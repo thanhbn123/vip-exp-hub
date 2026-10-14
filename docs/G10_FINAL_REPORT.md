@@ -32,8 +32,8 @@ cũng không có lượt gọi mạng nào, nhưng đó là đo bằng mắt ch�
 
 | Hạng mục | Giá trị |
 |---|---|
-| Commit SHA (local, **KHÔNG push**) | ghi ở mục 11 |
-| Số phép kiểm G10 | **87 ca** — 86 đạt, 1 bỏ qua trước khi có tài liệu này (sau khi có thì chạy) |
+| Commit SHA (local, **KHÔNG push**) | `da401a2` (`da401a2148121b8c4f6195091b076cb02a122aa1`) |
+| Số phép kiểm G10 | **87 ca, 87 đạt, 0 bỏ qua** |
 | Hồi quy nền | 13 bộ thử cũ: **không ca nào hỏng** (mục 9) |
 | File tôi tạo | 4 file, mục 2 |
 | File của người khác tôi chạm | **không có** |
@@ -536,9 +536,17 @@ Ran 87 tests in 1.113s
 OK (skipped=1)
 ```
 
-Một ca bỏ qua là `K_GiaoDien.test_15` (đối chiếu bảng route với **chính tài liệu này**), bỏ
-qua vì lúc chạy lần đó tài liệu chưa tồn tại. Sau khi có tài liệu thì chạy — **87 ca, 0 bỏ
-qua** (mục 11 ghi kết quả lượt chạy cuối).
+Lượt chạy trên là lượt trước khi có tài liệu này, nên `K_GiaoDien.test_15` (đối chiếu bảng
+route với **chính tài liệu này**) bị bỏ qua. Lượt chạy **cuối**, sau khi tài liệu đã có:
+
+```
+$ python3 -W error::ResourceWarning app/thu/thu_ai_job.py
+Ran 87 tests in 1.124s
+
+OK
+```
+
+**87 ca, 87 đạt, 0 bỏ qua.**
 
 Phân bố theo tám mục nghiệm thu của chỉ thị:
 

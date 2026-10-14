@@ -3,7 +3,15 @@ chọn hãng → gửi qua adapter mock → nhận webhook mock → cập nhật
 Đi qua CẢ 12 route G04 mới và 2 điểm cắm G06."""
 import base64, hashlib, hmac, json, os, sqlite3, sys, urllib.error, urllib.request
 
-GOC, S = f"http://127.0.0.1:{os.environ.get('VIP_E2E_CONG', '8947')}", os.environ["VIP_HUB_DATA"]
+# Bộ thử này cần MỘT MÁY CHỦ ĐANG CHẠY + CSDL cô lập, do `app/thu/chay_e2e.sh` dựng.
+# Thiếu môi trường thì NÓI RÕ và thoát mã 0 — không nổ KeyError để người đọc tưởng bộ thử
+# hỏng. Một bộ thử không chạy được phải TỰ KHAI là không chạy được, chứ không báo thất bại.
+S = os.environ.get("VIP_HUB_DATA")
+if not S:
+    print("BỎ QUA thu_e2e.py — bộ thử này cần máy chủ đang chạy + CSDL cô lập.")
+    print("Chạy đúng cách:  sh app/thu/chay_e2e.sh")
+    sys.exit(0)
+GOC = f"http://127.0.0.1:{os.environ.get('VIP_E2E_CONG', '8947')}"
 ck = {}
 def goi(duong, pt="GET", body=None, tho=None, hdr=None, ky=None):
     d = (tho if tho is not None else

@@ -20,7 +20,20 @@ VIP EXPRESS HUB
 Năm worktree agent đều nhận nền này.
 
 ## FINAL LOCAL SHA
-`599dd08` (`599dd088232572128cc6eb9dd4855b3f766a7d0a`)
+**Commit MÃ cuối cùng: `599dd08`** (`599dd088232572128cc6eb9dd4855b3f766a7d0a`).
+
+Sau nó còn các commit **chỉ sửa tài liệu**, trong đó có commit chứa chính dòng này. Một commit
+không thể chứa SHA của chính nó, nên con số viết cứng ở đây sẽ **luôn lạc đúng một commit** —
+ghi luật thay vì ghi con số sẽ sai mãi:
+
+```sh
+cd ~/Projects/vip-express-hub && git rev-parse HEAD        # SHA thật lúc anh đọc
+git log --oneline 599dd08..HEAD                            # chỉ còn commit tài liệu
+```
+
+Nếu `git log` trên in ra commit nào **chạm vào mã** (`app/` · `gateway/` · `admin/` ·
+`thu_frontend/`) thì báo cáo này đã lỗi thời, phải chạy lại bộ thử trước khi tin các con số
+nghiệm thu bên dưới.
 
 ## BRANCH
 `main` (local). **Không có git remote nào được cấu hình** — nên không có đường để push, kể cả vô ý.

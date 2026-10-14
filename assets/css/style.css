@@ -324,3 +324,81 @@ pre.json-xem {
   .buoc { min-width: 92px; }
   .hop-dang-nhap { padding: 20px; }
 }
+
+/* ===== F01/F03 (AG-04) — chế độ dữ liệu, bộ lọc nâng cao, dòng thời gian, phiếu in =====
+   Thêm ở CUỐI file để không đụng khối nào 10 trang demo G00 đang dùng. Mọi lớp dưới đây
+   là lớp MỚI, không ghi đè lớp cũ. */
+
+/* Nhãn chế độ dữ liệu: MOCK DATA / LOCAL REAL DATA / LIVE CARRIER DATA.
+   LIVE cố ý dùng màu cảnh báo mạnh — thấy nó là biết đang chạm hãng thật. */
+.che-do {
+  display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 10.5px;
+  font-weight: 800; letter-spacing: .04em; white-space: nowrap; border: 1px solid;
+}
+.cd-mock  { background: var(--xam-nhat); color: #5B6270; border-color: var(--vien); }
+.cd-local { background: var(--xanh-duong-nhat); color: var(--xanh-duong); border-color: #BFD4FE; }
+.cd-live  { background: #FFE8D6; color: #9A3412; border-color: #FDBA74; }
+
+/* Trạng thái giao diện CHƯA BIẾT TÊN: viền gạch để nhìn là thấy ngay có thứ mới từ backend. */
+.huy-hieu.hh-la { outline: 1.5px dashed var(--vang); outline-offset: 1px; }
+
+/* Hộp "chờ backend" — khác hộp lỗi: đây không phải lỗi, là việc chưa có. */
+.hop-cho-backend {
+  background: #FFFBEB; border: 1px solid #F5D08A; border-radius: 9px; padding: 12px 14px;
+  font-size: 12.5px; line-height: 1.7; color: #7A4F10;
+}
+.hop-cho-backend b { color: #6B4208; }
+.hop-cho-backend code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+
+/* Bộ lọc nâng cao */
+.loc-nang-cao { margin-bottom: 16px; }
+.luoi-loc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 14px; }
+.luoi-loc .form-nhom { margin-bottom: 10px; min-width: 0; }
+.luoi-loc .o-nho { width: 100%; box-sizing: border-box; }
+.ghi-chu-nguon .canh, p .canh { color: var(--do-dam); }
+
+.hang-cheo { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+
+/* Dòng thời gian giao vận */
+.dong-thoi-gian { list-style: none; margin: 0; padding: 4px 0 0 22px; border-left: 2px solid var(--vien); }
+.dong-thoi-gian li { position: relative; padding: 0 0 16px 14px; font-size: 12.5px; }
+.dong-thoi-gian li::before {
+  content: ""; position: absolute; left: -23px; top: 4px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--chu-mo); border: 2px solid #fff;
+}
+.dong-thoi-gian li.nguon-user::before    { background: var(--xanh-duong); }
+.dong-thoi-gian li.nguon-webhook::before { background: var(--xanh-la); }
+.dong-thoi-gian li.nguon-polling::before { background: var(--vang); }
+.dong-thoi-gian li.suy-ra::before        { background: #fff; border-color: var(--vang); }
+.dong-thoi-gian li.suy-ra { background: #FFFBEB; border-radius: 7px; padding: 6px 10px 10px 14px; }
+.dong-thoi-gian .luc { color: var(--chu-mo); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.dong-thoi-gian .noi { font-weight: 600; margin: 2px 0; }
+.dong-thoi-gian .nguon { color: var(--chu-mo); font-size: 11.5px; }
+
+/* Phiếu in nội bộ — KHÔNG phải nhãn vận đơn của hãng */
+.phieu-in { border: 2px solid #1F2430; border-radius: 8px; padding: 14px; background: #fff; }
+.phieu-in .pi-dau { display: flex; gap: 12px; align-items: flex-start; border-bottom: 2px dashed var(--vien); padding-bottom: 10px; margin-bottom: 10px; }
+.phieu-in .pi-dau b { font-size: 12.5px; letter-spacing: .02em; }
+.phieu-in .pi-nho { font-size: 11px; color: var(--chu-mo); margin-top: 3px; }
+.phieu-in .pi-ma { margin-left: auto; font-weight: 800; font-size: 15px; font-family: ui-monospace, Menlo, monospace; }
+.phieu-in .pi-chan { margin-top: 10px; font-size: 10.5px; color: var(--chu-mo); border-top: 1px dashed var(--vien); padding-top: 8px; }
+.phieu-in td:first-child { color: var(--chu-mo); width: 130px; font-weight: 600; }
+
+@media print {
+  /* In thì chỉ còn tờ phiếu: bỏ sidebar, header, nền modal, nút. Nếu không, bản in ra
+     là ảnh chụp cả giao diện — không dùng được để dán kho. */
+  body * { visibility: hidden !important; }
+  #pi-giay, #pi-giay * { visibility: visible !important; }
+  #pi-giay { position: absolute; left: 0; top: 0; width: 100%; border: none; }
+  .modal-nen { position: static; background: none; padding: 0; overflow: visible; }
+  .modal { box-shadow: none; max-width: none; }
+}
+
+@media (max-width: 1024px) { .luoi-loc { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .luoi-loc { grid-template-columns: 1fr; }
+  .dong-thoi-gian { padding-left: 16px; }
+  .phieu-in .pi-dau { flex-wrap: wrap; }
+  .phieu-in .pi-ma { margin-left: 0; }
+  .che-do { font-size: 10px; padding: 2px 7px; }
+}

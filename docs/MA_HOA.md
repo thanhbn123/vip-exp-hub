@@ -8,10 +8,11 @@ bằng AES-256-GCM của thư viện `cryptography` (đã được kiểm địn
 | Mục | Giá trị |
 |---|---|
 | Thuật toán | AES-256-GCM (AEAD: vừa mã hóa vừa xác thực toàn vẹn) |
-| Khóa | 32 byte trong `app/du-lieu/khoa-noi-bo.key`, quyền 0600, ngoài git |
+| Khóa | 32 byte mỗi file, `app/du-lieu/khoa/<key_id>.key`, quyền 0600, thư mục 0700, ngoài git |
 | Nonce | 12 byte (96 bit) ngẫu nhiên **mỗi lần mã hóa** |
-| Định dạng | `v2$<nonce_hex>$<ciphertext_hex>` (tag nằm trong ciphertext) |
-| Định dạng cũ | `<nonce>$<ct>$<mac>` — **chỉ còn đọc** để migrate, không mã hóa mới nữa |
+| Định dạng GHI hiện nay | `v3$<key_id>$<nonce_hex>$<ciphertext_hex>` — có định danh khóa |
+| Định dạng chỉ ĐỌC | `v2$<nonce_hex>$<ciphertext_hex>` (khóa `goc`) và `<nonce>$<ct>$<mac>` (v1 XOR+HMAC) |
+| Nguồn khóa | `app/secret_provider.py` — `LocalSecretProvider` đọc `app/du-lieu/khoa/<key_id>.key` |
 
 ## AAD — chống chép bản mã sang chỗ khác
 
@@ -57,11 +58,62 @@ giữ nguyên, và sau đó mọi secret đều đọc lại được đúng.
 Hàng nào **không giải mã nổi** thì migration **không nổ cả lượt**: ghi rõ hàng nào hỏng vào ghi chú
 của `schema_version` và in ra màn hình, giữ nguyên định dạng cũ để người xử — không im lặng bỏ qua.
 
+## key_id và SecretProvider (thêm 14/10/2026)
+
+Bản mã v2 **không nói nó dùng khóa nào**, nên đổi khóa là mọi bản mã cũ thành rác — thực tế
+không xoay khóa được. Định dạng `v3` mang `key_id`, nên khóa cũ và khóa mới **sống song song**:
+bản nào chưa kịp chuyển vẫn giải được bằng đúng khóa của nó.
+
+### Ba lớp nguồn khóa — `app/secret_provider.py`
+
+| Lớp | Việc |
+|---|---|
+| `SecretProvider` | lớp nền: `lay_khoa(key_id)` · `khoa_hien_hanh() -> (key_id, bytes)` · `danh_sach_key_id()` (+ `tao_khoa_moi`, `dat_khoa_hien_hanh` cho đường xoay khóa) |
+| `LocalSecretProvider` | khóa trong file: `app/du-lieu/khoa/<key_id>.key` (32 byte, 0600), con trỏ khóa hiện hành ở `app/du-lieu/khoa/hien-hanh` |
+| `KMSSecretProvider` | **CHỈ giao diện**, mọi hàm ném `NotImplementedError`. Cố ý chưa triển khai: một bản KMS "trông như thật" mà chưa đo với dịch vụ thật đúng là hỏng im lặng (§12.2) |
+
+**Di cư khóa cũ:** khóa một-file cũ `app/du-lieu/khoa-noi-bo.key` được **chép** (không di chuyển)
+thành `khoa/goc.key` và là khóa hiện hành đầu tiên. Phải **chép**, vì bản mã v1/v2 không mang
+`key_id` nên `bao_mat` vẫn phải đọc đúng file cũ ở đúng chỗ cũ — xóa file cũ là mất dữ liệu.
+
+**Thiếu khóa thì ném `LoiKhoa`, KHÔNG sinh khóa mới.** Sinh khóa thay thế chỉ biến
+"giải mã hỏng, thấy ngay" thành "dữ liệu mất, không ai thấy".
+
+**`key_id` bị kiểm bằng biểu thức** `^[a-z0-9][a-z0-9._-]{0,62}$`: `key_id` lọt `$` thì phá định
+dạng bản mã, lọt `/` hay `..` thì thoát khỏi thư mục khóa.
+
+### Xoay khóa — `bao_mat.xoay_khoa()`
+
+Thứ tự **cố ý**: sinh khóa mới → đặt làm hiện hành → mới mã hóa lại dữ liệu. Hỏng giữa đường thì
+hàng chưa chuyển vẫn mang `key_id` cũ, khóa cũ vẫn còn, nên vẫn giải được. Đổi thứ tự (xóa khóa cũ
+trước) là mất dữ liệu.
+
+- Phủ **cả hai** cột secret của `carrier_accounts`: `credentials_ma_hoa` và `webhook_secret_ma_hoa`.
+- Nhận được cả bản mã v1 và v2 (coi là "cần xoay"), không chỉ v3 khóa cũ.
+- Một hàng không giải được thì **ghi ra** rồi đi tiếp; audit ghi `ket_qua='that_bai'` — không báo
+  đạt khi chưa đạt.
+- **Khóa cũ không bao giờ bị xóa ở đây.** Bỏ một khóa cũ là việc người làm, sau khi tự kiểm không
+  còn bản mã nào mang `key_id` đó (§19).
+- Audit chỉ ghi `key_id` và **số lượng** — không ghi secret, không ghi nội dung khóa.
+- **Không đụng** `credentials_doi_luc`: cột đó ghi lần đổi *credentials của hãng*, còn đây là đổi
+  *khóa mã hóa*. Gộp hai việc vào một cột làm mất nghĩa cả hai.
+
+### Migration schema v4
+
+`app/migrate.py::nang_len_v4` đưa mọi secret sang `v3$<key_id>$…` bằng khóa **hiện hành**
+(không sinh khóa mới — việc đó là của `xoay_khoa`). Dùng cùng khuôn với v3: backup, transaction,
+kiểm bảo toàn số dòng, báo rõ hàng hỏng thay vì nổ cả lượt.
+
 ## Giới hạn còn lại
 
-- Khóa nằm trong **file trên đĩa**, chưa phải KMS/HSM. Ai đọc được file là giải mã được. Lên máy chủ
-  thật nên chuyển sang KMS hoặc ít nhất biến môi trường + quyền chặt.
-- **Chưa có cơ chế xoay khóa** (key rotation): đổi khóa hiện tại sẽ làm mọi bản mã cũ không đọc được.
-  Muốn xoay thì cần thêm định danh khóa vào bản mã (`v3$<key_id>$...`) và một lượt mã hóa lại.
+- Khóa vẫn nằm trong **file trên đĩa**, chưa phải KMS/HSM. Ai đọc được file là giải mã được.
+  `KMSSecretProvider` mới là **giao diện rỗng** — chưa nối với dịch vụ nào, chưa đo lượt nào.
+- `xoay_khoa()` hiện **chỉ phủ `carrier_accounts`**. Đó là hai cột secret duy nhất đo được trong
+  schema v4 (đo bằng `grep` cột `*_ma_hoa` trong `app/csdl.py`, ngày 14/10/2026). Thêm bảng nào có
+  secret mã hóa thì **phải** thêm vào `ma_hoa_lai_carrier_accounts` và vào bộ thử, nếu không nó sẽ
+  bị bỏ sót im lặng ở lượt xoay sau.
+- Chưa có lệnh/endpoint để người bấm xoay khóa — hiện chỉ gọi được từ mã (`bao_mat.xoay_khoa()`)
+  hoặc qua `migrate.py`. Mở cửa HTTP cho việc này thuộc `app/server.py`, do AG-00 làm.
+- Chưa có cơ chế **thu hồi** khóa cũ (đếm còn bao nhiêu bản mã mang `key_id` cũ rồi mới cho xóa).
 - Bản mã có `nonce` ngẫu nhiên 96 bit: an toàn ở quy mô này, nhưng nếu sau này mã hóa cực nhiều bản
   ghi bằng **cùng một khóa** thì nên cân nhắc nonce dạng đếm để triệt tiêu rủi ro trùng nonce.

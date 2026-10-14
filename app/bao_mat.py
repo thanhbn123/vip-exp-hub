@@ -6,11 +6,13 @@ import hmac
 import json
 import os
 import secrets
+import sqlite3
 from datetime import datetime, timedelta
 
 import cau_hinh
 import csdl
 import quyen
+import secret_provider
 
 
 # ====== Mật khẩu ======
@@ -207,9 +209,14 @@ def dat_lai_mat_khau(token, mat_khau_moi):
 # Owner duyệt 14/10/2026: chuyển từ bản tự dựng (XOR+HMAC) sang AES-256-GCM chuẩn.
 # Dùng `cryptography` (thư viện đã được kiểm định) — KHÔNG tự cài đặt AES.
 #
-# Định dạng bản mã:
-#   v2$<nonce_hex>$<ciphertext_hex>   ← AES-256-GCM (nonce 96 bit, tag nằm trong ciphertext)
-#   <nonce>$<ct>$<mac>                ← v1 cũ (XOR+HMAC), CHỈ còn đọc được để migrate
+# Định dạng bản mã (ĐỌC được cả ba, secret MỚI luôn ghi bằng v3):
+#   v3$<key_id>$<nonce_hex>$<ciphertext_hex>   ← AES-256-GCM CÓ định danh khóa → xoay khóa được
+#   v2$<nonce_hex>$<ciphertext_hex>            ← AES-256-GCM không key_id (khóa 'goc'), chỉ đọc
+#   <nonce>$<ct>$<mac>                         ← v1 cũ (XOR+HMAC), CHỈ còn đọc để migrate
+#
+# Vì sao thêm v3: bản mã v2 không nói nó dùng khóa nào, nên đổi khóa là mọi bản mã cũ thành rác
+# → thực tế KHÔNG xoay khóa được. v3 mang key_id, nên khóa cũ và khóa mới sống song song: bản nào
+# chưa kịp chuyển vẫn giải được bằng đúng khóa của nó. Khóa do `secret_provider` cấp.
 #
 # AAD (additional authenticated data) buộc bản mã vào ĐÚNG chỗ của nó: chép bản mã của tenant A
 # sang hàng của tenant B sẽ giải mã HỎNG. Xây AAD ở một nơi duy nhất để bên ghi và bên đọc
@@ -234,7 +241,11 @@ def aad_webhook(webhook_ma) -> str:
 
 
 def _khoa_noi_bo() -> bytes:
-    """Khóa 32 byte (AES-256) trong file 0600, ngoài git. Tạo lần đầu nếu chưa có."""
+    """Khóa 32 byte của ĐỊNH DẠNG CŨ (v1/v2 — bản mã không mang key_id), file 0600, ngoài git.
+
+    Giữ lại vì bản mã v1/v2 không nói nó dùng khóa nào, nên chỉ có một chỗ để tra: file này.
+    Secret MỚI không dùng đường này nữa — xem ma_hoa_v3() và secret_provider.
+    """
     duong = cau_hinh.DUONG_DAN_KHOA
     if not os.path.exists(duong):
         os.makedirs(os.path.dirname(duong), exist_ok=True)
@@ -249,10 +260,29 @@ def _khoa_noi_bo() -> bytes:
 
 
 def ma_hoa(ro: str, aad: str = "") -> str:
-    """Mã hóa bằng AES-256-GCM. aad buộc bản mã vào ngữ cảnh của nó (xem aad_*)."""
+    """ĐỊNH DẠNG v2 — CHỈ dùng cho đường migrate lịch sử (nang_len_v3) và tương thích ngược.
+
+    Bản mã v2 KHÔNG mang key_id nên KHÔNG xoay khóa được. Secret mới phải dùng ma_hoa_v3()
+    (hoặc bốn hàm contract ma_hoa_cred/giai_ma_cred/ma_hoa_wh/giai_ma_wh gọi sẵn v3).
+    """
     nonce = secrets.token_bytes(12)          # 96 bit — kích thước chuẩn cho GCM
     ct = AESGCM(_khoa_noi_bo()).encrypt(nonce, ro.encode(), aad.encode() if aad else None)
     return "v2$" + nonce.hex() + "$" + ct.hex()
+
+
+def ma_hoa_v3(ro: str, aad: str = "", key_id=None) -> str:
+    """Mã hóa AES-256-GCM CÓ key_id: `v3$<key_id>$<nonce>$<ct>`. Đây là đường ghi mặc định.
+
+    key_id=None → dùng khóa hiện hành do secret_provider cấp.
+    """
+    if key_id is None:
+        key_id, khoa = secret_provider.nha_cung_cap().khoa_hien_hanh()
+    else:
+        key_id = secret_provider.kiem_key_id(key_id)
+        khoa = secret_provider.nha_cung_cap().lay_khoa(key_id)
+    nonce = secrets.token_bytes(12)
+    ct = AESGCM(khoa).encrypt(nonce, ro.encode(), aad.encode() if aad else None)
+    return "v3$" + key_id + "$" + nonce.hex() + "$" + ct.hex()
 
 
 def _giai_ma_v1(goi: str) -> str:
@@ -270,20 +300,51 @@ def _giai_ma_v1(goi: str) -> str:
 
 
 def giai_ma(goi: str, aad: str = "") -> str:
-    """Giải mã. Tự nhận biết v2 (AES-GCM) hay v1 (cũ). Sai AAD → hỏng, đúng như thiết kế."""
+    """Giải mã. Tự nhận v3 (có key_id), v2 (khóa cũ) hay v1. Sai khóa/AAD → hỏng, đúng thiết kế."""
+    goi = str(goi)
+    if goi.startswith("v3$"):
+        phan = goi.split("$")
+        if len(phan) != 4:
+            raise ValueError(f"Bản mã v3 sai cấu trúc: cần 4 phần, có {len(phan)}")
+        _, key_id, nonce_hex, ct_hex = phan
+        khoa = secret_provider.nha_cung_cap().lay_khoa(key_id)   # thiếu khóa → LoiKhoa, không im
+        return _giai_gcm(khoa, nonce_hex, ct_hex, aad, f"v3 key_id={key_id}")
     if goi.startswith("v2$"):
         _, nonce_hex, ct_hex = goi.split("$")
-        try:
-            ro = AESGCM(_khoa_noi_bo()).decrypt(
-                bytes.fromhex(nonce_hex), bytes.fromhex(ct_hex), aad.encode() if aad else None)
-        except Exception as e:
-            raise ValueError(f"Giải mã AES-GCM hỏng (sai khóa, sai AAD, hoặc dữ liệu bị sửa): {type(e).__name__}")
-        return ro.decode()
+        return _giai_gcm(_khoa_noi_bo(), nonce_hex, ct_hex, aad, "v2")
     return _giai_ma_v1(goi)
 
 
+def _giai_gcm(khoa: bytes, nonce_hex: str, ct_hex: str, aad: str, nhan: str) -> str:
+    try:
+        ro = AESGCM(khoa).decrypt(bytes.fromhex(nonce_hex), bytes.fromhex(ct_hex),
+                                  aad.encode() if aad else None)
+    except Exception as e:
+        # KHÔNG đưa nội dung bản mã hay khóa vào thông báo lỗi — lỗi thường bị ghi ra log.
+        raise ValueError(f"Giải mã AES-GCM ({nhan}) hỏng (sai khóa, sai AAD, hoặc dữ liệu bị sửa): "
+                         f"{type(e).__name__}")
+    return ro.decode()
+
+
 def la_dinh_dang_cu(goi: str) -> bool:
-    return not str(goi).startswith("v2$")
+    """True nếu bản mã còn ở định dạng v1 (XOR+HMAC) — cần migrate."""
+    return not str(goi).startswith(("v2$", "v3$"))
+
+
+def key_id_cua(goi: str):
+    """key_id trong bản mã, hoặc None nếu bản mã không mang key_id (v1/v2)."""
+    goi = str(goi)
+    if not goi.startswith("v3$"):
+        return None
+    phan = goi.split("$")
+    return phan[1] if len(phan) == 4 else None
+
+
+def can_xoay(goi: str, key_id_dich=None) -> bool:
+    """True nếu bản mã này chưa nằm dưới khóa hiện hành (hoặc khóa đích) — cần mã hóa lại."""
+    if key_id_dich is None:
+        key_id_dich = secret_provider.nha_cung_cap().khoa_hien_hanh()[0]
+    return key_id_cua(goi) != key_id_dich
 
 
 # --- CẶP hàm theo từng loại secret ---
@@ -293,10 +354,10 @@ def la_dinh_dang_cu(goi: str) -> bool:
 # cho credentials và webhook secret nữa; dùng bốn hàm dưới đây.
 
 def ma_hoa_cred(cred: dict, tenant_id, hang):
-    """Mã hóa credentials của tài khoản hãng. Trả (bản_mã, đuôi_hiển_thị)."""
+    """Mã hóa credentials của tài khoản hãng. Trả (bản_mã, đuôi_hiển_thị). Ghi bằng v3."""
     ro = json.dumps(cred, ensure_ascii=False)
     duoi = next((str(v)[-4:] for v in cred.values() if v), "")
-    return ma_hoa(ro, aad_credentials(tenant_id, hang)), duoi
+    return ma_hoa_v3(ro, aad_credentials(tenant_id, hang)), duoi
 
 
 def giai_ma_cred(ban_ma, tenant_id, hang) -> dict:
@@ -304,7 +365,7 @@ def giai_ma_cred(ban_ma, tenant_id, hang) -> dict:
 
 
 def ma_hoa_wh(secret: str, webhook_ma: str) -> str:
-    return ma_hoa(secret, aad_webhook(webhook_ma))
+    return ma_hoa_v3(secret, aad_webhook(webhook_ma))
 
 
 def giai_ma_wh(ban_ma: str, webhook_ma: str) -> str:
@@ -315,4 +376,84 @@ def luu_credentials(cred: dict, aad: str = ""):
     """CŨ — giữ cho tương thích. Dùng ma_hoa_cred() để khỏi tự dựng AAD."""
     ro = json.dumps(cred, ensure_ascii=False)
     duoi = next((str(v)[-4:] for v in cred.values() if v), "")
-    return ma_hoa(ro, aad), duoi
+    return ma_hoa_v3(ro, aad), duoi
+
+
+# ====== Xoay khóa (key rotation) ======
+# Thứ tự CỐ Ý: sinh khóa mới → đặt làm hiện hành → mới mã hóa lại dữ liệu.
+# Nếu lượt mã hóa lại hỏng giữa đường thì những hàng chưa chuyển vẫn mang key_id CŨ, và khóa cũ
+# vẫn còn trong thư mục khóa, nên vẫn giải được. Đổi thứ tự (xóa khóa cũ trước) là mất dữ liệu.
+#
+# Khóa cũ KHÔNG BAO GIỜ bị xóa ở đây. Muốn bỏ một khóa cũ thì phải tự tay kiểm không còn bản mã
+# nào mang key_id đó — việc đó do người làm, không để lệnh chạy nền tự quyết (CLAUDE.md §19).
+
+def _cap_doc_ghi(kn):
+    """Trả (đọc, ghi) chạy được cả trên kết nối dùng chung của csdl lẫn kết nối migrate truyền vào."""
+    if kn is None:
+        return (lambda sql, p=(): csdl.nhieu(sql, p)), (lambda sql, p=(): csdl.ghi(sql, p))
+    kn.row_factory = sqlite3.Row
+    return (lambda sql, p=(): kn.execute(sql, p).fetchall()), (lambda sql, p=(): kn.execute(sql, p))
+
+
+def ma_hoa_lai_carrier_accounts(kn=None, key_id_dich=None) -> dict:
+    """Mã hóa lại MỌI secret trong carrier_accounts sang khóa đích (mặc định: khóa hiện hành).
+
+    Phủ CẢ HAI cột secret: `credentials_ma_hoa` và `webhook_secret_ma_hoa`. Hàng nào không giải
+    được thì GHI RA rồi đi tiếp — một hàng hỏng không được làm nổ cả lượt, nhưng cũng không được
+    im lặng bỏ qua (secret đó còn nằm dưới khóa cũ cho tới khi có người xử).
+    """
+    if key_id_dich is None:
+        key_id_dich = secret_provider.nha_cung_cap().khoa_hien_hanh()[0]
+    doc, ghi_ = _cap_doc_ghi(kn)
+    so_cred = so_wh = 0
+    da_dat = 0
+    hong = []
+    for r in doc("SELECT id, tenant_id, hang, webhook_ma, credentials_ma_hoa,"
+                 " webhook_secret_ma_hoa FROM carrier_accounts"):
+        da_dat += 1
+        for cot, ban_ma, aad in (
+            ("credentials_ma_hoa", r["credentials_ma_hoa"], aad_credentials(r["tenant_id"], r["hang"])),
+            ("webhook_secret_ma_hoa", r["webhook_secret_ma_hoa"], aad_webhook(r["webhook_ma"])),
+        ):
+            if not can_xoay(ban_ma, key_id_dich):
+                continue
+            try:
+                ro = giai_ma(ban_ma, aad)
+            except Exception as e:
+                # Bản mã v1 (chưa qua migrate v3) không có AAD — thử lại không AAD trước khi kết luận.
+                try:
+                    ro = giai_ma(ban_ma, "")
+                except Exception:
+                    hong.append(f"carrier_account {r['id']} {cot}: {type(e).__name__}")
+                    continue
+            ghi_(f"UPDATE carrier_accounts SET {cot}=? WHERE id=?",
+                 (ma_hoa_v3(ro, aad, key_id=key_id_dich), r["id"]))
+            if cot == "credentials_ma_hoa":
+                so_cred += 1
+            else:
+                so_wh += 1
+    return {"key_id": key_id_dich, "so_hang_da_doc": da_dat,
+            "so_credentials": so_cred, "so_webhook_secret": so_wh, "hong": hong}
+
+
+def xoay_khoa(user_id=None, dia_chi=None) -> dict:
+    """Xoay khóa: sinh khóa mới, đặt hiện hành, mã hóa lại mọi secret sang khóa đó.
+
+    Khóa cũ GIỮ LẠI. Audit chỉ ghi key_id và số lượng — KHÔNG ghi secret, không ghi nội dung khóa.
+    KHÔNG đụng `credentials_doi_luc`: cột đó ghi lần đổi CREDENTIALS của hãng, còn đây là đổi KHÓA
+    mã hóa; gộp hai việc vào một cột làm mất nghĩa cả hai.
+    """
+    p = secret_provider.nha_cung_cap()
+    key_id_cu = p.khoa_hien_hanh()[0]
+    key_id_moi = p.tao_khoa_moi()
+    p.dat_khoa_hien_hanh(key_id_moi)
+    kq = ma_hoa_lai_carrier_accounts(key_id_dich=key_id_moi)
+    kq["key_id_cu"] = key_id_cu
+    kq["so_khoa_dang_giu"] = len(p.danh_sach_key_id())
+    csdl.audit("xoay_khoa_ma_hoa", f"khoa:{key_id_moi}",
+               f"từ {key_id_cu}; mã hóa lại {kq['so_credentials']} credentials"
+               f" + {kq['so_webhook_secret']} webhook secret trên {kq['so_hang_da_doc']} tài khoản hãng"
+               + (f"; HỎNG: {'; '.join(kq['hong'])}" if kq["hong"] else ""),
+               user_id=user_id, dia_chi=dia_chi,
+               ket_qua="that_bai" if kq["hong"] else "thanh_cong")
+    return kq

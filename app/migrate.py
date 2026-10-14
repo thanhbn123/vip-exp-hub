@@ -183,6 +183,24 @@ def nang_len_v3(kn):
     return buoc
 
 
+def nang_len_v4(kn):
+    """v4: đưa mọi secret sang định dạng `v3$<key_id>$...` để từ nay XOAY KHÓA ĐƯỢC.
+
+    Bản mã v2 không mang định danh khóa, nên trước v4 đổi khóa là mọi bản mã cũ thành rác.
+    Lượt này giải bằng đúng đường của định dạng đang có rồi mã lại bằng khóa HIỆN HÀNH, kèm AAD
+    như cũ — KHÔNG đụng nội dung secret, KHÔNG sinh khóa mới (khóa mới là việc của bao_mat.xoay_khoa).
+    Một hàng không giải được thì ghi ra rồi đi tiếp, giữ nguyên bản cũ cho người xử.
+    """
+    import bao_mat
+    kq = bao_mat.ma_hoa_lai_carrier_accounts(kn)
+    buoc = [f"key_id (v3) khóa '{kq['key_id']}': {kq['so_credentials']} credentials"
+            f" + {kq['so_webhook_secret']} webhook secret trên {kq['so_hang_da_doc']} tài khoản hãng"]
+    if kq["hong"]:
+        buoc.append("KHÔNG mã hóa lại được (giữ nguyên định dạng cũ, CẦN NGƯỜI XỬ): "
+                    + "; ".join(kq["hong"]))
+    return buoc
+
+
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -212,6 +230,8 @@ def chay(im_lang=False):
                 buoc += nang_len_v2(kn)
             if pb < 3:
                 buoc += nang_len_v3(kn)
+            if pb < 4:
+                buoc += nang_len_v4(kn)
             kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                        " VALUES (?,?,?)",
                        (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

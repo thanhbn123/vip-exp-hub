@@ -19,6 +19,8 @@ JT_MA = {
     105: ("Cancel Order / 取消订单", None),        # hủy là trạng thái NGHIỆP VỤ, do Order Service quyết
     106: ("Picked Up / 快件揽收", "lay_hang"),
     109: ("Departure / 发件扫描", "dang_giao"),
+    # 110: NHẬP NHẰNG — tài liệu tự mâu thuẫn. Nghĩa dưới đây là nghĩa theo BẢNG THAM SỐ,
+    # giữ lại để đọc/hiển thị; đường CẬP NHẬT ĐƠN không được dùng nó (xem NHAP_NHANG + quyet_dinh()).
     110: ("Arrival / 到件扫描", "dang_giao"),
     112: ("On Delivery / 出仓扫描", "dang_giao"),
     113: ("Delivered / 快件签收", "giao_thanh_cong"),
@@ -62,19 +64,135 @@ VTP_MA_MOCK = {
 BANG = {"jt": JT_MA, "vtp": VTP_MA_MOCK}
 
 
-class KetQuaAnhXa:
-    """Kết quả ánh xạ: có biết mã không, đổi sang trạng thái nào, mô tả gốc của hãng."""
-    __slots__ = ("biet_ma", "trang_thai", "mo_ta_hang", "ma_goc")
+# ============================================================================
+# G06 — SỔ MÃ NHẬP NHẰNG (ambiguous) và QUYẾT ĐỊNH ÁNH XẠ
+#
+# Vì sao có mục này: tài liệu hãng có thể TỰ MÂU THUẪN. Khi đó luật của dự án là KHÔNG tự chọn
+# một nghĩa (§12 chống bịa) và KHÔNG BAO GIỜ mặc định sang trạng thái HOÀN TẤT — đoán sai về
+# phía "đã xong" là loại sai đắt nhất: đơn có vấn đề bị coi là đã giao, không ai soát lại.
+#
+# Thay vì chọn, hệ thống:
+#   1. lưu đủ dấu vết (mã gốc · mô tả gốc · sự kiện hãng gốc · nguồn tài liệu · độ tin cậy · giờ nhận),
+#   2. đánh dấu NEEDS_REVIEW / AMBIGUOUS,
+#   3. KHÔNG đổi trạng thái đơn cho tới khi có người CHỐT nghĩa kèm căn cứ từ hãng.
+# ============================================================================
 
-    def __init__(self, biet_ma, trang_thai, mo_ta_hang, ma_goc):
+# Độ tin cậy của một lượt ánh xạ.
+TIN_CAO = "cao"                  # tài liệu nói rõ, không có chỗ mâu thuẫn
+TIN_TRUNG_BINH = "trung_binh"    # có nghĩa nhưng còn điểm chưa chắc (vd mã chỉ ghi nhận)
+TIN_NHAP_NHANG = "nhap_nhang"    # tài liệu tự mâu thuẫn, CHƯA ai chốt nghĩa
+TIN_MA_LA = "ma_la"              # mã không có trong tài liệu đã đọc
+MUC_TIN_CAY = (TIN_CAO, TIN_TRUNG_BINH, TIN_NHAP_NHANG, TIN_MA_LA)
+
+# Trạng thái coi là KẾT THÚC hành trình. Mã nhập nhằng tuyệt đối không được rơi vào đây.
+TRANG_THAI_HOAN_TAT = ("giao_thanh_cong", "hoan_hang")
+
+NGUON_JT = ("open.jtexpress.vn/apiDoc/logistics/query + /logistics/statusFeedback"
+            " · đọc bằng trình duyệt 14/10/2026")
+# Nguồn của BẢNG ánh xạ từng hãng. VTP nói thẳng là mô phỏng của chính dự án, không phải hãng.
+NGUON_BANG = {"jt": NGUON_JT,
+              "vtp": "bộ mô phỏng của chính dự án (KHÔNG có tài liệu hãng)"}
+PHIEN_BAN_TAI_LIEU = {"jt": "doc-2026-10-14", "vtp": "chua-co-tai-lieu"}
+
+# Sổ mã nhập nhằng: (ma_hang, khóa mã) -> mô tả mâu thuẫn + các nghĩa có thể.
+# `trang_thai` trong từng nghĩa là trạng thái chuẩn mà nghĩa ĐÓ dẫn tới (None = chỉ ghi nhận).
+NHAP_NHANG = {
+    ("jt", 110): {
+        "ly_do": ("Tài liệu J&T tự mâu thuẫn với ví dụ của chính nó: BẢNG THAM SỐ ghi"
+                  " 110 = Arrival / 到件扫描 (hàng đến kho, đang đi), nhưng VÍ DỤ TRẢ LỜI ở cả"
+                  " /logistics/query lẫn /logistics/statusFeedback ghi 110 = quét kiện có vấn đề."
+                  " Hai nghĩa ngược chiều nhau trên cùng một con số."),
+        "nguon": NGUON_JT,
+        "nghia": {
+            "bang_tham_so": {
+                "mo_ta_hang": "Arrival / 到件扫描",
+                "trang_thai": "dang_giao",
+                "nguon": "bảng tham số scanTypeCode (phần chuẩn tắc của tài liệu)",
+            },
+            "vi_du_tra_loi": {
+                "mo_ta_hang": "Quét kiện có vấn đề",
+                # CỐ Ý None, không phải 'giao_that_bai': ví dụ của tài liệu không nói rõ đây là
+                # thất bại giao hay chỉ là một lần quét bất thường trên đường. Đã có mã 118
+                # (Delivery Problem) cho thất bại giao thật.
+                "trang_thai": None,
+                "nguon": "ví dụ trả lời của /logistics/query và /logistics/statusFeedback",
+            },
+        },
+    },
+}
+
+# Nghĩa ĐÃ CHỐT cho mã nhập nhằng. Rỗng là đúng hiện trạng: chưa ai đối chiếu được với hãng.
+# Chỉ điền qua chot_nghia() — cần căn cứ thật, không điền bằng suy đoán.
+NGHIA_DA_CHOT = {}
+
+
+class ChuaChotNghia(Exception):
+    """Ném khi ai đó cố lấy trạng thái của một mã nhập nhằng chưa được chốt nghĩa."""
+
+
+class KetQuaAnhXa:
+    """Kết quả ánh xạ một mã trạng thái của hãng.
+
+    `trang_thai` giữ nguyên ý nghĩa CŨ (có người đang gọi) = nghĩa theo bảng tham số.
+    Với mã NHẬP NHẰNG, nghĩa đó CHƯA được chốt, nên đường cập nhật đơn phải dùng
+    `trang_thai_ap` (hoặc tốt hơn: `quyet_dinh()`), KHÔNG dùng `trang_thai`.
+    """
+    __slots__ = ("biet_ma", "trang_thai", "mo_ta_hang", "ma_goc",
+                 "nhap_nhang", "do_tin_cay", "can_soat", "nguon_tai_lieu", "cac_nghia", "ma_hang")
+
+    def __init__(self, biet_ma, trang_thai, mo_ta_hang, ma_goc,
+                 nhap_nhang=False, do_tin_cay=None, can_soat=None,
+                 nguon_tai_lieu=None, cac_nghia=None, ma_hang=None):
+        self.ma_hang = ma_hang
         self.biet_ma = biet_ma          # False = mã lạ, chưa có trong tài liệu đã đọc
         self.trang_thai = trang_thai    # None = chỉ ghi nhận, không đổi trạng thái
         self.mo_ta_hang = mo_ta_hang
         self.ma_goc = ma_goc
+        self.nhap_nhang = nhap_nhang
+        self.can_soat = (not biet_ma or nhap_nhang) if can_soat is None else can_soat
+        self.nguon_tai_lieu = nguon_tai_lieu
+        self.cac_nghia = cac_nghia or {}
+        if do_tin_cay is None:
+            do_tin_cay = (TIN_NHAP_NHANG if nhap_nhang else
+                          TIN_MA_LA if not biet_ma else
+                          TIN_CAO if trang_thai else TIN_TRUNG_BINH)
+        self.do_tin_cay = do_tin_cay
+
+    @property
+    def trang_thai_ap(self):
+        """Trạng thái ĐƯỢC PHÉP áp vào đơn. Mã nhập nhằng chưa chốt nghĩa → None."""
+        if self.nhap_nhang and not self.nghia_da_chot:
+            return None
+        return self.trang_thai
+
+    @property
+    def nghia_da_chot(self):
+        """Tra sổ chốt THẬT — trả None cứng là tự nói dối về trạng thái hệ thống."""
+        if not self.nhap_nhang or self.ma_hang is None:
+            return None
+        khoa, loi = _khoa_ma(self.ma_hang, self.ma_goc)
+        return None if loi else NGHIA_DA_CHOT.get((self.ma_hang, khoa))
+
+    def nhu_dict(self):
+        return {"biet_ma": self.biet_ma, "trang_thai": self.trang_thai,
+                "mo_ta_hang": self.mo_ta_hang, "ma_goc": self.ma_goc,
+                "nhap_nhang": self.nhap_nhang, "do_tin_cay": self.do_tin_cay,
+                "can_soat": self.can_soat, "nguon_tai_lieu": self.nguon_tai_lieu}
 
     def __repr__(self):
         return (f"KetQuaAnhXa(biet_ma={self.biet_ma}, trang_thai={self.trang_thai!r}, "
-                f"ma_goc={self.ma_goc!r})")
+                f"ma_goc={self.ma_goc!r}, nhap_nhang={self.nhap_nhang}, "
+                f"do_tin_cay={self.do_tin_cay!r})")
+
+
+def _khoa_ma(ma_hang, ma_trang_thai):
+    """Khóa tra bảng: J&T dùng số (scanTypeCode), hãng khác dùng nguyên chuỗi."""
+    if ma_hang == "jt":
+        try:
+            return int(ma_trang_thai), None
+        except (TypeError, ValueError):
+            return None, "scanTypeCode không phải số"
+    return ma_trang_thai, None
 
 
 def anh_xa(ma_hang, ma_trang_thai):
@@ -82,17 +200,142 @@ def anh_xa(ma_hang, ma_trang_thai):
     bang = BANG.get(ma_hang)
     if bang is None:
         return KetQuaAnhXa(False, None, f"hãng '{ma_hang}' chưa có bảng ánh xạ", ma_trang_thai)
-    khoa = ma_trang_thai
-    if ma_hang == "jt":
-        try:
-            khoa = int(ma_trang_thai)
-        except (TypeError, ValueError):
-            return KetQuaAnhXa(False, None, "scanTypeCode không phải số", ma_trang_thai)
+    khoa, loi = _khoa_ma(ma_hang, ma_trang_thai)
+    if loi:
+        return KetQuaAnhXa(False, None, loi, ma_trang_thai)
     if khoa not in bang:
         return KetQuaAnhXa(False, None, "mã không có trong tài liệu đã đọc", ma_trang_thai)
     mo_ta, chuan = bang[khoa]
-    return KetQuaAnhXa(True, chuan, mo_ta, ma_trang_thai)
+    nn = NHAP_NHANG.get((ma_hang, khoa))
+    return KetQuaAnhXa(True, chuan, mo_ta, ma_trang_thai,
+                       nhap_nhang=nn is not None,
+                       nguon_tai_lieu=(nn or {}).get("nguon") or NGUON_BANG.get(ma_hang),
+                       cac_nghia=(nn or {}).get("nghia"), ma_hang=ma_hang)
 
 
 def ma_da_biet(ma_hang):
     return sorted(BANG.get(ma_hang, {}).keys(), key=str)
+
+
+def la_nhap_nhang(ma_hang, ma_trang_thai):
+    khoa, loi = _khoa_ma(ma_hang, ma_trang_thai)
+    return (ma_hang, khoa) in NHAP_NHANG if not loi else False
+
+
+def chot_nghia(ma_hang, ma_trang_thai, khoa_nghia, nguoi_chot, can_cu):
+    """Chốt nghĩa cho một mã nhập nhằng. CHỈ gọi khi có căn cứ THẬT từ hãng.
+
+    Bắt buộc có `nguoi_chot` và `can_cu` — chốt nghĩa mà không ghi ai chốt, căn cứ gì thì lần
+    sau không ai dựng lại được vì sao hệ thống hiểu mã đó như vậy (§12.1 luật 4).
+    Chặn cứng: nghĩa dẫn tới trạng thái HOÀN TẤT thì KHÔNG được chốt bằng con đường này —
+    kết thúc hành trình phải đến từ mã rõ nghĩa (113 Delivered, 116/117 Returned), không từ
+    một mã mà tài liệu còn đang tự mâu thuẫn.
+    """
+    khoa, loi = _khoa_ma(ma_hang, ma_trang_thai)
+    if loi:
+        raise ValueError(loi)
+    muc = NHAP_NHANG.get((ma_hang, khoa))
+    if muc is None:
+        raise KeyError(f"({ma_hang}, {ma_trang_thai}) không nằm trong sổ mã nhập nhằng")
+    if khoa_nghia not in muc["nghia"]:
+        raise KeyError(f"nghĩa '{khoa_nghia}' không có trong sổ; có: {sorted(muc['nghia'])}")
+    if not str(nguoi_chot or "").strip() or not str(can_cu or "").strip():
+        raise ValueError("chốt nghĩa phải ghi rõ ai chốt và căn cứ nào")
+    tt = muc["nghia"][khoa_nghia]["trang_thai"]
+    if tt in TRANG_THAI_HOAN_TAT:
+        raise ValueError(
+            f"nghĩa '{khoa_nghia}' dẫn tới trạng thái hoàn tất '{tt}' — cấm chốt qua đường này")
+    NGHIA_DA_CHOT[(ma_hang, khoa)] = {"khoa_nghia": khoa_nghia, "trang_thai": tt,
+                                      "nguoi_chot": nguoi_chot, "can_cu": can_cu,
+                                      "mo_ta_hang": muc["nghia"][khoa_nghia]["mo_ta_hang"]}
+    return dict(NGHIA_DA_CHOT[(ma_hang, khoa)])
+
+
+def bo_chot_nghia(ma_hang=None, ma_trang_thai=None):
+    """Gỡ chốt (dùng khi căn cứ bị bác, và trong bộ thử)."""
+    if ma_hang is None:
+        NGHIA_DA_CHOT.clear()
+        return
+    khoa, _ = _khoa_ma(ma_hang, ma_trang_thai)
+    NGHIA_DA_CHOT.pop((ma_hang, khoa), None)
+
+
+def _bay_gio():
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=7))).strftime("%Y-%m-%d %H:%M:%S%z")
+
+
+class QuyetDinhAnhXa:
+    """Quyết định dùng cho ĐƯỜNG CẬP NHẬT ĐƠN: giữ trọn dấu vết, nói rõ có được áp hay không."""
+    __slots__ = ("ma_hang", "ma_goc", "mo_ta_goc", "su_kien_hang_goc", "nguon_tai_lieu",
+                 "phien_ban_tai_lieu", "do_tin_cay", "nhap_nhang", "can_soat", "trang_thai_ap",
+                 "cac_nghia", "nghia_da_chot", "nhan_luc", "ghi_chu", "biet_ma")
+
+    def __init__(self, **kw):
+        for t in self.__slots__:
+            setattr(self, t, kw.get(t))
+
+    @property
+    def nhan(self):
+        """Nhãn trạng thái soát của sự kiện: AMBIGUOUS / NEEDS_REVIEW / OK."""
+        if self.nhap_nhang and not self.nghia_da_chot:
+            return "AMBIGUOUS"
+        if self.can_soat:
+            return "NEEDS_REVIEW"
+        return "OK"
+
+    def nhu_dict(self):
+        return {t: getattr(self, t) for t in self.__slots__} | {"nhan": self.nhan}
+
+    def __repr__(self):
+        return (f"QuyetDinhAnhXa({self.ma_hang}:{self.ma_goc!r} → {self.trang_thai_ap!r} "
+                f"[{self.nhan}] tin_cay={self.do_tin_cay!r})")
+
+
+def quyet_dinh(ma_hang, ma_trang_thai, su_kien_goc=None, nhan_luc=None):
+    """Hàm DUY NHẤT mà đường cập nhật đơn được dùng để biến mã hãng thành trạng thái chuẩn.
+
+    Khác `anh_xa()` ở ba chỗ, và đó là lý do nó tồn tại:
+      - mã nhập nhằng CHƯA chốt nghĩa → `trang_thai_ap = None` (không đổi trạng thái đơn),
+      - luôn mang theo đủ dấu vết để sau này soát lại được,
+      - chặn cứng mọi đường rơi vào trạng thái HOÀN TẤT khi mã còn nhập nhằng.
+    """
+    ax = anh_xa(ma_hang, ma_trang_thai)
+    khoa, _ = _khoa_ma(ma_hang, ma_trang_thai)
+    chot = NGHIA_DA_CHOT.get((ma_hang, khoa)) if ax.nhap_nhang else None
+    ghi_chu = []
+
+    if ax.nhap_nhang:
+        muc = NHAP_NHANG[(ma_hang, khoa)]
+        if chot:
+            tt = chot["trang_thai"]
+            do_tin = TIN_TRUNG_BINH      # người chốt, không phải tài liệu → không dám ghi 'cao'
+            can_soat = False
+            ghi_chu.append(f"nghĩa đã chốt '{chot['khoa_nghia']}' bởi {chot['nguoi_chot']}")
+        else:
+            tt = None
+            do_tin = TIN_NHAP_NHANG
+            can_soat = True
+            ghi_chu.append("mã nhập nhằng, chưa ai chốt nghĩa → KHÔNG đổi trạng thái đơn")
+            ghi_chu.append(muc["ly_do"])
+    else:
+        tt = ax.trang_thai
+        do_tin = ax.do_tin_cay
+        can_soat = not ax.biet_ma
+        if not ax.biet_ma:
+            ghi_chu.append("mã lạ, không có trong tài liệu đã đọc → chỉ ghi nhận")
+
+    # CHẶN CỨNG (không phụ thuộc nhánh nào ở trên): mã nhập nhằng không bao giờ được hoàn tất.
+    if ax.nhap_nhang and tt in TRANG_THAI_HOAN_TAT:
+        ghi_chu.append(f"CHẶN: mã nhập nhằng không được áp trạng thái hoàn tất '{tt}'")
+        tt = None
+        can_soat = True
+        do_tin = TIN_NHAP_NHANG
+
+    return QuyetDinhAnhXa(
+        ma_hang=ma_hang, ma_goc=ma_trang_thai, mo_ta_goc=ax.mo_ta_hang,
+        su_kien_hang_goc=su_kien_goc, nguon_tai_lieu=ax.nguon_tai_lieu,
+        phien_ban_tai_lieu=PHIEN_BAN_TAI_LIEU.get(ma_hang, "chua-ro"),
+        do_tin_cay=do_tin, nhap_nhang=ax.nhap_nhang, can_soat=can_soat,
+        trang_thai_ap=tt, cac_nghia=ax.cac_nghia, nghia_da_chot=chot,
+        nhan_luc=nhan_luc or _bay_gio(), ghi_chu=" | ".join(ghi_chu), biet_ma=ax.biet_ma)

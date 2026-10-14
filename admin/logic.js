@@ -407,21 +407,17 @@
      cập nhật. Như vậy nhãn "CHỜ BACKEND" không thể nói dối lâu. */
   const API_CHO_BACKEND = [
     {
-      ten: "Từ chối đơn có lý do",
-      duong: "/api/v2/don/<id>/tu-choi", method: "POST",
-      man: "Đơn hàng → Chi tiết đơn → Từ chối",
-      mong_doi_vao: { ly_do_ma: "sai_dia_chi|trung_don|khach_huy|qua_kho|khac", ghi_chu: "string" },
-      mong_doi_ra: { don: "bản ghi đơn sau khi từ chối", ly_do_ma: "string", ly_do_ghi_chu: "string" },
-      ghi_chu: "AG-02 đang mở rộng Order Service. Hiện giao diện chỉ có /huy (không nhận lý do).",
-    },
-    {
       ten: "Nhãn vận đơn của hãng",
       duong: "/api/v2/don/<id>/nhan", method: "GET",
       man: "Đơn hàng → Chi tiết đơn → In phiếu",
       mong_doi_vao: {},
       mong_doi_ra: { dinh_dang: "pdf|zpl|png", du_lieu_base64: "string", hang: "string", kho_giay: "A6|100x150" },
-      ghi_chu: "CarrierAdapter có getShippingLabel nhưng chưa phơi ra HTTP. Phiếu in hiện là " +
-               "PHIẾU NỘI BỘ dựng từ CSDL local, không phải nhãn hãng.",
+      ghi_chu: "Đường ĐÃ CÓ từ 15/10 (AG-00 cắm route G04), nhưng nó trả SIÊU DỮ LIỆU nhãn " +
+               "(ho_tro_nhan · la_mock · nhan_that · dinh_dang · do_lon_byte), KHÔNG trả byte " +
+               "nhãn hãng — vì mọi adapter đang CHO_PHEP_LIVE=False nên không có nhãn hãng nào " +
+               "tồn tại để trả. Phiếu in vẫn là PHIẾU NỘI BỘ và vẫn phải tự khai đúng như vậy. " +
+               "Khi nào mở live thì mới có byte nhãn, lúc đó mới gỡ nhãn chờ-backend.",
+      mot_phan: true,
     },
     {
       ten: "Tìm đơn nâng cao ở máy chủ",
@@ -492,6 +488,20 @@
     ["GET", "/api/v2/billing"],
     ["GET", "/api/v2/audit"],
     ["GET", "/api/v2/memberships"],
+    // Chuyển từ API_CHO_BACKEND sang đây ngày 15/10 — AG-00 đã cắm 12 route G04 và 2 điểm G06.
+    // Khai ở đây chứ không xoá hẳn: một đường biến mất khỏi CẢ HAI danh sách là một đường
+    // không ai còn canh, và ca thử 52 canh đúng điều đó.
+    ["POST", "/api/v2/don/<id>/tu-choi"],
+    ["POST", "/api/v2/don/<id>/doi-soat"],
+    ["POST", "/api/v2/don/<id>/doi-soat-tay"],
+    ["POST", "/api/v2/don/tim"],
+    ["POST", "/api/v2/don/kiem"],
+    ["GET", "/api/v2/don/can-doi-soat"],
+    ["GET", "/api/v2/don/<id>/hanh-trinh"],
+    ["GET", "/api/v2/don/<id>/day-du"],
+    ["GET", "/api/v2/don/<id>/kiem"],
+    ["GET", "/api/v2/don/<id>/mat-hang"],
+    ["PUT", "/api/v2/don/<id>/mat-hang"],
   ];
 
   /* ===== 14. Lý do từ chối đơn (dùng chung cho modal và cho bộ thử) ===== */

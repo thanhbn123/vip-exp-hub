@@ -163,7 +163,8 @@ def chay_mot_luot(tenant_id=None, chi_hang_khong_webhook=False):
                         tk["khong_doi"] += 1
                         continue
                     # ĐI QUA ĐÚNG đường của webhook: rank guard + ghi lịch sử
-                    ap, ly_do = don_hang.ap_trang_thai_giao(d["id"], qd.trang_thai_ap, "polling")
+                    ap, ly_do = don_hang.ap_trang_thai_giao(d["tenant_id"], d["id"], qd.trang_thai_ap,
+                                                            "polling")
                     if ap:
                         tk["doi_trang_thai"] += 1
                         csdl.audit("polling_cap_nhat", f"don:{d['id']}",

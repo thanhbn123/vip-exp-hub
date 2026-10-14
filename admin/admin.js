@@ -1343,10 +1343,16 @@ async function chiTietDon(id, taiKhoanHang, dsHang, sauKhiDoi) {
 }
 
 /* ===== F01 — Màn TỪ CHỐI ĐƠN (reject có lý do) =====
-   API CHƯA CÓ (đo 15/10/2026: app/server.py chỉ có duyet|gui|huy; không route nào khớp
-   /tu-choi). Màn này gọi đúng tên dự kiến; 404 thì hiện CHỜ BACKEND và KHÔNG tuyên bố đã
-   từ chối. Tuyệt đối không thay bằng /huy một cách im lặng — hủy và từ chối là hai việc
-   khác nhau, lý do từ chối phải vào được audit. */
+   API ĐÃ CÓ từ 15/10/2026 (AG-00 cắm route G04 `POST /api/v2/don/<id>/tu-choi`). Backend nhận
+   cả `{ly_do}` thuần và `{ly_do_ma, ghi_chu}` của màn này, rồi tự ghép thành chuỗi lý do lưu
+   vào `don_hang.ly_do_tu_choi` + `tu_choi_boi` + `tu_choi_luc`.
+   LƯU Ý về trạng thái: "bị từ chối" KHÔNG phải một giá trị `trang_thai` mới — AG-02 cố ý mô
+   hình hoá nó là `trang_thai='nhap'` + `ly_do_tu_choi` khác NULL, vì hợp đồng ghim `trang_thai`
+   đúng 5 giá trị. Nên sau khi từ chối, đơn quay về danh sách chờ duyệt KÈM lý do, không biến
+   mất. Giao diện phải đọc `ly_do_tu_choi` để hiện "đã bị từ chối", không đọc `trang_thai`.
+   Nhánh 404 bên dưới GIỮ LẠI làm lưới an toàn cho nền chưa migrate (backend trả 501 khi thiếu
+   cột `ly_do_tu_choi`) — không gỡ, vì gỡ là mất đường báo khi chạy trên nền cũ.
+   Tuyệt đối không thay bằng /huy một cách im lặng — hủy và từ chối là hai việc khác nhau. */
 const DUONG_TU_CHOI = (id) => `/api/v2/don/${id}/tu-choi`;
 
 function manTuChoiDon(d, sauKhiDoi) {
@@ -1377,7 +1383,10 @@ function manTuChoiDon(d, sauKhiDoi) {
       VIP.dongModal(); bao("Đã từ chối đơn."); sauKhiDoi();
     } catch (e) {
       if (e.daXuLy) return;
-      if (e.ma === 404 || e.ma === 405) {
+      if (e.ma === 404 || e.ma === 405 || e.ma === 501) {
+        // 501 = backend CÓ route nhưng CSDL chưa chạy migration G04 (thiếu cột ly_do_tu_choi).
+        // Backend cố ý từ chối thay vì âm thầm bỏ mất lý do — lý do là toàn bộ giá trị của
+        // hành động này. Giao diện phải nói đúng điều đó, không báo "đã từ chối".
         m.querySelector("#tc-kq").innerHTML = hopChoBackend("/api/v2/don/<id>/tu-choi",
           "HTTP " + e.ma + (e.message ? " — " + e.message : ""));
         m.querySelector("#tc-ok").disabled = true;

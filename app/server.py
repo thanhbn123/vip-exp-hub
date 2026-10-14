@@ -660,6 +660,22 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, ra)
 
         # --- đơn hàng ---
+        # --- G04 (AG-02): các đường có ĐOẠN CHỮ phải đứng TRƯỚC nhánh `/don/(\d+)`.
+        # `(\d+)` không khớp chữ nên không tranh chấp thật, nhưng đặt trước để người đọc sau
+        # không phải tự chứng minh điều đó mỗi lần thêm một đường mới.
+        if duong == "/api/v2/don/tim" and method == "POST":
+            self._can(nc, "tenant.don.xem")
+            return self._tra(200, don_hang.tim_don(
+                tenant_id, self._doc_json(long_khoa=("trang_thai", "trang_thai_giao", "hang",
+                                                     "carrier_account_id"))))
+        if duong == "/api/v2/don/kiem" and method == "POST":
+            self._can(nc, "tenant.don.ghi")
+            return self._tra(200, don_hang.kiem_don(tenant_id, d=self._doc_json()))
+        if duong == "/api/v2/don/can-doi-soat" and method == "GET":
+            self._can(nc, "tenant.don.xem")
+            ds = don_hang.don_can_doi_soat(tenant_id, self._so_nguyen(ts, "gioi_han", 200))
+            return self._tra(200, {"don": [dict(x) for x in ds]})
+
         if duong == "/api/v2/don" and method == "GET":
             self._can(nc, "tenant.don.xem")
             dk, tsq = ["tenant_id=?"], [tenant_id]
@@ -714,6 +730,83 @@ class BoXuLy(BaseHTTPRequestHandler):
             if method == "DELETE":
                 self._can(nc, "tenant.don.duyet")
                 return self._tra(200, {"don": don_hang.huy_don(tenant_id, nc.user_id, don_id)})
+        # --- G04 (AG-02): các việc trên MỘT đơn ---
+        m = re.fullmatch(r"/api/v2/don/(\d+)/(hanh-trinh|nhan|day-du|kiem|mat-hang)", duong)
+        if m and method == "GET":
+            don_id, viec = int(m.group(1)), m.group(2)
+            self._can(nc, "tenant.don.xem")
+            if viec == "hanh-trinh":
+                return self._tra(200, don_hang.dong_thoi_gian(tenant_id, don_id))
+            if viec == "nhan":
+                # Siêu dữ liệu nhãn, KHÔNG phải nhãn thật: mọi adapter đang ở `CHO_PHEP_LIVE=False`
+                # nên không có nhãn hãng nào tồn tại. Trả `nhan_that=False` để giao diện không
+                # dám in thứ không phải vận đơn ra giấy.
+                return self._tra(200, don_hang.sieu_du_lieu_nhan_van_don(
+                    tenant_id, nc.user_id, don_id))
+            if viec == "day-du":
+                return self._tra(200, don_hang.lay_don_day_du(tenant_id, don_id))
+            if viec == "kiem":
+                return self._tra(200, don_hang.kiem_don(tenant_id, don_id=don_id))
+            return self._tra(200, {"mat_hang": don_hang.lay_mat_hang(tenant_id, don_id)})
+        m = re.fullmatch(r"/api/v2/don/(\d+)/mat-hang", duong)
+        if m and method == "PUT":
+            self._can(nc, "tenant.don.ghi")
+            d = self._doc_json(long_khoa=("mat_hang",))
+            cac_mon = d.get("mat_hang")
+            if not isinstance(cac_mon, list):
+                return self._tra(400, {"loi": "cần mat_hang là danh sách"})
+            if len(cac_mon) > 200:
+                return self._tra(400, {"loi": f"quá nhiều mặt hàng ({len(cac_mon)}), tối đa 200"})
+            return self._tra(200, don_hang.luu_mat_hang(tenant_id, nc.user_id,
+                                                        int(m.group(1)), cac_mon))
+        m = re.fullmatch(r"/api/v2/don/(\d+)/(tu-choi|doi-soat|doi-soat-tay)", duong)
+        if m and method == "POST":
+            don_id, viec = int(m.group(1)), m.group(2)
+            self._can(nc, "tenant.don.duyet")
+            d = self._doc_json()
+            if viec == "tu-choi":
+                # Nhận HAI dạng vào, cố ý. AG-02 chốt hợp đồng `{ly_do: str}`; AG-04 dựng màn
+                # chọn 1 trong 6 mã + ghi chú. Thay vì buộc một bên sửa, tầng HTTP GHÉP lại:
+                # mã lý do giữ được cấu trúc cho người vận hành chọn, `ly_do_tu_choi` trong CSDL
+                # vẫn là một chuỗi đọc được. Chữ ký `tu_choi_don(..., ly_do)` không phải đổi.
+                # CHƯA ĐÓNG: mã lý do không truy vấn được như dữ liệu có cấu trúc (không có cột
+                # riêng) — muốn thống kê "bao nhiêu đơn bị từ chối vì sai địa chỉ" thì phải thêm
+                # cột. Ghi ra vì rủi ro không ghi là rủi ro bị bỏ quên (việc V-10711).
+                ly_do = str(d.get("ly_do") or "").strip()
+                if not ly_do:
+                    ma_ly_do = str(d.get("ly_do_ma") or "").strip()
+                    ghi_chu = str(d.get("ghi_chu") or "").strip()
+                    if ma_ly_do and ma_ly_do not in don_hang.LY_DO_TU_CHOI_MA:
+                        return self._tra(400, {
+                            "loi": f"ly_do_ma lạ: {ma_ly_do}",
+                            "cho_phep": sorted(don_hang.LY_DO_TU_CHOI_MA)})
+                    if ma_ly_do == "khac" and not ghi_chu:
+                        return self._tra(400, {"loi": "chọn 'khác' thì ghi_chu là bắt buộc"})
+                    if ma_ly_do:
+                        nhan = don_hang.LY_DO_TU_CHOI_MA[ma_ly_do]
+                        ly_do = f"{nhan} [{ma_ly_do}]" + (f" — {ghi_chu}" if ghi_chu else "")
+                if not ly_do:
+                    return self._tra(400, {"loi": "cần ly_do (hoặc ly_do_ma) khi từ chối đơn"})
+                don = don_hang.tu_choi_don(tenant_id, nc.user_id, don_id, ly_do)
+                csdl.audit("don_tu_choi", f"don:{don_id}", ly_do[:200],
+                           tenant_id=tenant_id, user_id=nc.user_id)
+                return self._tra(200, {"don": don})
+            if viec == "doi-soat":
+                kq = don_hang.doi_soat_don(tenant_id, nc.user_id, don_id)
+                csdl.audit("don_doi_soat", f"don:{don_id}", str(kq.get("ket_luan")),
+                           tenant_id=tenant_id, user_id=nc.user_id)
+                return self._tra(200, kq)
+            # doi-soat-tay: KẾT LUẬN DO NGƯỜI CHỐT, nên phải ghi rõ nguồn là người.
+            kl = str(d.get("ket_luan") or "")
+            if kl not in ("da_vao", "chua_vao"):
+                return self._tra(400, {"loi": "ket_luan phải là da_vao hoặc chua_vao"})
+            kq = don_hang.doi_soat_tay(tenant_id, nc.user_id, don_id, kl,
+                                       ma_van_don=d.get("ma_van_don"),
+                                       ghi_chu=str(d.get("ghi_chu") or ""))
+            csdl.audit("don_doi_soat_tay", f"don:{don_id}", f"{kl} · {d.get('ghi_chu') or ''}"[:200],
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, kq)
+
         m = re.fullmatch(r"/api/v2/don/(\d+)/(duyet|gui|huy)", duong)
         if m and method == "POST":
             don_id, viec = int(m.group(1)), m.group(2)
@@ -822,25 +915,44 @@ class BoXuLy(BaseHTTPRequestHandler):
         # --- webhook monitor ---
         if duong == "/api/v2/webhook/su-kien" and method == "GET":
             self._can(nc, "tenant.webhook.xem")
+            # G06 điểm cắm 2: phơi ra cột soát để người vận hành THẤY được sự kiện nhập nhằng.
+            # `NEEDS_REVIEW`/`AMBIGUOUS` nằm ở cột RIÊNG `can_soat`, không phải một giá trị mới
+            # của `trang_thai` — hợp đồng đóng băng giữ đúng 6 giá trị, thêm giá trị là phá mọi
+            # chỗ đang đọc. Bốn cột này chỉ có sau migration v7, nên hỏi schema trước khi chọn.
+            cot_soat = don_hang.co_cot("wh_su_kien", "can_soat")
+            them = (", s.can_soat, s.hang_ma_goc, s.anh_xa_do_tin_cay, s.trang_thai_chuan"
+                    if cot_soat else "")
+            dk, tsq = ["c.tenant_id=?"], [tenant_id]
+            if cot_soat and ts.get("can_soat") == "1":
+                dk.append("s.can_soat=1")
             ds = csdl.nhieu(
                 "SELECT s.id, s.event_id, s.nhan_luc, s.trang_thai, s.so_lan_thu, s.loi_cuoi,"
-                " c.hang, c.ten ten_tk FROM wh_su_kien s JOIN carrier_accounts c"
-                " ON c.id=s.carrier_account_id WHERE c.tenant_id=? ORDER BY s.id DESC LIMIT 200",
-                (tenant_id,))
-            return self._tra(200, {"su_kien": [dict(x) for x in ds]})
+                f" c.hang, c.ten ten_tk{them} FROM wh_su_kien s JOIN carrier_accounts c"
+                f" ON c.id=s.carrier_account_id WHERE {' AND '.join(dk)}"
+                " ORDER BY s.id DESC LIMIT ?", tsq + [self._so_nguyen(ts, "gioi_han", 200)])
+            return self._tra(200, {"su_kien": [dict(x) for x in ds],
+                                   "co_cot_soat": cot_soat})
         m = re.fullmatch(r"/api/v2/webhook/su-kien/(\d+)/replay", duong)
         if m and method == "POST":
             self._can(nc, "tenant.webhook.replay")
-            sk = csdl.mot("SELECT s.*, c.tenant_id t FROM wh_su_kien s JOIN carrier_accounts c"
-                          " ON c.id=s.carrier_account_id WHERE s.id=?", (int(m.group(1)),))
-            if not sk or sk["t"] != tenant_id:
+            # G06 điểm cắm 1: `yeu_cau_replay` tự kiểm tenant, tự áp trần REPLAY_TOI_DA và tự
+            # ghi audit. Replay không trần là một cửa phát lại vô hạn một sự kiện đã vào, tức là
+            # một cửa nhân bản tác động.
+            sk_id = int(m.group(1))
+            # PHẢI tách hai ca trước khi gọi: "không có / của tenant khác" → 404, "có nhưng
+            # vượt trần" → 409. `yeu_cau_replay` trả cùng một dạng cho cả hai, phân biệt bằng
+            # CHUỖI `ly_do` — và chọn mã HTTP theo chuỗi văn bản là hỏng im lặng: ai sửa câu
+            # chữ cho dễ hiểu là đổi mã HTTP theo mà không ai thấy. Gộp hai ca cũng làm người
+            # ngoài phân biệt được "ID này có thật ở tenant khác" với "ID không có", tức là dò
+            # được ID — đúng thứ TEST-011 canh. Lượt tra ở đây có lọc tenant, nên việc hàm kia
+            # cũng tự kiểm tenant là phòng thủ hai lớp, không phải trùng lặp.
+            co = csdl.mot("SELECT 1 FROM wh_su_kien s JOIN carrier_accounts c"
+                          " ON c.id=s.carrier_account_id WHERE s.id=? AND c.tenant_id=?",
+                          (sk_id, tenant_id))
+            if not co:
                 return self._tra(404, {"loi": "không có sự kiện này"})
-            csdl.ghi("UPDATE wh_su_kien SET trang_thai='moi', so_lan_thu=0, loi_cuoi=NULL WHERE id=?",
-                     (sk["id"],))
-            webhook.nap(sk["id"])
-            csdl.audit("webhook_replay", f"su_kien:{sk['id']}", f"trạng thái trước: {sk['trang_thai']}",
-                       tenant_id=tenant_id, user_id=nc.user_id)
-            return self._tra(202, {"ok": True})
+            ok, ly_do = webhook.yeu_cau_replay(sk_id, tenant_id, nc.user_id)
+            return self._tra(202 if ok else 409, {"ok": True} if ok else {"loi": ly_do})
 
         # --- polling hành trình (fallback khi hãng không đẩy webhook) ---
         if duong == "/api/v2/polling/chay" and method == "POST":

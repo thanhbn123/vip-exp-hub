@@ -456,12 +456,28 @@ test("51 API_CHO_BACKEND — mỗi mục phải khai đủ đường, method, m�
   }
 });
 
-test("52 API_CHO_BACKEND — không trùng đường, và đường từ chối/nhãn đơn phải có mặt", () => {
+test("52 API_CHO_BACKEND — không trùng đường, và ba đường quan trọng phải được KHAI Ở ĐÂU ĐÓ", () => {
   const duong = L.API_CHO_BACKEND.map(d => d.duong);
   assert.equal(new Set(duong).size, duong.length, "khai trùng đường là có hai chỗ nói về một việc");
-  assert.ok(duong.includes("/api/v2/don/<id>/tu-choi"));
-  assert.ok(duong.includes("/api/v2/don/<id>/nhan"));
-  assert.ok(duong.includes("/api/v2/webhook/su-kien/<id>"));
+  // Bản đầu đòi ba đường này nằm TRONG API_CHO_BACKEND — đúng lúc viết, vì backend chưa có.
+  // AG-00 cắm `/tu-choi` thật ngày 15/10, nên chốt như vậy biến ca thử thành cửa khoá chết:
+  // backend làm xong là ca HỎNG, mà đó là chiều TIẾN BỘ. Ý định thật của ca là "không đường
+  // nào được biến mất im lặng khỏi cả hai danh sách" — nên chốt đúng ý định đó.
+  const dangDung = L.API_DANG_DUNG.map(([, d]) => d);
+  const moiNoi = new Set([...duong, ...dangDung]);
+  for (const d of ["/api/v2/don/<id>/tu-choi", "/api/v2/don/<id>/nhan",
+                   "/api/v2/webhook/su-kien/<id>"]) {
+    assert.ok(moiNoi.has(d),
+      `${d} không còn được khai ở API_CHO_BACKEND lẫn API_DANG_DUNG — đường không ai canh`);
+  }
+  // Khai ở CẢ HAI danh sách chỉ hợp lệ khi mục đó mang cờ `mot_phan: true` — nghĩa là đường
+  // ĐANG dùng được một phần và VẪN còn chờ phần còn lại (ví dụ `GET /api/v2/don`: lọc cơ bản
+  // chạy rồi, tham số lọc nâng cao thì chưa). Không có cờ mà nằm ở cả hai thì là hai chỗ nói
+  // về một việc, và hai chỗ như vậy sẽ lệch nhau.
+  const motPhan = new Set(L.API_CHO_BACKEND.filter(d => d.mot_phan).map(d => d.duong));
+  const caHai = duong.filter(d => dangDung.includes(d) && !motPhan.has(d));
+  assert.deepEqual(caHai, [],
+    `khai ở cả hai danh sách mà không có cờ mot_phan: ${caHai}`);
 });
 
 /* ====================== 12. Canh cấu trúc của chính logic.js ====================== */

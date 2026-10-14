@@ -40,8 +40,14 @@ import quyen     # noqa: E402
 import server    # noqa: E402
 import webhook   # noqa: E402
 
-CONG = 18899
-GOC_URL = f"http://127.0.0.1:{CONG}"
+# Cổng 0 = để hệ tự cấp một cổng RỖI. Cổng cố định làm bộ thử báo HỎNG GIẢ khi hai
+# worktree chạy cùng lúc (AG-04 đo được 15/10: `Address already in use` ở lượt đầu,
+# chạy lại thì đạt). Cổng thật đọc lại từ `sv.server_address[1]` sau khi bind.
+CONG = 0
+# Không dựng ở mức module: lúc nạp file vẫn chưa bind nên CONG còn là 0. Hàm thì đọc
+# CONG lúc GỌI, nên luôn đúng cổng thật.
+def GOC_URL_F():
+    return "http://127.0.0.1:%d" % CONG
 LOG_SERVER = io.StringIO()
 MK = "MatKhauSoat-123"
 
@@ -65,7 +71,7 @@ class Phien:
             h["X-Requested-With"] = "VIPHub"
         if self.cookie:
             h["Cookie"] = self.cookie
-        yc = urllib.request.Request(GOC_URL + duong, data=body, headers=h, method=method)
+        yc = urllib.request.Request(GOC_URL_F() + duong, data=body, headers=h, method=method)
         try:
             with urllib.request.urlopen(yc, timeout=30) as ph:
                 sc = ph.headers.get("Set-Cookie")
@@ -96,11 +102,14 @@ class ThuQaSoat(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        global CONG      # gán lại sau khi bind cổng 0
         cls._stderr_cu = sys.stderr
         sys.stderr = LOG_SERVER
         csdl.mo()
         webhook.khoi_dong()
         cls.sv = server.ThreadingHTTPServer(("127.0.0.1", CONG), server.BoXuLy)
+        # Cổng THẬT do hệ cấp — gán lại CONG để mọi chỗ dựng URL lúc chạy tự đúng.
+        CONG = cls.sv.server_address[1]
         threading.Thread(target=cls.sv.serve_forever, daemon=True).start()
         quyen.seed()
         khoi_tao.seed_providers()
@@ -591,7 +600,9 @@ class ThuQaSoat(unittest.TestCase):
         "UPDATE carrier_accounts SET kich_hoat=? WHERE id=?",
         # nhap_file.duyet_batch — ngay trên là SELECT ... import_batch WHERE id=? AND tenant_id=?
         "UPDATE import_batch SET trang_thai=? WHERE id=?",
-        # don_hang.ap_trang_thai_giao — RỦI RO CẤU TRÚC CÒN LẠI (Q-10, LOW, CHƯA vá):
+        # don_hang.ap_trang_thai_giao — Q-10 ĐÃ VÁ 15/10 (G04-L2): tenant_id nay là tham số
+        # BẮT BUỘC đứng đầu, hàm tự lọc `WHERE id=? AND tenant_id=?`. Ghi chú dưới giữ lại
+        # làm lịch sử của rủi ro đã đóng:
         # hàm này nhận don_id trần và không tự kiểm tenant. An toàn HÔM NAY vì cả hai người
         # gọi (webhook._xu_ly, polling.chay_mot_luot) đã giải quyết đơn theo tenant trước.
         # Người gọi thứ ba quên làm vậy sẽ thành lỗi chéo tenant mà không có gì báo.

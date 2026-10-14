@@ -30,8 +30,13 @@ import quyen     # noqa: E402
 import server    # noqa: E402
 import webhook   # noqa: E402
 
-CONG = 18897
-GOC_URL = f"http://127.0.0.1:{CONG}"
+# Cổng 0 = để hệ tự cấp một cổng RỖI. Cổng cố định làm bộ thử báo HỎNG GIẢ khi hai
+# worktree chạy cùng lúc (AG-04 đo được 15/10: `Address already in use` ở lượt đầu,
+# chạy lại thì đạt). Cổng thật đọc lại từ `sv.server_address[1]` sau khi bind.
+CONG = 0
+# Không dựng ở mức module: lúc nạp file chưa bind nên chưa biết cổng (xem CONG ở trên).
+def GOC_URL_F():
+    return "http://127.0.0.1:%d" % CONG
 LOG_SERVER = io.StringIO()   # gom log để quét rò secret
 
 
@@ -47,7 +52,7 @@ class Phien:
             h["X-Requested-With"] = "VIPHub"
         if self.cookie:
             h["Cookie"] = self.cookie
-        yc = urllib.request.Request(GOC_URL + duong, data=body, headers=h, method=method)
+        yc = urllib.request.Request(GOC_URL_F() + duong, data=body, headers=h, method=method)
         try:
             with urllib.request.urlopen(yc, timeout=10) as ph:
                 sc = ph.headers.get("Set-Cookie")
@@ -99,12 +104,15 @@ def xlsx_mau():
 class ThuSaaS(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        global CONG      # gán lại sau khi bind cổng 0
         # chuyển stderr của server vào bộ nhớ để quét secret
         cls._stderr_cu = sys.stderr
         sys.stderr = LOG_SERVER
         csdl.mo()
         webhook.khoi_dong()
         cls.sv = server.ThreadingHTTPServer(("127.0.0.1", CONG), server.BoXuLy)
+        # Cổng THẬT do hệ cấp — gán lại CONG để mọi chỗ dựng URL lúc chạy tự đúng.
+        CONG = cls.sv.server_address[1]
         threading.Thread(target=cls.sv.serve_forever, daemon=True).start()
         # seed bằng API: platform owner tạo tay trong CSDL, phần còn lại qua API thật
         quyen.seed()

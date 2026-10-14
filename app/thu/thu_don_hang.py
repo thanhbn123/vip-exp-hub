@@ -311,7 +311,7 @@ class C_VongDoi(unittest.TestCase):
         self.assertEqual(don_hang.trang_thai_mo_rong(d), "SUBMITTED")
         for loai, ten in (("lay_hang", "PICKED_UP"), ("dang_giao", "IN_TRANSIT"),
                           ("giao_thanh_cong", "DELIVERED")):
-            don_hang.ap_trang_thai_giao(don["id"], loai, "he_thong")
+            don_hang.ap_trang_thai_giao(don["tenant_id"], don["id"], loai, "he_thong")
             self.assertEqual(
                 don_hang.trang_thai_mo_rong(don_hang.lay_don(n["tid"], don["id"])), ten)
 
@@ -802,7 +802,8 @@ class E_CachLyVaQuyen(unittest.TestCase):
         with open(os.path.join(GOC_APP, "don_hang.py"), encoding="utf-8") as f:
             nguon = f.read()
         mien = {
-            # ap_trang_thai_giao: webhook/polling đã giải quyết đơn theo tenant trước khi gọi.
+            # ap_trang_thai_giao: AG-00 đã đưa tenant_id vào chữ ký (G04-L2, 15/10) — nay hàm
+            # tự lọc theo tenant, không còn dựa vào lời cam kết của người gọi.
             # Rủi ro cấu trúc đã ghi nhận ở thu_qa_soat.py (Q-10) — không phải chỗ này vá.
             "SELECT * FROM don_hang WHERE id=?",
             "UPDATE don_hang SET trang_thai_giao=?, hang_trang_thai_giao=?, cap_nhat_luc=?"
@@ -903,7 +904,7 @@ class F_TimKiemVaTraCuu(unittest.TestCase):
     def test_f07_hanh_trinh_co_du_hai_truc_va_khong_goi_hang(self):
         n = self.n
         don = self.da_gui
-        don_hang.ap_trang_thai_giao(don["id"], "lay_hang", "webhook:9")
+        don_hang.ap_trang_thai_giao(don["tenant_id"], don["id"], "lay_hang", "webhook:9")
         ht = don_hang.dong_thoi_gian(n["tid"], don["id"])
         self.assertEqual(ht["trang_thai_giao"], "lay_hang")
         self.assertEqual(ht["trang_thai_mo_rong"], "PICKED_UP")
@@ -917,8 +918,8 @@ class F_TimKiemVaTraCuu(unittest.TestCase):
     def test_f08_hanh_trinh_ghi_ca_su_kien_den_muon_bi_bo(self):
         n = self.n
         don = self.da_gui
-        don_hang.ap_trang_thai_giao(don["id"], "dang_giao", "webhook:10")
-        ap, ly_do = don_hang.ap_trang_thai_giao(don["id"], "cho_lay", "webhook:11")
+        don_hang.ap_trang_thai_giao(don["tenant_id"], don["id"], "dang_giao", "webhook:10")
+        ap, ly_do = don_hang.ap_trang_thai_giao(don["tenant_id"], don["id"], "cho_lay", "webhook:11")
         self.assertEqual((ap, ly_do), (0, "out-of-order"))
         ht = don_hang.dong_thoi_gian(n["tid"], don["id"])
         self.assertTrue(any("out-of-order" in m["noi_dung"] for m in ht["moc"]),

@@ -604,11 +604,33 @@ def gui_don(tenant_id, user_id, don_id, carrier_account_id):
     ad, tk = _adapter_cua_account(tenant_id, carrier_account_id)
     if not ad.capability("createOrder"):
         raise LoiNghiepVu(f"hãng {ad.ten_hang} không hỗ trợ tạo đơn qua API")
-    billing.kiem_va_tang_don(tenant_id)
+    # G04-L3 (AG-00 vá 15/10). Bản cũ trừ suất TRƯỚC khi chiếm đơn, nên rò suất ở BA đường:
+    #   (1) luồng thua ở `_chiem_de_gui` đã bị trừ suất dù KHÔNG gửi gì;
+    #   (2) hãng TỪ CHỐI — không có vận đơn nào, nhưng suất đã mất và lượt gửi lại mất suất nữa;
+    #   (3) hãng TIMEOUT rồi đối soát ra `chua_vao` — gửi lại là trừ lần hai cho CÙNG một đơn.
+    # Đổi thứ tự xử (1): chiếm trước, chỉ luồng THẮNG mới bị trừ. Vượt hạn mức thì phải NHẢ
+    # chỗ đã chiếm, nếu không đơn mắc ở `dang_gui` vĩnh viễn.
     if _chiem_de_gui(tenant_id, don_id, carrier_account_id) == 0:
         raise LoiNghiepVu("đơn vừa được một lượt khác chiếm để gửi — không gửi lần hai", 409)
+    try:
+        billing.kiem_va_tang_don(tenant_id)
+    except Exception:
+        csdl.ghi("UPDATE don_hang SET trang_thai='da_duyet', cap_nhat_luc=?"
+                 " WHERE id=? AND tenant_id=? AND trang_thai='dang_gui'",
+                 (csdl.bay_gio(), don_id, tenant_id))
+        raise
 
-    kq = ad.createOrder(dict(don))
+    try:
+        kq = ad.createOrder(dict(don))
+    except Exception:
+        # Ngoại lệ lúc gọi hãng: KHÔNG hoàn suất. Ở đây không biết hãng đã nhận đơn hay chưa —
+        # cùng tình huống với timeout. Hoàn suất tức là khẳng định "không có đơn nào", mà mình
+        # không có bằng chứng đó. Thà tính dư một suất còn hơn mở đường tạo vận đơn trùng.
+        csdl.ghi("UPDATE don_hang SET can_doi_soat_ket_qua=1, cap_nhat_luc=?"
+                 " WHERE id=? AND tenant_id=?", (csdl.bay_gio(), don_id, tenant_id))
+        _ghi_lich_su(don_id, f"user:{user_id}",
+                     f"gửi {ad.ten_hang} NỔ NGOẠI LỆ — chưa rõ kết quả, cần đối soát")
+        raise
     if kq.ok:
         phi = ad.getShippingFee(dict(don)) if ad.capability("getShippingFee") else None
         csdl.ghi("UPDATE don_hang SET trang_thai='da_gui', ma_van_don=?, phi_van_chuyen=?,"
@@ -628,7 +650,11 @@ def gui_don(tenant_id, user_id, don_id, carrier_account_id):
     else:
         csdl.ghi("UPDATE don_hang SET trang_thai='da_duyet', cap_nhat_luc=?"
                  " WHERE id=? AND tenant_id=?", (csdl.bay_gio(), don_id, tenant_id))
-        _ghi_lich_su(don_id, f"user:{user_id}", f"hãng {ad.ten_hang} từ chối: {kq.loi}")
+        # Hãng TỪ CHỐI là câu trả lời RÕ RÀNG: không có vận đơn nào được tạo. Nên hoàn suất —
+        # khác hẳn timeout, nơi mình không biết gì. Đây là chỗ duy nhất trong gui_don được hoàn.
+        billing.hoan_don(tenant_id)
+        _ghi_lich_su(don_id, f"user:{user_id}",
+                     f"hãng {ad.ten_hang} từ chối: {kq.loi} — đã hoàn 1 suất đơn của gói")
         raise LoiNghiepVu(f"hãng từ chối: {kq.loi}", 502)
     return dict(lay_don(tenant_id, don_id))
 
@@ -694,9 +720,14 @@ def doi_soat_don(tenant_id, user_id, don_id):
     elif _la_khong_tim_thay(kq):
         csdl.ghi("UPDATE don_hang SET trang_thai='da_duyet', can_doi_soat_ket_qua=0,"
                  " cap_nhat_luc=? WHERE id=? AND tenant_id=?", (csdl.bay_gio(), don_id, tenant_id))
+        # G04-L3 đường (3): hãng nói RÕ là không có đơn ⇒ suất đã trừ ở lượt gửi timeout là
+        # suất của một đơn KHÔNG TỒN TẠI, và lượt gửi lại sẽ trừ suất lần nữa cho cùng một đơn.
+        # CHỈ hoàn ở nhánh `chua_vao`: `van_chua_ro` thì hoàn là khẳng định điều mình không
+        # biết, còn `da_vao` thì đơn có thật nên suất đã dùng đúng.
+        billing.hoan_don(tenant_id)
         _ghi_lich_su(don_id, f"user:{user_id}",
                      f"ĐỐI SOÁT {thao_tac} với {ad.ten_hang}: hãng KHÔNG có đơn này"
-                     f" → lùi về da_duyet, được gửi lại")
+                     f" → lùi về da_duyet, được gửi lại; đã hoàn 1 suất đơn của gói")
         ket_luan = "chua_vao"
     else:
         _ghi_lich_su(don_id, f"user:{user_id}",
@@ -722,6 +753,17 @@ def _la_khong_tim_thay(kq):
 
 
 KET_LUAN_TAY = ("da_vao", "chua_vao")
+
+# Sáu mã lý do từ chối. NGUỒN CHÂN LÝ ở đây (backend), `admin/logic.js` phải khớp — có ca thử
+# đối chiếu hai bên, vì hai bản danh sách là hai bản sẽ lệch nhau (§14.6).
+LY_DO_TU_CHOI_MA = {
+    "sai_dia_chi": "Địa chỉ nhận sai hoặc không đủ",
+    "trung_don": "Đơn trùng với đơn đã tạo",
+    "khach_huy": "Khách hủy trước khi gửi",
+    "qua_kho": "Hàng quá khổ / quá cân so với hãng nhận",
+    "sai_cod": "COD sai so với thỏa thuận",
+    "khac": "Lý do khác (ghi rõ ở ghi chú)",
+}
 
 
 def doi_soat_tay(tenant_id, user_id, don_id, ket_luan, ma_van_don=None, ghi_chu=""):
@@ -751,6 +793,9 @@ def doi_soat_tay(tenant_id, user_id, don_id, ket_luan, ma_van_don=None, ghi_chu=
     else:
         csdl.ghi("UPDATE don_hang SET trang_thai='da_duyet', can_doi_soat_ket_qua=0,"
                  " cap_nhat_luc=? WHERE id=? AND tenant_id=?", (csdl.bay_gio(), don_id, tenant_id))
+        # Cùng lý do như đường (3): NGƯỜI kết luận hãng không có đơn, nên suất đã trừ là của
+        # một đơn không tồn tại và lượt gửi lại sẽ trừ lần nữa.
+        billing.hoan_don(tenant_id)
     _ghi_lich_su(don_id, f"user:{user_id}",
                  f"ĐỐI SOÁT TAY — NGƯỜI kết luận '{ket_luan}'"
                  + (f", mã vận đơn {ma_van_don}" if ket_luan == "da_vao" else "")
@@ -793,25 +838,32 @@ def huy_don(tenant_id, user_id, don_id):
     return dict(lay_don(tenant_id, don_id))
 
 
-def ap_trang_thai_giao(don_id, loai, nguon):
+def ap_trang_thai_giao(tenant_id, don_id, loai, nguon):
     """Webhook/polling gọi: cập nhật TRỤC GIAO VẬN với rank guard. Trả (ap_dung, ly_do).
 
-    KHÔNG nhận tenant_id (người gọi — webhook._xu_ly, polling.chay_mot_luot — đã giải quyết
-    đơn theo tenant trước). Đây là rủi ro cấu trúc đã ghi nhận: QA Q-10 trong thu_qa_soat.py.
+    G04-L2 (AG-00 vá 15/10): `tenant_id` nay là tham số BẮT BUỘC và đứng ĐẦU. Bản cũ không
+    nhận nó, chỉ dựa vào lời cam kết "người gọi đã giải quyết đơn theo tenant rồi" — một lời
+    cam kết không có gì canh. Thêm một người gọi thứ ba quên bước ấy thì hàm này vui vẻ ghi
+    chéo tenant và KHÔNG báo lỗi nào. Đưa tenant_id vào chữ ký là biến lời cam kết thành thứ
+    trình biên dịch bắt được: gọi thiếu là `TypeError` ngay, không phải hỏng im lặng (§12.2).
+    Rủi ro cấu trúc này từng ghi ở QA Q-10 (`thu_qa_soat.py`) — nay đóng.
     """
     import cau_hinh
     hang_moi = cau_hinh.HANG_TRANG_THAI_GIAO.get(loai)
     if hang_moi is None:
         return 0, f"loại sự kiện lạ: {loai}"
     with csdl.khoa_ghi:
-        don = csdl.mot("SELECT * FROM don_hang WHERE id=?", (don_id,))
+        don = csdl.mot("SELECT * FROM don_hang WHERE id=? AND tenant_id=?", (don_id, tenant_id))
+        if don is None:
+            return 0, "không có đơn này trong doanh nghiệp đó"
         if don["hang_trang_thai_giao"] >= hang_moi:
             _ghi_lich_su(don_id, nguon,
                          f"sự kiện {loai} đến muộn/out-of-order — KHÔNG áp"
                          f" (giữ {don['trang_thai_giao']})")
             return 0, "out-of-order"
         csdl.ghi("UPDATE don_hang SET trang_thai_giao=?, hang_trang_thai_giao=?, cap_nhat_luc=?"
-                 " WHERE id=?", (loai, hang_moi, csdl.bay_gio(), don_id))
+                 " WHERE id=? AND tenant_id=?",
+                 (loai, hang_moi, csdl.bay_gio(), don_id, tenant_id))
     _ghi_lich_su(don_id, nguon, f"trạng thái giao → {loai}")
     return 1, ""
 

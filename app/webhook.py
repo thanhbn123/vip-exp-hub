@@ -549,7 +549,8 @@ def _xu_ly(sk):
                        tenant_id=tk["tenant_id"], ket_qua="tu_choi")
             return "xong"
 
-    ap_dung, ly_do = don_hang.ap_trang_thai_giao(don["id"], qd.trang_thai_ap, f"webhook:{sk['id']}")
+    ap_dung, ly_do = don_hang.ap_trang_thai_giao(
+        tk["tenant_id"], don["id"], qd.trang_thai_ap, f"webhook:{sk['id']}")
     if ap_dung and moc:
         _ghi_watermark(don["id"], moc, tk["tenant_id"])
     csdl.audit("webhook_cap_nhat_don", f"don:{don['id']}",

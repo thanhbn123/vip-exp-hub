@@ -56,8 +56,14 @@ import server       # noqa: E402
 import trang_thai_hang  # noqa: E402
 import webhook      # noqa: E402
 
-CONG = 8941                      # cổng riêng của AG-05, tránh đụng agent khác
-GOC_URL = f"http://127.0.0.1:{CONG}"
+# Cổng 0 = để hệ tự cấp một cổng RỖI. Cổng cố định làm bộ thử báo HỎNG GIẢ khi hai
+# worktree chạy cùng lúc (AG-04 đo được 15/10: `Address already in use` ở lượt đầu,
+# chạy lại thì đạt). Cổng thật đọc lại từ `sv.server_address[1]` sau khi bind.
+CONG = 0                      # cổng riêng của AG-05, tránh đụng agent khác
+# Không dựng ở mức module: lúc nạp file vẫn chưa bind nên CONG còn là 0. Hàm thì đọc
+# CONG lúc GỌI, nên luôn đúng cổng thật.
+def GOC_URL_F():
+    return "http://127.0.0.1:%d" % CONG
 MK = "MatKhauQA2-456"
 LOG = io.StringIO()
 
@@ -84,7 +90,7 @@ class Khach:
             h.setdefault("X-Requested-With", "VIPHub")
         if self.cookie:
             h["Cookie"] = self.cookie
-        yc = urllib.request.Request(GOC_URL + duong, data=body, headers=h, method=method)
+        yc = urllib.request.Request(GOC_URL_F() + duong, data=body, headers=h, method=method)
         try:
             with urllib.request.urlopen(yc, timeout=30) as ph:
                 sc = ph.headers.get("Set-Cookie")
@@ -137,11 +143,14 @@ class Qa2(unittest.TestCase):
     # ---------------------------------------------------------------- dựng nền
     @classmethod
     def setUpClass(cls):
+        global CONG      # gán lại sau khi bind cổng 0
         cls._err = sys.stderr
         sys.stderr = LOG
         csdl.mo()
         webhook.khoi_dong()
         cls.sv = server.ThreadingHTTPServer(("127.0.0.1", CONG), server.BoXuLy)
+        # Cổng THẬT do hệ cấp — gán lại CONG để mọi chỗ dựng URL lúc chạy tự đúng.
+        CONG = cls.sv.server_address[1]
         threading.Thread(target=cls.sv.serve_forever, daemon=True).start()
         quyen.seed()
         khoi_tao.seed_providers()
@@ -974,8 +983,8 @@ class Qa2(unittest.TestCase):
                      "tenant_memberships", "usage_thang"}
         # Mỗi dòng miễn phải nêu LÝ DO và lý do phải kiểm được bằng mắt trên mã.
         MIEN = {
-            ("don_hang.py", "don_hang"): "ap_trang_thai_giao: webhook đã resolve đơn theo "
-                                         "tenant_id + carrier_account_id TRƯỚC khi gọi",
+            ("don_hang.py", "don_hang"): "các câu còn lại đều mang tenant_id; "
+                                         "ap_trang_thai_giao ĐÃ nhận tenant_id từ 15/10 (G04-L2)",
             ("nhap_file.py", "import_batch"): "_lay_dong/chuyen_batch: đã tra theo tenant ở lượt trước",
             ("nhap_file.py", "don_hang"): "đi qua don_hang.tao_don(tenant_id, …)",
             ("webhook.py", "carrier_accounts"): "tra account theo webhook_ma — chính nó XÁC ĐỊNH tenant",

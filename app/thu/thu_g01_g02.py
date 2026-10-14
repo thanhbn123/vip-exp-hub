@@ -33,8 +33,14 @@ import server    # noqa: E402
 import webhook   # noqa: E402
 import khoi_tao  # noqa: E402
 
-CONG = 18896
-URL = f"http://127.0.0.1:{CONG}"
+# Cổng 0 = để hệ tự cấp một cổng RỖI. Cổng cố định làm bộ thử báo HỎNG GIẢ khi hai
+# worktree chạy cùng lúc (AG-04 đo được 15/10: `Address already in use` ở lượt đầu,
+# chạy lại thì đạt). Cổng thật đọc lại từ `sv.server_address[1]` sau khi bind.
+CONG = 0
+# Không dựng URL ở mức module: lúc nạp file vẫn chưa bind nên chưa biết cổng. Hàm thì
+# đọc CONG lúc GỌI, nên luôn đúng.
+def URL_GOC():
+    return "http://127.0.0.1:%d" % CONG
 LOG = io.StringIO()
 MK = "MatKhauThu-123"
 
@@ -50,7 +56,7 @@ class Phien:
             h["X-Requested-With"] = "VIPHub"
         if self.cookie:
             h["Cookie"] = self.cookie
-        yc = urllib.request.Request(URL + duong, data=body, headers=h, method=method)
+        yc = urllib.request.Request(URL_GOC() + duong, data=body, headers=h, method=method)
         try:
             with urllib.request.urlopen(yc, timeout=10) as ph:
                 sc = ph.headers.get("Set-Cookie")
@@ -81,6 +87,7 @@ DON = {"nguoi_gui_ten": "Shop", "nguoi_gui_sdt": "0901111111", "nguoi_gui_dia_ch
 class ThuG01G02(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        global CONG      # gán lại sau khi bind cổng 0
         cls._err = sys.stderr
         sys.stderr = LOG
         csdl.mo()
@@ -96,6 +103,8 @@ class ThuG01G02(unittest.TestCase):
                  (bao_mat.bam_mat_khau(MK), csdl.bay_gio()))
         webhook.khoi_dong()
         cls.sv = server.ThreadingHTTPServer(("127.0.0.1", CONG), server.BoXuLy)
+        # Cổng THẬT do hệ cấp — gán lại CONG để mọi chỗ dựng URL lúc chạy tự đúng.
+        CONG = cls.sv.server_address[1]
         threading.Thread(target=cls.sv.serve_forever, daemon=True).start()
 
         cls.po = phien("po")

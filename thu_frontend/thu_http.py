@@ -93,6 +93,21 @@ def doc_js(ten):
         return f.read()
 
 
+def bang_mot_phan():
+    """Những đường khai `mot_phan: true` — đường ĐÃ CÓ nhưng chưa đủ (thiếu tham số, hoặc trả
+    siêu dữ liệu chứ chưa trả thứ cuối cùng). Đọc từ chính `logic.js` để không có bản thứ hai."""
+    ma = doc_js("logic.js")
+    i = ma.index("const API_CHO_BACKEND = [")
+    j = ma.index("\n  ];", i)
+    ra = set()
+    for muc in ma[i:j].split("\n    {"):
+        if "mot_phan: true" in muc:
+            m = re.search(r'duong:\s*"([^"]+)"', muc)
+            if m:
+                ra.add(m.group(1))
+    return ra
+
+
 def bang_api_cho_backend():
     """Đọc API_CHO_BACKEND ra khỏi admin/logic.js mà KHÔNG chạy JS.
 
@@ -283,10 +298,22 @@ class ThuFrontendHTTP(unittest.TestCase):
     # ===================== C. Endpoint giao diện ĐANG dùng đều có thật =====================
 
     def test_08_moi_endpoint_giao_dien_dang_dung_deu_ton_tai(self):
+        """Mỗi đường giao diện khai là ĐANG DÙNG phải có thật trên máy chủ.
+
+        `<id>` phải được thay bằng id THẬT trước khi bắn. Bản đầu không thay, vì lúc viết
+        `API_DANG_DUNG` chỉ có đường GET không tham số; ngày 15/10 AG-00 khai thêm 11 đường
+        G04 có `<id>` và ca này báo hỏng với `POST /api/v2/don/<id>/tu-choi → 404` — đó là
+        404 cho chuỗi `<id>` chưa thay, KHÔNG phải route thiếu. Đo nhầm thứ mình nghĩ mình
+        đang đo chính là §12.1: công cụ kiểm chứng tự nó phải được kiểm trước khi tin.
+        """
         ds = api_dang_dung()
         self.assertGreaterEqual(len(ds), 8, "rút được quá ít endpoint — phép đo đang rỗng")
-        for method, duong in ds:
-            st, kq, _ = self.a.goi(duong, method)
+        don_id = self._tao_don()[1]["don"]["id"]
+        for method, duong_khai in ds:
+            duong = duong_khai.replace("<id>", str(don_id))
+            # Thân rỗng cho POST/PUT: ca này chỉ hỏi "route CÓ tồn tại không", nên 400 (thiếu
+            # trường) là câu trả lời ĐẠT — nó chứng minh route đã nhận và đã kiểm dữ liệu.
+            st, kq, _ = self.a.goi(duong, method, {} if method in ("POST", "PUT") else None)
             self.assertNotIn(st, (404, 405), "giao diện gọi %s %s nhưng máy chủ trả %s"
                              % (method, duong, st))
             self.assertLess(st, 500, "%s %s trả %s: %s" % (method, duong, st, kq))
@@ -299,13 +326,19 @@ class ThuFrontendHTTP(unittest.TestCase):
         Mục `/api/v2/don` (mot_phan: true) là đường ĐÃ CÓ nhưng thiếu tham số lọc nâng cao —
         cố ý loại khỏi phép đo này và ghi rõ lý do, chứ không im lặng bỏ qua."""
         bang = bang_api_cho_backend()
-        self.assertGreaterEqual(len(bang), 5, "rút được quá ít mục — phép đo đang rỗng")
+        mot_phan = bang_mot_phan()
+        self.assertGreaterEqual(len(bang), 4, "rút được quá ít mục — phép đo đang rỗng")
         don_id = self._tao_don()[1]["don"]["id"]
         thay_the = {"<id>": str(don_id)}
-        da_kiem = []
+        da_kiem, bo_qua = [], []
         for duong, method in bang:
-            if duong == "/api/v2/don":
-                continue       # mot_phan: endpoint có, chỉ thiếu tham số — xem test_10
+            if duong in mot_phan:
+                # Bỏ qua theo CỜ `mot_phan: true` trong chính logic.js, KHÔNG viết cứng đường
+                # dẫn ở đây: viết cứng thì mỗi mục một-phần mới lại phải sửa mã Python, và
+                # người sửa dễ quên — lúc đó ca thử lại báo hỏng giả. Mục bị bỏ qua được IN RA
+                # ở cuối ca, không im lặng (§12.1 luật 5: nói rõ cái gì nằm ngoài phạm vi).
+                bo_qua.append((method, duong))
+                continue
             that = duong
             for k, v in thay_the.items():
                 that = that.replace(k, v)
@@ -315,7 +348,9 @@ class ThuFrontendHTTP(unittest.TestCase):
             self.assertIn(st, (404, 405),
                           "giao diện khai '%s %s' là CHỜ BACKEND nhưng máy chủ trả %s — "
                           "backend đã có, phải gỡ nhãn và nối màn vào" % (m1, that, st))
-        self.assertGreaterEqual(len(da_kiem), 4, da_kiem)
+        print("\n      [ca09] đã bắn thật: %s" % (da_kiem,))
+        print("      [ca09] bỏ qua vì mot_phan=true: %s" % (bo_qua or "không có",))
+        self.assertGreaterEqual(len(da_kiem), 3, da_kiem)
 
     def test_10_tham_so_loc_nang_cao_that_su_chua_duoc_may_chu_ho_tro(self):
         """Giao diện nói 'máy chủ chỉ nhận q · trang_thai · gioi_han'. Đo lại câu đó:

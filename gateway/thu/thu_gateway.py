@@ -24,7 +24,10 @@ import server          # noqa: E402
 import xac_thuc        # noqa: E402
 from cau_hinh import HANG  # noqa: E402
 
-CONG = 18898
+# Cổng 0 = để hệ tự cấp một cổng RỖI. Cổng cố định làm bộ thử báo HỎNG GIẢ khi hai
+# worktree chạy cùng lúc (AG-04 đo được 15/10: `Address already in use` ở lượt đầu,
+# chạy lại thì đạt). Cổng thật đọc lại từ `sv.server_address[1]` sau khi bind.
+CONG = 0
 ADMIN = {"X-API-Key": "demo-admin-key"}
 VIEWER = {"X-API-Key": "demo-viewer-key"}
 
@@ -64,9 +67,12 @@ def ban_su_kien(ma_hang, du_lieu):
 class ThuGateway(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        global CONG      # gán lại sau khi bind cổng 0
         csdl.mo()
         hang_doi.khoi_dong()
         cls.sv = server.ThreadingHTTPServer(("127.0.0.1", CONG), server.BoXuLy)
+        # Cổng THẬT do hệ cấp — gán lại CONG để mọi chỗ dựng URL lúc chạy tự đúng.
+        CONG = cls.sv.server_address[1]
         cls.luong = threading.Thread(target=cls.sv.serve_forever, daemon=True)
         cls.luong.start()
 

@@ -18,6 +18,8 @@ os.environ["VIP_HUB_DATA"] = _tam
 
 import adapter          # noqa: E402
 import adapter_jt       # noqa: E402
+import adapter_jt as ajt  # noqa: E402
+import loi_hang as lh   # noqa: E402
 import adapter_vtp      # noqa: E402
 import bao_mat          # noqa: E402
 import csdl             # noqa: E402
@@ -42,6 +44,8 @@ class A_HopDongAdapter(unittest.TestCase):
             for ham in HAM_CHUAN:
                 self.assertTrue(callable(getattr(lop, ham, None)), f"{ma} thiếu {ham}")
             self.assertTrue(callable(getattr(lop, "normalizeTrackingStatus", None)))
+            self.assertTrue(callable(getattr(lop, "getCapabilities", None)),
+                            f"{ma} thiếu getCapabilities (hợp đồng SHARED_CONTRACTS mục 4)")
             self.assertTrue(lop.ma_hang and lop.ten_hang, f"{ma} thiếu tên")
 
     def test_a2_capability_khai_du_khoa(self):
@@ -359,6 +363,248 @@ class E_MaHoaAESGCM(unittest.TestCase):
                          bao_mat.aad_credentials(tid, "vtp")))["api_key"], "KEY-CU-1234")
         self.assertEqual(bao_mat.giai_ma(r["webhook_secret_ma_hoa"],
                          bao_mat.aad_webhook("wh-v3")), "secret-webhook-cu")
+
+
+class F_GetCapabilities(unittest.TestCase):
+    """getCapabilities() — hàm chuẩn của hợp đồng (SHARED_CONTRACTS mục 4)."""
+
+    KHOA_BAT_BUOC = ("ma_hang", "ten_hang", "chuc_nang", "moi_truong", "la_mock", "live_mo",
+                     "khoa_chong_trung", "createOrder_duoc_thu_lai", "ma_trang_thai_da_biet",
+                     "so_ma_loi_da_biet")
+
+    def test_f1_moi_adapter_tra_du_khoa(self):
+        for ma in adapter._DANG_KY:
+            c = adapter.tao_adapter(ma, {}, "mock").getCapabilities()
+            self.assertIsInstance(c, dict)
+            for k in self.KHOA_BAT_BUOC:
+                self.assertIn(k, c, f"{ma}.getCapabilities thiếu khóa '{k}'")
+
+    def test_f2_khop_voi_capability_va_danh_sach_hang(self):
+        """Ba đường đọc capability KHÔNG được nói khác nhau — lệch là hỏng im lặng (§12.2)."""
+        ds = adapter.danh_sach_hang()
+        for ma, lop in adapter._DANG_KY.items():
+            ad = adapter.tao_adapter(ma, {}, "mock")
+            c = ad.getCapabilities()
+            self.assertEqual(c["chuc_nang"], lop.CAPABILITIES)
+            self.assertEqual(c["chuc_nang"], ds[ma]["capabilities"])
+            self.assertEqual(c["live_mo"], ds[ma]["live_mo"])
+            self.assertEqual(c["khoa_chong_trung"], ds[ma]["khoa_chong_trung"])
+            for k, v in lop.CAPABILITIES.items():
+                self.assertEqual(ad.capability(k), v, f"{ma}: capability('{k}') lệch getCapabilities")
+
+    def test_f3_chuc_nang_la_ban_sao_khong_sua_duoc_vao_lop(self):
+        ad = adapter.tao_adapter("jt", {}, "mock")
+        c = ad.getCapabilities()
+        c["chuc_nang"]["createOrder"] = "BI_SUA"
+        self.assertIs(adapter._DANG_KY["jt"].CAPABILITIES["createOrder"], True,
+                      "getCapabilities trả thẳng dict của lớp — sửa một chỗ hỏng mọi tenant")
+
+    def test_f4_noi_dung_dung_su_that(self):
+        ad = adapter.tao_adapter("jt", {}, "mock")
+        c = ad.getCapabilities()
+        self.assertEqual(c["moi_truong"], "mock")
+        self.assertTrue(c["la_mock"], "chạy mock mà không tự nhận là mock")
+        self.assertFalse(c["live_mo"], "LIVE phải đang khóa")
+        self.assertTrue(c["khoa_chong_trung"] and c["createOrder_duoc_thu_lai"])
+        self.assertEqual(set(c["ma_trang_thai_da_biet"]), {str(x) for x in tth.ma_da_biet("jt")})
+        # J&T: đã đọc được bảng mã lỗi thật → phải > 0. VTP: chưa có tài liệu → phải = 0.
+        self.assertGreater(c["so_ma_loi_da_biet"], 0)
+        self.assertEqual(adapter.tao_adapter("vtp", {}, "mock").getCapabilities()["so_ma_loi_da_biet"],
+                         0, "VTP chưa có tài liệu mã lỗi mà lại khai có — là bịa")
+
+
+class G_LoiHangChuanHoa(unittest.TestCase):
+    """NormalizedCarrierError (app/loi_hang.py) — SHARED_CONTRACTS mục 5."""
+
+    def test_g1_du_truong_bat_buoc(self):
+        e = lh.NormalizedCarrierError(lh.THAM_SO_SAI, ma_goc_hang="145003050", thong_diep="x")
+        for t in ("ma_chuan", "ma_goc_hang", "thong_diep", "co_the_thu_lai"):
+            self.assertTrue(hasattr(e, t), f"thiếu trường bắt buộc '{t}'")
+        self.assertIsInstance(e.co_the_thu_lai, bool)
+        self.assertEqual(e.ma_goc_hang, "145003050")
+        self.assertIsInstance(e, Exception, "phải ném được như ngoại lệ")
+
+    def test_g2_ma_chuan_la_tap_dong(self):
+        with self.assertRaises(ValueError, msg="mã chuẩn lạ phải hỏng TO, không đi tiếp âm thầm"):
+            lh.NormalizedCarrierError("MA_TU_NGHI_RA")
+        for m in lh.MA_CHUAN:
+            self.assertIsInstance(lh.NormalizedCarrierError(m).co_the_thu_lai, bool)
+
+    def test_g3_danh_sach_trang_cho_thu_lai(self):
+        """Chỉ HET_GIO và QUA_HAN_MUC được thử lại; quên một loại phải ra KHÔNG thử lại."""
+        for m in lh.MA_CHUAN:
+            self.assertEqual(lh.NormalizedCarrierError(m).co_the_thu_lai,
+                             m in (lh.HET_GIO, lh.QUA_HAN_MUC), f"{m} sai chính sách thử lại")
+        self.assertFalse(lh.NormalizedCarrierError(lh.KHONG_RO).co_the_thu_lai,
+                         "mã KHÔNG RÕ mà cho thử lại — đúng kiểu thử lại mù gây đơn trùng")
+        # cấm nới lỏng: ép True cho loại ngoài danh sách trắng vẫn phải ra False
+        self.assertFalse(lh.NormalizedCarrierError(lh.THAM_SO_SAI, co_the_thu_lai=True).co_the_thu_lai)
+        # nhưng được siết chặt hơn
+        self.assertFalse(lh.NormalizedCarrierError(lh.HET_GIO, co_the_thu_lai=False).co_the_thu_lai)
+
+    def test_g4_bang_ma_loi_jt_that(self):
+        """Mã chép từ open.jtexpress.vn/apiDoc/errorCode/index (đọc bằng trình duyệt 14/10/2026)."""
+        self.assertIsNone(lh.doc_tra_loi_jt({"code": "1", "msg": "success"}), "code=1 là thành công")
+        cho = {"145003030": lh.XAC_THUC_HONG, "145003031": lh.XAC_THUC_HONG,
+               "999001030": lh.XAC_THUC_HONG, "145003050": lh.THAM_SO_SAI,
+               "145003502": lh.THAM_SO_SAI, "145003204": lh.DON_TRUNG,
+               "999010010": lh.HANG_TU_CHOI, "999002000": lh.KHONG_TIM_THAY}
+        for ma, chuan in cho.items():
+            e = lh.doc_tra_loi_jt({"code": ma, "msg": "m"}, thao_tac="createOrder")
+            self.assertIsNotNone(e, f"mã {ma} phải là lỗi")
+            self.assertEqual(e.ma_chuan, chuan, f"{ma} ánh xạ sai")
+            self.assertEqual(e.ma_goc_hang, ma, "mất mã gốc của hãng")
+            self.assertFalse(e.co_the_thu_lai, f"{ma} không được thử lại")
+
+    def test_g5_ma_loi_la_khong_doan_nghia(self):
+        e = lh.doc_tra_loi_jt({"code": "999999999", "msg": "loi la"})
+        self.assertEqual(e.ma_chuan, lh.KHONG_RO)
+        self.assertFalse(e.co_the_thu_lai)
+        self.assertIn("999999999", e.thong_diep)
+        # tài liệu ghi rõ 0 = fail — tuyệt đối không coi là thành công
+        self.assertIsNotNone(lh.doc_tra_loi_jt({"code": "0", "msg": "fail"}))
+        # gói trả lời dị dạng cũng không được lọt thành công
+        for goi in ({}, {"msg": "x"}, [], "ok", None):
+            self.assertIsNotNone(lh.doc_tra_loi_jt(goi), f"gói {goi!r} lọt thành công")
+
+    def test_g6_vtp_chua_co_bang_ma_loi_thi_noi_thang(self):
+        self.assertNotIn("vtp", lh.BANG_MA_LOI,
+                         "VTP chưa có tài liệu mã lỗi mà đã có bảng — kiểm lại nguồn")
+        e = lh.tu_ma_hang("vtp", "ABC", msg="loi gi do")
+        self.assertEqual(e.ma_chuan, lh.KHONG_RO)
+        self.assertFalse(e.co_the_thu_lai)
+
+    def test_g7_tu_http(self):
+        cho = {408: lh.HET_GIO, 429: lh.QUA_HAN_MUC, 500: lh.HET_GIO, 503: lh.HET_GIO,
+               401: lh.XAC_THUC_HONG, 403: lh.XAC_THUC_HONG, 404: lh.KHONG_TIM_THAY,
+               400: lh.THAM_SO_SAI, 422: lh.THAM_SO_SAI, 418: lh.KHONG_RO}
+        for st, chuan in cho.items():
+            e = lh.tu_http(st, hang="jt")
+            self.assertEqual(e.ma_chuan, chuan, f"HTTP {st} phân loại sai")
+            self.assertEqual(e.http_status, st)
+        self.assertTrue(lh.tu_http(429).co_the_thu_lai)
+        self.assertTrue(lh.tu_http(503).co_the_thu_lai)
+        self.assertFalse(lh.tu_http(400).co_the_thu_lai)
+        self.assertFalse(lh.tu_http(418).co_the_thu_lai, "4xx lạ mà cho thử lại")
+
+    def test_g8_noi_hai_chieu_voi_transport(self):
+        """co_the_thu_lai là thứ DUY NHẤT quyết định — hai lớp không được lệch nhau."""
+        self.assertEqual(lh.tu_ngoai_le(tp.LoiTamThoi("chap"), hang="jt").ma_chuan, lh.HET_GIO)
+        self.assertTrue(lh.tu_ngoai_le(tp.LoiTamThoi("chap")).co_the_thu_lai)
+        self.assertEqual(lh.tu_ngoai_le(tp.LoiVinhVien("sai chu ky")).ma_chuan, lh.THAM_SO_SAI)
+        self.assertFalse(lh.tu_ngoai_le(tp.LoiVinhVien("x")).co_the_thu_lai)
+        self.assertEqual(lh.tu_ngoai_le(RuntimeError("la")).ma_chuan, lh.KHONG_RO)
+        for m in lh.MA_CHUAN:
+            e = lh.NormalizedCarrierError(m)
+            lop_mong = tp.LoiTamThoi if e.co_the_thu_lai else tp.LoiVinhVien
+            self.assertIsInstance(lh.thanh_ngoai_le_transport(e), lop_mong,
+                                  f"{m}: hai lớp lệch chính sách thử lại")
+        e = lh.NormalizedCarrierError(lh.HET_GIO)
+        self.assertTrue(lh.tu_ngoai_le(lh.thanh_ngoai_le_transport(e)).co_the_thu_lai)
+
+    def test_g9_don_trung_khong_bao_gio_thu_lai(self):
+        """145003204 nghĩa là lượt trước ĐÃ vào hãng — thử lại nữa là chắc chắn sai."""
+        e = lh.doc_tra_loi_jt({"code": "145003204", "msg": "订单重复"}, thao_tac="createOrder")
+        self.assertEqual(e.ma_chuan, lh.DON_TRUNG)
+        self.assertFalse(e.co_the_thu_lai)
+        self.assertIsInstance(lh.thanh_ngoai_le_transport(e), tp.LoiVinhVien)
+
+    def test_g10_nhu_dict_ghi_audit_duoc(self):
+        e = lh.doc_tra_loi_jt({"code": "999001030", "msg": "sai mat khau"}, thao_tac="createOrder")
+        d = e.nhu_dict()
+        for k in ("ma_chuan", "ma_goc_hang", "thong_diep", "co_the_thu_lai"):
+            self.assertIn(k, d)
+        self.assertNotIn("tho", d, "nhu_dict() không được kéo theo dữ liệu thô chưa lọc")
+        self.assertTrue(json.dumps(d, ensure_ascii=False))
+
+    def test_g11_adapter_jt_dung_bang_ma_loi_that(self):
+        """Ca ép lỗi của mock cũng phải đi qua mã lỗi THẬT, không bịa chuỗi lỗi riêng."""
+        ad = adapter.tao_adapter("jt", {}, "mock")
+        kq = ad.createOrder(dict(DON_MAU, ghi_chu="demo_force_fail"))
+        self.assertFalse(kq.ok)
+        self.assertEqual(kq.tho["loi_chuan"]["ma_chuan"], lh.THAM_SO_SAI)
+        self.assertIn(kq.tho["loi_chuan"]["ma_goc_hang"], lh.JT_MA_LOI)
+        kq2 = ad.createOrder(dict(DON_MAU, ghi_chu="demo_force_timeout"))
+        self.assertTrue(kq2.timeout)
+        self.assertEqual(kq2.tho["loi_chuan"]["ma_chuan"], lh.HET_GIO)
+        self.assertTrue(kq2.tho["loi_chuan"]["co_the_thu_lai"])
+
+
+class H_ChuKyJT(unittest.TestCase):
+    """Hợp đồng chữ ký J&T — đối chiếu TÀI LIỆU, không đối chiếu mã của chính mình.
+    Nguồn: open.jtexpress.vn/apiDoc, trang 极兔API简介, đọc bằng trình duyệt 14/10/2026."""
+
+    def test_h1_cong_thuc_digest_dung_tai_lieu(self):
+        """digest = base64( md5-BYTES( bizContent + privateKey ) ) — md5 ra byte rồi mới base64."""
+        import base64 as b64
+        import hashlib as hl
+        biz, key = '{"customerCode":"024E000014","key":"Z354nbj1"}', "Z354nbj1"
+        mong = b64.b64encode(hl.md5((biz + key).encode("utf-8")).digest()).decode()
+        self.assertEqual(ajt.ky_digest(biz, key), mong)
+        # và phải KHÁC biến thể sai hay gặp: base64 của chuỗi hex md5
+        sai_hex = b64.b64encode(hl.md5((biz + key).encode()).hexdigest().encode()).decode()
+        self.assertNotEqual(ajt.ky_digest(biz, key), sai_hex,
+                            "đang base64 chuỗi hex — sai so với tài liệu")
+        self.assertEqual(len(ajt.ky_digest(biz, key)), 24, "md5 16 byte → base64 phải 24 ký tự")
+
+    def test_h2_chu_ky_phu_thuoc_ca_hai_dau_vao(self):
+        a = ajt.ky_digest('{"a":1}', "K1")
+        self.assertNotEqual(a, ajt.ky_digest('{"a":2}', "K1"), "đổi bizContent mà chữ ký không đổi")
+        self.assertNotEqual(a, ajt.ky_digest('{"a":1}', "K2"), "đổi privateKey mà chữ ký không đổi")
+
+    def test_h3_tieng_viet_co_dau_ky_theo_utf8(self):
+        """Tài liệu ghi 字符编码默认统一采用UTF-8. Ký bằng bảng mã khác là sai chữ ký im lặng."""
+        import base64 as b64
+        import hashlib as hl
+        biz = '{"name":"Nguyễn Đình Thành"}'
+        self.assertEqual(ajt.ky_digest(biz, "K"),
+                         b64.b64encode(hl.md5((biz + "K").encode("utf-8")).digest()).decode())
+
+    def test_h4_bizcontent_la_CHUOI_json_khong_phai_object(self):
+        s = ajt.dung_bizcontent({"customerCode": "C", "txlogisticId": "T1"})
+        self.assertIsInstance(s, str, "bizContent phải là chuỗi JSON (tài liệu: json格式的string)")
+        self.assertEqual(json.loads(s)["txlogisticId"], "T1")
+        body = ajt.dung_body(s)
+        self.assertEqual(list(body), ["bizContent"], "thân form chỉ có đúng trường bizContent")
+        self.assertIsInstance(body["bizContent"], str)
+
+    def test_h5_header_du_ba_truong_va_content_type(self):
+        biz = ajt.dung_bizcontent({"a": 1})
+        h = ajt.dung_headers("669375073659916329", biz, "KEY")
+        for k in ("apiAccount", "digest", "timestamp"):
+            self.assertIn(k, h, f"thiếu header bắt buộc '{k}'")
+        self.assertEqual(h["Content-Type"], "application/x-www-form-urlencoded")
+        self.assertEqual(h["digest"], ajt.ky_digest(biz, "KEY"))
+        self.assertEqual(h["apiAccount"], "669375073659916329")
+
+    def test_h6_timestamp_mili_giay_mui_gio_utc7(self):
+        """Tài liệu: 时间戳，毫秒 / 时区：UTC+7. Tính tường minh, không mượn múi giờ của máy."""
+        import datetime as dt
+        ts = ajt.dung_headers("1", "{}", "K")["timestamp"]
+        self.assertTrue(ts.isdigit(), "timestamp phải là chuỗi số")
+        tz7 = dt.timezone(dt.timedelta(hours=7))
+        moc = dt.datetime(2026, 10, 14, 12, 0, 0, tzinfo=tz7)
+        self.assertEqual(ajt.dau_thoi_gian_ms(moc), int(moc.timestamp() * 1000))
+        self.assertEqual(len(str(ajt.dau_thoi_gian_ms())), 13,
+                         "timestamp đang là giây, không phải mili giây")
+
+    def test_h7_goi_tao_don_ky_dung_chuoi_da_gui_di(self):
+        """Chữ ký phải ký ĐÚNG chuỗi bizContent nằm trong thân yêu cầu, không ký bản khác."""
+        ad = adapter.tao_adapter("jt", {"apiAccount": "A1", "customerCode": "C",
+                                        "password": "P", "privateKey": "K"}, "mock")
+        yc = ad.yeu_cau_tao_don(dict(DON_MAU))
+        self.assertEqual(yc["body"]["bizContent"], yc["bizContent"])
+        self.assertEqual(yc["headers"]["digest"], ajt.ky_digest(yc["bizContent"], "K"))
+        self.assertEqual(json.loads(yc["bizContent"])["txlogisticId"], DON_MAU["ma_don"])
+        self.assertIsNone(yc["url"], "môi trường mock KHÔNG được có URL thật để lỡ gọi ra ngoài")
+
+    def test_h8_mock_tach_bach_khong_co_ma_goi_mang(self):
+        for ten in ("adapter.py", "adapter_jt.py", "adapter_vtp.py", "loi_hang.py"):
+            with open(os.path.join(GOC_APP, ten), encoding="utf-8") as f:
+                nguon = f.read()
+            for cam in ("import requests", "import httpx", "urllib.request", "http.client",
+                        "socket.socket"):
+                self.assertNotIn(cam, nguon, f"{ten} có mã gọi mạng ('{cam}') — mock phải sạch")
 
 
 def _ma_hoa_kieu_cu(ro: str) -> str:

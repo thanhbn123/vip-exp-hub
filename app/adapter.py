@@ -41,6 +41,44 @@ class CarrierAdapter:
     def capability(self, ten):
         return self.CAPABILITIES.get(ten, False)
 
+    def getCapabilities(self) -> dict:
+        """Hàm chuẩn của hợp đồng (docs/SHARED_CONTRACTS.md mục 4): mô tả ĐẦY ĐỦ khả năng của
+        MỘT thể hiện adapter, để Order Service không phải biết chi tiết hãng.
+
+        Giữ nguyên `capability(ten)` và `danh_sach_hang()` — hai hàm cũ vẫn có người gọi.
+        Khác nhau ở chỗ: `capability` hỏi MỘT khóa; `danh_sach_hang` xem MỌI LỚP đã đăng ký;
+        còn `getCapabilities` mô tả CHÍNH thể hiện này, nên biết cả môi trường đang chạy.
+
+        `chuc_nang` là **bản sao**, không phải chính dict của lớp: người gọi lỡ sửa vào đó thì
+        chỉ hỏng bản sao, không đổi CAPABILITIES của cả lớp (một chỗ sửa lan ra mọi tenant là
+        đúng dạng hỏng im lặng, §12.2).
+        """
+        return {
+            "ma_hang": self.ma_hang,
+            "ten_hang": self.ten_hang,
+            "chuc_nang": dict(self.CAPABILITIES),
+            "moi_truong": self.moi_truong,
+            "la_mock": self.moi_truong == "mock",
+            "live_mo": bool(self.CHO_PHEP_LIVE),
+            "khoa_chong_trung": bool(self.KHOA_CHONG_TRUNG),
+            # Thao tác ghi chỉ được thử lại khi hãng tự chặn đơn trùng (xem transport.py).
+            "createOrder_duoc_thu_lai": bool(self.KHOA_CHONG_TRUNG),
+            "ma_trang_thai_da_biet": self._ma_trang_thai_da_biet(),
+            "so_ma_loi_da_biet": self._so_ma_loi_da_biet(),
+        }
+
+    @classmethod
+    def _ma_trang_thai_da_biet(cls):
+        import trang_thai_hang as tth
+        return [str(x) for x in tth.ma_da_biet(cls.ma_hang)]
+
+    @classmethod
+    def _so_ma_loi_da_biet(cls):
+        """Số mã lỗi ĐÃ ĐỌC ĐƯỢC từ tài liệu hãng. 0 nghĩa là chưa có tài liệu — nói thẳng,
+        không để người đọc tưởng hãng không có lỗi nào."""
+        import loi_hang
+        return len(loi_hang.BANG_MA_LOI.get(cls.ma_hang) or {})
+
     # Các hàm chuẩn — lớp con cài đặt; mặc định báo không hỗ trợ.
     def createOrder(self, don) -> KetQuaHang:
         return KetQuaHang(False, loi=f"{self.ma_hang} không hỗ trợ createOrder")

@@ -28,15 +28,28 @@ JT_MA = {
     120: ("Return Problem / 退件问题件", None),    # vấn đề trong lúc hoàn — chỉ ghi nhận
     121: ("FINISH / 完结", None),                  # tài liệu không nói rõ kết thúc theo hướng nào
 }
-# CẦN XÁC MINH khi có tài khoản thật:
-#   - Ví dụ request trong tài liệu dùng scanTypeCode = 10, KHÔNG nằm trong danh sách mã nêu trên.
-#     Chưa rõ là lỗi tài liệu hay có bộ mã khác. Mã lạ sẽ rơi vào nhánh "không ánh xạ" (an toàn).
+# CẦN XÁC MINH khi có tài khoản thật (đọc lại tài liệu bằng trình duyệt 14/10/2026, thấy thêm):
+#   - TÀI LIỆU TỰ MÂU THUẪN VỚI VÍ DỤ CỦA CHÍNH NÓ. Bảng tham số liệt kê bộ mã 103…121 ở trên,
+#     nhưng VÍ DỤ TRẢ LỜI ngay dưới bảng (cả /apiDoc/logistics/query lẫn /logistics/statusFeedback)
+#     dùng một bộ mã KHÁC HẲN: 10 "Nhận hàng / 快件揽收", 50 "Gửi hàng", 92 "Hàng đến",
+#     94 "Quét phát hàng", 100 "Ký nhận", 110 "Quét kiện vấn đề".
+#     Nguy nhất là **110**: bảng tham số ghi "Arrival / 到件扫描" (đang giao), ví dụ lại ghi
+#     "Quét kiện vấn đề". Hai nghĩa ngược chiều nhau trên cùng một con số.
+#     HIỆN GIỮ theo BẢNG THAM SỐ — phần chuẩn tắc của tài liệu — vì bộ mã trong ví dụ rõ ràng là
+#     một hệ đánh số khác (ví dụ ghi 10 = đã lấy hàng, trong khi bảng ghi 106).
+#     Rủi ro còn lại, ghi ra để không ai quên (§12.1 "rủi ro cố ý bỏ qua thì phải ghi ra"): nếu
+#     hãng thật đẩy theo bộ mã của ví dụ thì 110 sẽ bị hiểu thành "đang giao" thay vì "kiện vấn
+#     đề". Hậu quả có giới hạn — dang_giao hạng 3 < giao_that_bai hạng 4 nên rank guard không bị
+#     kéo lùi — nhưng đơn có vấn đề sẽ KHÔNG nổi lên. Phải hỏi hãng ngay khi có người đối tiếp.
 #   - Ý nghĩa chính xác của 121 FINISH (sau giao thành công hay sau hoàn hàng).
 
 # ---- Viettel Post ----
-# CHƯA CÓ TÀI LIỆU trong tay: adapter VTP hiện là MOCK, và việc đọc mã tích hợp thật nằm ở repo
-# `vip-viettelpost` mà Owner chưa cho phép đọc (BLOCKED). Vì vậy chỉ ánh xạ đúng các mã mà
-# BỘ MÔ PHỎNG của chính dự án này sinh ra — không bịa mã của hãng thật.
+# CHƯA CÓ TÀI LIỆU HÃNG trong tay: adapter VTP hiện là MOCK hoàn toàn.
+# SỬA 14/10/2026: ghi chú cũ nói "repo `vip-viettelpost` Owner chưa cho phép đọc" — nay Owner ĐÃ
+# cho phép và repo ĐÃ ĐỌC (chỉ đọc). Kết quả: lớp tích hợp hãng ở repo đó là khung rỗng,
+# `STATUS_MAP = {}`, không có mã trạng thái VTP nào. Chi tiết: docs/VIETTELPOST_REUSE_AUDIT.md.
+# ⇒ Nút thắt thật là TÀI LIỆU PARTNER API + credentials, không phải quyền đọc repo.
+# Vì vậy chỉ ánh xạ đúng các mã mà BỘ MÔ PHỎNG của chính dự án này sinh ra — không bịa mã hãng.
 VTP_MA_MOCK = {
     "cho_lay": ("MOCK chờ lấy", "cho_lay"),
     "lay_hang": ("MOCK đã lấy", "lay_hang"),

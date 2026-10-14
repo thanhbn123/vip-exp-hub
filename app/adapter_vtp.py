@@ -1,8 +1,9 @@
 # G05 — Adapter Viettel Post.
 # TRẠNG THÁI: MOCK hoàn toàn.
 #
-# ĐÃ ĐỌC repo `vip-viettelpost` ngày 14/10/2026 (Owner cho phép) — KẾT QUẢ: repo đó là SCAFFOLD RỖNG,
-# không có gì để tái dùng. Đo được:
+# ĐÃ ĐỌC repo `vip-viettelpost` ngày 14/10/2026 (Owner cho phép, CHỈ ĐỌC). Khảo sát lại lần hai
+# cùng ngày tại commit `4df8ce7`, kết quả đầy đủ ghi ở docs/VIETTELPOST_REUSE_AUDIT.md.
+# KẾT QUẢ cho LỚP TÍCH HỢP HÃNG — thứ adapter này cần: KHUNG RỖNG, không tái dùng được gì. Đo được:
 #   - app/providers/viettel_post/status_mapper.py : STATUS_MAP = {} rỗng, kèm
 #     "TODO: Fill only after verifying official VTP status codes."
 #   - auth.py       : raise NotImplementedError — chưa có contract xác thực
@@ -14,6 +15,11 @@
 #   - host: https://partner.viettelpost.vn   (app/core/config.py: vtp_base_url, .env.example)
 #   - kiểu xác thực dự kiến: Bearer token, cấu hình vtp_username/vtp_password/vtp_token
 #     → đây là PHỎNG ĐOÁN CỦA REPO ĐÓ, không phải tài liệu hãng. Không dùng làm căn cứ.
+#
+# ĐÍNH CHÍNH 14/10/2026 (§12.1): câu cũ ở đây viết repo đó "là SCAFFOLD RỖNG" — nói quá phạm vi.
+# Đúng là: LỚP TÍCH HỢP HÃNG rỗng (7/9 hạng mục `NotImplementedError`, 2 là vỏ), nhưng LỚP LƯU TRỮ
+# của repo đó KHÔNG rỗng — 1.325 dòng mã thật, 8 bảng có ràng buộc, 612 dòng test lưu trữ. Chỉ là
+# không chép sang được, vì bên mình dùng sqlite3 + thư viện chuẩn còn bên đó FastAPI + SQLAlchemy.
 #
 # ⇒ Nút thắt thật của VTP là TÀI LIỆU PARTNER API + credentials, KHÔNG phải quyền đọc repo.
 VTP_HOST_CHUA_XAC_MINH = "https://partner.viettelpost.vn"

@@ -209,3 +209,63 @@ cả 10 trang **không tràn**. Không trang nào bị sửa nội dung.
 7. **Không có uncaught exception** nào trong console suốt các lượt bấm; các dòng đỏ trong
    console chỉ là trình duyệt ghi lại mã HTTP không-2xx (401 trước khi đăng nhập, 404 của
    endpoint ánh xạ chưa có, 403 của ca kiểm quyền) — đều là ca cố tình tạo ra và đã được mã bắt.
+
+---
+
+# ĐỢT F04 — 15/10/2026 (AG-04): đã có bộ thử tự động, và đây là lượt đo tầng 3
+
+Mục 5.2 ở trên viết *"Không có bộ thử tự động cho frontend"* — **câu đó nay đã cũ**. Bộ thử
+dựng ở `thu_frontend/`, mô tả đầy đủ ở `docs/FRONTEND_AUTOMATION.md`.
+
+| Tầng | Lệnh | Số ca | Kết quả 15/10/2026 | Trình duyệt thật? |
+|---|---|---|---|---|
+| 1 — logic thuần | `node --test thu_frontend/thu_logic.mjs` | 56 | **56 đạt** | không |
+| 2 — HTTP + tệp tĩnh | `python3 thu_frontend/thu_http.py` | 36 | **36 đạt** | không |
+| 3 — trình duyệt thật | *(chưa tự động hoá — xem bên dưới)* | 30 phép đo + 9 kịch bản | đạt | **có** |
+
+## Tầng 3 — số đo thật, đo bằng Chrome, ngày 15/10/2026
+
+**Nền đo:** server `python3 app/server.py 8931`, `VIP_HUB_DATA` trỏ thư mục nháp của phiên
+(không ghi vào `app/du-lieu/`), dữ liệu mồi: 9 đơn (4 đã gửi hãng mock, 1 hủy, phần còn lại
+nháp/đã duyệt), 1 batch import 3 dòng, 3 sự kiện webhook (1 `khong_khop`, 1 `AMBIGUOUS` mô
+phỏng AG-03, 1 `dlq` 5 lần thử).
+
+### Tràn ngang — `scrollWidth` vs `clientWidth`, không đo bằng mắt
+
+| Đối tượng | 375px | 768px | 1280px |
+|---|---|---|---|
+| 10 màn SPA quản trị | **0 tràn / 10 màn** | **0 / 10** | **0 / 10** |
+| Modal chi tiết đơn, 4 tab | **0 / 4 tab** | — | — |
+| 10 trang demo G00 | **0 / 10 trang** | — | — |
+
+Phần tử nằm trong `.cuon-ngang` **cố ý loại khỏi phép đo**: bảng rộng phải cuộn ngang trong
+vùng của nó, đó là thiết kế chứ không phải lỗi. Ngoài vùng cuộn: 0 phần tử tràn ở mọi lượt.
+
+### Chín kịch bản bấm thật
+
+| # | Kịch bản | Kết quả đo |
+|---|---|---|
+| 1 | Đăng nhập `shopa-owner` | dashboard dựng, 6 lượt gọi API đều 200 |
+| 2 | Đi hết 10 màn SPA | tiêu đề đúng từng màn, không exception JS |
+| 3 | Bộ lọc nâng cao | COD ≥ 300.000: 8→3 · hãng `vtp`: 8→4 · chưa có vận đơn: 8→4 · xóa lọc: 8/8. Dòng "phạm vi lọc" đếm đúng số điều kiện |
+| 4 | Chế độ dữ liệu | 4 **LOCAL REAL DATA** + 4 **MOCK DATA** + **0 LIVE** |
+| 5 | Tạo đơn trên UI | form trống → **8 ô báo lỗi tại chỗ, không gọi API** · cân nặng 0 → chặn · sửa đúng → tạo thật `T1-000009`, bảng 8→9 dòng |
+| 6 | Chi tiết đơn | 4 tab chạy · timeline 2 nút · phiếu in đúng tiêu đề *"PHIẾU NỘI BỘ — KHÔNG PHẢI NHÃN VẬN ĐƠN"* |
+| 7 | Từ chối đơn | thiếu lý do → chặn · "Lý do khác" thiếu ghi chú → chặn · hợp lệ → gọi thật → **HTTP 404** → hộp CHỜ BACKEND, nút bị khóa, **không** báo đã từ chối |
+| 8 | Webhook monitor | KPI 3 / 1 DLQ / 8 lần thử lại / 1 nhập nhằng · `AMBIGUOUS` hiện **nguyên văn** kèm ⚠ trong khối riêng · chi tiết sự kiện kèm hộp CHỜ BACKEND |
+| 9 | 401 + chuyển tenant | thu hồi phiên ngầm → màn "Phiên đăng nhập đã hết hạn", nhớ *"mở lại màn Đơn hàng"* · chuyển tenant A (OWNER, 8 đơn) → B (ADMIN, 0 đơn) |
+
+### Tầng 3 chưa kiểm được gì
+
+1. **Chưa tự động hoá.** Repo cấm thêm thư viện ngoài nên không có Playwright/Puppeteer; tầng 3
+   là phiên Claude lái Chrome bằng tay, **không chạy lại được bằng một lệnh**. Đây vẫn là lỗ
+   hổng hồi quy của lớp DOM/CSS — chỉ là nhỏ hơn trước, vì phần quyết định đã xuống tầng 1.
+2. **Khối "Không đủ quyền" (403) chưa dựng lại bằng mắt ở lượt này**: người chỉ xem không còn
+   nút nào trên giao diện dẫn tới 403 (menu ẩn đúng, nút ẩn đúng). Đã đo phía HTTP:
+   `GET /api/v2/memberships` với `TENANT_VIEWER` trả **403 + `{"loi": "không đủ quyền"}`** —
+   đúng thứ khối 403 cần. Mã dựng khối này không bị đợt F04 sửa.
+3. **Chỉ Chrome.** Safari/Firefox chưa đo. Dưới 375px chưa đo.
+4. **In thật** (ra máy in / PDF) chưa thử; chỉ kiểm có `@media print` và khung `#pi-giay`.
+5. **Dữ liệu lớn vẫn chưa đo** — giới hạn 4 ở mục 5 phía trên còn nguyên: 9 đơn, 1 batch 3 dòng.
+   Bộ lọc nâng cao chạy **tại giao diện trên tập đã tải**, nên với CSDL lớn nó lọc thiếu; giao
+   diện có nói rõ phạm vi này nhưng đó là vá bằng lời, không phải vá bằng cấu trúc.

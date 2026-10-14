@@ -45,6 +45,40 @@ async function api(duong, method, du_lieu, headers) {
 const T = VIP.thoat, tien = VIP.tien;
 const bao = (m, loai) => VIP.toast(m, loai);
 
+/* LOGIC THUẦN nằm ở admin/logic.js — tách ra để bộ thử Node chạy được mà không cần trình
+   duyệt. File này chỉ dựng HTML và gắn sự kiện; mọi QUYẾT ĐỊNH (nhãn nào, lọc ra sao, chế độ
+   dữ liệu nào) đều hỏi L. Sửa luật nhãn/lọc thì sửa ở logic.js để bộ thử bắt được. */
+const L = window.VIPLOGIC;
+
+/* Dựng huy hiệu từ kết quả của logic.js. `la=true` nghĩa là trạng thái backend mới thêm mà
+   giao diện chưa biết tên — vẫn hiện NGUYÊN VĂN kèm dấu ⚠, không nuốt im lặng. */
+function hh(d, them) {
+  if (!d) return "—";
+  return `<span class="huy-hieu ${d.lop}${d.la ? " hh-la" : ""}" title="${T(d.ma)}${d.mo_ta ? " — " + T(d.mo_ta) : ""}">${T(d.ten)}${d.la ? " ⚠" : ""}</span>${them || ""}`;
+}
+/* Nhãn chế độ dữ liệu: MOCK DATA / LOCAL REAL DATA / LIVE CARRIER DATA (brief F01). */
+const nhanCheDo = (cd) => cd
+  ? `<span class="che-do ${cd.lop}" title="${T(cd.giai_thich)}">${T(cd.nhan)}</span>` : "";
+
+/* Nhãn + hộp CHỜ BACKEND tra từ bảng API_CHO_BACKEND trong logic.js (một chỗ khai duy nhất,
+   và bộ thử HTTP bắn thật vào từng đường trong bảng đó — nhãn không nói dối được lâu). */
+function nhanChoBackend(duong) {
+  const d = L.API_CHO_BACKEND.find(x => x.duong === duong);
+  return d ? `<span class="tag-demo" title="${T(d.method + " " + d.duong)} — ${T(d.ghi_chu)}">CHỜ BACKEND</span>`
+           : `<span class="tag-demo">CHỜ BACKEND</span>`;
+}
+function hopChoBackend(duong, loi_them) {
+  const d = L.API_CHO_BACKEND.find(x => x.duong === duong) || { duong: duong, method: "?", ghi_chu: "" };
+  return `<div class="hop-cho-backend">
+    <b>⏳ Chờ backend — ${T(d.ten || d.duong)}</b>
+    <div>Giao diện mong đợi <code>${T(d.method)} ${T(d.duong)}</code>. ${T(d.ghi_chu)}</div>
+    ${loi_them ? `<div>Máy chủ vừa trả: <b>${T(loi_them)}</b></div>` : ""}
+    <div class="ghi-chu-nguon" style="margin-top:6px">Schema mong đợi ghi ở
+      <code>admin/logic.js → API_CHO_BACKEND</code> và trong báo cáo gửi AG-00. Giao diện
+      <b>không</b> tự chế endpoint giả: chưa có thì để trống, không tuyên bố đã chạy.</div>
+  </div>`;
+}
+
 /* Báo lỗi đúng loại: 401 đã có màn riêng; 403 mở hộp "Không đủ quyền" nằm lại
    trên màn hình chứ không phải toast trôi qua; còn lại mới dùng toast. */
 function baoLoi(e, hanh_dong, quyen_can) {
@@ -372,7 +406,7 @@ const CAC_MAN = {
               <th>Hãng</th><th class="so-tien">Đơn</th><th class="so-tien">Đã gửi</th><th class="so-tien">Tổng COD</th><th>Trạng thái giao</th></tr></thead>
             <tbody>${hang_ds.map(([ma, o]) => `<tr><td><b>${T(ten_hang[ma] || ma)}</b> <code>${T(ma)}</code></td>
               <td class="so-tien">${o.tong}</td><td class="so-tien">${o.da_gui}</td><td class="so-tien">${tien(o.cod)}</td>
-              <td style="font-size:12px">${Object.entries(o.giao).map(([k, v]) => `${T(k)}: <b>${v}</b>`).join("<br>") || "—"}</td></tr>`).join("")
+              <td style="font-size:12px">${Object.entries(o.giao).map(([k, v]) => `${nhanGiao(k)} <b>${v}</b>`).join("<br>") || "—"}</td></tr>`).join("")
               || '<tr><td colspan="5">—</td></tr>'}
               ${chua_gan_hang ? `<tr><td colspan="5" style="color:var(--chu-mo)">Ngoài ra <b>${chua_gan_hang}</b> đơn chưa gán tài khoản hãng (nháp / đã duyệt / hủy).</td></tr>` : ""}
             </tbody></table></div>
@@ -446,7 +480,7 @@ const CAC_MAN = {
       <div class="cuon-ngang"><table class="bang"><thead><tr><th>Mã</th><th>Người nhận</th><th>Hãng</th><th>Trạng thái</th><th>Giao vận</th><th class="so-tien">COD</th></tr></thead>
       <tbody>${don.slice(0, 8).map(d => `<tr><td><b>${T(d.ma_don)}</b></td><td>${T(d.nguoi_nhan_ten)}</td>
         <td>${d.carrier_account_id ? T((tk_theo_id[d.carrier_account_id] || {}).hang || ("#" + d.carrier_account_id)) : "—"}</td>
-        <td>${nhanTT(d.trang_thai)}</td><td>${d.trang_thai_giao ? T(d.trang_thai_giao) : "—"}</td>
+        <td>${nhanTT(d.trang_thai)}</td><td>${nhanGiao(d.trang_thai_giao)}</td>
         <td class="so-tien">${tien(d.cod)}</td></tr>`).join("") || '<tr><td colspan="6">Chưa có đơn</td></tr>'}</tbody></table></div></div>`);
 
     /* vẽ biểu đồ sau khi HTML đã vào DOM; vẽ lại khi đổi cỡ cửa sổ (canvas không tự co) */
@@ -464,38 +498,166 @@ const CAC_MAN = {
     datVeLai(ve);
   },
 
+  /* F01 — Order Management UI.
+     Ba điều phải đúng ở màn này:
+     1. CHẾ ĐỘ DỮ LIỆU hiện rõ từng đơn: MOCK DATA / LOCAL REAL DATA / LIVE CARRIER DATA.
+        `CHO_PHEP_LIVE=False` và `live_mo=0` ⇒ không đơn nào được dán LIVE (luật ở L.cheDoDon).
+     2. PHẠM VI LỌC nói thật: máy chủ chỉ nhận q · trang_thai · gioi_han (đo ở app/server.py
+        15/10/2026). Điều kiện còn lại lọc TẠI GIAO DIỆN trên tập đã tải — ghi rõ, không để
+        người đọc tưởng đang lọc toàn bộ CSDL.
+     3. API chưa có thì hiện CHỜ BACKEND, không tự chế endpoint. */
   async don() {
-    const tk = duoc("tenant.hang.xem") ? await api("/api/v2/tai-khoan-hang") : { tai_khoan: [] };
+    const co_hang = duoc("tenant.hang.xem");
+    const tk = co_hang ? await api("/api/v2/tai-khoan-hang") : { tai_khoan: [] };
+    const hs = co_hang ? await api("/api/v2/hang") : { hang: [] };
+    const tk_theo_id = {}; tk.tai_khoan.forEach(x => tk_theo_id[x.id] = x);
+    const hang_theo_ma = {}; hs.hang.forEach(h => hang_theo_ma[h.ma] = h);
+    const che_do_he = L.cheDoHeThong(hs.hang);
+    const ma_hang_co_tk = [...new Set(tk.tai_khoan.map(x => x.hang))];
+
     datMan("Đơn hàng", `
       <div class="hang-cong-cu">
-        <input id="d-tim" class="o-nho" type="search" placeholder="Tìm mã/người nhận/SĐT…" style="min-width:220px">
+        <input id="d-tim" class="o-nho" type="search" placeholder="Tìm mã đơn / mã vận đơn / người nhận / SĐT…" style="min-width:240px">
         <select id="d-tt" class="nut" style="padding:7px 10px"><option value="">Mọi trạng thái</option>
-          ${["nhap", "da_duyet", "dang_gui", "da_gui", "huy"].map(t => `<option>${t}</option>`).join("")}</select>
-        <div class="day"><a class="nut" href="/api/v2/don/xuat-csv">⬇ Xuất CSV</a>
-          ${duoc("tenant.don.ghi") ? `<button class="nut nut-chinh" id="d-them">➕ Tạo đơn</button>` : ""}</div>
+          ${Object.keys(L.TT_DON).map(t => `<option value="${t}">${T(L.TT_DON[t][1])}</option>`).join("")}</select>
+        <button class="nut" id="d-nang-cao" aria-expanded="false">⚙ Bộ lọc nâng cao</button>
+        <div class="day">
+          <a class="nut" href="/api/v2/don/xuat-csv">⬇ Xuất CSV</a>
+          ${duoc("tenant.don.ghi") ? `<button class="nut nut-chinh" id="d-them">➕ Tạo đơn</button>` : ""}
+        </div>
       </div>
-      <div class="the"><div class="cuon-ngang"><table class="bang">
+
+      <div class="the loc-nang-cao" id="d-bang-loc" hidden><div class="the-than">
+        <div class="luoi-loc">
+          <div class="form-nhom"><label for="l-giao">Trạng thái giao vận</label>
+            <select id="l-giao" class="o-nho"><option value="">Mọi trạng thái giao</option>
+              ${Object.keys(L.TT_GIAO).map(t => `<option value="${t}">${T(L.TT_GIAO[t][1])}</option>`).join("")}</select></div>
+          <div class="form-nhom"><label for="l-hang">Hãng vận chuyển</label>
+            <select id="l-hang" class="o-nho"><option value="">Mọi hãng</option>
+              ${ma_hang_co_tk.map(m => `<option value="${T(m)}">${T((hang_theo_ma[m] || {}).ten || m)}</option>`).join("")}</select>
+            ${co_hang ? "" : '<div class="ghi-chu-nguon">Thiếu quyền <code>tenant.hang.xem</code> nên không lọc được theo hãng.</div>'}</div>
+          <div class="form-nhom"><label for="l-tk">Tài khoản hãng cụ thể</label>
+            <select id="l-tk" class="o-nho"><option value="">Mọi tài khoản</option>
+              ${tk.tai_khoan.map(x => `<option value="${x.id}">${T(x.hang)} · ${T(x.ten)}${x.kich_hoat ? "" : " (khóa)"}</option>`).join("")}</select></div>
+          <div class="form-nhom"><label for="l-vd">Mã vận đơn</label>
+            <select id="l-vd" class="o-nho"><option value="">Không xét</option>
+              <option value="co">Đã có mã vận đơn</option><option value="khong">Chưa có mã vận đơn</option></select></div>
+          <div class="form-nhom"><label for="l-cod-tu">COD từ (₫)</label><input id="l-cod-tu" class="o-nho" type="number" min="0" placeholder="0"></div>
+          <div class="form-nhom"><label for="l-cod-den">COD đến (₫)</label><input id="l-cod-den" class="o-nho" type="number" min="0" placeholder="không giới hạn"></div>
+          <div class="form-nhom"><label for="l-tu-ngay">Tạo từ ngày</label><input id="l-tu-ngay" class="o-nho" type="date"></div>
+          <div class="form-nhom"><label for="l-den-ngay">Tạo đến ngày</label><input id="l-den-ngay" class="o-nho" type="date"></div>
+          <div class="form-nhom"><label for="l-gioi-han">Số đơn tải từ máy chủ</label>
+            <select id="l-gioi-han" class="o-nho">
+              <option value="100">100 đơn mới nhất</option><option value="300">300</option><option value="500">500 (trần API)</option></select></div>
+          <div class="form-nhom" style="display:flex;align-items:center;gap:8px;padding-top:18px">
+            <input type="checkbox" id="l-doi-soat" style="width:auto">
+            <label for="l-doi-soat" style="margin:0">Chỉ đơn <b>cần đối soát</b> với hãng</label></div>
+        </div>
+        <div class="hang-cong-cu" style="margin:6px 0 0"><div class="day">
+          <button class="nut" id="l-xoa">↺ Xóa bộ lọc</button></div></div>
+        <p class="ghi-chu-nguon" style="margin-top:10px">
+          <b>Phạm vi lọc — đọc kỹ:</b> máy chủ chỉ lọc được
+          <code>${L.THAM_SO_MAY_CHU.map(x => T(x)).join("</code> · <code>")}</code>.
+          ${L.THAM_SO_LOC_TAI_GIAO_DIEN.length} điều kiện còn lại
+          (<code>${L.THAM_SO_LOC_TAI_GIAO_DIEN.map(x => T(x)).join("</code> <code>")}</code>)
+          lọc <b>tại giao diện trên tập đã tải</b>, nên đơn cũ hơn trần tải về sẽ không xuất hiện
+          dù khớp điều kiện. ${nhanChoBackend("/api/v2/don")} cần tham số lọc + <code>tong</code> ở máy chủ.
+        </p>
+      </div></div>
+
+      <div class="hop-nguon" style="margin-bottom:14px">
+        <b>Chế độ dữ liệu màn này</b> — ${nhanCheDo(che_do_he)}
+        <ul>
+          <li>${nhanCheDo(L.CHE_DO.LOCAL)} đơn chưa gán tài khoản hãng — dữ liệu thật trong CSDL local, chưa gửi hãng nào.</li>
+          <li>${nhanCheDo(L.CHE_DO.MOCK)} đơn đã đi qua <b>adapter MOCK</b>: mã vận đơn và phí do bản mô phỏng sinh.</li>
+          <li>${nhanCheDo(L.CHE_DO.LIVE)} chỉ xuất hiện khi tài khoản hãng khác môi trường <code>mock</code>
+            <b>và</b> hãng mở cờ <code>live_mo</code>. Hiện
+            <b>${hs.hang.filter(h => h.live_mo).length}/${hs.hang.length}</b> hãng mở live ⇒
+            không đơn nào được dán nhãn LIVE.</li>
+        </ul>
+      </div>
+
+      <div class="the"><div class="the-dau"><h2>Danh sách đơn</h2>
+        <div class="phai" id="d-dem"></div></div>
+        <div class="cuon-ngang"><table class="bang">
         <thead><tr><th>Mã</th><th>Người nhận</th><th>Hàng hóa</th><th class="so-tien">COD</th>
-        <th>Trạng thái</th><th>Giao vận</th><th>Mã vận đơn</th><th></th></tr></thead>
+        <th>Trạng thái</th><th>Giao vận</th><th>Hãng / tài khoản</th><th>Mã vận đơn</th><th>Chế độ</th><th></th></tr></thead>
         <tbody id="d-bang"></tbody></table></div></div>`);
+
+    const g = (id) => document.getElementById(id);
+    const docDieuKien = () => ({
+      q: g("d-tim").value.trim(), trang_thai: g("d-tt").value,
+      gioi_han: g("l-gioi-han").value,
+      trang_thai_giao: g("l-giao").value, hang: g("l-hang").value,
+      tai_khoan_id: g("l-tk").value, co_van_don: g("l-vd").value,
+      cod_tu: g("l-cod-tu").value, cod_den: g("l-cod-den").value,
+      tu_ngay: g("l-tu-ngay").value, den_ngay: g("l-den-ngay").value,
+      can_doi_soat: g("l-doi-soat").checked,
+    });
+
     const ve = async () => {
-      const q = document.getElementById("d-tim").value.trim();
-      const tt = document.getElementById("d-tt").value;
-      const kq = await api(`/api/v2/don?q=${encodeURIComponent(q)}&trang_thai=${tt}`);
-      document.getElementById("d-bang").innerHTML = kq.don.map(d => `
-        <tr><td><b>${T(d.ma_don)}</b>${d.can_doi_soat_ket_qua ? ' <span class="huy-hieu hh-vang">cần kiểm lại</span>' : ""}</td>
-        <td>${T(d.nguoi_nhan_ten)}<br><span style="color:var(--chu-mo);font-size:12px">${T(d.nguoi_nhan_sdt)}</span></td>
-        <td>${T(d.hang_hoa)}</td><td class="so-tien">${tien(d.cod)}</td>
-        <td>${nhanTT(d.trang_thai)}</td><td>${d.trang_thai_giao ? T(d.trang_thai_giao) : "—"}</td>
-        <td>${T(d.ma_van_don || "—")}</td>
-        <td><button class="nut nut-nho" data-xem="${d.id}">Chi tiết</button></td></tr>`).join("")
-        || '<tr><td colspan="8"><div class="trang-thai-rong"><div class="to">📦</div>Chưa có đơn</div></td></tr>';
+      const dk = docDieuKien();
+      const chia = L.chiaDieuKien(dk);
+      const ts = new URLSearchParams();
+      ts.set("q", chia.may_chu.q || "");
+      ts.set("trang_thai", chia.may_chu.trang_thai || "");
+      ts.set("gioi_han", chia.may_chu.gioi_han || "100");
+      const tai_ve = (await api("/api/v2/don?" + ts.toString())).don;
+      const ds = L.locDon(tai_ve, chia.giao_dien, tk_theo_id);
+      const so_dk_gd = Object.keys(chia.giao_dien).length;
+      const cham_tran = tai_ve.length >= +(chia.may_chu.gioi_han || 100);
+
+      g("d-dem").innerHTML = `<span class="huy-hieu hh-xam">${ds.length}/${tai_ve.length} đơn</span>`;
+      g("d-bang").innerHTML = ds.map(d => {
+        const t2 = tk_theo_id[d.carrier_account_id];
+        const h = t2 ? hang_theo_ma[t2.hang] : null;
+        const cd = L.cheDoDon(d, t2, h);
+        return `<tr><td><b>${T(d.ma_don)}</b>${d.can_doi_soat_ket_qua
+            ? ' <span class="huy-hieu hh-vang" title="hãng timeout — chưa biết kết quả, tuyệt đối không coi là thành công">cần đối soát</span>' : ""}
+            <div style="color:var(--chu-mo);font-size:11.5px">${T(String(d.tao_luc || "").slice(0, 16))}</div></td>
+          <td>${T(d.nguoi_nhan_ten)}<br><span style="color:var(--chu-mo);font-size:12px">${T(d.nguoi_nhan_sdt)}</span></td>
+          <td>${T(d.hang_hoa)}<br><span style="color:var(--chu-mo);font-size:11.5px">${T(d.khoi_luong_gram)}g</span></td>
+          <td class="so-tien">${tien(d.cod)}</td>
+          <td>${nhanTT(d.trang_thai)}</td><td>${nhanGiao(d.trang_thai_giao)}</td>
+          <td style="font-size:12px">${t2 ? `<b>${T(h ? h.ten : t2.hang)}</b><br><span style="color:var(--chu-mo)">${T(t2.ten)} · ${T(t2.moi_truong)}</span>`
+            : d.carrier_account_id ? `tài khoản #${d.carrier_account_id} <span class="ghi-chu-nguon">(thiếu quyền đọc tên)</span>` : "—"}</td>
+          <td>${T(d.ma_van_don || "—")}</td>
+          <td>${nhanCheDo(cd)}</td>
+          <td><button class="nut nut-nho" data-xem="${d.id}">Chi tiết</button></td></tr>`;
+      }).join("") || `<tr><td colspan="10"><div class="trang-thai-rong"><div class="to">📦</div>
+          ${tai_ve.length ? `Máy chủ trả <b>${tai_ve.length}</b> đơn nhưng không đơn nào khớp ${so_dk_gd} điều kiện lọc tại giao diện.`
+                          : "Không có đơn nào khớp điều kiện gửi máy chủ."}</div></td></tr>`;
+
+      g("d-pham-vi").innerHTML = `Máy chủ trả <b>${tai_ve.length}</b> đơn
+        (lọc máy chủ: ${Object.keys(chia.may_chu).filter(k => chia.may_chu[k] && k !== "gioi_han").length || "không"} điều kiện).
+        Giao diện lọc thêm <b>${so_dk_gd}</b> điều kiện, còn <b>${ds.length}</b> đơn.
+        ${cham_tran ? `<b class="canh">⚠ Đã chạm trần ${T(chia.may_chu.gioi_han || "100")} đơn — có thể còn đơn cũ hơn khớp điều kiện mà chưa tải về.</b>` : ""}`;
+
       document.querySelectorAll("[data-xem]").forEach(n =>
-        n.addEventListener("click", () => chiTietDon(+n.dataset.xem, tk.tai_khoan, ve)));
+        n.addEventListener("click", () => chiTietDon(+n.dataset.xem, tk.tai_khoan, hs.hang, ve)));
     };
-    document.getElementById("d-tim").addEventListener("input", ve);
-    document.getElementById("d-tt").addEventListener("change", ve);
-    const nutThem = document.getElementById("d-them");
+
+    // dòng phạm vi đặt ngay dưới bảng, dựng một lần rồi cập nhật nội dung
+    g("d-bang").closest(".the").insertAdjacentHTML("beforeend",
+      '<p class="ghi-chu-nguon" id="d-pham-vi" style="padding:0 18px 14px"></p>');
+
+    g("d-tim").addEventListener("input", ve);
+    g("d-tt").addEventListener("change", ve);
+    g("d-nang-cao").addEventListener("click", () => {
+      const o = g("d-bang-loc");
+      o.hidden = !o.hidden;
+      g("d-nang-cao").setAttribute("aria-expanded", String(!o.hidden));
+    });
+    ["l-giao", "l-hang", "l-tk", "l-vd", "l-gioi-han", "l-doi-soat"].forEach(id =>
+      g(id).addEventListener("change", ve));
+    ["l-cod-tu", "l-cod-den", "l-tu-ngay", "l-den-ngay"].forEach(id =>
+      g(id).addEventListener("change", ve));
+    g("l-xoa").addEventListener("click", () => {
+      ["l-giao", "l-hang", "l-tk", "l-vd", "l-cod-tu", "l-cod-den", "l-tu-ngay", "l-den-ngay"]
+        .forEach(id => g(id).value = "");
+      g("l-doi-soat").checked = false; g("l-gioi-han").value = "100"; ve();
+    });
+    const nutThem = g("d-them");
     if (nutThem) nutThem.addEventListener("click", () => formDon(null, ve));
     ve();
   },
@@ -656,26 +818,100 @@ Secret: ${T(kq.webhook_secret_mot_lan)}</pre>`,
     }));
   },
 
+  /* F03 — Webhook Monitor UI.
+     Hiển thị: số lần thử lại · DLQ · chi tiết sự kiện · cập nhật tracking · TRẠNG THÁI NHẬP NHẰNG.
+     Trạng thái lạ (AG-03 đang thêm NEEDS_REVIEW / AMBIGUOUS cho mã J&T 110) hiện NGUYÊN VĂN
+     kèm dấu ⚠ và được gom thành một khối riêng — không nuốt im lặng, không tự đoán kết quả.
+     Nút Replay vẫn để BACKEND kiểm quyền (giữ nguyên hành vi cũ). */
   async webhook() {
     const kq = await api("/api/v2/webhook/su-kien");
-    const lop = { xong: "hh-xanh", dlq: "hh-do", cho_thu_lai: "hh-vang", moi: "hh-xam", khong_khop: "hh-vang" };
+    const n = L.nhomWebhook(kq.su_kien);
+    const oTT = (t) => `${nhanWH(t)} <b>${n.theo_trang_thai[t] || 0}</b>`;
+
     datMan("Webhook", `
-      <div class="the"><div class="the-dau"><h2>Sự kiện webhook của doanh nghiệp</h2>
-        <div class="phai"><button class="nut nut-nho" id="w-moi">↻ Làm mới</button></div></div>
+      <div class="luoi luoi-kpi">
+        <div class="the kpi"><div class="nhan">Sự kiện (200 gần nhất)</div><div class="so">${n.tong}</div>
+          <div class="phu">trần 200 do <code>GET /api/v2/webhook/su-kien</code> đặt</div></div>
+        <div class="the kpi"><div class="nhan">DLQ — hết lượt thử</div>
+          <div class="so" style="color:var(--do-vip)">${n.dlq.length}</div>
+          <div class="phu">${n.dlq.length ? "cần người xử — replay hoặc sửa gốc" : "không có"}</div></div>
+        <div class="the kpi"><div class="nhan">Tổng lần thử lại</div><div class="so">${n.tong_lan_thu_lai}</div>
+          <div class="phu">${n.so_su_kien_da_thu_lai} sự kiện từng thử lại${n.thu_lai_nhieu_nhat
+            ? ` · nhiều nhất <b>${n.thu_lai_nhieu_nhat.so_lan_thu}</b> lần (#${n.thu_lai_nhieu_nhat.id})` : ""}</div></div>
+        <div class="the kpi"><div class="nhan">Trạng thái nhập nhằng</div>
+          <div class="so" style="color:var(--vang)">${n.nhap_nhang.length + n.trang_thai_la.length}</div>
+          <div class="phu">${n.nhap_nhang.length} nhập nhằng · ${n.trang_thai_la.length} trạng thái lạ khác</div></div>
+      </div>
+
+      ${(n.nhap_nhang.length + n.trang_thai_la.length) ? `
+      <div class="the" style="margin-top:16px;border-color:#F5D08A"><div class="the-dau" style="background:var(--vang-nhat)">
+        <h2>⚠ Trạng thái nhập nhằng / giao diện chưa biết</h2></div>
+        <div class="the-than">
+          <p style="margin-top:0;font-size:12.5px">Những sự kiện dưới đây mang trạng thái <b>không</b> nằm trong
+            hợp đồng §12 (<code>moi · dang_xu_ly · xong · cho_thu_lai · dlq · khong_khop</code>).
+            Giao diện <b>hiện nguyên văn</b> và không tự quy ra thành công/thất bại —
+            ánh xạ trạng thái là việc của backend (AG-03 <code>normalizeTrackingStatus</code>).</p>
+          <div class="cuon-ngang"><table class="bang bang-hep"><thead><tr>
+            <th>#</th><th>Event ID</th><th>Hãng</th><th>Trạng thái nguyên văn</th><th>Lần thử</th></tr></thead>
+          <tbody>${n.nhap_nhang.concat(n.trang_thai_la).map(s => `<tr>
+            <td>${s.id}</td><td><code>${T(s.event_id)}</code></td><td>${T(s.hang)}</td>
+            <td>${nhanWH(s.trang_thai)}</td><td style="text-align:center">${s.so_lan_thu}</td></tr>`).join("")}</tbody></table></div>
+        </div></div>` : ""}
+
+      ${n.dlq.length ? `
+      <div class="the" style="margin-top:16px;border-color:#F5B5B5"><div class="the-dau" style="background:var(--do-nhat)">
+        <h2>☠ Dead Letter Queue — ${n.dlq.length} sự kiện</h2>
+        <div class="phai"><span class="huy-hieu hh-do">hết lượt thử tự động</span></div></div>
+        <div class="the-than" style="padding-bottom:0"><p style="margin-top:0;font-size:12.5px;color:var(--chu-mo)">
+          Sự kiện vào DLQ là sự kiện backend đã thử hết số lần cho phép mà vẫn lỗi. Replay là
+          <b>quyết định của người</b>; quyền replay do backend kiểm (<code>tenant.webhook.replay</code>).</p></div>
+        <div class="cuon-ngang"><table class="bang"><thead><tr>
+          <th>#</th><th>Event ID</th><th>Hãng</th><th>Nhận lúc</th><th>Lần thử</th><th>Lỗi cuối</th><th></th></tr></thead>
+        <tbody>${n.dlq.map(s => `<tr><td>${s.id}</td><td><code>${T(s.event_id)}</code></td><td>${T(s.hang)}</td>
+          <td style="white-space:nowrap">${T(s.nhan_luc)}</td><td style="text-align:center"><b>${s.so_lan_thu}</b></td>
+          <td style="font-size:11.5px;color:var(--do-dam);max-width:260px">${T(s.loi_cuoi || "(máy chủ không trả lỗi cuối)")}</td>
+          <td style="white-space:nowrap"><button class="nut nut-nho" data-chi-tiet="${s.id}">Chi tiết</button>
+            ${duoc("tenant.webhook.replay") ? `<button class="nut nut-nho" data-replay="${s.id}">Replay</button>` : ""}</td></tr>`).join("")}
+        </tbody></table></div></div>` : ""}
+
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Toàn bộ sự kiện của doanh nghiệp</h2>
+        <div class="phai">
+          <select id="w-loc" class="o-nho"><option value="">Mọi trạng thái</option>
+            ${Object.keys(n.theo_trang_thai).map(t => `<option value="${T(t)}">${T(t)} (${n.theo_trang_thai[t]})</option>`).join("")}</select>
+          <button class="nut nut-nho" id="w-moi">↻ Làm mới</button></div></div>
+      <div class="the-than" style="padding-bottom:0"><div class="chu-giai" style="margin:0">
+        ${Object.keys(L.TT_WH).map(t => oTT(t)).join(" · ")}</div></div>
       <div class="cuon-ngang"><table class="bang">
-      <thead><tr><th>#</th><th>Event ID</th><th>Hãng</th><th>Nhận lúc</th><th>Trạng thái</th><th>Lần thử</th><th>Lỗi</th><th></th></tr></thead>
-      <tbody>${kq.su_kien.map(s => `<tr><td>${s.id}</td><td>${T(s.event_id)}</td><td>${T(s.hang)}</td>
-        <td style="white-space:nowrap">${T(s.nhan_luc)}</td>
-        <td><span class="huy-hieu ${lop[s.trang_thai] || "hh-xam"}">${T(s.trang_thai)}</span></td>
-        <td style="text-align:center">${s.so_lan_thu}</td><td style="font-size:11.5px;max-width:220px">${T(s.loi_cuoi || "")}</td>
-        <td>${duoc("tenant.webhook.replay") && ["dlq", "khong_khop"].includes(s.trang_thai) ? `<button class="nut nut-nho" data-replay="${s.id}">Replay</button>` : ""}</td></tr>`).join("")
-        || '<tr><td colspan="8"><div class="trang-thai-rong"><div class="to">🔔</div>Chưa có sự kiện</div></td></tr>'}</tbody></table></div></div>`);
-    document.getElementById("w-moi").addEventListener("click", () => moMan("webhook"));
-    document.querySelectorAll("[data-replay]").forEach(n => n.addEventListener("click", async () => {
-      try { await api(`/api/v2/webhook/su-kien/${n.dataset.replay}/replay`, "POST", {});
-            bao("Đã nạp lại (có audit)."); setTimeout(() => moMan("webhook"), 500); }
-      catch (e) { baoLoi(e, "replay sự kiện webhook", "tenant.webhook.replay"); }
-    }));
+      <thead><tr><th>#</th><th>Event ID</th><th>Hãng</th><th>Nhận lúc</th><th>Trạng thái</th>
+        <th>Lần thử</th><th>Lỗi cuối</th><th></th></tr></thead>
+      <tbody id="w-bang">${kq.su_kien.map(s => dongWebhook(s)).join("")
+        || '<tr><td colspan="8"><div class="trang-thai-rong"><div class="to">🔔</div>Chưa có sự kiện</div></td></tr>'}</tbody></table></div>
+      <p class="ghi-chu-nguon" style="padding:0 18px 14px">
+        <b>Nguồn:</b> <code>GET /api/v2/webhook/su-kien</code> — 200 sự kiện gần nhất, tenant resolve từ
+        <code>carrier_account</code> (§12: <b>không bao giờ</b> từ payload).
+        <b>Chống trùng</b> do CSDL cưỡng chế bằng <code>UNIQUE(carrier_account_id, event_id)</code>.
+        <b>Chưa có:</b> payload thô, headers, đơn/mã vận đơn liên quan, lịch sử từng lần thử —
+        ${nhanChoBackend("/api/v2/webhook/su-kien/<id>")}
+      </p></div>
+
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Cập nhật tracking từ webhook</h2></div>
+        <div class="the-than">${hopChoBackend("/api/v2/webhook/su-kien/<id>")}
+          <p class="ghi-chu-nguon">Màn này <b>chưa nối được</b> sự kiện webhook với đơn mà nó cập nhật:
+            danh sách API không trả <code>don_id</code> hay <code>ma_van_don</code>. Trong khi chờ, xem
+            cột <b>Giao vận</b> và tab <b>Dòng thời gian</b> ở màn <b>Đơn hàng</b> — các mốc có
+            nguồn <code>webhook:&lt;id tài khoản&gt;</code> chính là cập nhật do hãng đẩy về.</p>
+        </div></div>`);
+
+    const g = (id) => document.getElementById(id);
+    g("w-moi").addEventListener("click", () => moMan("webhook"));
+    g("w-loc").addEventListener("change", () => {
+      const v = g("w-loc").value;
+      const ds = v ? kq.su_kien.filter(s => s.trang_thai === v) : kq.su_kien;
+      g("w-bang").innerHTML = ds.map(s => dongWebhook(s)).join("")
+        || `<tr><td colspan="8"><div class="trang-thai-rong">Không sự kiện nào ở trạng thái <code>${T(v)}</code></div></td></tr>`;
+      gocWebhook(kq.su_kien);
+    });
+    gocWebhook(kq.su_kien);
   },
 
   async "thanh-vien"() {
@@ -850,62 +1086,82 @@ Secret: ${T(kq.webhook_secret_mot_lan)}</pre>`,
   },
 };
 
-/* ===== phụ trợ ===== */
-function nhanTT(t) {
-  const lop = { nhap: "hh-xam", da_duyet: "hh-xanh-duong", dang_gui: "hh-vang", da_gui: "hh-xanh", huy: "hh-do" };
-  const ten = { nhap: "Nháp", da_duyet: "Đã duyệt", dang_gui: "Đang gửi hãng", da_gui: "Đã gửi hãng", huy: "Hủy" };
-  return `<span class="huy-hieu ${lop[t] || "hh-xam"}">${ten[t] || t}</span>`;
-}
+/* ===== phụ trợ =====
+   Bảng trạng thái và luật nhãn đã chuyển hẳn sang admin/logic.js (bộ thử Node kiểm trực
+   tiếp ở đó). Ở đây chỉ còn lớp dựng HTML mỏng. */
+const nhanTT    = (t) => hh(L.nhanTT(t));
+const nhanBatch = (t) => hh(L.nhanBatch(t));
+const nhanDong  = (t) => hh(L.nhanDong(t));
+const nhanGiao  = (t) => (t ? hh(L.nhanGiao(t)) : "—");
+const nhanWH    = (t) => hh(L.nhanWebhook(t));
+const lopDongBang = (t) => L.lopDongBang(t);
+
 /* Tên tiếng Việt cho capabilities của hãng (khóa do backend/adapter đặt).
-   Khóa lạ thì hiện nguyên văn khóa — không bỏ qua, để thấy ngay khi adapter thêm khả năng mới. */
+   Khóa lạ thì hiện nguyên văn khóa — để thấy ngay khi adapter thêm khả năng mới. */
 const TEN_KHA_NANG = {
   createOrder: "Tạo đơn", cancelOrder: "Hủy đơn", getOrder: "Tra đơn",
   trackOrder: "Theo dõi hành trình", getShippingFee: "Tính cước",
   getShippingLabel: "In nhãn vận đơn", webhook: "Nhận webhook",
 };
 
-/* Trạng thái batch/dòng import — đỡ được CẢ bộ cũ (`moi`) và bộ mới của AG-04
-   (UPLOADED…FAILED, UNSUPPORTED, NEEDS_REVIEW). Trạng thái lạ thì hiện nguyên văn
-   kèm huy hiệu xám, KHÔNG im lặng bỏ qua — để thấy ngay khi backend thêm trạng thái mới. */
-const BATCH_TT = {
-  moi: ["hh-xam", "Mới (bộ cũ)"],
-  xong: ["hh-xanh", "Xong (bộ cũ)"],
-  da_duyet_mot_phan: ["hh-vang", "Duyệt một phần (bộ cũ)"],
-  UPLOADED: ["hh-xam", "Đã upload"],
-  PARSING: ["hh-xanh-duong", "Đang đọc file"],
-  VALIDATING: ["hh-xanh-duong", "Đang kiểm dữ liệu"],
-  READY: ["hh-xanh", "Sẵn sàng duyệt"],
-  APPROVED: ["hh-xanh-duong", "Đã duyệt"],
-  PROCESSING: ["hh-vang", "Đang tạo đơn"],
-  COMPLETED: ["hh-xanh", "Hoàn tất"],
-  PARTIAL_FAILED: ["hh-vang", "Hoàn tất một phần"],
-  FAILED: ["hh-do", "Thất bại"],
-};
-const DONG_TT = {
-  VALID: ["hh-xanh", "VALID", "hợp lệ, duyệt được"],
-  INVALID: ["hh-do", "INVALID", "dữ liệu sai, phải sửa"],
-  READY: ["hh-xanh-duong", "READY", "đã chuẩn hóa, chờ duyệt"],
-  SUBMITTED: ["hh-vang", "SUBMITTED", "đã gửi tạo đơn"],
-  SUCCESS: ["hh-xanh", "SUCCESS", "đã tạo đơn nháp"],
-  FAILED: ["hh-do", "FAILED", "tạo đơn lỗi, thử lại được"],
-  UNSUPPORTED: ["hh-xam", "UNSUPPORTED", "backend không đọc được dòng này"],
-  NEEDS_REVIEW: ["hh-vang", "NEEDS_REVIEW", "backend yêu cầu người xem lại"],
-};
-function nhanBatch(t) {
-  const d = BATCH_TT[t];
-  return d ? `<span class="huy-hieu ${d[0]}" title="${T(t)}">${d[1]}</span>`
-           : `<span class="huy-hieu hh-xam" title="trạng thái giao diện chưa biết tên tiếng Việt">${T(t)}</span>`;
+/* ===== F03 — phụ trợ webhook ===== */
+function dongWebhook(s) {
+  const n = L.nhanWebhook(s.trang_thai);
+  return `<tr class="${n.nhap_nhang ? "dong-can-xem" : s.trang_thai === "dlq" ? "dong-loi" : ""}">
+    <td>${s.id}</td><td><code>${T(s.event_id)}</code></td><td>${T(s.hang)}${s.ten_tk
+      ? `<div class="ghi-chu-nguon">${T(s.ten_tk)}</div>` : ""}</td>
+    <td style="white-space:nowrap">${T(s.nhan_luc)}</td>
+    <td>${hh(n)}</td>
+    <td style="text-align:center">${s.so_lan_thu > 0 ? `<b title="số lần backend đã thử xử lý lại">${s.so_lan_thu}</b>` : "0"}</td>
+    <td style="font-size:11.5px;max-width:220px">${T(s.loi_cuoi || "")}</td>
+    <td style="white-space:nowrap"><button class="nut nut-nho" data-chi-tiet="${s.id}">Chi tiết</button>
+      ${duoc("tenant.webhook.replay") && ["dlq", "khong_khop"].includes(s.trang_thai)
+        ? `<button class="nut nut-nho" data-replay="${s.id}">Replay</button>` : ""}</td></tr>`;
 }
-function nhanDong(t) {
-  const d = DONG_TT[t];
-  return d ? `<span class="huy-hieu ${d[0]}" title="${T(d[2])}">${d[1]}</span>`
-           : `<span class="huy-hieu hh-xam" title="trạng thái giao diện chưa biết">${T(t)}</span>`;
+
+function gocWebhook(ds) {
+  document.querySelectorAll("[data-replay]").forEach(n => {
+    if (n.dataset.goc) return; n.dataset.goc = "1";
+    n.addEventListener("click", async () => {
+      try {
+        await api(`/api/v2/webhook/su-kien/${n.dataset.replay}/replay`, "POST", {});
+        bao("Đã nạp lại (có audit). Kết quả do backend xử — xem lại trạng thái sau khi làm mới.");
+        setTimeout(() => moMan("webhook"), 500);
+      } catch (e) { baoLoi(e, "replay sự kiện webhook", "tenant.webhook.replay"); }
+    });
+  });
+  document.querySelectorAll("[data-chi-tiet]").forEach(n => {
+    if (n.dataset.goc) return; n.dataset.goc = "1";
+    n.addEventListener("click", () =>
+      chiTietSuKienWebhook((ds || []).find(x => x.id === +n.dataset.chiTiet)));
+  });
 }
-function lopDongBang(t) {
-  if (["INVALID", "FAILED", "UNSUPPORTED"].includes(t)) return "dong-loi";
-  if (t === "NEEDS_REVIEW") return "dong-can-xem";
-  if (["VALID", "READY", "SUCCESS"].includes(t)) return "dong-hop-le";
-  return "";
+
+/* Chi tiết sự kiện: API chi tiết CHƯA CÓ. Thay vì bỏ trống, hiện đủ những trường danh sách
+   ĐÃ trả về, rồi nói thẳng cái gì còn thiếu và endpoint nào cần. Không bịa payload. */
+function chiTietSuKienWebhook(s) {
+  if (!s) { bao("Không tìm thấy sự kiện trong danh sách đã tải.", "loi"); return; }
+  const n = L.nhanWebhook(s.trang_thai);
+  const m = VIP.moModal(`Sự kiện webhook #${s.id}`, `
+    <table class="bang"><tbody>
+      <tr><td style="width:150px;color:var(--chu-mo)">Event ID</td><td><code>${T(s.event_id)}</code>
+        <div class="ghi-chu-nguon">khóa chống trùng cùng với tài khoản hãng —
+          <code>UNIQUE(carrier_account_id, event_id)</code> do CSDL cưỡng chế</div></td></tr>
+      <tr><td style="color:var(--chu-mo)">Hãng / tài khoản</td><td><b>${T(s.hang)}</b>${s.ten_tk ? " · " + T(s.ten_tk) : ""}</td></tr>
+      <tr><td style="color:var(--chu-mo)">Nhận lúc</td><td>${T(s.nhan_luc)}</td></tr>
+      <tr><td style="color:var(--chu-mo)">Trạng thái</td><td>${hh(n)}
+        <div class="ghi-chu-nguon">${T(n.mo_ta || "")}</div></td></tr>
+      <tr><td style="color:var(--chu-mo)">Số lần thử</td><td><b>${s.so_lan_thu}</b>
+        ${s.trang_thai === "dlq" ? ' — đã hết lượt thử tự động, chỉ còn replay bằng tay' : ""}</td></tr>
+      <tr><td style="color:var(--chu-mo)">Lỗi cuối</td><td>${T(s.loi_cuoi || "—")}</td></tr>
+    </tbody></table>
+    ${n.nhap_nhang ? `<div class="hop-loi" style="margin-top:12px">
+      <b>Trạng thái nhập nhằng.</b> Backend đánh dấu sự kiện này cần người xem lại
+      (ví dụ mã hãng J&amp;T 110 ánh xạ được ra nhiều trạng thái chuẩn). Giao diện
+      <b>không</b> tự chọn giúp — hiện nguyên văn <code>${T(s.trang_thai)}</code>.</div>` : ""}
+    ${hopChoBackend("/api/v2/webhook/su-kien/<id>")}`,
+    `<button class="nut nut-chinh" onclick="VIP.dongModal()">Đóng</button>`);
+  return m;
 }
 
 function bangAudit(ds) {
@@ -917,30 +1173,55 @@ function bangAudit(ds) {
       <td style="font-size:12px">${T(a.chi_tiet || "")}</td></tr>`).join("") || '<tr><td colspan="6">Trống</td></tr>'}</tbody></table></div></div>`;
 }
 
+/* Form tạo/sửa đơn. Kiểm dữ liệu ở L.kiemTraDon (logic thuần, bộ thử Node phủ) rồi mới gọi
+   API — nhưng backend VẪN là chỗ chốt, kiểm ở đây chỉ để người dùng khỏi mất một lượt gọi. */
 function formDon(don, sauKhiLuu) {
   const f = don || {};
-  const m = VIP.moModal(don ? "Sửa đơn" : "Tạo đơn mới", `
+  const o = (k, nhan, kieu, bat_buoc, rong) => `
+    <div class="form-nhom${rong ? " o-rong" : ""}" data-o="${k}">
+      <label for="f-${k}">${nhan}${bat_buoc ? ' <span class="bat-buoc">*</span>' : ""}</label>
+      <input id="f-${k}" data-truong="${k}" ${kieu ? `type="${kieu}"` : ""} value="${T(f[k] == null ? (k === "cod" ? 0 : "") : f[k])}">
+      <div class="loi-nhan"></div></div>`;
+  const m = VIP.moModal(don ? "Sửa đơn " + T(f.ma_don || "") : "Tạo đơn mới", `
+    <div class="hop-nguon" style="margin-bottom:12px">Đơn tạo ở đây là
+      ${nhanCheDo(L.CHE_DO.LOCAL)} — lưu vào CSDL local, <b>chưa</b> gửi hãng vận chuyển.
+      Gửi hãng là bước riêng ở chi tiết đơn.</div>
     <div class="form-hang">
-      <div class="form-nhom"><label>Người gửi <span class="bat-buoc">*</span></label><input id="f-gt" value="${T(f.nguoi_gui_ten || "")}"></div>
-      <div class="form-nhom"><label>SĐT gửi <span class="bat-buoc">*</span></label><input id="f-gs" value="${T(f.nguoi_gui_sdt || "")}"></div>
-      <div class="form-nhom" style="grid-column:1/-1"><label>Địa chỉ gửi <span class="bat-buoc">*</span></label><input id="f-gd" value="${T(f.nguoi_gui_dia_chi || "")}"></div>
-      <div class="form-nhom"><label>Người nhận <span class="bat-buoc">*</span></label><input id="f-nt" value="${T(f.nguoi_nhan_ten || "")}"></div>
-      <div class="form-nhom"><label>SĐT nhận <span class="bat-buoc">*</span></label><input id="f-ns" value="${T(f.nguoi_nhan_sdt || "")}"></div>
-      <div class="form-nhom" style="grid-column:1/-1"><label>Địa chỉ nhận <span class="bat-buoc">*</span></label><input id="f-nd" value="${T(f.nguoi_nhan_dia_chi || "")}"></div>
-      <div class="form-nhom"><label>Hàng hóa <span class="bat-buoc">*</span></label><input id="f-hh" value="${T(f.hang_hoa || "")}"></div>
-      <div class="form-nhom"><label>Cân nặng (gram) <span class="bat-buoc">*</span></label><input id="f-kl" type="number" value="${f.khoi_luong_gram || ""}"></div>
-      <div class="form-nhom"><label>COD (₫)</label><input id="f-cod" type="number" value="${f.cod ?? 0}"></div>
-      <div class="form-nhom"><label>Ghi chú</label><input id="f-gc" value="${T(f.ghi_chu || "")}"></div>
-    </div>`,
+      ${o("nguoi_gui_ten", "Người gửi", "", true)}
+      ${o("nguoi_gui_sdt", "SĐT gửi", "", true)}
+      ${o("nguoi_gui_dia_chi", "Địa chỉ gửi", "", true, true)}
+      ${o("nguoi_nhan_ten", "Người nhận", "", true)}
+      ${o("nguoi_nhan_sdt", "SĐT nhận", "", true)}
+      ${o("nguoi_nhan_dia_chi", "Địa chỉ nhận", "", true, true)}
+      ${o("hang_hoa", "Hàng hóa", "", true)}
+      ${o("khoi_luong_gram", "Cân nặng (gram)", "number", true)}
+      ${o("cod", "COD (₫)", "number", false)}
+      ${o("ghi_chu", "Ghi chú", "", false)}
+    </div>
+    <div id="f-tong-loi"></div>`,
     `<button class="nut" onclick="VIP.dongModal()">Hủy</button><button class="nut nut-chinh" id="f-luu">💾 Lưu</button>`);
+  const docForm = () => {
+    const d = {};
+    m.querySelectorAll("[data-truong]").forEach(i2 => d[i2.dataset.truong] = i2.value);
+    return d;
+  };
+  const hienLoi = (loi) => {
+    m.querySelectorAll("[data-o]").forEach(n => { n.classList.remove("co-loi"); n.querySelector(".loi-nhan").textContent = ""; });
+    loi.forEach(e => {
+      const n = m.querySelector(`[data-o="${e.truong}"]`);
+      if (n) { n.classList.add("co-loi"); n.querySelector(".loi-nhan").textContent = e.thong_diep; }
+    });
+    m.querySelector("#f-tong-loi").innerHTML = loi.length
+      ? `<div class="hop-loi">Còn <b>${loi.length}</b> chỗ phải sửa trước khi lưu.</div>` : "";
+  };
   m.querySelector("#f-luu").addEventListener("click", async () => {
-    const d = {
-      nguoi_gui_ten: m.querySelector("#f-gt").value, nguoi_gui_sdt: m.querySelector("#f-gs").value,
-      nguoi_gui_dia_chi: m.querySelector("#f-gd").value, nguoi_nhan_ten: m.querySelector("#f-nt").value,
-      nguoi_nhan_sdt: m.querySelector("#f-ns").value, nguoi_nhan_dia_chi: m.querySelector("#f-nd").value,
-      hang_hoa: m.querySelector("#f-hh").value, khoi_luong_gram: +m.querySelector("#f-kl").value,
-      cod: +m.querySelector("#f-cod").value || 0, ghi_chu: m.querySelector("#f-gc").value,
-    };
+    const tho = docForm();
+    const loi = L.kiemTraDon(tho);
+    hienLoi(loi);
+    if (loi.length) { bao("Dữ liệu chưa hợp lệ — xem các ô bị đánh dấu.", "loi"); return; }
+    const d = Object.assign({}, tho, {
+      khoi_luong_gram: +tho.khoi_luong_gram, cod: +tho.cod || 0,
+    });
     try {
       if (don) await api(`/api/v2/don/${don.id}`, "PUT", d);
       else await api("/api/v2/don", "POST", d,
@@ -950,40 +1231,203 @@ function formDon(don, sauKhiLuu) {
   });
 }
 
-async function chiTietDon(id, taiKhoanHang, sauKhiDoi) {
+/* ===== F01 — Chi tiết đơn: thông tin · dòng thời gian · lịch sử · phiếu in · hành động =====
+   Timeline dựng từ `don_lich_su` do GET /api/v2/don/<id> trả về (§11 — mọi thay đổi trạng thái
+   PHẢI có một dòng ở đó), nên là dữ liệu THẬT. L.dungTimeline không bịa mốc nào: trạng thái
+   giao không xuất hiện trong lịch sử thì nút cuối gắn cờ "suy ra", không có giờ. */
+async function chiTietDon(id, taiKhoanHang, dsHang, sauKhiDoi) {
   const kq = await api(`/api/v2/don/${id}`);
   const d = kq.don;
   const duyet = duoc("tenant.don.duyet");
+  const tk = (taiKhoanHang || []).find(x => x.id === d.carrier_account_id) || null;
+  const hang_theo_ma = {}; (dsHang || []).forEach(h => hang_theo_ma[h.ma] = h);
+  const hang = tk ? hang_theo_ma[tk.hang] : null;
+  const cd = L.cheDoDon(d, tk, hang);
+  const tl = L.dungTimeline(d, kq.lich_su);
+  const chon = L.chonTaiKhoanGui(taiKhoanHang || [], dsHang || []);
+
   const m = VIP.moModal(`Đơn ${T(d.ma_don)}`, `
-    <table class="bang"><tbody>
-      <tr><td style="width:150px;color:var(--chu-mo)">Trạng thái</td><td>${nhanTT(d.trang_thai)}
-        ${d.can_doi_soat_ket_qua ? ' <span class="huy-hieu hh-vang">timeout — cần kiểm lại với hãng</span>' : ""}</td></tr>
-      <tr><td style="color:var(--chu-mo)">Giao vận</td><td>${T(d.trang_thai_giao || "—")}</td></tr>
-      <tr><td style="color:var(--chu-mo)">Mã vận đơn</td><td>${T(d.ma_van_don || "—")}</td></tr>
-      <tr><td style="color:var(--chu-mo)">Người nhận</td><td>${T(d.nguoi_nhan_ten)} — ${T(d.nguoi_nhan_sdt)}<br>${T(d.nguoi_nhan_dia_chi)}</td></tr>
-      <tr><td style="color:var(--chu-mo)">Hàng / COD / Phí</td><td>${T(d.hang_hoa)} (${d.khoi_luong_gram}g) / ${tien(d.cod)} / ${d.phi_van_chuyen != null ? tien(d.phi_van_chuyen) : "—"}</td></tr>
-    </tbody></table>
-    <h3 style="font-size:13px">Lịch sử</h3>
-    <div style="max-height:160px;overflow:auto;font-size:12px">${kq.lich_su.map(l =>
-      `<div style="padding:4px 0;border-bottom:1px solid var(--vien)"><span style="color:var(--chu-mo)">${T(l.luc)} · ${T(l.nguon)}</span><br>${T(l.noi_dung)}</div>`).join("")}</div>
-    ${d.trang_thai === "da_duyet" && duyet ? `
-      <div class="form-nhom" style="margin-top:12px"><label>Gửi qua tài khoản hãng</label>
-      <select id="ct-tk">${taiKhoanHang.filter(t2 => t2.kich_hoat).map(t2 => `<option value="${t2.id}">${T(t2.ten)} (${T(t2.moi_truong)})</option>`).join("")}</select></div>` : ""}`,
+    <div class="hang-cheo">${nhanTT(d.trang_thai)} ${nhanGiao(d.trang_thai_giao)} ${nhanCheDo(cd)}
+      ${d.can_doi_soat_ket_qua ? '<span class="huy-hieu hh-vang" title="hãng timeout: ba kết cục không gộp — ok / từ chối / KHÔNG BIẾT. Đây là không biết.">timeout — cần đối soát với hãng</span>' : ""}</div>
+
+    <div class="tab-day" id="ct-tab">
+      <button class="tab-nut hien-tai" data-tab="tt">Thông tin</button>
+      <button class="tab-nut" data-tab="tl">Dòng thời gian (${tl.nut.length})</button>
+      <button class="tab-nut" data-tab="ls">Lịch sử (${kq.lich_su.length})</button>
+      <button class="tab-nut" data-tab="in">Phiếu in</button>
+    </div>
+
+    <div data-vung="tt">
+      <table class="bang"><tbody>
+        <tr><td style="width:150px;color:var(--chu-mo)">Mã vận đơn</td><td>${T(d.ma_van_don || "—")}
+          ${d.ma_van_don ? `<span class="ghi-chu-nguon">(${T(cd.nhan)} — ${T(cd.giai_thich)})</span>` : ""}</td></tr>
+        <tr><td style="color:var(--chu-mo)">Hãng / tài khoản</td><td>${tk
+          ? `<b>${T(hang ? hang.ten : tk.hang)}</b> <code>${T(tk.hang)}</code><br>
+             tài khoản <b>${T(tk.ten)}</b> (#${tk.id}) · môi trường <span class="tag-demo">${T(tk.moi_truong)}</span>
+             ${tk.kich_hoat ? "" : ' · <b style="color:var(--do-dam)">đang khóa</b>'}`
+          : d.carrier_account_id ? `tài khoản #${d.carrier_account_id} — thiếu quyền <code>tenant.hang.xem</code> để đọc tên`
+                                 : "chưa gán — đơn chưa gửi hãng nào"}</td></tr>
+        <tr><td style="color:var(--chu-mo)">Người gửi</td><td>${T(d.nguoi_gui_ten)} — ${T(d.nguoi_gui_sdt)}<br>${T(d.nguoi_gui_dia_chi)}</td></tr>
+        <tr><td style="color:var(--chu-mo)">Người nhận</td><td>${T(d.nguoi_nhan_ten)} — ${T(d.nguoi_nhan_sdt)}<br>${T(d.nguoi_nhan_dia_chi)}</td></tr>
+        <tr><td style="color:var(--chu-mo)">Hàng / COD / Phí</td><td>${T(d.hang_hoa)} (${T(d.khoi_luong_gram)}g) / ${tien(d.cod)} /
+          ${d.phi_van_chuyen != null ? tien(d.phi_van_chuyen) : '<span style="color:var(--chu-mo)">chưa có — hãng chưa trả phí</span>'}</td></tr>
+        <tr><td style="color:var(--chu-mo)">Ghi chú</td><td>${T(d.ghi_chu || "—")}</td></tr>
+        <tr><td style="color:var(--chu-mo)">Tạo lúc</td><td>${T(d.tao_luc || "—")}</td></tr>
+      </tbody></table>
+      ${d.trang_thai === "da_duyet" && duyet ? `
+        <h3 style="font-size:13px;margin-bottom:6px">Gửi hãng — chọn hãng và tài khoản</h3>
+        ${chon.dung_duoc.length ? `
+          <div class="form-nhom"><label for="ct-tk">Tài khoản hãng dùng để gửi</label>
+            <select id="ct-tk">${chon.dung_duoc.map(x =>
+              `<option value="${x.id}">${T(x.hang_ten)} (${T(x.hang)}) · ${T(x.ten)} · ${T(x.moi_truong)} · ${T(x.che_do.nhan)}</option>`).join("")}</select>
+            <div class="ghi-chu-nguon">Danh sách chỉ gồm tài khoản <b>đang bật</b> và hãng có khả năng
+              <code>createOrder</code>. Gửi đi sẽ chạy qua <b>adapter MOCK</b> — không tạo đơn thật.</div></div>`
+          : `<div class="hop-loi">Không có tài khoản hãng nào dùng được để gửi
+              ${chon.loai_ra.length ? `(${chon.loai_ra.length} tài khoản bị loại: ${chon.loai_ra.map(x => T(x.ten) + " — " + T(x.ly_do_loai)).join("; ")})` : ""}.</div>`}
+        ${chon.loai_ra.length && chon.dung_duoc.length ? `<p class="ghi-chu-nguon">Bị loại khỏi danh sách:
+          ${chon.loai_ra.map(x => `<b>${T(x.ten)}</b> — ${T(x.ly_do_loai)}`).join(" · ")}</p>` : ""}` : ""}
+    </div>
+
+    <div data-vung="tl" hidden>
+      ${tl.nut.length ? `<ol class="dong-thoi-gian">${tl.nut.map(n => `
+        <li class="${n.suy_ra ? "suy-ra" : "nguon-" + T(n.nguon_loai)}">
+          <div class="luc">${n.luc ? T(n.luc) : '<i>không có mốc giờ</i>'}</div>
+          <div class="noi">${T(n.noi_dung)}</div>
+          <div class="nguon">${T(n.nguon_ten)}${n.suy_ra
+            ? ' — <b>suy ra từ trường <code>trang_thai_giao</code>, KHÔNG phải một sự kiện có giờ</b>' : ""}</div>
+        </li>`).join("")}</ol>`
+        : '<div class="trang-thai-rong">Chưa có mốc nào trong <code>don_lich_su</code></div>'}
+      <p class="ghi-chu-nguon"><b>Nguồn:</b> <code>don_lich_su</code> qua <code>GET /api/v2/don/${id}</code> —
+        dữ liệu thật, không suy diễn. <b>Phạm vi:</b> ${T(tl.ghi_chu_pham_vi)}</p>
+    </div>
+
+    <div data-vung="ls" hidden>
+      <div class="cuon-ngang"><table class="bang bang-hep"><thead><tr><th>Lúc</th><th>Nguồn</th><th>Nội dung</th></tr></thead>
+      <tbody>${kq.lich_su.map(l => {
+        const ng = L.dienGiaiNguon(l.nguon);
+        return `<tr><td style="white-space:nowrap">${T(l.luc)}</td>
+          <td><b>${T(ng.ten)}</b><br><code style="font-size:11px">${T(l.nguon)}</code>
+            <div class="ghi-chu-nguon">${T(ng.mo_ta)}</div></td>
+          <td>${T(l.noi_dung)}</td></tr>`; }).join("")
+        || '<tr><td colspan="3"><div class="trang-thai-rong">Trống</div></td></tr>'}</tbody></table></div>
+    </div>
+
+    <div data-vung="in" hidden>${htmlPhieuIn(L.metaNhan(d, tk, hang), hang)}</div>`,
     `<button class="nut" onclick="VIP.dongModal()">Đóng</button>
      ${["nhap", "da_duyet"].includes(d.trang_thai) && duoc("tenant.don.ghi") ? `<button class="nut" id="ct-sua">Sửa</button>` : ""}
-     ${d.trang_thai === "nhap" && duyet ? `<button class="nut nut-chinh" id="ct-duyet">Duyệt</button>` : ""}
-     ${d.trang_thai === "da_duyet" && duyet ? `<button class="nut nut-chinh" id="ct-gui">🚚 Gửi hãng (mock)</button>` : ""}
+     ${d.trang_thai === "nhap" && duyet ? `<button class="nut nut-chinh" id="ct-duyet">✔ Duyệt</button>` : ""}
+     ${["nhap", "da_duyet"].includes(d.trang_thai) && duyet ? `<button class="nut" id="ct-tu-choi" style="color:var(--do-dam)">✖ Từ chối</button>` : ""}
+     ${d.trang_thai === "da_duyet" && duyet && chon.dung_duoc.length ? `<button class="nut nut-chinh" id="ct-gui">🚚 Gửi hãng (MOCK)</button>` : ""}
      ${d.trang_thai !== "huy" && duyet ? `<button class="nut" id="ct-huy" style="color:var(--do-dam)">Hủy đơn</button>` : ""}`);
-  const lam = async (duong, body) => {
+
+  const g = (s2) => m.querySelector(s2);
+  m.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => {
+    m.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("hien-tai", x === b));
+    m.querySelectorAll("[data-vung]").forEach(v => v.hidden = v.dataset.vung !== b.dataset.tab);
+  }));
+  const lam = async (duong, body, ten_viec) => {
     try { await api(duong, "POST", body || {}); VIP.dongModal(); bao("Xong."); sauKhiDoi(); }
-    catch (e) { baoLoi(e, "thao tác trên đơn (duyệt / gửi hãng / hủy)", "tenant.don.duyet"); }
+    catch (e) { baoLoi(e, ten_viec || "thao tác trên đơn", "tenant.don.duyet"); }
   };
-  const g = (s) => m.querySelector(s);
-  if (g("#ct-duyet")) g("#ct-duyet").addEventListener("click", () => lam(`/api/v2/don/${id}/duyet`));
+  if (g("#ct-duyet")) g("#ct-duyet").addEventListener("click", () => lam(`/api/v2/don/${id}/duyet`, {}, "duyệt đơn"));
   if (g("#ct-gui")) g("#ct-gui").addEventListener("click", () =>
-    lam(`/api/v2/don/${id}/gui`, { carrier_account_id: +g("#ct-tk").value }));
-  if (g("#ct-huy")) g("#ct-huy").addEventListener("click", () => lam(`/api/v2/don/${id}/huy`));
+    lam(`/api/v2/don/${id}/gui`, { carrier_account_id: +g("#ct-tk").value }, "gửi đơn sang hãng"));
+  if (g("#ct-huy")) g("#ct-huy").addEventListener("click", () => {
+    if (!confirm(`Hủy đơn ${d.ma_don}? Hủy KHÔNG ghi lý do — muốn ghi lý do thì dùng "Từ chối".`)) return;
+    lam(`/api/v2/don/${id}/huy`, {}, "hủy đơn");
+  });
   if (g("#ct-sua")) g("#ct-sua").addEventListener("click", () => { VIP.dongModal(); formDon(d, sauKhiDoi); });
+  if (g("#ct-tu-choi")) g("#ct-tu-choi").addEventListener("click", () => manTuChoiDon(d, sauKhiDoi));
+  const inNut = g("#pi-in");
+  if (inNut) inNut.addEventListener("click", () => window.print());
+}
+
+/* ===== F01 — Màn TỪ CHỐI ĐƠN (reject có lý do) =====
+   API CHƯA CÓ (đo 15/10/2026: app/server.py chỉ có duyet|gui|huy; không route nào khớp
+   /tu-choi). Màn này gọi đúng tên dự kiến; 404 thì hiện CHỜ BACKEND và KHÔNG tuyên bố đã
+   từ chối. Tuyệt đối không thay bằng /huy một cách im lặng — hủy và từ chối là hai việc
+   khác nhau, lý do từ chối phải vào được audit. */
+const DUONG_TU_CHOI = (id) => `/api/v2/don/${id}/tu-choi`;
+
+function manTuChoiDon(d, sauKhiDoi) {
+  const m = VIP.moModal(`Từ chối đơn ${T(d.ma_don)}`, `
+    <p style="margin-top:0;font-size:12.5px;color:var(--chu-mo)">Từ chối là <b>quyết định có lý do</b>,
+      khác với hủy đơn. Lý do phải vào được nhật ký để sau này tra được vì sao đơn không đi.</p>
+    <div class="form-nhom" data-o="ly_do_ma"><label for="tc-ly-do">Lý do <span class="bat-buoc">*</span></label>
+      <select id="tc-ly-do"><option value="">— chọn lý do —</option>
+        ${L.LY_DO_TU_CHOI.map(([ma, ten]) => `<option value="${T(ma)}">${T(ten)}</option>`).join("")}</select>
+      <div class="loi-nhan"></div></div>
+    <div class="form-nhom" data-o="ghi_chu"><label for="tc-ghi-chu">Ghi chú</label>
+      <input id="tc-ghi-chu" placeholder="bắt buộc nếu chọn &quot;Lý do khác&quot;">
+      <div class="loi-nhan"></div></div>
+    <div id="tc-kq"></div>`,
+    `<button class="nut" onclick="VIP.dongModal()">Hủy</button>
+     <button class="nut nut-chinh" id="tc-ok" style="background:var(--do-dam);border-color:var(--do-dam)">✖ Từ chối đơn</button>`);
+  m.querySelector("#tc-ok").addEventListener("click", async () => {
+    const body = { ly_do_ma: m.querySelector("#tc-ly-do").value, ghi_chu: m.querySelector("#tc-ghi-chu").value.trim() };
+    const loi = L.kiemTraTuChoi(body);
+    m.querySelectorAll("[data-o]").forEach(n => { n.classList.remove("co-loi"); n.querySelector(".loi-nhan").textContent = ""; });
+    loi.forEach(e => {
+      const n = m.querySelector(`[data-o="${e.truong}"]`);
+      if (n) { n.classList.add("co-loi"); n.querySelector(".loi-nhan").textContent = e.thong_diep; }
+    });
+    if (loi.length) return;
+    try {
+      await api(DUONG_TU_CHOI(d.id), "POST", body);
+      VIP.dongModal(); bao("Đã từ chối đơn."); sauKhiDoi();
+    } catch (e) {
+      if (e.daXuLy) return;
+      if (e.ma === 404 || e.ma === 405) {
+        m.querySelector("#tc-kq").innerHTML = hopChoBackend("/api/v2/don/<id>/tu-choi",
+          "HTTP " + e.ma + (e.message ? " — " + e.message : ""));
+        m.querySelector("#tc-ok").disabled = true;
+        bao("Chưa từ chối được: backend chưa có endpoint từ chối (CHỜ BACKEND).", "canh-bao");
+        return;
+      }
+      baoLoi(e, "từ chối đơn", "tenant.don.duyet");
+    }
+  });
+}
+
+/* ===== F01 — Phiếu in =====
+   KHÔNG có API nhãn vận đơn của hãng. Phiếu dưới đây là PHIẾU NỘI BỘ dựng từ CSDL local và
+   tự khai đúng như vậy ngay trên giấy in (`la_nhan_hang=false` là bất biến — có ca thử canh).
+   Cấm in ra cái trông như nhãn hãng rồi để người dùng dán lên hàng. */
+function htmlPhieuIn(meta, hang) {
+  const o = meta.o;
+  return `
+    <div class="hop-cho-backend" style="margin-bottom:12px">
+      <b>⏳ Đây KHÔNG phải nhãn vận đơn của hãng</b>
+      <div>Backend chưa phơi <code>getShippingLabel</code> ra HTTP
+        (mong đợi <code>GET /api/v2/don/&lt;id&gt;/nhan</code> ${nhanChoBackend("/api/v2/don/<id>/nhan")}).
+        Phiếu dưới đây dựng từ <b>${T(meta.nguon)}</b> — dùng để dán nội bộ / đối chiếu kho,
+        <b>không</b> dán lên hàng thay nhãn hãng.</div>
+      <div>Hãng ${hang ? `<b>${T(hang.ten)}</b>` : "(chưa gán)"}
+        ${meta.hang_ho_tro_in_nhan ? "<b>có</b>" : "<b>không khai</b>"} khả năng
+        <code>getShippingLabel</code> trong capabilities.</div>
+      ${meta.thieu.length ? `<div>Thiếu dữ liệu: ${meta.thieu.map(x => T(x)).join(" · ")}.</div>` : ""}
+    </div>
+    <div class="phieu-in" id="pi-giay">
+      <div class="pi-dau">
+        <div><b>PHIẾU NỘI BỘ — KHÔNG PHẢI NHÃN VẬN ĐƠN</b>
+          <div class="pi-nho">VIP Express Hub · ${T(meta.che_do.nhan)} · in lúc ${T(new Date().toISOString().slice(0, 16).replace("T", " "))}</div></div>
+        <div class="pi-ma">${T(o.ma_don)}</div>
+      </div>
+      <table class="bang bang-hep"><tbody>
+        <tr><td>Mã vận đơn</td><td><b>${T(o.ma_van_don || "— chưa có —")}</b></td></tr>
+        <tr><td>Người gửi</td><td>${o.nguoi_gui.map(x => T(x || "")).join("<br>")}</td></tr>
+        <tr><td>Người nhận</td><td>${o.nguoi_nhan.map(x => T(x || "")).join("<br>")}</td></tr>
+        <tr><td>Hàng hóa</td><td>${T(o.hang_hoa)} — ${T(o.khoi_luong_gram)}g</td></tr>
+        <tr><td>COD</td><td><b>${tien(o.cod)}</b></td></tr>
+        <tr><td>Phí vận chuyển</td><td>${o.phi_van_chuyen != null ? tien(o.phi_van_chuyen) : "— chưa có —"}</td></tr>
+        <tr><td>Ghi chú</td><td>${T(o.ghi_chu || "—")}</td></tr>
+        <tr><td>Tạo lúc</td><td>${T(o.tao_luc)}</td></tr>
+      </tbody></table>
+      <div class="pi-chan">Mọi số liệu lấy từ CSDL local. Phiếu này không có mã vạch của hãng
+        và không thay thế nhãn vận đơn.</div>
+    </div>
+    <div class="hang-cong-cu" style="margin:12px 0 0"><div class="day">
+      <button class="nut nut-chinh" id="pi-in">🖨 In phiếu nội bộ</button></div></div>`;
 }
 
 async function moBatch(id) {

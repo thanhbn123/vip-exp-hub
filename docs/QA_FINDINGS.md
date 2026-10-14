@@ -166,6 +166,53 @@ chưa đo được vì ở mức mock không có credentials trong thông điệ
 
 ---
 
+## 3b. SỰ CỐ trong lúc làm — phải báo, không được im (§16.6 luật 4)
+
+**Hai việc đã xảy ra thật trong worktree này, cần AG-00 xử.**
+
+### (a) Có người ghi vào worktree của AG-07
+
+`app/thu/thu_saas.py` **bị sửa từ bên ngoài** lúc `23:37:45` ngày 14/10/2026 — sau khi AG-07
+đã đo baseline (`23:29`) và không phải do AG-07 ghi. Nội dung thêm vào là bản vá cho đúng
+**Q-11** (ca `test_16` đòi file ngoài git), kèm câu *"Ba agent độc lập cùng vấp đúng bẫy này
+ngày 14/10/2026"* — tức một tác tử khác viết.
+
+Năm agent có **năm worktree riêng** (`git worktree list`), nên việc này không được phép xảy ra.
+Theo §16.2, AG-07 **không tự sửa và không commit** thay đổi của người khác.
+
+### (b) AG-07 chạy `git stash` lên thay đổi đó — và nó mất
+
+Để đo lại baseline trên bản gốc, AG-07 chạy `git stash` → test → `git stash pop`. Lượt `pop`
+báo **`No stash entries found`**, và `git reflog show stash` cho biết **worktree này chưa bao
+giờ có mục stash nào**.
+
+Đo được sau đó:
+
+| Phép đo | Kết quả |
+|---|---|
+| `git hash-object app/thu/thu_saas.py` | `aaeb475…` |
+| `git rev-parse a1dea69:app/thu/thu_saas.py` | `aaeb475…` — **giống hệt**, file đã về bản gốc |
+| `git stash list` / `git reflog show stash` | rỗng / không tồn tại |
+| `git log --all -S "Ba agent độc lập cùng vấp"` | không có commit nào |
+| Bản sao ở 4 worktree kia | không file nào chứa đoạn đó |
+| `git fsck --unreachable` | chỉ có 2 commit stash **của `agent/import`** lúc `23:32`, không liên quan |
+
+**Nội dung sửa đó hiện không còn ở đâu trong repo.**
+
+**Không kết luận được ai làm mất** (§12.1: không nói quá phạm vi đã đo). Việc không có mục
+stash nào là **bằng chứng** rằng `git stash` không tìm thấy thay đổi để lưu — nghĩa là tác giả
+đã tự hoàn tác trước đó — nhưng **không phải chứng minh**. Khả năng `git stash` của AG-07 đã
+hủy nó **chưa loại trừ được**.
+
+**Việc cho AG-00:** hỏi tác tử đã sửa `thu_saas.py` xem bản vá Q-11 của họ còn không; nếu mất
+thì dựng lại (hướng vá ghi ở Q-11 và mục `R-01` của `QA_TEST_PLAN.md`). Và tìm xem đường nào
+làm một agent ghi được vào worktree của agent khác — đó là lỗi nặng hơn chính bản vá bị mất.
+
+**Bài học cho chính AG-07:** worktree dùng chung object store thì `git stash` là lệnh **toàn
+worktree**, không phải lệnh riêng của phiên — cùng họ với §16.6 ("script đẩy chung không phải
+lệnh riêng của phiên"). Muốn đo bản gốc thì dùng `git show <ref>:<đường dẫn>` ra file tạm, hoặc
+`git worktree add` một bản riêng, **không** `git stash`.
+
 ## 4. Việc nên làm tiếp
 
 1. **Vá Q-01 trước mọi thứ khác**, và sửa `thu_g01_g02.py::test_017` để nó tự bật cờ thay vì

@@ -53,15 +53,34 @@ class BoXuLy(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _doc_body(self, gioi_han=20 * 1024 * 1024):
+    GIOI_HAN_BODY_MAC_DINH = 64 * 1024          # đủ cho mọi JSON nghiệp vụ
+    GIOI_HAN_BODY_IMPORT = 20 * 1024 * 1024     # chỉ đường upload file mới được lớn
+
+    TRAN_RUT_BODY = 32 * 1024 * 1024    # rút tối đa chừng này rồi mới bỏ cuộc
+
+    def _doc_body(self, gioi_han=None):
+        """Đọc body, chặn theo `gioi_han`.
+
+        Quá cỡ thì vẫn phải RÚT HẾT body trước khi trả 413: nếu đóng ngay, bên gửi đang ghi dở
+        sẽ nhận 'Broken pipe' và KHÔNG đọc được mã lỗi — người dùng chỉ thấy kết nối đứt, không
+        biết vì sao (AG-07, ca q07c). Rút có trần để chính việc rút không thành đường làm kiệt máy.
+        """
+        gioi_han = self.GIOI_HAN_BODY_MAC_DINH if gioi_han is None else gioi_han
         dai = int(self.headers.get("Content-Length") or 0)
         if dai > gioi_han:
-            raise don_hang.LoiNghiepVu("body quá lớn", 413)
+            con = min(dai, self.TRAN_RUT_BODY)
+            while con > 0:
+                khuc = self.rfile.read(min(65536, con))
+                if not khuc:
+                    break
+                con -= len(khuc)
+            raise don_hang.LoiNghiepVu(
+                f"body quá lớn: {dai} byte, tối đa {gioi_han}", 413)
         return self.rfile.read(dai) if dai else b""
 
-    def _doc_json(self):
+    def _doc_json(self, gioi_han=None):
         try:
-            return json.loads(self._doc_body() or b"{}")
+            return json.loads(self._doc_body(gioi_han) or b"{}")
         except ValueError:
             raise don_hang.LoiNghiepVu("body không phải JSON")
 
@@ -83,6 +102,18 @@ class BoXuLy(BaseHTTPRequestHandler):
                 ts[k] = unquote_plus(v)
         return ts
 
+    def _so_nguyen(self, ts, ten, mac_dinh, nho_nhat=1, lon_nhat=500):
+        """Đọc tham số số từ query. Chặn CẢ đầu dưới: SQLite coi LIMIT -1 là KHÔNG giới hạn,
+        nên chỉ min() là thủng (AG-07, ca q05). Sai kiểu → 400, không để vọt thành 500."""
+        tho = ts.get(ten)
+        if tho in (None, ""):
+            return mac_dinh
+        try:
+            n = int(tho)
+        except (TypeError, ValueError):
+            raise don_hang.LoiNghiepVu(f"tham số '{ten}' phải là số nguyên", 400)
+        return max(nho_nhat, min(n, lon_nhat))
+
     def _can(self, nc, hanh_dong):
         """AUTHORIZE: tra quyền trong CSDL. Từ chối thì ghi audit rồi ném 403."""
         if not nc.co_quyen(hanh_dong):
@@ -98,7 +129,18 @@ class BoXuLy(BaseHTTPRequestHandler):
         if duong.endswith("/"):
             duong += "index.html"
         an_toan = os.path.normpath(duong).lstrip("/")
-        if an_toan.startswith(("..", "app/du-lieu", "gateway/du-lieu", ".git")):
+        # DANH SÁCH TRẮNG, không phải danh sách đen. Câu hỏi phân biệt: quên một dòng thì kết quả
+        # là an toàn hay hỏng? Với danh sách đen, quên một đường = LỘ MÃ NGUỒN (AG-07 QA chứng minh
+        # 14/10/2026: /app/bao_mat.py và /gateway/cau_hinh.py trả 200 cho người vô danh, lộ cả
+        # secret HMAC của 5 hãng). Nên ở đây chỉ cho qua đúng thứ đã liệt kê.
+        THU_MUC_CHO_PHEP = ("admin/", "pages/", "assets/", "mock/")
+        DUOI_CHO_PHEP = (".html", ".css", ".js", ".json", ".csv", ".png", ".jpg", ".jpeg",
+                         ".svg", ".ico", ".woff", ".woff2", ".map", ".txt")
+        if ".." in an_toan.split("/"):
+            return self._tra(404, {"loi": "không có"})
+        if an_toan != "index.html" and not an_toan.startswith(THU_MUC_CHO_PHEP):
+            return self._tra(404, {"loi": "không có"})
+        if not an_toan.endswith(DUOI_CHO_PHEP):
             return self._tra(404, {"loi": "không có"})
         full = os.path.join(GOC_TINH, an_toan)
         if not os.path.isfile(full):
@@ -238,6 +280,14 @@ class BoXuLy(BaseHTTPRequestHandler):
 
     # ---------- platform ----------
     def _api_platform(self, duong, method, nc):
+        # MỘT cổng chung cho mọi đường /platform/* — endpoint mới tự động được bảo vệ.
+        # Trước đây mỗi đường tự gọi _can, nên hai đường (/goi, /vai-tro) quên gọi là hở
+        # (AG-07 QA, ca q03/q03b: TENANT_VIEWER đọc được trọn ma trận RBAC).
+        if not nc.platform_role:
+            csdl.audit("tu_choi_quyen", f"platform:{duong}", f"vai trò {nc.role}",
+                       tenant_id=nc.tenant_id, user_id=nc.user_id,
+                       dia_chi=self.client_address[0], ket_qua="tu_choi")
+            raise don_hang.LoiNghiepVu("không đủ quyền", 403)
         if duong == "/api/v2/platform/tenants" and method == "GET":
             self._can(nc, "platform.tenant.xem")
             ds = csdl.nhieu("SELECT t.*, g.ten ten_goi,"
@@ -273,18 +323,19 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/platform/tenants/(\d+)", duong)
         if m:
             t_id = int(m.group(1))
+            # Kiểm quyền TRƯỚC khi tra CSDL: nếu tra trước thì người không quyền nhận 404 cho id
+            # không tồn tại và 403 cho id có thật → đếm được số doanh nghiệp (AG-07, ca q04).
+            self._can(nc, "platform.tenant.xem" if method == "GET" else "platform.tenant.sua")
             t = csdl.mot("SELECT t.*, g.ten ten_goi FROM tenants t JOIN goi_dich_vu g ON g.id=t.goi_id"
                          " WHERE t.id=?", (t_id,))
             if not t:
                 return self._tra(404, {"loi": "không có tenant"})
             if method == "GET":
-                self._can(nc, "platform.tenant.xem")
                 tv = csdl.nhieu("SELECT m.role, m.trang_thai, u.ten_dang_nhap, u.ho_ten"
                                 " FROM tenant_memberships m JOIN users u ON u.id=m.user_id"
                                 " WHERE m.tenant_id=?", (t_id,))
                 return self._tra(200, {"tenant": dict(t), "thanh_vien": [dict(x) for x in tv]})
             if method in ("PUT", "POST"):
-                self._can(nc, "platform.tenant.sua")
                 d = self._doc_json()
                 ten = d.get("ten", t["ten"]).strip() or t["ten"]
                 csdl.ghi("UPDATE tenants SET ten=?, cap_nhat_luc=? WHERE id=?", (ten, csdl.bay_gio(), t_id))
@@ -293,17 +344,16 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/platform/tenants/(\d+)/(khoa|mo|goi)", duong)
         if m and method == "POST":
             t_id, viec = int(m.group(1)), m.group(2)
+            self._can(nc, "platform.goi.doi" if viec == "goi" else "platform.tenant.khoa")
             if not csdl.mot("SELECT id FROM tenants WHERE id=?", (t_id,)):
                 return self._tra(404, {"loi": "không có tenant"})
             if viec == "goi":
-                self._can(nc, "platform.goi.doi")
                 goi_id = self._doc_json().get("goi_id")
                 if not csdl.mot("SELECT id FROM goi_dich_vu WHERE id=?", (goi_id,)):
                     return self._tra(400, {"loi": "gói không tồn tại"})
                 csdl.ghi("UPDATE tenants SET goi_id=?, cap_nhat_luc=? WHERE id=?",
                          (goi_id, csdl.bay_gio(), t_id))
             else:
-                self._can(nc, "platform.tenant.khoa")
                 csdl.ghi("UPDATE tenants SET trang_thai=?, cap_nhat_luc=? WHERE id=?",
                          ("khoa" if viec == "khoa" else "hoat_dong", csdl.bay_gio(), t_id))
             csdl.audit(f"tenant_{viec}", f"tenant:{t_id}", "", user_id=nc.user_id)
@@ -511,7 +561,7 @@ class BoXuLy(BaseHTTPRequestHandler):
             if ts.get("q"):
                 dk.append("(ma_don LIKE ? OR ma_van_don LIKE ? OR nguoi_nhan_ten LIKE ? OR nguoi_nhan_sdt LIKE ?)")
                 tsq += [f"%{ts['q']}%"] * 4
-            tsq.append(min(int(ts.get("gioi_han", "100")), 500))
+            tsq.append(self._so_nguyen(ts, "gioi_han", 100))
             ds = csdl.nhieu(f"SELECT * FROM don_hang WHERE {' AND '.join(dk)} ORDER BY id DESC LIMIT ?", tsq)
             return self._tra(200, {"don": [dict(x) for x in ds]})
         if duong == "/api/v2/don/xuat-csv" and method == "GET":
@@ -522,7 +572,10 @@ class BoXuLy(BaseHTTPRequestHandler):
                    "nguoi_nhan_sdt", "nguoi_nhan_dia_chi", "hang_hoa", "khoi_luong_gram", "cod",
                    "phi_van_chuyen", "tao_luc"]
             def o(v):
-                return '"' + str(v if v is not None else "").replace('"', '""') + '"'
+                # Làm sạch công thức y như đường xuất của import — DÙNG CHUNG một hàm để hai
+                # đường xuất CSV không thể lệch nhau (AG-07, ca q08).
+                sach = nhap_file.lam_sach_o_xuat(str(v if v is not None else ""))
+                return '"' + sach.replace('"', '""') + '"'
             csv = "﻿" + ",".join(cot) + "\n" + "\n".join(",".join(o(d[c]) for c in cot) for d in ds)
             body = csv.encode()
             self.send_response(200)
@@ -576,7 +629,7 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, {"batch": [dict(x) for x in ds]})
         if duong == "/api/v2/import" and method == "POST":
             self._can(nc, "tenant.import.ghi")
-            d = self._doc_json()
+            d = self._doc_json(self.GIOI_HAN_BODY_IMPORT)   # chỉ đường này được body lớn
             if not d.get("ten_file") or not d.get("noi_dung_base64"):
                 return self._tra(400, {"loi": "cần ten_file và noi_dung_base64"})
             try:
@@ -629,11 +682,17 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/import/(\d+)/duyet", duong)
         if m and method == "POST":
             self._can(nc, "tenant.import.duyet")
-            d = self._doc_json()
+            d = self._doc_json(1024 * 1024)      # đủ chỗ để ĐẾM rồi từ chối có thông điệp rõ
             ng = d.get("nguoi_gui") or {}
             if not all((ng.get(k) or "").strip() for k in ("ten", "sdt", "dia_chi")):
                 return self._tra(400, {"loi": "cần nguoi_gui {ten, sdt, dia_chi}"})
-            kq = nhap_file.duyet_batch(tenant_id, nc.user_id, int(m.group(1)), d.get("dong_ids") or [], ng)
+            dong_ids = d.get("dong_ids") or []
+            if not isinstance(dong_ids, list):
+                return self._tra(400, {"loi": "dong_ids phải là danh sách"})
+            if len(dong_ids) > 1000:
+                return self._tra(400, {"loi": f"quá nhiều dòng trong một lượt duyệt "
+                                              f"({len(dong_ids)}), tối đa 1000"})
+            kq = nhap_file.duyet_batch(tenant_id, nc.user_id, int(m.group(1)), dong_ids, ng)
             return self._tra(200, kq)
 
         # --- webhook monitor ---
@@ -686,6 +745,12 @@ class BoXuLy(BaseHTTPRequestHandler):
             if viec == "chuan-hoa-dia-chi":
                 return self._tra(200, ai_gateway.chuan_hoa_dia_chi(tenant_id, d.get("dia_chi", "")))
             if viec == "phat-hien-bat-thuong":
+                for truong in ("cod", "khoi_luong_gram"):
+                    if truong in d and d[truong] not in (None, ""):
+                        try:
+                            int(d[truong])
+                        except (TypeError, ValueError):
+                            return self._tra(400, {"loi": f"'{truong}' phải là số"})
                 return self._tra(200, ai_gateway.phat_hien_bat_thuong(tenant_id, d))
             return self._tra(200, ai_gateway.goi_y_hang(tenant_id, d))
 

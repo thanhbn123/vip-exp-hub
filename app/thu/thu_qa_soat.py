@@ -625,6 +625,12 @@ class ThuQaSoat(unittest.TestCase):
                 nen = " ".join(sql.split())
                 if not any(b in nen for b in bang):
                     continue
+                # PRAGMA đọc SIÊU DỮ LIỆU schema (tên cột), KHÔNG đọc một dòng dữ liệu nào,
+                # nên không thể rò dữ liệu tenant dù có nhắc tên bảng. Bỏ qua là an toàn:
+                # quên một PRAGMA không gây lộ gì. (AG-00 thêm 14/10/2026 sau khi AG-04 dùng
+                # PRAGMA table_info(import_batch) để dò schema cũ.)
+                if nen.upper().startswith("PRAGMA"):
+                    continue
                 if nen.upper().startswith("INSERT"):
                     continue          # INSERT cấp tenant_id làm giá trị, không phải điều kiện
                 if "tenant_id" in nen:

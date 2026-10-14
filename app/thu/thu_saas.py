@@ -397,9 +397,11 @@ class ThuSaaS(unittest.TestCase):
         # v2 CỐ Ý trả thông báo chung khi tự khóa — không tiết lộ tài khoản nào có thật/đang bị khóa
         # (brief G02.1: "Không để lộ thông tin tài khoản qua thông báo lỗi").
         self.assertEqual(kq["loi"], "sai tên đăng nhập hoặc mật khẩu")
-        # nhưng tài khoản PHẢI thật sự bị khóa: đúng mật khẩu cũng không vào được
-        self.assertEqual(csdl.mot("SELECT trang_thai FROM users WHERE ten_dang_nhap='a-khoa'")["trang_thai"],
-                         "khoa", "sai 5 lần mà tài khoản không bị khóa!")
+        # Tài khoản PHẢI bị khóa TẠM (không phải vĩnh viễn — khóa vĩnh viễn bằng mật khẩu sai
+        # là đường cho người lạ vô hiệu hóa tài khoản người khác; đổi 14/10/2026 theo AG-07 q06).
+        r = csdl.mot("SELECT trang_thai, khoa_den FROM users WHERE ten_dang_nhap='a-khoa'")
+        self.assertEqual(r["trang_thai"], "hoat_dong", "không được khóa VĨNH VIỄN khi đoán sai")
+        self.assertIsNotNone(r["khoa_den"], "sai 5 lần mà không khóa tạm!")
         st, kq = p.dang_nhap("a-khoa", MK)
         self.assertEqual(st, 401, "tài khoản khóa vẫn đăng nhập được!")
         # đổi mật khẩu thu hồi phiên khác

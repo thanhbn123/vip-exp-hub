@@ -223,6 +223,21 @@ def nang_len_v5(kn):
     return buoc
 
 
+def nang_len_v6(kn):
+    """v6: thêm users.khoa_den (khóa TẠM) và gỡ các tài khoản đang bị khóa vĩnh viễn
+    DO ĐOÁN SAI MẬT KHẨU. Không đụng tài khoản do quản trị cố ý khóa — nhưng schema cũ
+    không phân biệt được hai loại, nên chỉ thêm cột và để nguyên trạng thái hiện có."""
+    buoc = []
+    if "khoa_den" not in [r[1] for r in kn.execute("PRAGMA table_info(users)")]:
+        kn.execute("ALTER TABLE users ADD COLUMN khoa_den TEXT")
+        buoc.append("users.khoa_den (khóa tạm thay cho khóa vĩnh viễn khi đoán sai)")
+    so_khoa = kn.execute("SELECT COUNT(*) FROM users WHERE trang_thai='khoa'").fetchone()[0]
+    if so_khoa:
+        buoc.append(f"GHI CHÚ: còn {so_khoa} tài khoản ở trạng thái 'khoa' — schema cũ không phân "
+                    "biệt được do quản trị khóa hay do đoán sai, người vận hành tự xem và mở")
+    return buoc
+
+
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -256,6 +271,8 @@ def chay(im_lang=False):
                 buoc += nang_len_v4(kn)
             if pb < 5:
                 buoc += nang_len_v5(kn)
+            if pb < 6:
+                buoc += nang_len_v6(kn)
             kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                        " VALUES (?,?,?)",
                        (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

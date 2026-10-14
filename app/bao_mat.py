@@ -65,15 +65,24 @@ def dang_nhap(ten_dang_nhap, mat_khau, dia_chi=None):
                    dia_chi=dia_chi, ket_qua="that_bai")
         return None, CHUNG
     if u["trang_thai"] == "khoa":
-        csdl.audit("dang_nhap_that_bai", f"user:{u['id']}", "tài khoản bị khóa",
+        csdl.audit("dang_nhap_that_bai", f"user:{u['id']}", "tài khoản bị quản trị khóa",
                    user_id=u["id"], dia_chi=dia_chi, ket_qua="tu_choi")
         return None, "tài khoản đã bị khóa — liên hệ quản trị"
+    bay = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if u["khoa_den"] and u["khoa_den"] > bay:
+        csdl.audit("dang_nhap_that_bai", f"user:{u['id']}", f"đang khóa tạm tới {u['khoa_den']}",
+                   user_id=u["id"], dia_chi=dia_chi, ket_qua="tu_choi")
+        return None, CHUNG          # không nói ra là đang khóa tạm (tránh dò tài khoản)
     if not kiem_mat_khau(mat_khau, u["mat_khau_hash"]):
         so_sai = u["so_lan_sai"] + 1
         if so_sai >= cau_hinh.KHOA_SAU_SO_LAN_SAI:
-            csdl.ghi("UPDATE users SET so_lan_sai=?, trang_thai='khoa' WHERE id=?", (so_sai, u["id"]))
-            thu_hoi_moi_phien(u["id"])
-            csdl.audit("khoa_tai_khoan_tu_dong", f"user:{u['id']}", f"sai mật khẩu {so_sai} lần",
+            # KHÓA TẠM, tự mở sau KHOA_TAM_PHUT. Không khóa vĩnh viễn để người lạ không
+            # vô hiệu hóa được tài khoản người khác chỉ bằng mật khẩu sai.
+            den = (datetime.now() + timedelta(minutes=cau_hinh.KHOA_TAM_PHUT)
+                   ).strftime("%Y-%m-%d %H:%M:%S")
+            csdl.ghi("UPDATE users SET so_lan_sai=0, khoa_den=? WHERE id=?", (den, u["id"]))
+            csdl.audit("khoa_tam_tai_khoan", f"user:{u['id']}",
+                       f"sai mật khẩu {so_sai} lần → khóa tạm tới {den}",
                        user_id=u["id"], dia_chi=dia_chi, ket_qua="tu_choi")
             return None, CHUNG   # không nói ra là vừa bị khóa (tránh dò tài khoản)
         csdl.ghi("UPDATE users SET so_lan_sai=? WHERE id=?", (so_sai, u["id"]))
@@ -87,7 +96,7 @@ def dang_nhap(ten_dang_nhap, mat_khau, dia_chi=None):
                    user_id=u["id"], dia_chi=dia_chi, ket_qua="tu_choi")
         return None, "tài khoản chưa được gán vào doanh nghiệp nào đang hoạt động"
 
-    csdl.ghi("UPDATE users SET so_lan_sai=0 WHERE id=?", (u["id"],))
+    csdl.ghi("UPDATE users SET so_lan_sai=0, khoa_den=NULL WHERE id=?", (u["id"],))
     token = secrets.token_urlsafe(32)
     het_han = (datetime.now() + timedelta(hours=cau_hinh.PHIEN_SONG_GIO)).strftime("%Y-%m-%d %H:%M:%S")
     active = ds[0]["tenant_id"] if ds else None
@@ -197,7 +206,11 @@ def dat_lai_mat_khau(token, mat_khau_moi):
         return False, "token không hợp lệ hoặc đã dùng"
     if r["het_han"] < datetime.now().strftime("%Y-%m-%d %H:%M:%S"):
         return False, "token đã hết hạn"
-    csdl.ghi("UPDATE users SET mat_khau_hash=?, doi_mat_khau_luc=?, so_lan_sai=0 WHERE id=?",
+    # MỞ KHÓA luôn: trước đây chỉ xóa so_lan_sai mà giữ trang_thai='khoa', nên chính chủ đặt
+    # lại mật khẩu xong vẫn không đăng nhập được — và kẻ xấu khóa tài khoản người khác từ xa
+    # bằng 5 lần đoán sai thì nạn nhân không có đường tự mở (AG-07, ca q06).
+    csdl.ghi("UPDATE users SET mat_khau_hash=?, doi_mat_khau_luc=?, so_lan_sai=0, khoa_den=NULL"
+             " WHERE id=?",
              (bam_mat_khau(mat_khau_moi), csdl.bay_gio(), r["user_id"]))
     csdl.ghi("UPDATE reset_tokens SET da_dung=1 WHERE token_hash=?", (_hash_token(token),))
     thu_hoi_moi_phien(r["user_id"])     # đổi mật khẩu → mọi phiên cũ hết hiệu lực

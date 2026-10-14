@@ -22,6 +22,9 @@ sys.path.insert(0, GOC_APP)
 _tam = tempfile.mkdtemp(prefix="vip-hub-g0102-")
 os.environ["VIP_HUB_DATA"] = _tam
 os.environ["VIP_HUB_BACKOFF"] = "0.05"
+# Provider reset giả lập MẶC ĐỊNH TẮT (trả token cho người vô danh là lỗ hổng chiếm tài khoản).
+# Bộ thử bật CÓ CHỦ ĐÍCH để đo được luồng đặt lại mật khẩu — đây là ngoại lệ của riêng bộ thử.
+os.environ["VIP_HUB_RESET_TOKEN"] = "1"
 
 import bao_mat   # noqa: E402
 import csdl      # noqa: E402

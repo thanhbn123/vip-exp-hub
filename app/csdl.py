@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 import cau_hinh
 
-PHIEN_BAN_SCHEMA = 5
+PHIEN_BAN_SCHEMA = 6
 
 MUI_GIO_VN = timezone(timedelta(hours=7))
 khoa_ghi = threading.RLock()   # serialize mọi lượt GHI (WAL: một writer tại một thời điểm)
@@ -58,8 +58,9 @@ CREATE TABLE IF NOT EXISTS users (
   mat_khau_hash TEXT NOT NULL,
   ho_ten TEXT NOT NULL,
   platform_role TEXT,                              -- NULL = người thường; PLATFORM_OWNER/PLATFORM_ADMIN
-  trang_thai TEXT NOT NULL DEFAULT 'hoat_dong',    -- hoat_dong | khoa
+  trang_thai TEXT NOT NULL DEFAULT 'hoat_dong',    -- hoat_dong | khoa (do QUẢN TRỊ khóa)
   so_lan_sai INTEGER NOT NULL DEFAULT 0,
+  khoa_den TEXT,                                   -- khóa TẠM do đoán sai; hết giờ tự mở
   tao_luc TEXT NOT NULL,
   doi_mat_khau_luc TEXT
 );

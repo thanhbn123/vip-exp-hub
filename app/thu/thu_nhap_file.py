@@ -139,14 +139,14 @@ class ThuNhapFile(unittest.TestCase):
     def test_03_khong_duyet_duoc_batch_FAILED(self):
         """Máy trạng thái phải CHẶN, không im lặng cho qua."""
         bid, tid, uid = self.nap("A", "ok.csv", csv_bytes("Lê Ba,0906666666,6 Hẻm,Áo,500,0,"))
-        nhap_file.chuyen_batch(bid, "FAILED", "thử")
+        nhap_file.chuyen_batch(tid, bid, "FAILED", "thử")
         with self.assertRaises(don_hang.LoiNghiepVu) as e:
             nhap_file.duyet_batch(tid, uid, bid, [], NGUOI_GUI)
         self.assertIn("FAILED", str(e.exception))
         # chuyển lùi/nhảy bậc cũng bị chặn
-        bid2, _, _ = self.nap("A", "ok2.csv", csv_bytes("Lê Tư,0907777777,7 Hẻm,Áo,500,0,"))
+        bid2, tid2, _ = self.nap("A", "ok2.csv", csv_bytes("Lê Tư,0907777777,7 Hẻm,Áo,500,0,"))
         with self.assertRaises(don_hang.LoiNghiepVu):
-            nhap_file.chuyen_batch(bid2, "PROCESSING")   # READY → PROCESSING: không có đường
+            nhap_file.chuyen_batch(tid2, bid2, "PROCESSING")   # READY → PROCESSING: không có đường
         self.assertEqual(self.tt_batch(bid2), "READY", "chuyển sai mà vẫn ghi đè trạng thái!")
 
     def test_04_doc_duoc_trang_thai_cu(self):

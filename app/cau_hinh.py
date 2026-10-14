@@ -9,11 +9,18 @@ DUONG_DAN_KHOA = os.path.join(THU_MUC_DU_LIEU, "khoa-noi-bo.key")  # khóa mã h
 CONG_MAC_DINH = int(os.environ.get("VIP_HUB_PORT", "8897"))
 
 PHIEN_SONG_GIO = 12            # phiên đăng nhập sống 12 giờ
-KHOA_SAU_SO_LAN_SAI = 5        # sai mật khẩu 5 lần → khóa tài khoản (admin/owner mở lại)
+KHOA_SAU_SO_LAN_SAI = 5        # sai mật khẩu 5 lần liên tiếp → khóa TẠM
+# Khóa TẠM, không khóa vĩnh viễn: khóa vĩnh viễn bằng mật khẩu sai là đường cho người lạ
+# vô hiệu hóa tài khoản bất kỳ (AG-07 QA, ca q06 — 5 yêu cầu vô danh là khóa chết một tài khoản).
+# Khóa vĩnh viễn chỉ do QUẢN TRỊ đặt (users.trang_thai='khoa').
+KHOA_TAM_PHUT = 15
 PBKDF2_VONG = 200_000
-# Chưa cấu hình SMTP: provider reset mật khẩu GIẢ LẬP trả token ra API để kiểm thử luồng.
-# Phải TẮT khi rời môi trường local (đặt VIP_HUB_RESET_TOKEN=0).
-HIEN_TOKEN_RESET = os.environ.get("VIP_HUB_RESET_TOKEN", "1") == "1"
+# Provider reset mật khẩu GIẢ LẬP: trả token thẳng qua API để kiểm thử luồng khi chưa có SMTP.
+# MẶC ĐỊNH TẮT. Bật là lỗ hổng chiếm tài khoản: người VÔ DANH gọi /auth/quen-mat-khau cho bất kỳ
+# tên đăng nhập nào sẽ nhận token hợp lệ rồi đặt lại mật khẩu — chiếm được cả PLATFORM_OWNER
+# trong 3 yêu cầu HTTP (AG-07 QA chứng minh được thật ngày 14/10/2026, ca q01b).
+# Chỉ bật có chủ đích khi chạy bộ thử: VIP_HUB_RESET_TOKEN=1.
+HIEN_TOKEN_RESET = os.environ.get("VIP_HUB_RESET_TOKEN", "0") == "1"
 
 VAI_TRO_PLATFORM = ("PLATFORM_OWNER", "PLATFORM_ADMIN")
 VAI_TRO_TENANT = ("TENANT_OWNER", "TENANT_ADMIN", "TENANT_STAFF", "TENANT_VIEWER")

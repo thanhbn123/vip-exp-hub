@@ -455,22 +455,28 @@ def trang_thai_batch(b):
 _co_cot_loi = None
 
 
-def _ghi_trang_thai(batch_id, tt, loi=None):
-    """Ghi trạng thái (+ lý do nếu CSDL đã có cột `loi`). Chịu được CSDL cũ chưa migrate."""
+def _ghi_trang_thai(tenant_id, batch_id, tt, loi=None):
+    """Ghi trạng thái (+ lý do nếu CSDL đã có cột `loi`). Chịu được CSDL cũ chưa migrate.
+
+    BẮT BUỘC tenant_id trong mệnh đề WHERE: trước đây hàm này ghi theo id trần và chỉ an toàn
+    nhờ mọi caller đã resolve tenant trước. Caller thứ ba quên là lỗi chéo tenant KHÔNG có gì
+    báo (AG-07 QA nêu đúng dạng này ở Q-10). Phòng thủ ngay tại câu SQL."""
     global _co_cot_loi
     if _co_cot_loi is None:
         _co_cot_loi = any(c["name"] == "loi"
                           for c in csdl.nhieu("PRAGMA table_info(import_batch)"))
     if _co_cot_loi:
-        csdl.ghi("UPDATE import_batch SET trang_thai=?, loi=? WHERE id=?", (tt, loi, batch_id))
+        csdl.ghi("UPDATE import_batch SET trang_thai=?, loi=? WHERE id=? AND tenant_id=?",
+                 (tt, loi, batch_id, tenant_id))
     else:
-        csdl.ghi("UPDATE import_batch SET trang_thai=? WHERE id=?", (tt, batch_id))
+        csdl.ghi("UPDATE import_batch SET trang_thai=? WHERE id=? AND tenant_id=?",
+                 (tt, batch_id, tenant_id))
 
 
-def chuyen_batch(batch_id, moi, loi=None):
+def chuyen_batch(tenant_id, batch_id, moi, loi=None):
     """Chuyển trạng thái batch THEO máy trạng thái. Chuyển sai thứ tự → lỗi, không
     im lặng ghi đè: trạng thái đi lùi mà không báo là một dạng hỏng im lặng."""
-    b = csdl.mot("SELECT * FROM import_batch WHERE id=?", (batch_id,))
+    b = csdl.mot("SELECT * FROM import_batch WHERE id=? AND tenant_id=?", (batch_id, tenant_id))
     if not b:
         raise don_hang.LoiNghiepVu("không có batch này", 404)
     cu = trang_thai_batch(b)
@@ -478,7 +484,7 @@ def chuyen_batch(batch_id, moi, loi=None):
         raise don_hang.LoiNghiepVu(f"trạng thái batch không hợp lệ: {moi}")
     if moi not in CHUYEN_BATCH[cu]:
         raise don_hang.LoiNghiepVu(f"batch {batch_id}: không chuyển được {cu} → {moi}")
-    _ghi_trang_thai(batch_id, moi, loi)
+    _ghi_trang_thai(tenant_id, batch_id, moi, loi)
     return moi
 
 
@@ -503,7 +509,7 @@ def tao_batch(tenant_id, user_id, ten_file, du_lieu: bytes):
                    (tenant_id, ten_file, duoi, "UPLOADED", user_id, csdl.bay_gio()))
     batch_id = con.lastrowid
     try:
-        chuyen_batch(batch_id, "PARSING")
+        chuyen_batch(tenant_id, batch_id, "PARSING")
         bang = _parse(duoi, du_lieu)
         if len(bang) < 2:
             raise don_hang.LoiNghiepVu("file không có dữ liệu (cần dòng tiêu đề + ít nhất 1 dòng)")
@@ -513,7 +519,7 @@ def tao_batch(tenant_id, user_id, ten_file, du_lieu: bytes):
         thieu = bat_buoc - set(anh_xa.values())
         if thieu:
             raise don_hang.LoiNghiepVu("không nhận diện được cột: " + ", ".join(sorted(thieu)))
-        chuyen_batch(batch_id, "VALIDATING")
+        chuyen_batch(tenant_id, batch_id, "VALIDATING")
         da_thay = {}
         for stt, hang in enumerate(bang[1:], 1):
             r = {t: "" for t in TRUONG}
@@ -530,19 +536,19 @@ def tao_batch(tenant_id, user_id, ten_file, du_lieu: bytes):
             csdl.ghi("INSERT INTO import_dong (batch_id, stt, du_lieu_json, trang_thai, loi)"
                      " VALUES (?,?,?,?,?)",
                      (batch_id, stt, json.dumps(r, ensure_ascii=False), tt, ghi_loi))
-        chuyen_batch(batch_id, "READY")
+        chuyen_batch(tenant_id, batch_id, "READY")
     except LoiKhongHoTro as e:
         # Định dạng không đọc được: để lại MỘT dòng UNSUPPORTED làm dấu vết cho người xem.
         csdl.ghi("INSERT INTO import_dong (batch_id, stt, du_lieu_json, trang_thai, loi)"
                  " VALUES (?,?,?,?,?)",
                  (batch_id, 1, json.dumps({t: "" for t in TRUONG}, ensure_ascii=False),
                   "UNSUPPORTED", str(e)))
-        _ghi_trang_thai(batch_id, "FAILED", str(e))
+        _ghi_trang_thai(tenant_id, batch_id, "FAILED", str(e))
         csdl.audit("import_that_bai", f"batch:{batch_id}", str(e),
                    tenant_id=tenant_id, user_id=user_id, ket_qua="that_bai")
         raise
     except Exception as e:
-        _ghi_trang_thai(batch_id, "FAILED", str(e))
+        _ghi_trang_thai(tenant_id, batch_id, "FAILED", str(e))
         csdl.audit("import_that_bai", f"batch:{batch_id}", f"{type(e).__name__}: {e}",
                    tenant_id=tenant_id, user_id=user_id, ket_qua="that_bai")
         raise
@@ -615,8 +621,8 @@ def duyet_batch(tenant_id, user_id, batch_id, dong_ids, nguoi_gui):
     cu = trang_thai_batch(b)
     if "APPROVED" not in CHUYEN_BATCH[cu]:
         raise don_hang.LoiNghiepVu(f"batch đang ở trạng thái {cu} — chưa duyệt được")
-    chuyen_batch(batch_id, "APPROVED")
-    chuyen_batch(batch_id, "PROCESSING")
+    chuyen_batch(tenant_id, batch_id, "APPROVED")
+    chuyen_batch(tenant_id, batch_id, "PROCESSING")
     kq = {"SUCCESS": 0, "FAILED": 0, "bo_qua": 0}
     for dong_id in dong_ids:
         d = csdl.mot("SELECT * FROM import_dong WHERE id=? AND batch_id=?", (dong_id, batch_id))
@@ -649,7 +655,7 @@ def duyet_batch(tenant_id, user_id, batch_id, dong_ids, nguoi_gui):
         cuoi = "FAILED"          # không dòng nào làm được gì (ví dụ chỉ có UNSUPPORTED)
     else:
         cuoi = "PARTIAL_FAILED"
-    chuyen_batch(batch_id, cuoi)
+    chuyen_batch(tenant_id, batch_id, cuoi)
     kq["trang_thai_batch"] = cuoi
     csdl.audit("import_duyet", f"batch:{batch_id}", json.dumps(kq),
                tenant_id=tenant_id, user_id=user_id)

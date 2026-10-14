@@ -605,6 +605,27 @@ class BoXuLy(BaseHTTPRequestHandler):
         if m and method in ("PUT", "POST"):
             self._can(nc, "tenant.import.ghi")
             return self._tra(200, nhap_file.sua_dong(tenant_id, int(m.group(1)), self._doc_json()))
+        m = re.fullmatch(r"/api/v2/import/(\d+)/xuat-csv", duong)
+        if m and method == "GET":
+            self._can(nc, "tenant.don.xem")
+            csv = nhap_file.xuat_csv(tenant_id, int(m.group(1)))   # đã làm sạch chống formula injection
+            body = csv.encode()
+            # Tên file do NGƯỜI DÙNG đặt — tuyệt đối không ghép thẳng vào header (CRLF/quote injection).
+            ten_an_toan = "import-batch-%d.csv" % int(m.group(1))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{ten_an_toan}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        m = re.fullmatch(r"/api/v2/import/dong/(\d+)/xac-nhan", duong)
+        if m and method == "POST":
+            self._can(nc, "tenant.import.ghi")
+            kq = nhap_file.xac_nhan_dong(tenant_id, nc.user_id, int(m.group(1)))
+            csdl.audit("import_xac_nhan_dong", f"import_dong:{m.group(1)}", "NEEDS_REVIEW → READY",
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, kq if isinstance(kq, dict) else {"ok": True})
         m = re.fullmatch(r"/api/v2/import/(\d+)/duyet", duong)
         if m and method == "POST":
             self._can(nc, "tenant.import.duyet")

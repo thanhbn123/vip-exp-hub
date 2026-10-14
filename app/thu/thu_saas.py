@@ -23,6 +23,7 @@ os.environ["VIP_HUB_DATA"] = _tam
 os.environ["VIP_HUB_BACKOFF"] = "0.05"
 
 import bao_mat   # noqa: E402
+import cau_hinh  # noqa: E402
 import csdl      # noqa: E402
 import khoi_tao  # noqa: E402
 import quyen     # noqa: E402
@@ -436,10 +437,23 @@ class ThuSaaS(unittest.TestCase):
 
     # ===== G12.14-15: migration/regression =====
     def test_16_khong_dung_du_lieu_cu(self):
-        # CSDL SaaS nằm riêng; gateway.db G01 không bị đụng
+        """CSDL SaaS phải nằm RIÊNG, không đụng kho dữ liệu của gateway G01.
+
+        Trước đây ca này đòi `gateway/du-lieu/gateway.db` TỒN TẠI — nhưng đường đó nằm trong
+        `.gitignore`, nên mọi bản sao mới (worktree của agent, CI) đều hỏng dù mã hoàn toàn đúng.
+        Ba agent độc lập cùng vấp đúng bẫy này ngày 14/10/2026. Phép kiểm đã đổi sang đo thứ
+        THỰC SỰ cần bảo đảm — hai kho tách nhau — mà không phụ thuộc file ngoài git."""
         goc = os.path.dirname(GOC_APP)
-        self.assertTrue(os.path.exists(os.path.join(goc, "gateway", "du-lieu", "gateway.db")))
-        self.assertNotEqual(os.environ["VIP_HUB_DATA"], os.path.join(goc, "gateway", "du-lieu"))
+        kho_gateway = os.path.realpath(os.path.join(goc, "gateway", "du-lieu"))
+        kho_saas = os.path.realpath(os.environ["VIP_HUB_DATA"])
+        self.assertNotEqual(kho_saas, kho_gateway, "SaaS dùng chung kho dữ liệu với gateway!")
+        self.assertFalse(kho_saas.startswith(kho_gateway + os.sep),
+                         "CSDL SaaS nằm BÊN TRONG kho của gateway!")
+        self.assertFalse(os.path.realpath(cau_hinh.DUONG_DAN_CSDL).startswith(kho_gateway + os.sep))
+        # và nếu gateway.db có tồn tại thì SaaS tuyệt đối không được ghi vào nó
+        db_gw = os.path.join(kho_gateway, "gateway.db")
+        if os.path.exists(db_gw):
+            self.assertNotEqual(os.path.realpath(cau_hinh.DUONG_DAN_CSDL), os.path.realpath(db_gw))
 
     def test_17_live_bi_khoa(self):
         import adapter

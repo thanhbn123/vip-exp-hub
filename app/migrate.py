@@ -201,6 +201,28 @@ def nang_len_v4(kn):
     return buoc
 
 
+def nang_len_v5(kn):
+    """v5: đổi giá trị trạng thái import_batch cũ sang bộ chuẩn của SHARED_CONTRACTS mục 6.
+    Mã đã tự đọc được giá trị cũ, lượt này chỉ để dọn cho nhất quán."""
+    buoc = []
+    cot = [r[1] for r in kn.execute("PRAGMA table_info(import_batch)")]
+    if "loi" not in cot:
+        kn.execute("ALTER TABLE import_batch ADD COLUMN loi TEXT")
+        buoc.append("import_batch.loi")
+    doi = 0
+    for cu, moi in (("moi", "READY"), ("da_duyet_mot_phan", "PARTIAL_FAILED"), ("xong", "COMPLETED")):
+        con = kn.execute("UPDATE import_batch SET trang_thai=? WHERE trang_thai=?", (moi, cu))
+        doi += con.rowcount
+    buoc.append(f"trang_thai import_batch: đổi {doi} dòng sang bộ chuẩn")
+    la = [r[0] for r in kn.execute(
+        "SELECT DISTINCT trang_thai FROM import_batch WHERE trang_thai NOT IN"
+        " ('UPLOADED','PARSING','VALIDATING','READY','APPROVED','PROCESSING','COMPLETED',"
+        "'PARTIAL_FAILED','FAILED')")]
+    if la:
+        buoc.append("CÒN giá trị lạ (CẦN NGƯỜI XỬ): " + ", ".join(map(str, la)))
+    return buoc
+
+
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -232,6 +254,8 @@ def chay(im_lang=False):
                 buoc += nang_len_v3(kn)
             if pb < 4:
                 buoc += nang_len_v4(kn)
+            if pb < 5:
+                buoc += nang_len_v5(kn)
             kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                        " VALUES (?,?,?)",
                        (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

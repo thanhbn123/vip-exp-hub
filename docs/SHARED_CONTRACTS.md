@@ -61,3 +61,55 @@ Cấm ghi mật khẩu/token/secret vào audit và log.
 - Không agent nào sửa `gateway/` (đã nghiệm thu) trừ khi có lỗi thật, và phải báo AG-00.
 - Không push remote, không deploy, không gọi API hãng thật, không mở `CHO_PHEP_LIVE`.
 - Mọi test mới đặt trong file test RIÊNG của agent để không giẫm chân nhau.
+
+---
+
+# ĐÓNG BĂNG ĐỢT 2 — 15/10/2026 (AG-00 chốt, agent KHÔNG tự đổi)
+
+Nền: `fd7c545`, schema v6, 184 test đạt. Hợp đồng dưới đây **đang được mã chạy dùng** — đổi phải
+có đề xuất + đánh giá tương thích ngược + AG-00 duyệt + regression test.
+
+## 10. OrderStatus — hợp đồng HIỆN TẠI (không phá)
+Trạng thái nghiệp vụ trong `don_hang.trang_thai`: `nhap · da_duyet · dang_gui · da_gui · huy`.
+Trạng thái GIAO VẬN tách riêng ở `don_hang.trang_thai_giao` (+ `hang_trang_thai_giao` để chặn
+sự kiện đến muộn): `cho_lay(1) · lay_hang(2) · dang_giao(3) · giao_that_bai(4) ·
+giao_thanh_cong(5) · hoan_hang(6)`.
+
+**Hai trục này CỐ Ý tách nhau** — nghiệp vụ do người điều khiển, giao vận do hãng báo về.
+Mở rộng state machine (VALIDATED/PENDING_APPROVAL/SUBMITTING/IN_TRANSIT…) phải **ánh xạ** vào hai
+trục này, hoặc di cư có migration + giữ đọc được giá trị cũ. KHÔNG gộp hai trục làm một.
+
+Bất biến phải giữ: chỉ vào `da_gui` khi hãng XÁC NHẬN; hãng timeout ⇒ giữ `dang_gui` +
+`can_doi_soat_ket_qua=1`, tuyệt đối không coi là thành công.
+
+## 11. OrderEvent / TrackingEvent
+`don_lich_su(don_id, luc, nguon, noi_dung)` — `nguon` dạng `user:<id>` | `webhook:<sk_id>` |
+`polling` | `he_thong`. Mọi thay đổi trạng thái PHẢI ghi một dòng ở đây.
+
+## 12. WebhookEvent
+`wh_su_kien(carrier_account_id, event_id, payload_tho, headers_json, nhan_luc, trang_thai,
+so_lan_thu, loi_cuoi)` với `UNIQUE(carrier_account_id, event_id)` — chống trùng do **CSDL cưỡng
+chế**, không bằng `if`. Trạng thái: `moi · dang_xu_ly · xong · cho_thu_lai · dlq · khong_khop`.
+Tenant resolve từ `carrier_account`, **không bao giờ** từ payload.
+
+## 13. IdempotencyRecord
+Hiện cưỡng chế bằng `UNIQUE(tenant_id, idem_key)` trên `don_hang`. Thêm bảng riêng thì phải giữ
+ràng buộc này hoặc thay bằng ràng buộc tương đương ở tầng CSDL — không chuyển sang kiểm bằng mã.
+
+## 14. CredentialReference
+Chỉ bốn hàm được phép chạm secret: `bao_mat.ma_hoa_cred / giai_ma_cred / ma_hoa_wh / giai_ma_wh`.
+Bản mã mang `key_id` (`v3$<key_id>$<nonce>$<ct>`) để xoay khóa được. Cấm gọi `ma_hoa`/`giai_ma`
+trần ngoài `migrate.py` — có ca canh `thu_tich_hop.test_02`.
+
+## 15. Quyền sở hữu file đợt này
+| Agent | SỞ HỮU | CẤM chạm |
+|---|---|---|
+| AG-01 SECURITY | `bao_mat.py`, `quyen.py`, `secret_provider.py`, `gioi_han.py`(mới), `thu_bao_mat.py`, `thu_gioi_han.py`(mới) | `don_hang.py`, `webhook.py`, `admin/` |
+| AG-02 ORDERS | `don_hang.py`, `thu_don_hang.py`(mới) | `bao_mat.py`, `webhook.py`, `admin/` |
+| AG-03 WEBHOOK | `webhook.py`, `trang_thai_hang.py`, `polling.py`, `thu_webhook.py`(mới) | `don_hang.py`, `bao_mat.py`, `admin/` |
+| AG-04 FRONTEND | `admin/*`, `assets/*` | toàn bộ `app/*.py` |
+| AG-05 QA | `thu_qa_*.py`, `docs/QA_*.md` | mọi mã sản phẩm |
+| **AG-00** | `server.py`, `csdl.py`, `migrate.py`, `cau_hinh.py`, `khoi_tao.py`, `thu_tich_hop.py`, `thu_saas.py` | — |
+
+**LUẬT KHÓA WORKTREE:** AG-00 **chỉ ĐỌC** worktree của agent khi họ đang chạy. Muốn sửa thì đợi
+bàn giao rồi sửa trên nhánh tích hợp. (Lỗi đã xảy ra 14/10: AG-00 ghi vào worktree của AG-07.)

@@ -11,6 +11,9 @@ CONG_MAC_DINH = int(os.environ.get("VIP_HUB_PORT", "8897"))
 PHIEN_SONG_GIO = 12            # phiên đăng nhập sống 12 giờ
 KHOA_SAU_SO_LAN_SAI = 5        # sai mật khẩu 5 lần → khóa tài khoản (admin/owner mở lại)
 PBKDF2_VONG = 200_000
+# Chưa cấu hình SMTP: provider reset mật khẩu GIẢ LẬP trả token ra API để kiểm thử luồng.
+# Phải TẮT khi rời môi trường local (đặt VIP_HUB_RESET_TOKEN=0).
+HIEN_TOKEN_RESET = os.environ.get("VIP_HUB_RESET_TOKEN", "1") == "1"
 
 VAI_TRO_PLATFORM = ("PLATFORM_OWNER", "PLATFORM_ADMIN")
 VAI_TRO_TENANT = ("TENANT_OWNER", "TENANT_ADMIN", "TENANT_STAFF", "TENANT_VIEWER")

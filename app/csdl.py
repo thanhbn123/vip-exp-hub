@@ -1,10 +1,13 @@
-# CSDL SQLite của Multi-Tenant SaaS. CSDL riêng (hub.db) — KHÔNG đụng gateway/du-lieu/gateway.db.
+# CSDL SQLite của Multi-Tenant SaaS (schema v2). CSDL riêng (hub.db) — KHÔNG đụng gateway/du-lieu/gateway.db.
+# v2 đổi lõi quyền: user ↔ NHIỀU tenant qua tenant_memberships; quyền lưu trong CSDL (roles/permissions).
 import os
 import sqlite3
 import threading
 from datetime import datetime, timezone, timedelta
 
 import cau_hinh
+
+PHIEN_BAN_SCHEMA = 2
 
 MUI_GIO_VN = timezone(timedelta(hours=7))
 khoa_ghi = threading.RLock()   # serialize mọi lượt GHI (WAL: một writer tại một thời điểm)
@@ -24,7 +27,17 @@ def thang_nay():
     return datetime.now(MUI_GIO_VN).strftime("%Y-%m")
 
 
+# Bảng nghiệp vụ dùng tên tiếng Việt (giữ nguyên từ bản trước để không phá mã đang chạy).
+# Ánh xạ sang tên trong brief: users=users · tenants=tenants · tenant_memberships=tenant_memberships
+# roles/permissions/role_permissions · user_sessions=sessions · customers=khach_hang
+# carrier_providers=carrier_providers · carrier_accounts=carrier_accounts · orders=don_hang
+# order_events=don_lich_su · audit_logs=audit.
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_version (
+  phien_ban INTEGER PRIMARY KEY,
+  ap_dung_luc TEXT NOT NULL,
+  ghi_chu TEXT
+);
 CREATE TABLE IF NOT EXISTS goi_dich_vu (
   id TEXT PRIMARY KEY, ten TEXT NOT NULL, gia_thang INTEGER NOT NULL,
   han_muc_don_thang INTEGER NOT NULL, han_muc_ai_thang INTEGER NOT NULL,
@@ -32,30 +45,65 @@ CREATE TABLE IF NOT EXISTS goi_dich_vu (
 );
 CREATE TABLE IF NOT EXISTS tenants (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE,
   ten TEXT NOT NULL,
   goi_id TEXT NOT NULL REFERENCES goi_dich_vu(id),
   trang_thai TEXT NOT NULL DEFAULT 'hoat_dong',   -- hoat_dong | khoa
-  tao_luc TEXT NOT NULL
+  tao_luc TEXT NOT NULL,
+  cap_nhat_luc TEXT
 );
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  tenant_id INTEGER REFERENCES tenants(id),        -- NULL = người của nền tảng
   ten_dang_nhap TEXT NOT NULL UNIQUE,
-  mat_khau_hash TEXT NOT NULL,                     -- pbkdf2$vòng$salt$hash
+  mat_khau_hash TEXT NOT NULL,
   ho_ten TEXT NOT NULL,
-  vai_tro TEXT NOT NULL,
+  platform_role TEXT,                              -- NULL = người thường; PLATFORM_OWNER/PLATFORM_ADMIN
   trang_thai TEXT NOT NULL DEFAULT 'hoat_dong',    -- hoat_dong | khoa
   so_lan_sai INTEGER NOT NULL DEFAULT 0,
   tao_luc TEXT NOT NULL,
   doi_mat_khau_luc TEXT
 );
+-- Một user thuộc NHIỀU tenant. Vai trò trong tenant nằm ở đây, không nằm ở users.
+CREATE TABLE IF NOT EXISTS tenant_memberships (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+  role TEXT NOT NULL REFERENCES roles(ma),
+  trang_thai TEXT NOT NULL DEFAULT 'hoat_dong',    -- hoat_dong | vo_hieu
+  moi_boi INTEGER REFERENCES users(id),
+  tao_luc TEXT NOT NULL,
+  UNIQUE (user_id, tenant_id)
+);
+CREATE INDEX IF NOT EXISTS ix_mem_user ON tenant_memberships(user_id, trang_thai);
+CREATE INDEX IF NOT EXISTS ix_mem_tenant ON tenant_memberships(tenant_id, trang_thai);
+CREATE TABLE IF NOT EXISTS roles (
+  ma TEXT PRIMARY KEY, ten TEXT NOT NULL,
+  pham_vi TEXT NOT NULL                            -- platform | tenant
+);
+CREATE TABLE IF NOT EXISTS permissions (
+  ma TEXT PRIMARY KEY, mo_ta TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role_ma TEXT NOT NULL REFERENCES roles(ma),
+  perm_ma TEXT NOT NULL REFERENCES permissions(ma),
+  PRIMARY KEY (role_ma, perm_ma)
+);
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,                     -- SHA-256 của token; token gốc không lưu
   user_id INTEGER NOT NULL REFERENCES users(id),
+  active_tenant_id INTEGER REFERENCES tenants(id), -- tenant đang thao tác (đổi bằng switch-tenant)
   tao_luc TEXT NOT NULL,
   het_han TEXT NOT NULL,
   thu_hoi INTEGER NOT NULL DEFAULT 0,
   dia_chi TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_session_user ON sessions(user_id, thu_hoi);
+CREATE TABLE IF NOT EXISTS reset_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  het_han TEXT NOT NULL,
+  da_dung INTEGER NOT NULL DEFAULT 0,
+  tao_luc TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS khach_hang (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,25 +111,34 @@ CREATE TABLE IF NOT EXISTS khach_hang (
   ten TEXT NOT NULL, sdt TEXT, dia_chi TEXT, ghi_chu TEXT,
   tao_luc TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS ix_khach_tenant ON khach_hang(tenant_id);
+CREATE TABLE IF NOT EXISTS carrier_providers (
+  ma TEXT PRIMARY KEY, ten TEXT NOT NULL,
+  capabilities_json TEXT NOT NULL,
+  live_mo INTEGER NOT NULL DEFAULT 0,
+  cap_nhat_luc TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS carrier_accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id INTEGER NOT NULL REFERENCES tenants(id),
-  hang TEXT NOT NULL,                              -- vtp | jt | ...
+  hang TEXT NOT NULL REFERENCES carrier_providers(ma),
   ten TEXT NOT NULL,
   moi_truong TEXT NOT NULL DEFAULT 'mock',         -- mock | sandbox | production (prod khóa ở local)
   credentials_ma_hoa TEXT NOT NULL,                -- JSON mã hóa (bao_mat.ma_hoa)
   credentials_duoi TEXT NOT NULL DEFAULT '',       -- 4 ký tự cuối để hiển thị
+  credentials_doi_luc TEXT,                        -- lần rotate gần nhất
   webhook_ma TEXT NOT NULL,                        -- định danh công khai trên URL webhook
   webhook_secret_ma_hoa TEXT NOT NULL,
-  kich_hoat INTEGER NOT NULL DEFAULT 1,
+  kich_hoat INTEGER NOT NULL DEFAULT 1,            -- 1=ACTIVE, 0=DISABLED
   tao_luc TEXT NOT NULL,
   UNIQUE (webhook_ma)
 );
+CREATE INDEX IF NOT EXISTS ix_ca_tenant ON carrier_accounts(tenant_id, kich_hoat);
 CREATE TABLE IF NOT EXISTS don_hang (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id INTEGER NOT NULL REFERENCES tenants(id),
-  ma_don TEXT NOT NULL,                            -- mã nội bộ, duy nhất trong tenant
-  idem_key TEXT,                                   -- khóa idempotency client gửi
+  ma_don TEXT NOT NULL,
+  idem_key TEXT,
   khach_hang_id INTEGER REFERENCES khach_hang(id),
   nguoi_gui_ten TEXT NOT NULL, nguoi_gui_sdt TEXT NOT NULL, nguoi_gui_dia_chi TEXT NOT NULL,
   nguoi_nhan_ten TEXT NOT NULL, nguoi_nhan_sdt TEXT NOT NULL, nguoi_nhan_dia_chi TEXT NOT NULL,
@@ -92,35 +149,38 @@ CREATE TABLE IF NOT EXISTS don_hang (
   carrier_account_id INTEGER REFERENCES carrier_accounts(id),
   ma_van_don TEXT,
   trang_thai TEXT NOT NULL DEFAULT 'nhap',         -- nhap | da_duyet | dang_gui | da_gui | huy
-  can_doi_soat_ket_qua INTEGER NOT NULL DEFAULT 0, -- 1 khi gửi hãng timeout, phải getOrder kiểm lại
-  trang_thai_giao TEXT,                            -- cho_lay... (từ webhook, tách riêng)
+  can_doi_soat_ket_qua INTEGER NOT NULL DEFAULT 0,
+  trang_thai_giao TEXT,
   hang_trang_thai_giao INTEGER NOT NULL DEFAULT 0,
   nguoi_tao INTEGER NOT NULL REFERENCES users(id),
   tao_luc TEXT NOT NULL, cap_nhat_luc TEXT NOT NULL,
   UNIQUE (tenant_id, ma_don),
-  UNIQUE (tenant_id, idem_key)                     -- idempotency cưỡng chế bằng CSDL
+  UNIQUE (tenant_id, idem_key)
 );
+CREATE INDEX IF NOT EXISTS ix_don_tenant ON don_hang(tenant_id, trang_thai);
+CREATE INDEX IF NOT EXISTS ix_don_mvd ON don_hang(ma_van_don);
 CREATE TABLE IF NOT EXISTS don_lich_su (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   don_id INTEGER NOT NULL REFERENCES don_hang(id),
-  luc TEXT NOT NULL, nguon TEXT NOT NULL,          -- user:<id> | webhook:<sk_id> | he_thong
+  luc TEXT NOT NULL, nguon TEXT NOT NULL,
   noi_dung TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS ix_ls_don ON don_lich_su(don_id);
 CREATE TABLE IF NOT EXISTS wh_su_kien (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   carrier_account_id INTEGER NOT NULL REFERENCES carrier_accounts(id),
   event_id TEXT NOT NULL,
   payload_tho BLOB NOT NULL, headers_json TEXT NOT NULL,
   nhan_luc TEXT NOT NULL,
-  trang_thai TEXT NOT NULL DEFAULT 'moi',          -- moi|dang_xu_ly|xong|cho_thu_lai|dlq|khong_khop
+  trang_thai TEXT NOT NULL DEFAULT 'moi',
   so_lan_thu INTEGER NOT NULL DEFAULT 0, loi_cuoi TEXT, xu_ly_xong_luc TEXT,
-  UNIQUE (carrier_account_id, event_id)            -- chống trùng + replay cưỡng chế bằng CSDL
+  UNIQUE (carrier_account_id, event_id)
 );
 CREATE TABLE IF NOT EXISTS import_batch (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id INTEGER NOT NULL REFERENCES tenants(id),
   ten_file TEXT NOT NULL, loai_file TEXT NOT NULL,
-  trang_thai TEXT NOT NULL DEFAULT 'moi',          -- moi | da_duyet_mot_phan | xong
+  trang_thai TEXT NOT NULL DEFAULT 'moi',
   nguoi_tao INTEGER NOT NULL REFERENCES users(id), tao_luc TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS import_dong (
@@ -128,7 +188,7 @@ CREATE TABLE IF NOT EXISTS import_dong (
   batch_id INTEGER NOT NULL REFERENCES import_batch(id),
   stt INTEGER NOT NULL,
   du_lieu_json TEXT NOT NULL,
-  trang_thai TEXT NOT NULL,                        -- VALID|INVALID|READY|SUBMITTED|SUCCESS|FAILED
+  trang_thai TEXT NOT NULL,
   loi TEXT,
   don_id INTEGER REFERENCES don_hang(id)
 );
@@ -142,15 +202,20 @@ CREATE TABLE IF NOT EXISTS usage_thang (
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   luc TEXT NOT NULL,
-  tenant_id INTEGER,                               -- NULL = cấp nền tảng
-  user_id INTEGER,
-  hanh_dong TEXT NOT NULL, doi_tuong TEXT NOT NULL, chi_tiet TEXT, dia_chi TEXT
+  tenant_id INTEGER,
+  user_id INTEGER,                                 -- actor_id
+  hanh_dong TEXT NOT NULL,                         -- action
+  doi_tuong TEXT NOT NULL,                         -- "<resource_type>:<resource_id>"
+  resource_type TEXT, resource_id TEXT,
+  ket_qua TEXT NOT NULL DEFAULT 'thanh_cong',      -- thanh_cong | tu_choi | that_bai
+  chi_tiet TEXT, dia_chi TEXT
 );
+CREATE INDEX IF NOT EXISTS ix_audit_tenant ON audit(tenant_id, id);
 """
 
 
 def _khoi_tao_schema():
-    """Tạo schema + seed gói MỘT lần (dùng một kết nối tạm). An toàn khi nhiều thread cùng gọi."""
+    """Tạo schema + seed MỘT lần (dùng một kết nối tạm). An toàn khi nhiều thread cùng gọi."""
     with _khoa_khoi_tao:
         if _da_khoi_tao.is_set():
             return
@@ -194,6 +259,12 @@ def dong():
     _da_khoi_tao.clear()
 
 
+def phien_ban_hien_tai():
+    """Phiên bản schema đang có trong CSDL (0 nếu chưa ghi nhận)."""
+    r = mot("SELECT MAX(phien_ban) pb FROM schema_version")
+    return (r["pb"] or 0) if r else 0
+
+
 def ghi(sql, tham_so=()):
     kn = mo()
     with khoa_ghi:
@@ -210,6 +281,11 @@ def nhieu(sql, tham_so=()):
     return mo().execute(sql, tham_so).fetchall()
 
 
-def audit(hanh_dong, doi_tuong, chi_tiet="", tenant_id=None, user_id=None, dia_chi=None):
-    ghi("INSERT INTO audit (luc, tenant_id, user_id, hanh_dong, doi_tuong, chi_tiet, dia_chi) VALUES (?,?,?,?,?,?,?)",
-        (bay_gio(), tenant_id, user_id, hanh_dong, doi_tuong, chi_tiet, dia_chi))
+def audit(hanh_dong, doi_tuong, chi_tiet="", tenant_id=None, user_id=None, dia_chi=None,
+          ket_qua="thanh_cong"):
+    """Ghi audit log. doi_tuong dạng '<resource_type>:<resource_id>' — tự tách thành 2 cột."""
+    rt, _, rid = doi_tuong.partition(":")
+    ghi("INSERT INTO audit (luc, tenant_id, user_id, hanh_dong, doi_tuong, resource_type, resource_id,"
+        " ket_qua, chi_tiet, dia_chi) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (bay_gio(), tenant_id, user_id, hanh_dong, doi_tuong, rt or None, rid or None,
+         ket_qua, chi_tiet, dia_chi))

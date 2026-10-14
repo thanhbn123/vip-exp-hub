@@ -18,3 +18,25 @@ Mốc rollback: git local `fd79d74` + bản sao `gateway.db`. Mỗi bước xong
 | 12 | G13 | Nghiệm thu local + FINAL REPORT | 11 | cuối |
 
 **BLOCKED (cần Owner):** credentials J&T thật + cho phép gọi API thật (G04 LIVE); đọc repo `vip-viettelpost` cho G05 phần thật; mọi deploy.
+
+
+## Đợt 2 — brief Multi-Tenant Core + Auth/RBAC (14/10/2026)
+
+| Bước | Nội dung | Trạng thái |
+|---|---|---|
+| 13 | G01.1 schema v2: `tenant_memberships`, `roles`/`permissions`/`role_permissions`, `carrier_providers`, `tenants.code` | DONE |
+| 14 | G01.2 Tenant Context Middleware (authenticate → membership → active tenant → authorize) | DONE |
+| 15 | G01.3 Tenant Management API (create/get/update/list/activate/suspend) | DONE |
+| 16 | G01.5 Migration có phiên bản + backup + verify + rollback (`app/migrate.py`) | DONE |
+| 17 | G02.1 reset mật khẩu (provider giả lập), chống brute-force, không lộ tài khoản | DONE |
+| 18 | G02.2 RBAC trong CSDL + chống leo thang đặc quyền | DONE |
+| 19 | G02.3 Membership management + switch tenant | DONE |
+| 20 | G02.4 Audit đủ trường (actor/resource/result), ghi cả lượt bị từ chối | DONE |
+| 21 | G03-PREP carrier account isolation + rotate/revoke + secret storage abstraction | DONE |
+| 22 | Frontend: đăng nhập, quên mật khẩu, tenant switcher, thành viên, vai trò & quyền, rotate khóa | DONE |
+| 23 | TEST-001..015 + 6 ca bổ sung; regression gateway | DONE (49/49) |
+| 24 | Tài liệu G01/G02/SECURITY/MIGRATION/ACCEPTANCE | DONE |
+
+**Còn BLOCKED (cần Owner):** credentials J&T thật; đọc repo `vip-viettelpost`; mọi quyết định deploy.
+**G03 kế tiếp:** Carrier Integration Engine — đã có interface + 2 mock adapter + capability;
+phần còn lại (adapter thật) phụ thuộc Owner.

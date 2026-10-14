@@ -24,6 +24,8 @@ os.environ["VIP_HUB_BACKOFF"] = "0.05"
 
 import bao_mat   # noqa: E402
 import csdl      # noqa: E402
+import khoi_tao  # noqa: E402
+import quyen     # noqa: E402
 import server    # noqa: E402
 import webhook   # noqa: E402
 
@@ -104,8 +106,12 @@ class ThuSaaS(unittest.TestCase):
         cls.sv = server.ThreadingHTTPServer(("127.0.0.1", CONG), server.BoXuLy)
         threading.Thread(target=cls.sv.serve_forever, daemon=True).start()
         # seed bằng API: platform owner tạo tay trong CSDL, phần còn lại qua API thật
-        csdl.ghi("INSERT INTO users (tenant_id, ten_dang_nhap, mat_khau_hash, ho_ten, vai_tro, tao_luc)"
-                 " VALUES (NULL, 'po', ?, 'Platform Owner', 'PLATFORM_OWNER', ?)",
+        quyen.seed()
+        khoi_tao.seed_providers()
+        csdl.ghi("INSERT INTO schema_version (phien_ban, ap_dung_luc, ghi_chu) VALUES (?,?,'test')",
+                 (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio()))
+        csdl.ghi("INSERT INTO users (ten_dang_nhap, mat_khau_hash, ho_ten, platform_role, tao_luc)"
+                 " VALUES ('po', ?, 'Platform Owner', 'PLATFORM_OWNER', ?)",
                  (bao_mat.bam_mat_khau(MK), csdl.bay_gio()))
         po = tao_phien("po", MK)
         for ten, dn in (("Tenant A", "a"), ("Tenant B", "b")):
@@ -126,10 +132,10 @@ class ThuSaaS(unittest.TestCase):
         assert st == 201, kq
         cls.tk_b = kq
         # staff + viewer của A
-        assert cls.a.goi("/api/v2/users", "POST", {"ten_dang_nhap": "a-staff", "mat_khau": MK,
-                                                   "vai_tro": "TENANT_STAFF", "ho_ten": "NV A"})[0] == 201
-        assert cls.a.goi("/api/v2/users", "POST", {"ten_dang_nhap": "a-viewer", "mat_khau": MK,
-                                                   "vai_tro": "TENANT_VIEWER", "ho_ten": "Xem A"})[0] == 201
+        assert cls.a.goi("/api/v2/memberships", "POST", {"ten_dang_nhap": "a-staff", "mat_khau": MK,
+                                                         "role": "TENANT_STAFF", "ho_ten": "NV A"})[0] == 201
+        assert cls.a.goi("/api/v2/memberships", "POST", {"ten_dang_nhap": "a-viewer", "mat_khau": MK,
+                                                         "role": "TENANT_VIEWER", "ho_ten": "Xem A"})[0] == 201
         cls.a_staff = tao_phien("a-staff", MK)
         cls.a_viewer = tao_phien("a-viewer", MK)
 
@@ -185,8 +191,8 @@ class ThuSaaS(unittest.TestCase):
 
     # ===== G12.4: RBAC =====
     def test_04_khong_vuot_quyen(self):
-        st, _ = self.a_staff.goi("/api/v2/users", "POST",
-                                 {"ten_dang_nhap": "x", "mat_khau": MK * 2, "vai_tro": "TENANT_STAFF"})
+        st, _ = self.a_staff.goi("/api/v2/memberships", "POST",
+                                 {"ten_dang_nhap": "x", "mat_khau": MK * 2, "role": "TENANT_STAFF"})
         self.assertEqual(st, 403, "staff tạo được user!")
         st, _ = self.a_viewer.goi("/api/v2/don", "POST", dict(DON_MAU))
         self.assertEqual(st, 403, "viewer tạo được đơn!")
@@ -196,9 +202,9 @@ class ThuSaaS(unittest.TestCase):
         self.assertEqual(st, 403, "staff duyệt được đơn!")
         st, _ = self.a.goi("/api/v2/platform/tenants")
         self.assertEqual(st, 403, "tenant owner gọi được API platform!")
-        st, _ = self.a.goi("/api/v2/users", "POST",
-                           {"ten_dang_nhap": "lau-quyen", "mat_khau": MK, "vai_tro": "PLATFORM_ADMIN"})
-        self.assertEqual(st, 400, "tenant tạo được vai trò platform!")
+        st, _ = self.a.goi("/api/v2/memberships", "POST",
+                           {"ten_dang_nhap": "lau-quyen", "mat_khau": MK, "role": "PLATFORM_ADMIN"})
+        self.assertEqual(st, 403, "tenant tạo được vai trò platform!")
 
     # ===== G12.5-7: webhook =====
     def _don_da_gui_a(self):
@@ -380,12 +386,17 @@ class ThuSaaS(unittest.TestCase):
 
     # ===== auth bổ sung (G02) =====
     def test_14_khoa_tai_khoan_va_phien(self):
-        self.a.goi("/api/v2/users", "POST", {"ten_dang_nhap": "a-khoa", "mat_khau": MK,
-                                             "vai_tro": "TENANT_STAFF", "ho_ten": "Sắp khóa"})
+        self.a.goi("/api/v2/memberships", "POST", {"ten_dang_nhap": "a-khoa", "mat_khau": MK,
+                                                   "role": "TENANT_STAFF", "ho_ten": "Sắp khóa"})
         p = Phien()
         for _ in range(5):
             st, kq = p.dang_nhap("a-khoa", "sai-mat-khau")
-        self.assertIn("khóa", kq["loi"])
+        # v2 CỐ Ý trả thông báo chung khi tự khóa — không tiết lộ tài khoản nào có thật/đang bị khóa
+        # (brief G02.1: "Không để lộ thông tin tài khoản qua thông báo lỗi").
+        self.assertEqual(kq["loi"], "sai tên đăng nhập hoặc mật khẩu")
+        # nhưng tài khoản PHẢI thật sự bị khóa: đúng mật khẩu cũng không vào được
+        self.assertEqual(csdl.mot("SELECT trang_thai FROM users WHERE ten_dang_nhap='a-khoa'")["trang_thai"],
+                         "khoa", "sai 5 lần mà tài khoản không bị khóa!")
         st, kq = p.dang_nhap("a-khoa", MK)
         self.assertEqual(st, 401, "tài khoản khóa vẫn đăng nhập được!")
         # đổi mật khẩu thu hồi phiên khác
@@ -408,9 +419,9 @@ class ThuSaaS(unittest.TestCase):
                              {"ten": "Tenant Free", "goi_id": "free",
                               "owner_ten_dang_nhap": "free-owner", "owner_mat_khau": MK})
         f = tao_phien("free-owner", MK)
-        st, _ = f.goi("/api/v2/users", "POST", {"ten_dang_nhap": "free-nv1", "mat_khau": MK, "vai_tro": "TENANT_STAFF"})
+        st, _ = f.goi("/api/v2/memberships", "POST", {"ten_dang_nhap": "free-nv1", "mat_khau": MK, "role": "TENANT_STAFF"})
         self.assertEqual(st, 201)
-        st, kq = f.goi("/api/v2/users", "POST", {"ten_dang_nhap": "free-nv2", "mat_khau": MK, "vai_tro": "TENANT_STAFF"})
+        st, kq = f.goi("/api/v2/memberships", "POST", {"ten_dang_nhap": "free-nv2", "mat_khau": MK, "role": "TENANT_STAFF"})
         self.assertEqual(st, 402, "vượt hạn mức nhân viên gói free mà không bị chặn!")
         st, _ = f.goi("/api/v2/tai-khoan-hang", "POST", {"hang": "vtp", "credentials": {}})
         self.assertEqual(st, 201)

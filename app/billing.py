@@ -48,7 +48,9 @@ def kiem_va_tang_ai(tenant_id):
 
 def kiem_han_muc_nhan_vien(tenant_id):
     goi = goi_cua_tenant(tenant_id)
-    so = csdl.mot("SELECT COUNT(*) c FROM users WHERE tenant_id=? AND trang_thai='hoat_dong'", (tenant_id,))["c"]
+    so = csdl.mot("SELECT COUNT(*) c FROM tenant_memberships m JOIN users u ON u.id=m.user_id"
+                  " WHERE m.tenant_id=? AND m.trang_thai='hoat_dong' AND u.trang_thai='hoat_dong'",
+                  (tenant_id,))["c"]
     if so >= goi["so_nhan_vien"]:
         raise VuotHanMuc(f"gói {goi['ten']} chỉ cho {goi['so_nhan_vien']} tài khoản nhân viên")
 

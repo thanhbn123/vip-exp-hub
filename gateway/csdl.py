@@ -8,26 +8,16 @@ from datetime import datetime, timezone, timedelta
 from cau_hinh import DUONG_DAN_CSDL
 
 MUI_GIO_VN = timezone(timedelta(hours=7))
-_khoa = threading.Lock()
-_ket_noi = None
+_khoa = threading.RLock()        # serialize mọi lượt GHI
+# Mỗi THREAD một kết nối SQLite riêng. Trước đây dùng CHUNG một connection giữa các thread
+# (check_same_thread=False) — cách đó làm truy vấn đồng thời giẫm lên nhau: trong app/ nó trả
+# byte rác, còn ở đây nó làm tiến trình CHẾT HẲN (SIGSEGV, đo được ~1/5 lượt chạy bộ thử
+# ngày 14/10/2026). Sửa cấu trúc, không vá từng chỗ.
+_local = threading.local()
+_da_khoi_tao = threading.Event()
+_khoa_khoi_tao = threading.Lock()
 
-
-def bay_gio():
-    return datetime.now(MUI_GIO_VN).strftime("%Y-%m-%d %H:%M:%S%z")
-
-
-def mo(duong_dan=None):
-    """Mở (hoặc trả lại) kết nối dùng chung, tạo bảng nếu chưa có."""
-    global _ket_noi
-    if _ket_noi is not None:
-        return _ket_noi
-    dd = duong_dan or DUONG_DAN_CSDL
-    os.makedirs(os.path.dirname(dd), exist_ok=True)
-    kn = sqlite3.connect(dd, check_same_thread=False)
-    kn.row_factory = sqlite3.Row
-    kn.execute("PRAGMA journal_mode=WAL")
-    kn.execute("PRAGMA foreign_keys=ON")
-    kn.executescript("""
+SCHEMA = """
     CREATE TABLE IF NOT EXISTS su_kien_tho (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       hang TEXT NOT NULL,
@@ -69,17 +59,51 @@ def mo(duong_dan=None):
       doi_tuong TEXT NOT NULL,
       chi_tiet TEXT
     );
-    """)
-    kn.commit()
-    _ket_noi = kn
+"""
+
+
+def bay_gio():
+    return datetime.now(MUI_GIO_VN).strftime("%Y-%m-%d %H:%M:%S%z")
+
+
+def _khoi_tao_schema(duong_dan):
+    with _khoa_khoi_tao:
+        if _da_khoi_tao.is_set():
+            return
+        os.makedirs(os.path.dirname(duong_dan), exist_ok=True)
+        kn = sqlite3.connect(duong_dan)
+        try:
+            kn.execute("PRAGMA journal_mode=WAL")
+            kn.executescript(SCHEMA)
+            kn.commit()
+        finally:
+            kn.close()
+        _da_khoi_tao.set()
+
+
+def mo(duong_dan=None):
+    """Trả kết nối RIÊNG của thread hiện tại (tạo nếu chưa có)."""
+    dd = duong_dan or DUONG_DAN_CSDL
+    if not _da_khoi_tao.is_set():
+        _khoi_tao_schema(dd)
+    kn = getattr(_local, "kn", None)
+    if kn is not None:
+        return kn
+    kn = sqlite3.connect(dd, timeout=10)
+    kn.row_factory = sqlite3.Row
+    kn.execute("PRAGMA journal_mode=WAL")
+    kn.execute("PRAGMA foreign_keys=ON")
+    kn.execute("PRAGMA busy_timeout=10000")
+    _local.kn = kn
     return kn
 
 
 def dong():
-    global _ket_noi
-    if _ket_noi is not None:
-        _ket_noi.close()
-        _ket_noi = None
+    kn = getattr(_local, "kn", None)
+    if kn is not None:
+        kn.close()
+        _local.kn = None
+    _da_khoi_tao.clear()
 
 
 def ghi_su_kien_tho(hang, event_id, payload_tho, headers):

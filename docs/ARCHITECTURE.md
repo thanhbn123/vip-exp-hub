@@ -1,5 +1,11 @@
 # ARCHITECTURE — VIP Express Hub Multi-Tenant SaaS (local-first)
 
+> **Cập nhật 14/10/2026 — schema v2.** Một user thuộc NHIỀU tenant qua `tenant_memberships`;
+> RBAC chuyển vào CSDL (`roles`/`permissions`/`role_permissions`); thêm `carrier_providers`,
+> `reset_tokens`, `schema_version`. Chi tiết: `G01_MULTI_TENANT.md`, `G02_AUTH_RBAC.md`,
+> `MIGRATION_REPORT.md`. Kết nối SQLite là **theo từng thread** (dùng chung một connection giữa
+> các thread đã gây đọc sai dữ liệu ở `app/` và SIGSEGV ở `gateway/` — xem SECURITY_TEST_REPORT).
+
 Nguyên tắc: Python 3 stdlib + SQLite (không thư viện ngoài — chạy được trên mọi máy Mac của VIP ORDER), bind `127.0.0.1`, mã mới nằm trong `app/` — **không ghi đè** `gateway/` (bản G01 đã nghiệm thu) và các trang demo G00.
 
 ```text
@@ -42,7 +48,7 @@ Nguyên tắc: Python 3 stdlib + SQLite (không thư viện ngoài — chạy đ
 
 ## Bảng dữ liệu chính (app/du-lieu/hub.db)
 
-`tenants` · `goi_dich_vu` · `users` (UNIQUE ten_dang_nhap; pbkdf2-sha256 200k; khóa sau 5 lần sai) · `sessions` (lưu SHA-256 của token; thu hồi được) · `khach_hang` · `carrier_accounts` (credentials **mã hóa** bằng khóa file `app/du-lieu/khoa-noi-bo.key`, 0600, ngoài git) · `don_hang` (UNIQUE(tenant_id, idem_key); trạng thái nghiệp vụ tách trạng thái giao) · `don_lich_su` · `wh_su_kien` (UNIQUE(account_id, event_id); thô + retry + DLQ) · `import_batch` / `import_dong` · `usage_thang` · `audit`.
+`tenants` (có `code`) · `goi_dich_vu` · `users` (UNIQUE ten_dang_nhap; `platform_role`; pbkdf2-sha256 200k; khóa sau 5 lần sai) · `tenant_memberships` (user↔tenant+role) · `roles`/`permissions`/`role_permissions` · `sessions` (lưu SHA-256 của token; thu hồi được) · `khach_hang` · `carrier_accounts` (credentials **mã hóa** bằng khóa file `app/du-lieu/khoa-noi-bo.key`, 0600, ngoài git) · `don_hang` (UNIQUE(tenant_id, idem_key); trạng thái nghiệp vụ tách trạng thái giao) · `don_lich_su` · `wh_su_kien` (UNIQUE(account_id, event_id); thô + retry + DLQ) · `import_batch` / `import_dong` · `usage_thang` · `audit`.
 
 ## Trạng thái đơn
 

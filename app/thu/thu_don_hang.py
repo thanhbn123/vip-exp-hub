@@ -499,6 +499,17 @@ class D_IdemVaDoiSoat(unittest.TestCase):
         don_hang.duyet_don(n["tid"], n["u"]["owner"], don["id"])
         hang_rao = threading.Barrier(4)
         xong, loi = [], []
+        # Đếm số lần hãng THẬT SỰ bị gọi — đây mới là thứ quyết định có vận đơn trùng hay không.
+        so_lan_goi_hang = [0]
+        import adapter_vtp
+        goc_createOrder = adapter_vtp.AdapterVTP.createOrder
+
+        def dem_createOrder(self_ad, d):
+            so_lan_goi_hang[0] += 1
+            return goc_createOrder(self_ad, d)
+
+        adapter_vtp.AdapterVTP.createOrder = dem_createOrder
+        self.addCleanup(setattr, adapter_vtp.AdapterVTP, "createOrder", goc_createOrder)
 
         def chay():
             try:
@@ -514,8 +525,17 @@ class D_IdemVaDoiSoat(unittest.TestCase):
             t.start()
         for t in ts:
             t.join()
-        self.assertEqual(len(xong), 1, f"{len(xong)} lượt gửi thành công — phải đúng 1")
-        self.assertEqual(len(loi), 3, f"lỗi trả về: {[str(x) for x in loi]}")
+        # Bất biến THẬT cần giữ: hãng chỉ được gọi ĐÚNG MỘT LẦN và đơn chỉ có MỘT mã vận đơn.
+        # KHÔNG đếm "số lượt trả về thành công": luồng thua đến SAU khi luồng thắng đã xong thì
+        # gui_don trả về đơn đã gửi theo đúng nghĩa idempotent — không gọi hãng, không sinh vận
+        # đơn mới. Đếm nó là lỗi làm ca thử chập chờn ~1/8 lượt (AG-00 đo 15 lượt × 4 luồng:
+        # hãng bị gọi đúng 15 lần, 0 lượt gọi 2 lần).
+        self.assertEqual(so_lan_goi_hang[0], 1,
+                         f"hãng bị gọi {so_lan_goi_hang[0]} lần — phải đúng 1 (vận đơn trùng!)")
+        self.assertGreaterEqual(len(xong), 1, "không lượt nào gửi được")
+        ma_vd = {d["ma_van_don"] for d in xong if d.get("ma_van_don")}
+        self.assertEqual(len(ma_vd), 1, f"sinh {len(ma_vd)} mã vận đơn — phải đúng 1: {ma_vd}")
+        self.assertEqual(len(xong) + len(loi), 4, "thiếu lượt")
         for e in loi:
             self.assertEqual(e.ma, 409, f"lượt thua trả mã {e.ma}, phải là 409")
         d = don_hang.lay_don(n["tid"], don["id"])

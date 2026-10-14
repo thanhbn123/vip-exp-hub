@@ -20,7 +20,7 @@ VIP EXPRESS HUB
 Năm worktree agent đều nhận nền này.
 
 ## FINAL LOCAL SHA
-`5caa68f` (`5caa68f51b782db209418076edf18dfd3a78f62d`)
+`599dd08` (`599dd088232572128cc6eb9dd4855b3f766a7d0a`)
 
 ## BRANCH
 `main` (local). **Không có git remote nào được cấu hình** — nên không có đường để push, kể cả vô ý.
@@ -176,8 +176,8 @@ chứng chiều ngược lại.
 | Hạng mục | Giá trị |
 |---|---|
 | **AGENT COMMITS** | `c52f8f1` AG-01 · `c43bed2` AG-02 · `48d04f9` AG-03 · `fb39fe3` AG-04 · `0efd291` AG-05 |
-| **INTEGRATION COMMITS** | `8270f03` (sửa ca chập chờn) · `71fc2cd` · `6e7b194` · `7f7c6dc` · `88b491e` · `4461fb0` (5 lượt gộp) · `f449f33` (WAVE 2) · `5caa68f` (WAVE 3) |
-| **FINAL MAIN SHA** | `5caa68f` |
+| **INTEGRATION COMMITS** | `8270f03` (sửa ca chập chờn) · `71fc2cd` · `6e7b194` · `7f7c6dc` · `88b491e` · `4461fb0` (5 lượt gộp) · `f449f33` (WAVE 2) · `5caa68f` (WAVE 3) · `ae2be33` (tài liệu) · `599dd08` (sửa dải mã việc) |
+| **FINAL MAIN SHA** | `599dd08` |
 | **REMOTE PUSH** | **NO** — không có remote nào được cấu hình, nên không có đường push kể cả vô ý |
 | **FILES CHANGED** | 40 file, +12 747 / −304 dòng (so với `fd7c545`) |
 | **Xung đột khi gộp** | 0 — nhờ bảng quyền sở hữu file đóng băng ở WAVE 0 |
@@ -278,6 +278,7 @@ python3 app/migrate.py --kiem
 | **CSDL về v6** | `python3 app/migrate.py --rollback app/du-lieu/sao-luu/hub-truoc-migrate-20261015-003910.db` | **ĐÃ ĐO trên bản sao**: 7→6, 40→26 cột, 202 dòng, `integrity_check: ok`. Lượt lùi tự cất bản trước khi lùi |
 | **Mã về trước đợt này** | `git reset --hard fd7c545` | Chưa cần dùng. 5 nhánh agent và mọi commit tích hợp đều còn, không nhánh nào bị xoá |
 | **Mã về sau WAVE 2** | `git reset --hard f449f33` | — |
+| **Mã về sau WAVE 3** | `git reset --hard 5caa68f` | — |
 | **Khoá mã hoá** | `python3 app/sao_luu_khoa.py khoi-phuc <gói.vipkb> <thư-mục-đích> [--ghi-de]` — passphrase lấy từ `VIP_HUB_BACKUP_PASSPHRASE` hoặc nhập lúc chạy. Kiểm gói TRƯỚC bằng `kiem <gói.vipkb>` | ĐÃ ĐO trong môi trường cô lập; **CHƯA ĐO** trên máy chủ thật (B-2) |
 
 **Không dùng `force reset` để loại mã lỗi** — chỉ thị cấm, và không có lượt nào cần dùng.

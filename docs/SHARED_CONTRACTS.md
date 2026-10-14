@@ -113,3 +113,146 @@ trần ngoài `migrate.py` — có ca canh `thu_tich_hop.test_02`.
 
 **LUẬT KHÓA WORKTREE:** AG-00 **chỉ ĐỌC** worktree của agent khi họ đang chạy. Muốn sửa thì đợi
 bàn giao rồi sửa trên nhánh tích hợp. (Lỗi đã xảy ra 14/10: AG-00 ghi vào worktree của AG-07.)
+
+---
+
+# ĐÓNG BĂNG ĐỢT 3 — 15/10/2026 (AG-00 chốt, agent KHÔNG tự đổi)
+
+Nền: `31a321f`, schema **v7**, **563 phép kiểm đạt** (430 python + 56 node + 36 HTTP frontend
++ 41 E2E). Mọi hợp đồng ở trên **vẫn hiệu lực** — đợt này THÊM, không sửa.
+
+## 16. TIỀN TỆ — luật cứng, không ngoại lệ
+
+**Mọi số tiền là `INTEGER`, đơn vị ĐỒNG (VND), không có phần thập phân.**
+
+- **CẤM `REAL`/`FLOAT`/`DOUBLE` cho tiền** ở mọi bảng, mọi biến, mọi JSON. `0.1 + 0.2 != 0.3`
+  — một đồng lệch trong đối soát là một lần phải ngồi tìm cả buổi.
+- VND không có đơn vị nhỏ hơn đồng đang lưu hành, nên **không cần nhân 100**. `cod INTEGER` là
+  số đồng, đọc thẳng. Mã hiện tại đã làm đúng vậy (`don_hang.cod`, `phi_van_chuyen`,
+  `don_mat_hang.don_gia`) — **giữ nguyên cách đó**, đừng đổi sang đơn vị khác giữa đường.
+- Tỷ lệ / phần trăm: lưu **điểm cơ bản** (`INTEGER`, 1 = 0,01 %), không lưu `0.0825`.
+- Chia tiền: dùng `//` và ghi rõ phần dư đi đâu. **Không bao giờ để phần dư biến mất** — tổng
+  các phần phải bằng đúng số ban đầu, và phải có ca thử canh điều đó.
+- Nếu một agent thấy **cần** số thập phân, đó là dấu hiệu đơn vị chọn sai: **bàn giao AG-00**,
+  không tự đổi kiểu cột.
+
+## 17. FinancialEntry — bút toán BẤT BIẾN (AG-01 sở hữu)
+
+```
+FinancialEntry: id · tenant_id · loai · don_id? · carrier_account_id? · so_tien_dong (INTEGER)
+                · chieu (ghi_no|ghi_co) · nguon (hang|nguoi|he_thong) · can_cu
+                · tao_boi · tao_luc · batch_id?
+```
+
+- **Bút toán KHÔNG được sửa, KHÔNG được xoá.** Sai thì ghi bút toán ĐẢO, không `UPDATE`.
+  Đây là chỗ §19 (luật thùng rác) và "không silent overwrite" gặp nhau: lịch sử tiền phải dựng
+  lại được từ đầu, nên một dòng đã ghi là một dòng ở đó mãi.
+- Mọi bút toán phải trả lời được **ai · lúc nào · căn cứ gì**. `nguon` phân biệt rõ số do
+  **hãng** báo, số do **người** chốt, số do **hệ thống** suy ra — ba thứ có độ tin cậy khác nhau
+  và **cấm trộn vào một cột**.
+
+## 18. CodState — sáu trạng thái COD, KHÔNG gộp
+
+```
+COD_EXPECTED · COD_COLLECTED · COD_RECONCILED · COD_SETTLED · COD_DISPUTED · COD_ADJUSTED
+```
+
+**Luật quan trọng nhất của G07: `trang_thai_giao = 'giao_thanh_cong'` KHÔNG có nghĩa là tiền
+COD đã về.** Giao hàng và thu tiền là hai sự kiện khác nhau, cách nhau nhiều ngày, do hai bên
+khác nhau xác nhận. Đơn giao xong mà hãng chưa đối soát thì COD vẫn là `COD_COLLECTED` (hãng
+đang giữ tiền), chưa phải `COD_SETTLED`. Gộp hai thứ này là cách nhanh nhất để báo doanh thu
+không có thật.
+
+Chuyển trạng thái phải qua MỘT hàm duy nhất, có bảng chuyển hợp lệ, và ghi `FinancialEntry`.
+
+## 19. SubscriptionPlan — KHÔNG đổi tên ba gói đang chạy (AG-02 sở hữu)
+
+CSDL đang có **đúng ba gói**: `free` (Miễn phí) · `basic` (Cơ bản) · `pro` (Chuyên nghiệp),
+và `tenants.goi_id` đang trỏ vào đó. Chỉ thị đợt này đề xuất tên `FREE/STARTER/BUSINESS/
+ENTERPRISE` — đó là **tên kỹ thuật đề xuất, không phải lệnh đổi tên**.
+
+- **CẤM đổi hay xoá ba mã `free`/`basic`/`pro`.** Đổi là phá mọi tenant đang chạy và phá
+  `thu_saas.py`. Muốn thêm gói thì **THÊM dòng mới**, giữ ba dòng cũ.
+- `goi_dich_vu` hiện có 5 cột hạn mức (`han_muc_don_thang`, `han_muc_ai_thang`, `so_nhan_vien`,
+  `so_tai_khoan_hang`, `gia_thang`). Thêm hạn mức thì **thêm cột `DEFAULT`**, không đổi cột cũ.
+- **Giá bán thực tế do anh Thành quyết.** Agent được điền giá cho gói MỚI chỉ khi gói đó chưa
+  bán cho ai; gói đang chạy thì giữ nguyên giá.
+
+## 20. UsageEvent — mỗi lượt tính phí phải có khoá chống trùng (AG-02 sở hữu)
+
+```
+UsageEvent: id · tenant_id · loai · so_luong (INTEGER) · idem_key (UNIQUE cùng tenant_id)
+            · nguon · tao_luc · tham_chieu?
+```
+
+- **`UNIQUE(tenant_id, idem_key)` là ràng buộc CSDL, không phải phép kiểm trong mã.** Worker
+  thử lại là chuyện bình thường; thu phí hai lần thì không. Chặn ở tầng CSDL thì không có khe
+  hở nào giữa đọc và ghi.
+- Bộ đếm cộng bằng **một `UPDATE` có trần trong `WHERE`**, xét `rowcount` — đúng khuôn
+  `gioi_han._cong_co_tran` và `billing.kiem_va_tang_don` (đã vá đợt 2 vì đọc-rồi-ghi để lọt
+  5/8 luồng). **Cấm đọc rồi mới ghi.**
+- `billing.kiem_va_tang_don` và `billing.hoan_don` **đang được `don_hang.gui_don` dùng** — đổi
+  chữ ký phải bàn giao AG-00.
+
+## 21. AIJob — hợp đồng công việc AI (AG-04 sở hữu)
+
+```
+AIJob: id · tenant_id · user_id · loai · trang_thai (moi|dang_chay|xong|loi|cho_duyet|tu_choi)
+       · vao_json · ra_json? · nha_cung_cap · phien_ban_hop_dong · do_tin_cay?
+       · can_nguoi_duyet (0|1) · duyet_boi? · duyet_luc? · idem_key · tao_luc · xong_luc?
+```
+
+- **`tenant_id` lấy từ PHIÊN đã xác thực, KHÔNG từ body.** Đây là luật đã có từ G01, áp nguyên
+  vào đây. Một AIJob không có `tenant_id` là một AIJob không được chạy.
+- **Kết quả AI là DỮ LIỆU, không phải LỆNH.** Không có đường nào cho `ra_json` quyết định quyền,
+  gọi hãng, hay đổi trạng thái đơn. Nó chỉ được đề xuất; người duyệt mới là người quyết.
+- `ra_json` phải qua **phép kiểm schema** trước khi lưu. Kết quả không khớp schema là `loi`,
+  không phải `xong` với dữ liệu méo.
+- **Cấm đưa bí mật vào prompt** (credentials hãng, khoá, token, mật khẩu). Có ca thử canh.
+- `MOCK` trong `app/ai_gateway.py` hiện là `True`. **Không ai được đặt `False`** trong đợt này —
+  nối thật là **V-G10-01, CHƯA được cấp quyền**.
+
+## 22. Quyền sở hữu file — ĐỢT 3
+
+| Agent | SỞ HỮU (được ghi) | CHỈ ĐỌC |
+|---|---|---|
+| **AG-01 FINANCE** | `app/tai_chinh.py` · `app/doi_soat.py` · `app/thu/thu_tai_chinh.py` · `app/thu/thu_doi_soat.py` · `admin/finance.js` · `docs/G07_*.md` | mọi thứ khác |
+| **AG-02 BILLING** | `app/goi_dich_vu.py` · `app/usage.py` · `app/thu/thu_goi_dich_vu.py` · `app/thu/thu_usage.py` · `admin/billing.js` · `docs/G08_*.md` | mọi thứ khác |
+| **AG-03 CARRIER** | `app/harness_hang.py` · `app/thu/thu_harness_hang.py` · `docs/G09_*.md` · `docs/JT_*.md` · `docs/VTP_*.md` | mọi thứ khác (gồm `adapter*.py` — ĐỌC để khảo sát, **không sửa**) |
+| **AG-04 AI** | `app/ai_job.py` · `app/ai_validator.py` · `app/thu/thu_ai_job.py` · `admin/ai.js` · `docs/G10_*.md` | mọi thứ khác (gồm `ai_gateway.py` — bàn giao AG-00 nếu cần sửa) |
+| **AG-05 DEVOPS** | `Dockerfile` · `docker-compose.yml` · `.env.example` · `trien_khai/` (thư mục MỚI) · `app/quan_sat.py` · `app/thu/thu_quan_sat.py` · `docs/G11_*.md` | mọi thứ khác |
+| **AG-00** | `app/csdl.py` · `app/migrate.py` · `app/server.py` · `app/cau_hinh.py` · `app/billing.py` · `app/ai_gateway.py` · `docs/SHARED_CONTRACTS.md` · `.gitignore` · mọi file của agent SAU KHI agent đó bàn giao | — |
+
+**Không agent nào được ghi vào `app/csdl.py`, `app/migrate.py`, `app/server.py`.** Cần schema
+mới thì khai **hằng `DDL_G0x`** trong module của chính mình; AG-00 viết migration v8. Cần route
+mới thì khai bảng route trong tài liệu của mình; AG-00 cắm.
+
+## 23. WORKTREE OWNERSHIP LOCK — giữ nguyên từ đợt 2
+
+AG-00 **KHÔNG ghi file vào worktree mà agent đang dùng**, kể cả để sửa một lỗi nhỏ, kể cả khi
+nghĩ rằng mình đang giúp. Lỗi này đã xảy ra thật ở đợt 1 (AG-00 chép `thu_saas.py` vào worktree
+AG-07 đang chạy, AG-07 phát hiện và báo). Cần sửa thì **nói với agent**; agent đã kết thúc thì
+làn coi như đã nhả và AG-00 mới được vào.
+
+## 24. CSDL thử của từng agent — KHÔNG ai chạy migration lên CSDL thật
+
+Mỗi worktree đặt `VIP_HUB_DATA` trỏ vào thư mục riêng của nó. **Cấm chạy `migrate.py` lên
+`~/Projects/vip-express-hub/app/du-lieu/`** — đó là CSDL đang giữ dữ liệu thật của các đợt
+trước. AG-00 là người duy nhất chạy migration lên đó, sau khi đã thử trên bản sao.
+
+## 25. Những điều CHƯA được cấp quyền — cấm tự suy diễn
+
+| Mã | Việc | Trạng thái |
+|---|---|---|
+| V-13906-01 | Thư viện ngoài để tự động hoá kiểm giao diện tầng 3 | **CHƯA CẤP** |
+| V-13906-02 | Xoay khoá mã hoá thật | **CHƯA CẤP** |
+| V-13906-03 | Sao lưu bí mật ra ngoài máy (VIP Vault) | **CHƯA CẤP** |
+| V-13906-04 | Nghĩa của mã J&T `110` | **CHƯA CẤP** |
+| V-13906-05 | Credentials sandbox J&T | **CHƯA CẤP** |
+| V-G09-01 | Gọi API hãng thật (sandbox hoặc live) | **CHƯA CẤP** |
+| V-G10-01 | Nối VIP AI Brain thật | **CHƯA CẤP** |
+| V-G11-01 | Triển khai staging lên VPS | **CHƯA CẤP** |
+
+**Giao G09 không có nghĩa là được gọi hãng. Giao G10 không có nghĩa là được nối AI thật. Giao
+G11 không có nghĩa là được deploy.** Việc nào chạm vào tám dòng trên thì dừng, ghi **BLOCKED**
+kèm chính xác cái còn thiếu, rồi làm tiếp phần mock/local.

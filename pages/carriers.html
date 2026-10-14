@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhà vận chuyển — VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div id="noi-dung-trang">
+  <div class="hop-loi" style="background:var(--xanh-duong-nhat);border-color:#BFDBFE;color:var(--xanh-duong);margin-bottom:16px">
+    ℹ️ Mọi kết nối bên dưới đều ở trạng thái <b>demo / sandbox giả lập</b>. Chưa có hãng nào được kết nối thật ở G00.
+  </div>
+  <div class="luoi luoi-3" id="khay-hang">
+    <div class="the dang-tai" style="grid-column:1/-1"><span class="xoay"></span>Đang tải…</div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script>
+VIP.dungKhung("carriers", "Nhà vận chuyển");
+let HANG = [];
+async function khoiDong() {
+  try { HANG = await VIP.taiMock("carriers.json"); }
+  catch (e) { document.getElementById("khay-hang").innerHTML = `<div class="hop-loi" style="grid-column:1/-1">Không tải được dữ liệu: ${VIP.thoat(e.message)}</div>`; return; }
+  ve();
+}
+function ve() {
+  document.getElementById("khay-hang").innerHTML = HANG.map(h => `
+    <div class="the the-hang">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="ten-hang">${h.ten}</span>
+        <span class="huy-hieu hh-vang">DEMO — chưa kết nối</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--chu-mo)">
+        ${h.tong_don} đơn mô phỏng · ${h.giao_thanh_cong} giao thành công<br>
+        Hỗ trợ (theo thiết kế): tạo đơn${h.ho_tro.webhook ? ", webhook" : ""}${h.ho_tro.doi_soat_cod ? ", đối soát COD" : ""}
+      </div>
+      <div>
+        ${h.tai_khoan.map(tk => `
+          <div class="dong-tk">
+            <span>${tk.kich_hoat ? "🟢" : "⚪️"}</span>
+            <span><b>${tk.ten}</b> · ${tk.ma}<br><span style="color:var(--chu-mo)">${tk.moi_truong}</span></span>
+          </div>`).join("")}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:auto">
+        <button class="nut nut-nho" data-cau-hinh="${h.id}">⚙️ Cấu hình (giả lập)</button>
+        <button class="nut nut-nho" data-them-tk="${h.id}">＋ Thêm tài khoản demo</button>
+      </div>
+    </div>`).join("");
+  document.querySelectorAll("[data-cau-hinh]").forEach(b => b.addEventListener("click", () => cauHinh(b.dataset.cauHinh)));
+  document.querySelectorAll("[data-them-tk]").forEach(b => b.addEventListener("click", () => themTK(b.dataset.themTk)));
+}
+function cauHinh(id) {
+  const h = HANG.find(x => x.id === id);
+  const m = VIP.moModal(`Cấu hình ${h.ten} <span class="tag-demo">GIẢ LẬP</span>`, `
+    <div class="hop-loi" style="margin-bottom:14px">Form này là <b>giả lập</b>: không có giá trị nào được gửi đi hay lưu lên máy chủ. Không nhập khóa API thật vào đây.</div>
+    <div class="form-nhom"><label for="ch-ten">Tên hiển thị</label><input id="ch-ten" value="${h.ten}"></div>
+    <div class="form-nhom"><label for="ch-moi-truong">Môi trường</label>
+      <select id="ch-moi-truong"><option selected>sandbox (giả lập)</option><option disabled>production — khóa ở G00</option></select></div>
+    <div class="form-nhom"><label for="ch-webhook">URL nhận webhook (demo)</label><input id="ch-webhook" placeholder="https://vi-du.demo/webhook — chưa hoạt động"></div>`,
+    `<button class="nut" id="ch-huy">Hủy</button><button class="nut nut-chinh" id="ch-luu">Lưu giả lập</button>`);
+  m.querySelector("#ch-huy").addEventListener("click", VIP.dongModal);
+  m.querySelector("#ch-luu").addEventListener("click", () => { VIP.dongModal(); VIP.toast(`DEMO: đã mô phỏng lưu cấu hình ${h.ten}. Không có gì được gửi đi.`); });
+}
+function themTK(id) {
+  const h = HANG.find(x => x.id === id);
+  h.tai_khoan.push({ ten: `Tài khoản demo ${h.tai_khoan.length + 1}`, ma: `${h.id}-DEMO-${String(h.tai_khoan.length + 1).padStart(2, "0")}`, moi_truong: "sandbox (giả lập)", kich_hoat: false });
+  ve(); VIP.toast(`DEMO: đã thêm tài khoản giả lập cho ${h.ten} (chỉ trong phiên này).`);
+}
+khoiDong();
+</script>
+</body>
+</html>

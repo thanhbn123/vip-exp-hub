@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+gateway/du-lieu/
+app/du-lieu/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store

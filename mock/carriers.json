@@ -1,0 +1,137 @@
+[
+ {
+  "id": "VTP",
+  "ten": "Viettel Post",
+  "trang_thai_demo": "demo",
+  "so_tai_khoan": 2,
+  "tai_khoan": [
+   {
+    "ten": "Tài khoản demo 1",
+    "ma": "VTP-DEMO-01",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": true
+   },
+   {
+    "ten": "Tài khoản demo 2",
+    "ma": "VTP-DEMO-02",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": false
+   }
+  ],
+  "tong_don": 17,
+  "giao_thanh_cong": 4,
+  "ho_tro": {
+   "tao_don": true,
+   "webhook": true,
+   "doi_soat_cod": true
+  }
+ },
+ {
+  "id": "GHN",
+  "ten": "GHN",
+  "trang_thai_demo": "demo",
+  "so_tai_khoan": 2,
+  "tai_khoan": [
+   {
+    "ten": "Tài khoản demo 1",
+    "ma": "GHN-DEMO-01",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": true
+   },
+   {
+    "ten": "Tài khoản demo 2",
+    "ma": "GHN-DEMO-02",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": false
+   },
+   {
+    "ten": "Tài khoản demo 3",
+    "ma": "GHN-DEMO-03",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": false
+   }
+  ],
+  "tong_don": 15,
+  "giao_thanh_cong": 10,
+  "ho_tro": {
+   "tao_don": true,
+   "webhook": true,
+   "doi_soat_cod": true
+  }
+ },
+ {
+  "id": "GHTK",
+  "ten": "GHTK",
+  "trang_thai_demo": "demo",
+  "so_tai_khoan": 2,
+  "tai_khoan": [
+   {
+    "ten": "Tài khoản demo 1",
+    "ma": "GHTK-DEMO-01",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": true
+   }
+  ],
+  "tong_don": 17,
+  "giao_thanh_cong": 7,
+  "ho_tro": {
+   "tao_don": true,
+   "webhook": true,
+   "doi_soat_cod": true
+  }
+ },
+ {
+  "id": "JT",
+  "ten": "J&T Express",
+  "trang_thai_demo": "demo",
+  "so_tai_khoan": 2,
+  "tai_khoan": [
+   {
+    "ten": "Tài khoản demo 1",
+    "ma": "JT-DEMO-01",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": true
+   },
+   {
+    "ten": "Tài khoản demo 2",
+    "ma": "JT-DEMO-02",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": false
+   },
+   {
+    "ten": "Tài khoản demo 3",
+    "ma": "JT-DEMO-03",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": false
+   }
+  ],
+  "tong_don": 16,
+  "giao_thanh_cong": 8,
+  "ho_tro": {
+   "tao_don": true,
+   "webhook": true,
+   "doi_soat_cod": false
+  }
+ },
+ {
+  "id": "BEST",
+  "ten": "BEST Express",
+  "trang_thai_demo": "demo",
+  "so_tai_khoan": 3,
+  "tai_khoan": [
+   {
+    "ten": "Tài khoản demo 1",
+    "ma": "BEST-DEMO-01",
+    "moi_truong": "sandbox (giả lập)",
+    "kich_hoat": true
+   }
+  ],
+  "tong_don": 7,
+  "giao_thanh_cong": 2,
+  "ho_tro": {
+   "tao_don": true,
+   "webhook": true,
+   "doi_soat_cod": false
+  }
+ }
+]

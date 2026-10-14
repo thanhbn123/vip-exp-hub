@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tạo đơn — VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div id="noi-dung-trang">
+  <form id="form-don" novalidate>
+  <div class="luoi luoi-2">
+    <div class="the">
+      <div class="the-dau"><h2>Người gửi</h2></div>
+      <div class="the-than">
+        <div class="form-nhom" data-truong><label for="g-ten">Tên người gửi <span class="bat-buoc">*</span></label>
+          <input id="g-ten" required><div class="loi-nhan">Vui lòng nhập tên người gửi.</div></div>
+        <div class="form-nhom" data-truong data-kieu="sdt"><label for="g-sdt">SĐT người gửi <span class="bat-buoc">*</span></label>
+          <input id="g-sdt" required inputmode="numeric"><div class="loi-nhan">SĐT phải gồm 10 số và bắt đầu bằng 0.</div></div>
+        <div class="form-nhom" data-truong><label for="g-dia-chi">Địa chỉ lấy hàng <span class="bat-buoc">*</span></label>
+          <textarea id="g-dia-chi" rows="2" required></textarea><div class="loi-nhan">Vui lòng nhập địa chỉ lấy hàng.</div></div>
+      </div>
+    </div>
+    <div class="the">
+      <div class="the-dau"><h2>Người nhận</h2></div>
+      <div class="the-than">
+        <div class="form-nhom" data-truong><label for="n-ten">Tên người nhận <span class="bat-buoc">*</span></label>
+          <input id="n-ten" required><div class="loi-nhan">Vui lòng nhập tên người nhận.</div></div>
+        <div class="form-nhom" data-truong data-kieu="sdt"><label for="n-sdt">SĐT người nhận <span class="bat-buoc">*</span></label>
+          <input id="n-sdt" required inputmode="numeric"><div class="loi-nhan">SĐT phải gồm 10 số và bắt đầu bằng 0.</div></div>
+        <div class="form-nhom" data-truong><label for="n-dia-chi">Địa chỉ giao hàng <span class="bat-buoc">*</span></label>
+          <textarea id="n-dia-chi" rows="2" required></textarea><div class="loi-nhan">Vui lòng nhập địa chỉ giao hàng.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="the" style="margin-top:16px">
+    <div class="the-dau"><h2>Hàng hóa &amp; dịch vụ</h2><div class="phai"><span class="tag-demo">DEMO</span></div></div>
+    <div class="the-than">
+      <div class="form-hang">
+        <div class="form-nhom" data-truong><label for="h-ten">Tên hàng hóa <span class="bat-buoc">*</span></label>
+          <input id="h-ten" required><div class="loi-nhan">Vui lòng nhập tên hàng hóa.</div></div>
+        <div class="form-nhom" data-truong data-kieu="so-duong"><label for="h-kl">Cân nặng (gram) <span class="bat-buoc">*</span></label>
+          <input id="h-kl" type="number" min="1" required><div class="loi-nhan">Cân nặng phải là số lớn hơn 0.</div></div>
+        <div class="form-nhom" data-truong data-kieu="so-khong-am"><label for="h-cod">Tiền thu hộ COD (₫)</label>
+          <input id="h-cod" type="number" min="0" value="0"><div class="loi-nhan">COD không được âm.</div></div>
+        <div class="form-nhom" data-truong data-kieu="so-khong-am"><label for="h-gia-tri">Giá trị khai (₫)</label>
+          <input id="h-gia-tri" type="number" min="0" value="0"><div class="loi-nhan">Giá trị khai không được âm.</div></div>
+        <div class="form-nhom" data-truong><label for="h-hang">Hãng vận chuyển <span class="bat-buoc">*</span></label>
+          <select id="h-hang" required>
+            <option value="">— Chọn hãng (demo) —</option>
+            <option>Viettel Post</option><option>GHN</option><option>GHTK</option><option>J&amp;T Express</option><option>BEST Express</option>
+          </select><div class="loi-nhan">Vui lòng chọn hãng vận chuyển.</div></div>
+        <div class="form-nhom"><label for="h-ghi-chu">Ghi chú giao hàng</label><input id="h-ghi-chu"></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--chu-mo);margin:4px 0 0">
+        Nút bên dưới chỉ <b>lưu nháp demo trong trình duyệt</b> (localStorage) — không gọi API hãng, không tạo đơn thật.
+      </p>
+    </div>
+    <div class="modal-chan">
+      <button type="button" class="nut" id="nut-xoa-form">Xóa form</button>
+      <button type="submit" class="nut nut-chinh">💾 Kiểm tra &amp; lưu nháp (DEMO)</button>
+    </div>
+  </div>
+  </form>
+
+  <div class="the" style="margin-top:16px">
+    <div class="the-dau"><h2>Nháp đã lưu (trong trình duyệt này)</h2>
+      <div class="phai"><button class="nut nut-nho" id="nut-xoa-nhap">Xóa tất cả nháp</button></div></div>
+    <div class="cuon-ngang"><table class="bang">
+      <thead><tr><th>Lúc lưu</th><th>Người nhận</th><th>Hàng hóa</th><th class="so-tien">COD</th><th>Hãng</th></tr></thead>
+      <tbody id="bang-nhap"></tbody>
+    </table></div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script>
+VIP.dungKhung("create-order", "Tạo đơn vận chuyển");
+const KHOA_NHAP = "vip_g00_nhap_don";
+function layNhap() { try { return JSON.parse(localStorage.getItem(KHOA_NHAP) || "[]"); } catch { return []; } }
+function veNhap() {
+  const ds = layNhap();
+  document.getElementById("bang-nhap").innerHTML = ds.map(n => `
+    <tr><td style="white-space:nowrap">${n.luc}</td><td>${VIP.thoat(n.nguoi_nhan)}<br><span style="color:var(--chu-mo);font-size:12px">${VIP.thoat(n.sdt)}</span></td>
+    <td>${VIP.thoat(n.hang_hoa)} (${n.kl} g)</td><td class="so-tien">${VIP.tien(n.cod)}</td><td>${VIP.thoat(n.hang)}</td></tr>`).join("")
+    || `<tr><td colspan="5"><div class="trang-thai-rong"><div class="to">📝</div>Chưa có nháp nào — điền form bên trên rồi lưu thử</div></td></tr>`;
+}
+function kiemTruong(nhom) {
+  const inp = nhom.querySelector("input, select, textarea");
+  const v = inp.value.trim();
+  let hopLe = true;
+  if (inp.required && !v) hopLe = false;
+  else if (nhom.dataset.kieu === "sdt" && !/^0\d{9}$/.test(v.replace(/[\s.]/g, ""))) hopLe = false;
+  else if (nhom.dataset.kieu === "so-duong" && !(Number(v) > 0)) hopLe = false;
+  else if (nhom.dataset.kieu === "so-khong-am" && (v !== "" && (Number.isNaN(Number(v)) || Number(v) < 0))) hopLe = false;
+  nhom.classList.toggle("co-loi", !hopLe);
+  return hopLe;
+}
+document.querySelectorAll("[data-truong]").forEach(nhom => {
+  nhom.querySelector("input, select, textarea").addEventListener("blur", () => kiemTruong(nhom));
+});
+document.getElementById("form-don").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const cacNhom = [...document.querySelectorAll("[data-truong]")];
+  const hong = cacNhom.filter(n => !kiemTruong(n));
+  if (hong.length) {
+    hong[0].querySelector("input, select, textarea").focus();
+    VIP.toast(`Còn ${hong.length} trường chưa hợp lệ.`, "loi");
+    return;
+  }
+  const nhap = {
+    luc: new Date().toLocaleString("vi-VN"),
+    nguoi_nhan: document.getElementById("n-ten").value.trim(),
+    sdt: document.getElementById("n-sdt").value.trim(),
+    hang_hoa: document.getElementById("h-ten").value.trim(),
+    kl: Number(document.getElementById("h-kl").value),
+    cod: Number(document.getElementById("h-cod").value || 0),
+    hang: document.getElementById("h-hang").value,
+  };
+  const ds = layNhap(); ds.unshift(nhap);
+  try { localStorage.setItem(KHOA_NHAP, JSON.stringify(ds.slice(0, 20))); } catch {}
+  veNhap();
+  VIP.toast("DEMO: đã lưu nháp trong trình duyệt. Không có API nào được gọi.");
+});
+document.getElementById("nut-xoa-form").addEventListener("click", () => {
+  document.getElementById("form-don").reset();
+  document.querySelectorAll(".co-loi").forEach(n => n.classList.remove("co-loi"));
+});
+document.getElementById("nut-xoa-nhap").addEventListener("click", () => {
+  try { localStorage.removeItem(KHOA_NHAP); } catch {}
+  veNhap(); VIP.toast("Đã xóa nháp demo trong trình duyệt.", "canh-bao");
+});
+veNhap();
+</script>
+</body>
+</html>

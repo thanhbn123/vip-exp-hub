@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>So sánh cước — VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div id="noi-dung-trang">
+  <div class="hop-loi" style="background:var(--vang-nhat);border-color:#FBD38D;color:var(--vang);margin-bottom:16px">
+    ⚠️ Bảng cước dưới đây là <b>số liệu minh họa hư cấu</b> để trình diễn giao diện so sánh — <b>không phải báo giá thực</b> của bất kỳ hãng nào. Khi có backend, cước sẽ lấy từ API báo giá từng hãng.
+  </div>
+  <div class="the">
+    <div class="the-dau"><h2>Tính thử cước (minh họa)</h2><div class="phai"><span class="tag-demo">DEMO</span></div></div>
+    <div class="the-than">
+      <div class="form-hang">
+        <div class="form-nhom"><label for="t-kl">Cân nặng (gram)</label><input id="t-kl" type="number" min="1" value="500"></div>
+        <div class="form-nhom"><label for="t-vung">Tuyến</label>
+          <select id="t-vung">
+            <option value="noi-tinh">Nội tỉnh</option>
+            <option value="noi-mien" selected>Nội miền</option>
+            <option value="lien-mien">Liên miền</option>
+          </select></div>
+      </div>
+      <button class="nut nut-chinh" id="nut-tinh">Tính cước minh họa</button>
+    </div>
+  </div>
+  <div class="the" style="margin-top:16px">
+    <div class="the-dau"><h2>Kết quả so sánh (hư cấu)</h2></div>
+    <div class="cuon-ngang"><table class="bang">
+      <thead><tr><th>Hãng</th><th class="so-tien">Cước minh họa</th><th>Thời gian dự kiến (minh họa)</th><th>Ghi chú</th></tr></thead>
+      <tbody id="bang-cuoc"><tr><td colspan="4"><div class="trang-thai-rong"><div class="to">💰</div>Nhập cân nặng và bấm "Tính cước minh họa"</div></td></tr></tbody>
+    </table></div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script>
+VIP.dungKhung("pricing", "So sánh cước");
+// Hệ số hoàn toàn hư cấu, chỉ để demo UI — không phải biểu cước thật của hãng nào.
+const BIEU_DEMO = [
+  { ten: "Viettel Post", goc: 16000, moi500g: 4500, heSo: { "noi-tinh": 0.8, "noi-mien": 1, "lien-mien": 1.35 }, gio: [24, 48] },
+  { ten: "GHN", goc: 15500, moi500g: 5000, heSo: { "noi-tinh": 0.85, "noi-mien": 1, "lien-mien": 1.3 }, gio: [24, 48] },
+  { ten: "GHTK", goc: 14500, moi500g: 5500, heSo: { "noi-tinh": 0.8, "noi-mien": 1, "lien-mien": 1.4 }, gio: [36, 60] },
+  { ten: "J&T Express", goc: 15000, moi500g: 5200, heSo: { "noi-tinh": 0.85, "noi-mien": 1, "lien-mien": 1.32 }, gio: [36, 60] },
+  { ten: "BEST Express", goc: 14000, moi500g: 5800, heSo: { "noi-tinh": 0.9, "noi-mien": 1, "lien-mien": 1.38 }, gio: [48, 72] },
+];
+document.getElementById("nut-tinh").addEventListener("click", () => {
+  const kl = Number(document.getElementById("t-kl").value);
+  const vung = document.getElementById("t-vung").value;
+  if (!(kl > 0)) { VIP.toast("Cân nặng phải lớn hơn 0.", "loi"); return; }
+  const kq = BIEU_DEMO.map(b => ({
+    ten: b.ten,
+    cuoc: Math.round((b.goc + Math.max(0, Math.ceil(kl / 500) - 1) * b.moi500g) * b.heSo[vung] / 500) * 500,
+    gio: b.gio,
+  })).sort((a, b) => a.cuoc - b.cuoc);
+  document.getElementById("bang-cuoc").innerHTML = kq.map((r, i) => `
+    <tr><td><b>${r.ten}</b>${i === 0 ? ' <span class="huy-hieu hh-xanh">rẻ nhất (minh họa)</span>' : ""}</td>
+    <td class="so-tien">${VIP.tien(r.cuoc)}</td>
+    <td>${r.gio[0]}–${r.gio[1]} giờ</td>
+    <td style="color:var(--chu-mo);font-size:12px">Số liệu hư cấu — không phải báo giá thực</td></tr>`).join("");
+  VIP.toast("DEMO: cước hiển thị là minh họa, không phải báo giá thực.", "canh-bao");
+});
+</script>
+</body>
+</html>

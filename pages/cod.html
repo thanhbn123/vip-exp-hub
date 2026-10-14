@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đối soát COD — VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div id="noi-dung-trang">
+  <div class="luoi luoi-kpi" id="kpi-cod">
+    <div class="the dang-tai" style="grid-column:1/-1"><span class="xoay"></span>Đang tải…</div>
+  </div>
+  <div class="hang-cong-cu" style="margin-top:16px">
+    <select id="loc-hang" class="nut" style="padding:7px 10px" aria-label="Lọc theo hãng"><option value="">Tất cả hãng</option></select>
+    <select id="loc-ds" class="nut" style="padding:7px 10px" aria-label="Lọc theo trạng thái đối soát">
+      <option value="">Mọi trạng thái đối soát</option>
+      <option value="da">Đã đối soát (demo)</option>
+      <option value="chua">Chưa đối soát</option>
+    </select>
+    <div class="day"><button class="nut nut-chinh" id="nut-doi-soat">🧾 Chạy đối soát (DEMO)</button></div>
+  </div>
+  <div class="the">
+    <div class="the-dau"><h2>COD theo vận đơn (đơn giao thành công, mô phỏng)</h2>
+      <div class="phai"><span class="tag-demo">DEMO</span></div></div>
+    <div class="cuon-ngang"><table class="bang">
+      <thead><tr><th>Mã vận đơn</th><th>Hãng</th><th class="so-tien">COD phải thu</th><th class="so-tien">Đã nhận (demo)</th>
+        <th class="so-tien">Phí hãng</th><th class="so-tien">Chênh lệch</th><th>Đối soát</th></tr></thead>
+      <tbody id="bang-cod"></tbody>
+    </table></div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script>
+VIP.dungKhung("cod", "Đối soát COD");
+let DS = [];
+async function khoiDong() {
+  let don;
+  try { don = await VIP.taiMock("shipments.json"); }
+  catch (e) { document.getElementById("kpi-cod").innerHTML = `<div class="hop-loi" style="grid-column:1/-1">Không tải được dữ liệu: ${VIP.thoat(e.message)}</div>`; return; }
+  // Dựng dòng COD mô phỏng từ các đơn giao thành công có COD.
+  DS = don.filter(s => s.trang_thai === "giao_thanh_cong" && s.cod > 0).map((s, i) => {
+    const daDoiSoat = i % 3 !== 0;
+    const lech = i % 7 === 0 ? -s.cuoc_phi : 0; // vài dòng cố ý lệch để demo
+    return {
+      ma: s.ma_van_don, hang: s.hang, ten_hang: s.ten_hang,
+      phai_thu: s.cod,
+      da_nhan: daDoiSoat ? s.cod - s.cuoc_phi + lech : 0,
+      phi: s.cuoc_phi, da_doi_soat: daDoiSoat, lech,
+    };
+  });
+  [...new Map(DS.map(s => [s.hang, s.ten_hang]))].forEach(([id, ten]) =>
+    document.getElementById("loc-hang").insertAdjacentHTML("beforeend", `<option value="${id}">${ten}</option>`));
+  ["loc-hang", "loc-ds"].forEach(id => document.getElementById(id).addEventListener("change", ve));
+  document.getElementById("nut-doi-soat").addEventListener("click", chayDoiSoat);
+  ve();
+}
+function ve() {
+  const h = document.getElementById("loc-hang").value;
+  const d = document.getElementById("loc-ds").value;
+  const ds = DS.filter(r => (!h || r.hang === h) && (!d || (d === "da") === r.da_doi_soat));
+  const phaiThu = ds.reduce((a, r) => a + r.phai_thu, 0);
+  const daNhan = ds.reduce((a, r) => a + r.da_nhan, 0);
+  const phi = ds.filter(r => r.da_doi_soat).reduce((a, r) => a + r.phi, 0);
+  const lech = ds.reduce((a, r) => a + r.lech, 0);
+  document.getElementById("kpi-cod").innerHTML = `
+    <div class="the kpi"><div class="nhan">COD phải thu (demo)</div><div class="so">${VIP.tien(phaiThu)}</div><div class="phu">${ds.length} vận đơn</div></div>
+    <div class="the kpi"><div class="nhan">Đã nhận về (demo)</div><div class="so" style="color:var(--xanh-la)">${VIP.tien(daNhan)}</div></div>
+    <div class="the kpi"><div class="nhan">Phí hãng đã trừ</div><div class="so">${VIP.tien(phi)}</div></div>
+    <div class="the kpi"><div class="nhan">Chênh lệch cần xử lý</div><div class="so" style="color:${lech ? "var(--do-vip)" : "var(--xanh-la)"}">${VIP.tien(Math.abs(lech))}</div>
+      <div class="phu">${lech ? ds.filter(r => r.lech).length + " dòng lệch (demo)" : "không lệch"}</div></div>`;
+  document.getElementById("bang-cod").innerHTML = ds.map(r => `
+    <tr><td><b>${r.ma}</b></td><td>${r.ten_hang}</td>
+    <td class="so-tien">${VIP.tien(r.phai_thu)}</td>
+    <td class="so-tien">${r.da_doi_soat ? VIP.tien(r.da_nhan) : "—"}</td>
+    <td class="so-tien">${r.da_doi_soat ? VIP.tien(r.phi) : "—"}</td>
+    <td class="so-tien" style="color:${r.lech ? "var(--do-dam)" : "inherit"}">${r.da_doi_soat ? VIP.tien(r.lech) : "—"}</td>
+    <td>${r.da_doi_soat ? '<span class="huy-hieu hh-xanh">Đã đối soát (demo)</span>' : '<span class="huy-hieu hh-vang">Chưa đối soát</span>'}</td></tr>`).join("")
+    || `<tr><td colspan="7"><div class="trang-thai-rong"><div class="to">🧾</div>Không có dòng COD khớp bộ lọc</div></td></tr>`;
+}
+function chayDoiSoat() {
+  const chua = DS.filter(r => !r.da_doi_soat);
+  if (!chua.length) { VIP.toast("Mọi dòng đều đã đối soát (demo).", "canh-bao"); return; }
+  const m = VIP.moModal("Chạy đối soát (DEMO)",
+    `<p>Sẽ <b>mô phỏng</b> đối soát <b>${chua.length}</b> dòng chưa đối soát. Không có dữ liệu nào gửi tới hãng hay hệ thống kế toán thật.</p>`,
+    `<button class="nut" id="ds-huy">Hủy</button><button class="nut nut-chinh" id="ds-ok">Chạy demo</button>`);
+  m.querySelector("#ds-huy").addEventListener("click", VIP.dongModal);
+  m.querySelector("#ds-ok").addEventListener("click", () => {
+    chua.forEach(r => { r.da_doi_soat = true; r.da_nhan = r.phai_thu - r.phi; });
+    VIP.dongModal(); ve();
+    VIP.toast(`DEMO: đã mô phỏng đối soát ${chua.length} dòng.`);
+  });
+}
+khoiDong();
+</script>
+</body>
+</html>

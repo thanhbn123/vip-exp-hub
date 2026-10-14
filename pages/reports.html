@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo — VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div id="noi-dung-trang">
+  <div class="hang-cong-cu">
+    <label for="loc-ngay" style="font-weight:600">Khoảng thời gian:</label>
+    <select id="loc-ngay" class="nut" style="padding:7px 10px">
+      <option value="7">7 ngày qua</option>
+      <option value="14">14 ngày qua</option>
+      <option value="30" selected>30 ngày qua</option>
+    </select>
+    <div class="day"><span class="tag-demo">DEMO — số liệu mô phỏng</span></div>
+  </div>
+
+  <div class="the">
+    <div class="the-dau"><h2>Sản lượng theo hãng</h2></div>
+    <div class="the-than">
+      <canvas id="bd-hang" class="bieu-do" style="height:280px" role="img" aria-label="Biểu đồ cột sản lượng theo hãng (mô phỏng)"></canvas>
+      <div class="chu-giai">
+        <span><span class="cham" style="background:#1D4ED8"></span>Tổng đơn</span>
+        <span><span class="cham" style="background:#15803D"></span>Giao thành công</span>
+        <span><span class="cham" style="background:#CC0000"></span>Giao thất bại</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="luoi luoi-2" style="margin-top:16px">
+    <div class="the">
+      <div class="the-dau"><h2>COD theo hãng (demo)</h2></div>
+      <div class="the-than">
+        <canvas id="bd-cod" class="bieu-do" style="height:240px" role="img" aria-label="Biểu đồ cột COD theo hãng (mô phỏng)"></canvas>
+      </div>
+    </div>
+    <div class="the">
+      <div class="the-dau"><h2>Bảng tổng hợp theo hãng</h2></div>
+      <div class="cuon-ngang"><table class="bang">
+        <thead><tr><th>Hãng</th><th class="so-tien">Đơn</th><th class="so-tien">Thành công</th><th class="so-tien">Tỷ lệ</th><th class="so-tien">COD (demo)</th></tr></thead>
+        <tbody id="bang-tong"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script>
+VIP.dungKhung("reports", "Báo cáo đa hãng");
+let DON = [];
+async function khoiDong() {
+  try { DON = await VIP.taiMock("shipments.json"); }
+  catch (e) { document.getElementById("bang-tong").innerHTML = `<tr><td colspan="5"><div class="hop-loi">Không tải được dữ liệu: ${VIP.thoat(e.message)}</div></td></tr>`; return; }
+  document.getElementById("loc-ngay").addEventListener("change", ve);
+  ve();
+}
+function ve() {
+  const soNgay = +document.getElementById("loc-ngay").value;
+  const moc = new Date("2026-10-14T23:59");
+  const tu = new Date(moc); tu.setDate(tu.getDate() - soNgay + 1);
+  const ds = DON.filter(s => new Date(s.ngay_tao.replace(" ", "T")) >= tu);
+  const hangs = [...new Map(DON.map(s => [s.hang, s.ten_hang]))];
+  const nhan = hangs.map(([, t]) => t.replace(" Express", ""));
+  const tong = hangs.map(([id]) => ds.filter(s => s.hang === id).length);
+  const ok = hangs.map(([id]) => ds.filter(s => s.hang === id && s.trang_thai === "giao_thanh_cong").length);
+  const fail = hangs.map(([id]) => ds.filter(s => s.hang === id && s.trang_thai === "giao_that_bai").length);
+  const cod = hangs.map(([id]) => ds.filter(s => s.hang === id && s.trang_thai === "giao_thanh_cong").reduce((a, s) => a + s.cod, 0));
+  VIP.veBieuDoCot(document.getElementById("bd-hang"), nhan, [{ so: tong }, { so: ok }, { so: fail }], ["#1D4ED8", "#15803D", "#CC0000"]);
+  VIP.veBieuDoCot(document.getElementById("bd-cod"), nhan, [{ so: cod }], ["#B45309"]);
+  document.getElementById("bang-tong").innerHTML = hangs.map(([id, ten], i) => `
+    <tr><td><b>${ten}</b></td><td class="so-tien">${tong[i]}</td><td class="so-tien">${ok[i]}</td>
+    <td class="so-tien">${tong[i] ? Math.round(ok[i] / tong[i] * 100) : 0}%</td>
+    <td class="so-tien">${VIP.tien(cod[i])}</td></tr>`).join("") +
+    `<tr style="font-weight:700;background:var(--xam-nhat)"><td>Tổng</td><td class="so-tien">${ds.length}</td>
+    <td class="so-tien">${ok.reduce((a, b) => a + b, 0)}</td><td class="so-tien">—</td>
+    <td class="so-tien">${VIP.tien(cod.reduce((a, b) => a + b, 0))}</td></tr>`;
+}
+let hgio; window.addEventListener("resize", () => { clearTimeout(hgio); hgio = setTimeout(ve, 200); });
+khoiDong();
+</script>
+</body>
+</html>

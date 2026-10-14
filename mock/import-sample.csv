@@ -1,0 +1,15 @@
+recipient_name,recipient_phone,recipient_address,product_name,quantity,weight_grams,cod_amount,declared_value,note
+Ngô Mỹ Tâm,0976616881,"Số 48 phố Thử Nghiệm Hà Nội",Giày thể thao demo,2,200,0,200000,demo dòng 1
+Phạm Quốc Dũng,0917841509,"Số 143 đường Hoa Mai Cần Thơ",Giày thể thao demo,1,500,0,500000,demo dòng 2
+Đỗ Hoài Nam,0909294749,"Số 87 đường Bờ Hồ Demo Bắc Ninh",Bình giữ nhiệt demo,3,1200,320000,500000,demo dòng 3
+Đỗ Hữu Thắng,0958470766,"Số 80 phố Thử Nghiệm Đồng Nai",Sách hướng dẫn demo,2,200,150000,500000,demo dòng 4
+Hồ Khánh Linh,0963125777,"Số 162 phố Thử Nghiệm Đồng Nai",Túi vải demo,3,500,550000,500000,demo dòng 5
+Lê Thị Bình,0930330673,"Số 190 đường Mẫu Số Bắc Ninh",Túi vải demo,2,1200,0,200000,demo dòng 6
+Trần Đức Huy,0929568533,"Số 216 phố Thử Nghiệm Lâm Đồng",Sách hướng dẫn demo,1,1200,320000,500000,demo dòng 7
+Hoàng Tường Vy,0935557804,"Số 104 đường Mẫu Số TP.HCM",Sách hướng dẫn demo,2,200,320000,500000,demo dòng 8
+Đặng Minh Châu,0956826963,"Số 249 đường Hoa Mai Bắc Ninh",Bình giữ nhiệt demo,2,1200,550000,500000,demo dòng 9
+Hồ Bá Sơn,0987933942,"Số 208 ngõ Minh Họa Hải Phòng",Áo thun demo,3,1200,150000,200000,demo dòng 10
+Lê Kim Oanh,0934483634,"Số 216 đường Giả Lập Đồng Nai",Giày thể thao demo,2,1200,550000,1000000,demo dòng 11
+Ngô Minh Châu,012345,"Số 99 đường Bờ Hồ Demo Đồng Nai",Giày thể thao demo,1,1200,150000,200000,demo dòng 12
+,0984942075,"Số 234 đường Mẫu Số Hải Phòng",Phụ kiện điện thoại demo,2,1200,320000,200000,demo dòng 13
+Phạm Bá Sơn,0913802782,"Số 114 phố Thử Nghiệm Đồng Nai",Hộp mỹ phẩm demo,2,500,-5000,1000000,demo dòng 14

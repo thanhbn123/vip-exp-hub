@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cấu hình — VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div id="noi-dung-trang">
+  <div class="tab-day" role="tablist">
+    <button class="tab-nut hien-tai" data-tab="chung" role="tab" aria-selected="true">Chung</button>
+    <button class="tab-nut" data-tab="tai-khoan" role="tab" aria-selected="false">Tài khoản &amp; quyền</button>
+    <button class="tab-nut" data-tab="thong-bao" role="tab" aria-selected="false">Thông báo</button>
+  </div>
+
+  <div id="tab-chung" class="noi-dung-tab">
+    <div class="the"><div class="the-dau"><h2>Cấu hình chung (demo)</h2><div class="phai"><span class="tag-demo">DEMO</span></div></div>
+    <div class="the-than">
+      <div class="form-hang">
+        <div class="form-nhom"><label for="c-ten-cty">Tên tổ chức</label><input id="c-ten-cty" value="VIP ORDER (demo)"></div>
+        <div class="form-nhom"><label for="c-mui-gio">Múi giờ</label>
+          <select id="c-mui-gio"><option selected>Asia/Ho_Chi_Minh (UTC+7)</option></select></div>
+        <div class="form-nhom"><label for="c-don-vi">Đơn vị cân nặng mặc định</label>
+          <select id="c-don-vi"><option selected>gram</option><option>kg</option></select></div>
+        <div class="form-nhom"><label for="c-hang-mac-dinh">Hãng mặc định khi tạo đơn</label>
+          <select id="c-hang-mac-dinh"><option selected>Viettel Post</option><option>GHN</option><option>GHTK</option><option>J&amp;T Express</option><option>BEST Express</option></select></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--chu-mo)">Giá trị chỉ lưu demo trong trình duyệt — chưa có backend ở G00.</p>
+    </div>
+    <div class="modal-chan"><button class="nut nut-chinh" id="luu-chung">💾 Lưu demo</button></div></div>
+  </div>
+
+  <div id="tab-tai-khoan" class="noi-dung-tab" hidden>
+    <div class="the"><div class="the-dau"><h2>Tài khoản &amp; phân quyền (demo)</h2>
+      <div class="phai"><button class="nut nut-nho" id="them-nd">＋ Thêm người dùng demo</button></div></div>
+    <div class="cuon-ngang"><table class="bang">
+      <thead><tr><th>Người dùng</th><th>Email (hư cấu)</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody id="bang-nd"></tbody>
+    </table></div></div>
+  </div>
+
+  <div id="tab-thong-bao" class="noi-dung-tab" hidden>
+    <div class="the"><div class="the-dau"><h2>Thông báo (demo)</h2></div>
+    <div class="the-than">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <label style="display:flex;align-items:center;gap:12px"><input type="checkbox" class="cong-tac" checked> Báo khi đơn giao thất bại</label>
+        <label style="display:flex;align-items:center;gap:12px"><input type="checkbox" class="cong-tac" checked> Báo khi COD lệch sau đối soát</label>
+        <label style="display:flex;align-items:center;gap:12px"><input type="checkbox" class="cong-tac"> Báo khi webhook lỗi liên tiếp</label>
+        <label style="display:flex;align-items:center;gap:12px"><input type="checkbox" class="cong-tac"> Gửi báo cáo tổng hợp cuối ngày</label>
+      </div>
+      <p style="font-size:12.5px;color:var(--chu-mo);margin-top:16px">Công tắc chỉ là demo giao diện — chưa có kênh thông báo thật nào được nối.</p>
+    </div>
+    <div class="modal-chan"><button class="nut nut-chinh" id="luu-tb">💾 Lưu demo</button></div></div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script>
+VIP.dungKhung("settings", "Cấu hình hệ thống");
+const ND = [
+  { ten: "Quản trị demo", email: "quantri@vi-du-demo.test", vaiTro: "Quản trị", bat: true },
+  { ten: "Vận hành demo 1", email: "vanhanh1@vi-du-demo.test", vaiTro: "Vận hành", bat: true },
+  { ten: "Kế toán demo", email: "ketoan@vi-du-demo.test", vaiTro: "Kế toán (chỉ xem COD)", bat: true },
+  { ten: "CTV demo", email: "ctv@vi-du-demo.test", vaiTro: "Chỉ xem", bat: false },
+];
+document.querySelectorAll(".tab-nut").forEach(n => n.addEventListener("click", () => {
+  document.querySelectorAll(".tab-nut").forEach(x => { x.classList.remove("hien-tai"); x.setAttribute("aria-selected", "false"); });
+  n.classList.add("hien-tai"); n.setAttribute("aria-selected", "true");
+  document.querySelectorAll(".noi-dung-tab").forEach(t => t.hidden = true);
+  document.getElementById("tab-" + n.dataset.tab).hidden = false;
+}));
+function veND() {
+  document.getElementById("bang-nd").innerHTML = ND.map((u, i) => `
+    <tr><td><b>${VIP.thoat(u.ten)}</b></td><td>${VIP.thoat(u.email)}</td><td>${VIP.thoat(u.vaiTro)}</td>
+    <td>${u.bat ? '<span class="huy-hieu hh-xanh">Hoạt động</span>' : '<span class="huy-hieu hh-xam">Tạm khóa</span>'}</td>
+    <td><button class="nut nut-nho" data-doi="${i}">${u.bat ? "Khóa demo" : "Mở demo"}</button></td></tr>`).join("");
+  document.querySelectorAll("[data-doi]").forEach(b => b.addEventListener("click", () => {
+    ND[+b.dataset.doi].bat = !ND[+b.dataset.doi].bat;
+    veND(); VIP.toast("DEMO: đã đổi trạng thái người dùng (chỉ trong phiên này).");
+  }));
+}
+document.getElementById("them-nd").addEventListener("click", () => {
+  ND.push({ ten: `Người dùng demo ${ND.length + 1}`, email: `demo${ND.length + 1}@vi-du-demo.test`, vaiTro: "Chỉ xem", bat: true });
+  veND(); VIP.toast("DEMO: đã thêm người dùng hư cấu.");
+});
+["luu-chung", "luu-tb"].forEach(id => document.getElementById(id).addEventListener("click", () =>
+  VIP.toast("DEMO: đã mô phỏng lưu cấu hình. Chưa có backend ở G00.")));
+veND();
+</script>
+</body>
+</html>

@@ -219,8 +219,8 @@ thật lượt nào. Chưa tạo đơn vận chuyển thật nào. Chủ dự á
 | # | Rủi ro | Mức | Ghi chú |
 |---|---|---|---|
 | R-a | Trần rate limit trong bộ nhớ một tiến trình: restart là mất bộ đếm; nhiều worker là trần nhân lên | TRUNG BÌNH | Chặn được lạm dụng tự động, **không** chặn tấn công phân tán, **không thay WAF** |
-| R-b | `_doc_json` chỉ đóng lớp list/dict ở chỗ chờ vô hướng. **CHƯA đóng**: số ở chỗ chờ chuỗi (`ten=5` vẫn làm `.strip()` nổ) và kiểu sai ở tầng sâu trong một khoá đã khai | THẤP | Việc **V-10710** |
-| R-c | Mã lý do từ chối lưu trong chuỗi `ly_do_tu_choi`, **không truy vấn được như dữ liệu có cấu trúc** | THẤP | Muốn thống kê "bao nhiêu đơn bị từ chối vì sai địa chỉ" thì phải thêm cột. Việc **V-10711** |
+| R-b | `_doc_json` chỉ đóng lớp list/dict ở chỗ chờ vô hướng. **CHƯA đóng**: số ở chỗ chờ chuỗi (`ten=5` vẫn làm `.strip()` nổ) và kiểu sai ở tầng sâu trong một khoá đã khai | THẤP | Việc **V-13904** |
+| R-c | Mã lý do từ chối lưu trong chuỗi `ly_do_tu_choi`, **không truy vấn được như dữ liệu có cấu trúc** | THẤP | Muốn thống kê "bao nhiêu đơn bị từ chối vì sai địa chỉ" thì phải thêm cột. Việc **V-13905** |
 | R-d | Tầng 3 frontend không có chặn hồi quy | TRUNG BÌNH | Muốn có thì phải nới ràng buộc "không thư viện ngoài" — **quyết định của chủ dự án** |
 | R-e | Bộ lọc nâng cao lọc TẠI GIAO DIỆN trên tập đã tải — CSDL lớn thì lọc thiếu | TRUNG BÌNH | Giao diện nói rõ phạm vi và cảnh báo khi chạm trần, nhưng đó là **vá bằng lời, không phải vá bằng cấu trúc**. Vá gốc = thêm tham số lọc cho `GET /api/v2/don` |
 | R-f | `NGHIA_DA_CHOT` sống trong tiến trình, chưa có bảng CSDL | THẤP | Nhiều tiến trình phải chốt riêng. Khi cần chốt thật thì thêm bảng và nạp lúc khởi động |

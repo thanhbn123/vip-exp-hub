@@ -102,7 +102,7 @@ class BoXuLy(BaseHTTPRequestHandler):
         PHẠM VI ĐÃ ĐÓNG (nói đúng chỗ đo được, §12.1 luật 3): lớp list/dict ở chỗ chờ vô hướng,
         tại tầng trên cùng của body. CHƯA ĐÓNG: số ở chỗ chờ chuỗi (`ten=5` vẫn làm `.strip()`
         nổ) và cấu trúc lồng sai kiểu ở tầng sâu bên trong một khóa đã khai. Ghi ra vì rủi ro
-        không ghi là rủi ro bị bỏ quên — việc V-10710.
+        không ghi là rủi ro bị bỏ quên — việc V-13904.
         """
         try:
             d = json.loads(self._doc_body(gioi_han) or b"{}")
@@ -771,7 +771,7 @@ class BoXuLy(BaseHTTPRequestHandler):
                 # vẫn là một chuỗi đọc được. Chữ ký `tu_choi_don(..., ly_do)` không phải đổi.
                 # CHƯA ĐÓNG: mã lý do không truy vấn được như dữ liệu có cấu trúc (không có cột
                 # riêng) — muốn thống kê "bao nhiêu đơn bị từ chối vì sai địa chỉ" thì phải thêm
-                # cột. Ghi ra vì rủi ro không ghi là rủi ro bị bỏ quên (việc V-10711).
+                # cột. Ghi ra vì rủi ro không ghi là rủi ro bị bỏ quên (việc V-13905).
                 ly_do = str(d.get("ly_do") or "").strip()
                 if not ly_do:
                     ma_ly_do = str(d.get("ly_do_ma") or "").strip()

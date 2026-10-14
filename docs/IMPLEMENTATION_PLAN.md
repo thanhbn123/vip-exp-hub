@@ -40,3 +40,17 @@ Mốc rollback: git local `fd79d74` + bản sao `gateway.db`. Mỗi bước xong
 **Còn BLOCKED (cần Owner):** credentials J&T thật; đọc repo `vip-viettelpost`; mọi quyết định deploy.
 **G03 kế tiếp:** Carrier Integration Engine — đã có interface + 2 mock adapter + capability;
 phần còn lại (adapter thật) phụ thuộc Owner.
+
+
+## Đợt 3 — G03 Carrier Integration Engine, phần thuần local (14/10/2026)
+
+| Bước | Nội dung | Trạng thái |
+|---|---|---|
+| 25 | Bảng ánh xạ trạng thái từng hãng — mã J&T THẬT từ tài liệu công khai | DONE |
+| 26 | Sửa capability J&T `webhook` False→True (đọc sót trang con 轨迹回传) | DONE |
+| 27 | Khung retry/timeout; createOrder chỉ thử lại khi hãng có khóa chống trùng | DONE |
+| 28 | Tracking polling fallback (gom lô 30/lượt theo tài liệu, qua rank guard, không tự chạy) | DONE |
+| 29 | Bộ thử hợp đồng adapter chạy với MỌI hãng + ánh xạ + retry + polling | DONE (23 test) |
+| 30 | Tài liệu `G03_CARRIER_ENGINE.md` | DONE |
+
+**Tổng test sau đợt 3: 72** (23 G03 + 21 G01/G02 + 19 nghiệp vụ + 9 gateway).

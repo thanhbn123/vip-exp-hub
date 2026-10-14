@@ -21,6 +21,7 @@ import cau_hinh
 import csdl
 import don_hang
 import nhap_file
+import polling
 import quyen
 import webhook
 
@@ -636,6 +637,16 @@ class BoXuLy(BaseHTTPRequestHandler):
                        tenant_id=tenant_id, user_id=nc.user_id)
             return self._tra(202, {"ok": True})
 
+        # --- polling hành trình (fallback khi hãng không đẩy webhook) ---
+        if duong == "/api/v2/polling/chay" and method == "POST":
+            self._can(nc, "tenant.hang.quan_ly")
+            d = self._doc_json()
+            tk = polling.chay_mot_luot(tenant_id,
+                                       chi_hang_khong_webhook=bool(d.get("chi_hang_khong_webhook")))
+            csdl.audit("polling_chay_tay", f"tenant:{tenant_id}", json.dumps(tk, ensure_ascii=False),
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, tk)
+
         # --- billing / audit / ai ---
         if duong == "/api/v2/billing":
             self._can(nc, "tenant.billing.xem")
@@ -667,6 +678,8 @@ def chay(cong=cau_hinh.CONG_MAC_DINH):
         print("[hub] Chạy migration trước: python3 app/migrate.py")
         raise SystemExit(3)
     quyen.seed()
+    import khoi_tao
+    khoi_tao.seed_providers()   # capability adapter đổi thì CSDL phải theo (vd J&T webhook)
     webhook.khoi_dong()
     sv = ThreadingHTTPServer(("127.0.0.1", cong), BoXuLy)
     print(f"[hub] VIP Express Hub SaaS (local) chạy tại http://127.0.0.1:{cong} — Ctrl+C để dừng")

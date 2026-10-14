@@ -26,6 +26,9 @@ class CarrierAdapter:
     }
     # Chặn cứng đường LIVE ở local cho tới khi Owner cấp credentials + duyệt.
     CHO_PHEP_LIVE = False
+    # Hãng có khóa chống trùng của CHÍNH NÓ cho createOrder không? Quyết định việc có được
+    # thử lại thao tác ghi hay không (xem transport.py). Mặc định: KHÔNG, để an toàn.
+    KHOA_CHONG_TRUNG = False
 
     def __init__(self, credentials: dict, moi_truong: str = "mock"):
         self.credentials = credentials
@@ -57,10 +60,12 @@ class CarrierAdapter:
     def getShippingLabel(self, ma_van_don) -> KetQuaHang:
         return KetQuaHang(False, loi=f"{self.ma_hang} không hỗ trợ getShippingLabel")
 
-    @staticmethod
-    def normalizeTrackingStatus(trang_thai_hang: str) -> str:
-        """Đổi trạng thái riêng của hãng → trạng thái chuẩn hệ thống. Lớp con ghi đè."""
-        return trang_thai_hang
+    @classmethod
+    def normalizeTrackingStatus(cls, trang_thai_hang):
+        """Đổi mã trạng thái riêng của hãng → trạng thái chuẩn, qua bảng ánh xạ chung.
+        Trả KetQuaAnhXa: mã lạ KHÔNG ném lỗi và KHÔNG đổi trạng thái đơn."""
+        import trang_thai_hang as tth
+        return tth.anh_xa(cls.ma_hang, trang_thai_hang)
 
 
 _DANG_KY = {}
@@ -78,5 +83,6 @@ def tao_adapter(ma_hang, credentials, moi_truong="mock") -> CarrierAdapter:
 
 
 def danh_sach_hang():
-    return {ma: {"ten": lop.ten_hang, "capabilities": lop.CAPABILITIES, "live_mo": lop.CHO_PHEP_LIVE}
+    return {ma: {"ten": lop.ten_hang, "capabilities": lop.CAPABILITIES,
+                 "live_mo": lop.CHO_PHEP_LIVE, "khoa_chong_trung": lop.KHOA_CHONG_TRUNG}
             for ma, lop in _DANG_KY.items()}

@@ -20,6 +20,11 @@ URL_TAO_DON = {
     "sandbox": "https://demoopenapi.jtexpress.vn/webopenplatformapi/api/order/addOrder",
     "production": "https://ylopenapi.jtexpress.vn/webopenplatformapi/api/order/addOrder",
 }
+# Tra cứu hành trình (轨迹查询) — nguồn: open.jtexpress.vn/apiDoc/logistics/query, đọc 14/10/2026.
+# Tài liệu nêu rõ: billcodes ngăn cách bằng dấu phẩy, MỘT LƯỢT tối đa 30 vận đơn.
+SO_VAN_DON_MOI_LUOT = 30
+# Tài liệu chỉ cho đường dẫn tương đối của mục tra cứu; dùng chung host với tạo đơn.
+DUONG_TRA_HANH_TRINH = "/webopenplatformapi/api/logistics/trace"
 
 
 def ky_digest(biz_content_json: str, private_key: str) -> str:
@@ -34,9 +39,15 @@ class AdapterJT(CarrierAdapter):
     CAPABILITIES = {
         "createOrder": True, "cancelOrder": True, "getOrder": False,   # docs công khai chưa thấy getOrder riêng
         "trackOrder": True, "getShippingFee": True, "getShippingLabel": True,
-        "webhook": False,    # menu docs công khai chưa thấy mục webhook — dùng polling trackOrder (fallback)
+        # SỬA 14/10/2026: lần đọc đầu em khai webhook=False vì chỉ nhìn menu cấp 1. Đọc kỹ thì
+        # mục 物流轨迹 có trang con 轨迹回传 (callback): hãng CHỦ ĐỘNG đẩy hành trình về URL do
+        # khách cung cấp. Nguồn: open.jtexpress.vn/apiDoc/logistics/statusFeedback.
+        "webhook": True,
     }
     CHO_PHEP_LIVE = False    # BLOCKED: cần credentials thật + Owner duyệt
+    # txlogisticId: tài liệu tạo đơn ghi "不支持重复" (không hỗ trợ trùng) → hãng tự chặn đơn trùng,
+    # nên createOrder được phép thử lại có kiểm soát (xem transport.py).
+    KHOA_CHONG_TRUNG = True
 
     def _dung_bizcontent_tao_don(self, don):
         """Dựng bizContent đúng theo bảng tham số docs (phần bắt buộc)."""
@@ -89,7 +100,5 @@ class AdapterJT(CarrierAdapter):
             return KetQuaHang(True, ma_van_don=ma_van_don, tho={"mock": True, "label": "MOCK-PDF"})
         raise PermissionError("Đường LIVE J&T đang khóa")
 
-    # Bảng mã trạng thái riêng của J&T sẽ bổ sung khi đọc được mục 物流轨迹 chi tiết; tạm ánh xạ tên chuẩn.
-    @staticmethod
-    def normalizeTrackingStatus(trang_thai_hang):
-        return trang_thai_hang
+    # Bảng mã scanTypeCode thật đã đọc từ tài liệu → xem app/trang_thai_hang.py (JT_MA).
+    # Lớp nền CarrierAdapter.normalizeTrackingStatus đã dùng bảng đó, không cần ghi đè.

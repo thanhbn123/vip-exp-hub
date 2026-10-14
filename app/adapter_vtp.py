@@ -17,6 +17,9 @@ class AdapterVTP(CarrierAdapter):
         "webhook": True,
     }
     CHO_PHEP_LIVE = False  # BLOCKED: chờ Owner cho đọc vip-viettelpost / cấp credentials
+    # Chưa có tài liệu VTP trong tay → coi như KHÔNG có khóa chống trùng (an toàn hơn):
+    # createOrder sẽ không được thử lại, timeout thì giữ đơn 'dang_gui' + cờ đối soát.
+    KHOA_CHONG_TRUNG = False
 
     def createOrder(self, don) -> KetQuaHang:
         if self.moi_truong == "mock":

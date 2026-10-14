@@ -331,7 +331,8 @@ class E_MaHoaAESGCM(unittest.TestCase):
 
     def test_e6_khong_am_tham_tut_ve_so_do_yeu(self):
         """Thiếu thư viện phải HỎNG TO, không được tự chuyển sang mã hóa yếu."""
-        nguon = open(os.path.join(GOC_APP, "bao_mat.py"), encoding="utf-8").read()
+        with open(os.path.join(GOC_APP, "bao_mat.py"), encoding="utf-8") as f:
+            nguon = f.read()
         self.assertIn("raise ImportError", nguon)
         self.assertIn("CỐ Ý không chạy tiếp bằng sơ đồ mã hóa yếu", nguon)
         # và không còn hàm nào mã hóa MỚI bằng sơ đồ cũ

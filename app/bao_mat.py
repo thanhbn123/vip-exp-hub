@@ -206,6 +206,20 @@ def dat_lai_mat_khau(token, mat_khau_moi):
         return False, "token không hợp lệ hoặc đã dùng"
     if r["het_han"] < datetime.now().strftime("%Y-%m-%d %H:%M:%S"):
         return False, "token đã hết hạn"
+    # ĐỔI MẬT KHẨU LÀ VÔ HIỆU MỌI TOKEN RESET CŨ (AG-01, S01 — vá 15/10/2026).
+    # Trước đây hàm này chỉ kiểm `da_dung` + `het_han`, nên chuỗi sau đây CHẠY ĐƯỢC: kẻ xấu xin
+    # token lúc T → chính chủ phát hiện, tự đổi mật khẩu lúc T+1 qua /auth/doi-mat-khau → token
+    # cũ VẪN còn hiệu lực tới T+30 phút, kẻ xấu đặt lại mật khẩu và chiếm tài khoản. Chính chủ
+    # làm đúng mọi thứ mà vẫn mất tài khoản, và không có gì báo lỗi.
+    # So theo MỐC (không đánh dấu từng token) để mọi token cũ — kể cả token sinh ở phiên khác,
+    # kể cả token chưa ai biết là có — cùng chết một lúc. Quên một token thì mất tài khoản, nên
+    # đây phải là phép so bao trùm, không phải danh sách phải nhớ.
+    u = csdl.mot("SELECT doi_mat_khau_luc FROM users WHERE id=?", (r["user_id"],))
+    if u and u["doi_mat_khau_luc"] and r["tao_luc"] and r["tao_luc"] < u["doi_mat_khau_luc"]:
+        csdl.audit("dat_lai_mat_khau", f"user:{r['user_id']}",
+                   "từ chối: token sinh trước lần đổi mật khẩu gần nhất",
+                   user_id=r["user_id"], ket_qua="tu_choi")
+        return False, "token không hợp lệ hoặc đã dùng"
     # MỞ KHÓA luôn: trước đây chỉ xóa so_lan_sai mà giữ trang_thai='khoa', nên chính chủ đặt
     # lại mật khẩu xong vẫn không đăng nhập được — và kẻ xấu khóa tài khoản người khác từ xa
     # bằng 5 lần đoán sai thì nạn nhân không có đường tự mở (AG-07, ca q06).

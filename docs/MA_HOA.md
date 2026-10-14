@@ -104,6 +104,35 @@ trước) là mất dữ liệu.
 (không sinh khóa mới — việc đó là của `xoay_khoa`). Dùng cùng khuôn với v3: backup, transaction,
 kiểm bảo toàn số dòng, báo rõ hàng hỏng thay vì nổ cả lượt.
 
+## Sao lưu / khôi phục khóa (thêm 15/10/2026 — S03)
+
+Mất `app/du-lieu/khoa/` là **mất sạch credentials hãng**, và cái hỏng đó **không báo lỗi**: bản mã
+vẫn còn trong CSDL, sao lưu CSDL vẫn khớp số dòng, hệ vẫn chạy — tới lượt gọi hãng đầu tiên mới
+biết. Và `lay_khoa` cố ý **không sinh khóa thay thế**, nên không có bản sao lưu là không có đường
+về. Trước 15/10/2026 hệ **chưa có** quy trình nào cho việc này.
+
+Nay có `app/sao_luu_khoa.py`. Điều quan trọng nhất của thiết kế:
+
+> **Gói backup được bảo vệ bằng passphrase RIÊNG do người vận hành cấp — KHÔNG bằng chính khóa
+> đang được sao lưu.** Mã hóa gói bằng khóa nằm trong gói thì nó chỉ là một file nén có mật khẩu
+> dán sẵn bên trong: mất thư mục khóa là mất luôn đường mở backup.
+
+| Mục | Giá trị |
+|---|---|
+| KEK | PBKDF2-HMAC-SHA256 từ passphrase, salt 16 byte mỗi gói, 600.000 vòng (dưới 100.000 thì từ chối) |
+| Mã hóa gói | AES-256-GCM, nonce 12 byte, **AAD = toàn bộ header** (hạ `vong` trong header là giải mã hỏng) |
+| Nguồn passphrase | env `VIP_HUB_BACKUP_PASSPHRASE`, hoặc nhập lúc chạy. **Không hard-code, không tự sinh** |
+| Nội dung gói | mọi `<key_id>.key` + con trỏ `hien-hanh` + `khoa-noi-bo.key` + bản mã **kèm `tenant_id`/`hang`/`webhook_ma`** (đầu vào dựng AAD) + siêu dữ liệu |
+| Chỗ bị từ chối ghi | `admin/ pages/ assets/ mock/` (static đang phục vụ), thư mục khóa, `.git/`, mọi chỗ trong repo mà `git check-ignore` không chặn, tên không đuôi `.vipkb` |
+
+Chi tiết, lệnh, diễn tập khôi phục đã chạy thật và phần **`BLOCKED`** (passphrase production do
+Owner giữ, chỗ cất gói ngoài máy chủ, lượt khôi phục trên máy chủ sạch, xoay vòng gói theo §19.4):
+**`docs/KEY_BACKUP_RESTORE.md`**.
+
+Một cái bẫy đáng ghi: bản đầu kiểm repo git bằng `os.path.isdir(.git)`. Trong một **git worktree**
+thì `.git` là một **FILE**, nên chốt chặn gitignore **chết im lặng đúng ở nơi mọi agent đang làm
+việc**. Bộ thử `h6` bắt được; đã đổi sang `os.path.exists`.
+
 ## Giới hạn còn lại
 
 - Khóa vẫn nằm trong **file trên đĩa**, chưa phải KMS/HSM. Ai đọc được file là giải mã được.
@@ -115,5 +144,14 @@ kiểm bảo toàn số dòng, báo rõ hàng hỏng thay vì nổ cả lượt.
 - Chưa có lệnh/endpoint để người bấm xoay khóa — hiện chỉ gọi được từ mã (`bao_mat.xoay_khoa()`)
   hoặc qua `migrate.py`. Mở cửa HTTP cho việc này thuộc `app/server.py`, do AG-00 làm.
 - Chưa có cơ chế **thu hồi** khóa cũ (đếm còn bao nhiêu bản mã mang `key_id` cũ rồi mới cho xóa).
+  Bù lại một phần: `sao_luu_khoa.kiem_toan_ven()` **báo ra** `key_id` mà bản mã đang dùng nhưng
+  gói backup không có — phát hiện ở bước kiểm, không để phát hiện lúc cần tới.
+- Chưa có **lệnh/endpoint HTTP** để người bấm sao lưu khóa; hiện chỉ gọi từ dòng lệnh
+  (`python3 app/sao_luu_khoa.py tao|kiem|header|khoi-phuc`) hoặc từ mã. Đề nghị **không** mở cửa
+  HTTP cho việc sao lưu: passphrase sẽ đi qua body, vào log, vào bộ nhớ tiến trình web.
+- Chưa có **cơ chế nhắc** khi gói backup gần nhất đã quá cũ — đây là chỗ hỏng im lặng còn lại của
+  chính quy trình sao lưu.
+- Gói backup chứa **mọi khóa còn giữ**, nên sức mạnh cả sơ đồ nằm ở **một** passphrase. Chưa có
+  chia mảnh (Shamir) hay nhiều người cùng giữ.
 - Bản mã có `nonce` ngẫu nhiên 96 bit: an toàn ở quy mô này, nhưng nếu sau này mã hóa cực nhiều bản
   ghi bằng **cùng một khóa** thì nên cân nhắc nonce dạng đếm để triệt tiêu rủi ro trùng nonce.

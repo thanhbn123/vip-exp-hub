@@ -1016,8 +1016,18 @@ class Qa2(unittest.TestCase):
             # GỘP chuỗi liền nhau trước khi soát: SQL trong mã này trải trên nhiều dòng
             # ("SELECT …" " WHERE tenant_id=?"), nên soát từng chuỗi lẻ là tự tạo báo động giả —
             # đúng dạng §12.1 luật 3: công cụ do mình giới hạn cũng phải nghi.
-            gop = re.sub(r'"\s*(?:#[^\n]*\n\s*)?"', "", src)
-            gop = re.sub(r"'\s*'", "", gop)
+            # Nối các chuỗi literal LIỀN NHAU trước khi quét, vì Python ghép chúng lúc biên
+            # dịch nên câu SQL thật là bản ĐÃ ghép. Mẫu phải cho phép TIỀN TỐ f/r/b/u ở
+            # literal thứ hai: bản đầu chỉ khớp `" "` nên
+            #     f"UPDATE usage_thang SET {cot}={cot}+1"
+            #     f" WHERE tenant_id=? AND {cot}+1 <= ?"
+            # bị đọc thành MỘT MẢNH không có `tenant_id` ⇒ **báo lỗi sai** cho
+            # `billing._cong_bo_dem_co_tran`. AG-00 đo lại SQL thật: `UPDATE usage_thang SET
+            # so_ai=so_ai+1 WHERE tenant_id=? AND so_ai+1 <= ?` — CÓ tenant_id.
+            # Cùng cái bẫy AG-01 đã dính ở ca `h5` của nó. §12.1: công cụ mình tự tay giới
+            # hạn phạm vi cũng là một công cụ cần nghi.
+            gop = re.sub(r'"\s*(?:#[^\n]*\n\s*)?[frbuFRBU]*"', "", src)
+            gop = re.sub(r"'\s*[frbuFRBU]*'", "", gop)
             for m in re.finditer(r'"((?:SELECT|UPDATE|DELETE FROM|INSERT INTO)[^"]*)"', gop):
                 cau = re.sub(r"\s+", " ", m.group(1))
                 for bang in co_tenant:

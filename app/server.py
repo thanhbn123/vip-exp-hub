@@ -514,6 +514,10 @@ class BoXuLy(BaseHTTPRequestHandler):
             ten_dn = (d.get("ten_dang_nhap") or "").strip()
             if not ten_dn:
                 return self._tra(400, {"loi": "thiếu ten_dang_nhap"})
+            # Lượt kiểm sớm này giữ lại CỐ Ý — nó cho thông điệp đẹp trước khi tạo user mới,
+            # tránh tạo user rồi mới từ chối. Nhưng nó KHÔNG còn là chốt thật: chốt thật nằm
+            # trong `chen_membership_co_tran` bên dưới, nơi điều kiện trần ở trong chính câu
+            # chèn. Hai lớp này là phòng thủ chiều sâu, không phải một lớp làm hai lần.
             billing.kiem_han_muc_nhan_vien(tenant_id)
             u = csdl.mot("SELECT * FROM users WHERE ten_dang_nhap=?", (ten_dn,))
             if u:
@@ -528,9 +532,9 @@ class BoXuLy(BaseHTTPRequestHandler):
                                 " VALUES (?,?,?,?)",
                                 (ten_dn, bao_mat.bam_mat_khau(d["mat_khau"]), d.get("ho_ten", ""),
                                  csdl.bay_gio())).lastrowid
-            mid = csdl.ghi("INSERT INTO tenant_memberships (user_id, tenant_id, role, moi_boi, tao_luc)"
-                           " VALUES (?,?,?,?,?)",
-                           (u_id, tenant_id, role, nc.user_id, csdl.bay_gio())).lastrowid
+            # CHÈN CÓ ĐIỀU KIỆN: trần nằm trong chính câu chèn, nên hai yêu cầu song song
+            # không thể cùng lọt. Vượt trần → `VuotHanMuc` → 402, do `_chay` bắt sẵn.
+            mid = billing.chen_membership_co_tran(tenant_id, u_id, role, nc.user_id)
             csdl.audit("them_membership", f"membership:{mid}", f"user {ten_dn} → {role}",
                        tenant_id=tenant_id, user_id=nc.user_id)
             return self._tra(201, {"membership_id": mid, "user_id": u_id})
@@ -617,18 +621,18 @@ class BoXuLy(BaseHTTPRequestHandler):
                 return self._tra(400, {"loi": "hãng chưa có adapter"})
             if d.get("moi_truong", "mock") != "mock":
                 return self._tra(403, {"loi": "môi trường sandbox/production đang khóa — chờ Owner duyệt (BLOCKED)"})
+            # Lượt kiểm sớm: chỉ để có thông điệp trước khi sinh khoá và mã hoá credentials.
+            # Chốt THẬT ở `chen_tai_khoan_hang_co_tran`. Chốt cũ ở đây hở 12/12 luồng (AG-00 đo).
             billing.kiem_han_muc_tai_khoan_hang(tenant_id)
             import secrets as _s
             wh_secret, wh_ma = _s.token_urlsafe(24), _s.token_urlsafe(12)
             cred_mh, duoi = bao_mat.ma_hoa_cred(d.get("credentials") or {}, tenant_id, d["hang"])
-            con = csdl.ghi("INSERT INTO carrier_accounts (tenant_id, hang, ten, moi_truong,"
-                           " credentials_ma_hoa, credentials_duoi, webhook_ma, webhook_secret_ma_hoa, tao_luc)"
-                           " VALUES (?,?,?,?,?,?,?,?,?)",
-                           (tenant_id, d["hang"], d.get("ten", d["hang"]), "mock", cred_mh, duoi,
-                            wh_ma, bao_mat.ma_hoa_wh(wh_secret, wh_ma), csdl.bay_gio()))
-            csdl.audit("tao_tai_khoan_hang", f"carrier_account:{con.lastrowid}", d["hang"],
+            id_moi = billing.chen_tai_khoan_hang_co_tran(
+                tenant_id, d["hang"], d.get("ten", d["hang"]), "mock", cred_mh, duoi,
+                wh_ma, bao_mat.ma_hoa_wh(wh_secret, wh_ma))
+            csdl.audit("tao_tai_khoan_hang", f"carrier_account:{id_moi}", d["hang"],
                        tenant_id=tenant_id, user_id=nc.user_id)
-            return self._tra(201, {"id": con.lastrowid, "webhook_ma": wh_ma,
+            return self._tra(201, {"id": id_moi, "webhook_ma": wh_ma,
                                    "webhook_secret_mot_lan": wh_secret,
                                    "webhook_url": f"/api/v2/webhook/nhan/{wh_ma}"})
         m = re.fullmatch(r"/api/v2/tai-khoan-hang/(\d+)/(khoa|mo|rotate|revoke)", duong)

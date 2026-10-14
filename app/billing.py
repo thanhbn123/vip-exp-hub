@@ -38,17 +38,9 @@ def kiem_va_tang_don(tenant_id):
     """
     goi = goi_cua_tenant(tenant_id)
     tran = goi["han_muc_don_thang"]
-    thang = csdl.thang_nay()
-    with csdl.khoa_ghi:
-        kn = csdl.mo()
-        kn.execute("INSERT OR IGNORE INTO usage_thang (tenant_id, thang) VALUES (?,?)",
-                   (tenant_id, thang))
-        cur = kn.execute(
-            "UPDATE usage_thang SET so_don=so_don+1"
-            " WHERE tenant_id=? AND thang=? AND so_don+1 <= ?", (tenant_id, thang, tran))
-        duoc = cur.rowcount == 1
-        kn.commit()
-    if not duoc:
+    # Dùng CHUNG helper với lượt AI — hai bản sao của một câu SQL là hai bản sẽ lệch nhau,
+    # và lần lệch trước đã tốn một lỗ hổng.
+    if not _cong_bo_dem_co_tran(tenant_id, "so_don", tran):
         # Đọc lại CHỈ để viết thông điệp — quyết định đã do câu UPDATE ở trên chốt.
         u = usage_hien_tai(tenant_id)
         raise VuotHanMuc(
@@ -71,13 +63,99 @@ def hoan_don(tenant_id):
     return cur.rowcount == 1
 
 
+def _cong_bo_dem_co_tran(tenant_id, cot, tran):
+    """Cộng 1 vào `cot` của `usage_thang` CHỈ KHI không vượt `tran`. Nguyên tử. True nếu cộng được.
+
+    Trần nằm trong `WHERE` nên chính CSDL so — không có khe hở nào giữa lúc đọc và lúc ghi.
+    MỘT chỗ duy nhất dựng câu này, để mọi bộ đếm dùng chung đúng một khuôn: trước đây mỗi chốt
+    tự viết lại và chỉ MỘT chốt được vá, nên ba chốt còn lại hỏng y nguyên.
+    """
+    thang = csdl.thang_nay()
+    with csdl.khoa_ghi:
+        kn = csdl.mo()
+        kn.execute("INSERT OR IGNORE INTO usage_thang (tenant_id, thang) VALUES (?,?)",
+                   (tenant_id, thang))
+        cur = kn.execute(
+            f"UPDATE usage_thang SET {cot}={cot}+1"
+            f" WHERE tenant_id=? AND thang=? AND {cot}+1 <= ?", (tenant_id, thang, tran))
+        duoc = cur.rowcount == 1
+        kn.commit()
+    return duoc
+
+
 def kiem_va_tang_ai(tenant_id):
+    """Gọi khi dùng một lượt AI. Vượt hạn mức gói → chặn. NGUYÊN TỬ.
+
+    AG-02 tìm ra ở đợt 3, AG-00 đo lại: bản cũ đọc `usage_hien_tai` rồi mới `_tang`, nên
+    **28/40 lượt** (16 luồng tranh 1 suất cuối) vượt trần, `so_ai` cao nhất **30 trên trần 20**.
+
+    Đây là CÙNG MỘT LỖI đã vá cho `kiem_va_tang_don` ở r35 (đợt 2) — và nó còn nguyên ở hàm
+    ngay bên cạnh, vì lượt vá đó **bỏ bước 4 của §12.2**: *sửa xong hỏi cấu trúc này còn hỏng
+    kiểu đó ở đâu nữa?* Bỏ một bước, sót ba chốt. Nay cả bốn chốt dùng chung khuôn, và
+    `thu_han_muc_nguyen_tu.py` canh để chốt thứ năm không mọc theo khuôn cũ.
+    """
     goi = goi_cua_tenant(tenant_id)
-    u = usage_hien_tai(tenant_id)
-    if u["so_ai"] >= goi["han_muc_ai_thang"]:
+    tran = goi["han_muc_ai_thang"]
+    if not _cong_bo_dem_co_tran(tenant_id, "so_ai", tran):
+        u = usage_hien_tai(tenant_id)   # đọc lại CHỈ để viết thông điệp
         raise VuotHanMuc(
-            f"đã dùng {u['so_ai']}/{goi['han_muc_ai_thang']} lượt AI của gói {goi['ten']} tháng này")
-    _tang(tenant_id, "so_ai")
+            f"đã dùng {u['so_ai']}/{tran} lượt AI của gói {goi['ten']} tháng này")
+
+
+SQL_DEM_NHAN_VIEN = ("SELECT COUNT(*) FROM tenant_memberships m JOIN users u ON u.id=m.user_id"
+                     " WHERE m.tenant_id=? AND m.trang_thai='hoat_dong'"
+                     " AND u.trang_thai='hoat_dong'")
+SQL_DEM_TAI_KHOAN_HANG = "SELECT COUNT(*) FROM carrier_accounts WHERE tenant_id=? AND kich_hoat=1"
+
+
+def chen_membership_co_tran(tenant_id, user_id, role, moi_boi):
+    """Thêm thành viên CHỈ KHI chưa đủ trần gói. Nguyên tử. Vượt trần → `VuotHanMuc`.
+
+    Vì sao phải là CHÈN CÓ ĐIỀU KIỆN chứ không phải "kiểm rồi chèn": `kiem_han_muc_nhan_vien`
+    chỉ ĐỌC rồi raise, còn câu `INSERT` nằm ở `server.py` — giữa hai bước có khe hở, nên hai
+    yêu cầu song song cùng thấy "còn 1 suất" rồi cùng chèn. Phép đo ad-hoc của AG-00 KHÔNG tái
+    hiện được chốt này (khoá ghi của SQLite tình cờ che), nhưng **không tái hiện KHÔNG PHẢI là
+    an toàn** — cấu trúc vẫn hở, và chốt tài khoản hãng cùng khuôn thì hở thật 12/12 luồng.
+    Đưa điều kiện vào chính câu chèn thì CSDL tự so, khe hở không còn tồn tại.
+    """
+    goi = goi_cua_tenant(tenant_id)
+    tran = goi["so_nhan_vien"]
+    with csdl.khoa_ghi:
+        kn = csdl.mo()
+        cur = kn.execute(
+            "INSERT INTO tenant_memberships (user_id, tenant_id, role, moi_boi, tao_luc)"
+            f" SELECT ?,?,?,?,? WHERE ({SQL_DEM_NHAN_VIEN}) < ?",
+            (user_id, tenant_id, role, moi_boi, csdl.bay_gio(), tenant_id, tran))
+        duoc, mid = cur.rowcount == 1, cur.lastrowid
+        kn.commit()
+    if not duoc:
+        raise VuotHanMuc(f"gói {goi['ten']} chỉ cho {tran} tài khoản nhân viên")
+    return mid
+
+
+def chen_tai_khoan_hang_co_tran(tenant_id, hang, ten, moi_truong, cred_ma_hoa,
+                                cred_duoi, webhook_ma, webhook_secret_ma_hoa):
+    """Thêm tài khoản hãng CHỈ KHI chưa đủ trần gói. Nguyên tử. Vượt trần → `VuotHanMuc`.
+
+    Chốt này hở THẬT và nặng nhất trong bốn chốt: AG-00 đo được **12/12 luồng qua, 12 tài khoản
+    hãng trên trần 1** của gói Miễn phí. Hậu quả không chỉ là lách hạn mức — mỗi tài khoản hãng
+    là một bộ credentials được mã hoá và một cửa webhook, nên lách ở đây là MỞ THÊM CỬA.
+    """
+    goi = goi_cua_tenant(tenant_id)
+    tran = goi["so_tai_khoan_hang"]
+    with csdl.khoa_ghi:
+        kn = csdl.mo()
+        cur = kn.execute(
+            "INSERT INTO carrier_accounts (tenant_id, hang, ten, moi_truong, credentials_ma_hoa,"
+            " credentials_duoi, webhook_ma, webhook_secret_ma_hoa, tao_luc)"
+            f" SELECT ?,?,?,?,?,?,?,?,? WHERE ({SQL_DEM_TAI_KHOAN_HANG}) < ?",
+            (tenant_id, hang, ten, moi_truong, cred_ma_hoa, cred_duoi, webhook_ma,
+             webhook_secret_ma_hoa, csdl.bay_gio(), tenant_id, tran))
+        duoc, id_moi = cur.rowcount == 1, cur.lastrowid
+        kn.commit()
+    if not duoc:
+        raise VuotHanMuc(f"gói {goi['ten']} chỉ cho {tran} kết nối hãng")
+    return id_moi
 
 
 def kiem_han_muc_nhan_vien(tenant_id):

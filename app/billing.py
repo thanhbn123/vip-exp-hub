@@ -28,13 +28,47 @@ def _tang(tenant_id, cot):
 
 
 def kiem_va_tang_don(tenant_id):
-    """Gọi khi GỬI đơn sang hãng. Vượt hạn mức gói → chặn."""
+    """Gọi khi GỬI đơn sang hãng. Vượt hạn mức gói → chặn. NGUYÊN TỬ.
+
+    r35: bản cũ đọc `usage_hien_tai` rồi mới `_tang` — giữa hai bước có khe hở, nên nhiều lượt
+    gửi song song cùng đọc "còn 1 suất" rồi cùng tăng. Đo thật: còn 1 suất mà **5/8 luồng** lọt
+    qua, `so_don` thành 10004/10000. Vá bằng cách đổi cấu trúc chứ không thêm một lượt đọc nữa:
+    đưa trần vào `WHERE` của MỘT câu `UPDATE`, để chính CSDL so — khe hở không còn tồn tại.
+    Cùng khuôn `gioi_han._cong_co_tran`.
+    """
     goi = goi_cua_tenant(tenant_id)
-    u = usage_hien_tai(tenant_id)
-    if u["so_don"] >= goi["han_muc_don_thang"]:
+    tran = goi["han_muc_don_thang"]
+    thang = csdl.thang_nay()
+    with csdl.khoa_ghi:
+        kn = csdl.mo()
+        kn.execute("INSERT OR IGNORE INTO usage_thang (tenant_id, thang) VALUES (?,?)",
+                   (tenant_id, thang))
+        cur = kn.execute(
+            "UPDATE usage_thang SET so_don=so_don+1"
+            " WHERE tenant_id=? AND thang=? AND so_don+1 <= ?", (tenant_id, thang, tran))
+        duoc = cur.rowcount == 1
+        kn.commit()
+    if not duoc:
+        # Đọc lại CHỈ để viết thông điệp — quyết định đã do câu UPDATE ở trên chốt.
+        u = usage_hien_tai(tenant_id)
         raise VuotHanMuc(
-            f"đã dùng {u['so_don']}/{goi['han_muc_don_thang']} đơn của gói {goi['ten']} tháng này")
-    _tang(tenant_id, "so_don")
+            f"đã dùng {u['so_don']}/{tran} đơn của gói {goi['ten']} tháng này")
+
+
+def hoan_don(tenant_id):
+    """Hoàn một suất đơn đã trừ, khi lượt gửi KHÔNG tạo được vận đơn.
+
+    G04-L3: `kiem_va_tang_don` trừ suất TRƯỚC khi gọi hãng. Lượt gửi trả kết quả
+    "không rõ" (timeout) rồi được gửi lại sẽ trừ suất LẦN HAI cho cùng một đơn.
+    Không cho `so_don` xuống âm — trừ nhiều hơn số đã cộng là dấu hiệu lỗi logic chỗ khác.
+    """
+    thang = csdl.thang_nay()
+    with csdl.khoa_ghi:
+        kn = csdl.mo()
+        cur = kn.execute("UPDATE usage_thang SET so_don=so_don-1"
+                         " WHERE tenant_id=? AND thang=? AND so_don >= 1", (tenant_id, thang))
+        kn.commit()
+    return cur.rowcount == 1
 
 
 def kiem_va_tang_ai(tenant_id):

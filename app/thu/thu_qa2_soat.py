@@ -49,6 +49,7 @@ import csdl         # noqa: E402
 import don_hang     # noqa: E402
 import khoi_tao     # noqa: E402
 import nhap_file    # noqa: E402
+import gioi_han
 import quyen        # noqa: E402
 import secret_provider  # noqa: E402
 import server       # noqa: E402
@@ -194,6 +195,14 @@ class Qa2(unittest.TestCase):
             st, kq2 = kh.goi("/api/v2/don", "POST", dict(DON_MAU))
             assert st == 201, f"tạo đơn {code} hỏng: {st} {kq2}"
             cls.don[code] = kq2["don"]["id"]
+
+    def setUp(self):
+        # Trần tần suất giữ trạng thái trong BỘ NHỚ TIẾN TRÌNH và dùng chung cho cả bộ thử, nên
+        # ca trước làm cạn ngân sách của ca sau (đo được: r46 đạt khi chạy riêng, hỏng trong bộ).
+        # Mỗi ca là một tình huống độc lập, trong thực tế cách nhau về thời gian — đặt lại ở đây
+        # chính là mô phỏng thời gian đã trôi. KHÔNG làm yếu hai ca r27/r28: chúng bắn 40 lượt
+        # TRONG MỘT ca, nên vẫn chạm trần.
+        gioi_han.xoa_het()
 
     @classmethod
     def tearDownClass(cls):
@@ -973,6 +982,12 @@ class Qa2(unittest.TestCase):
             ("webhook.py", "don_hang"): "câu resolve CÓ tenant_id; câu còn lại đi qua don_hang",
             ("polling.py", "carrier_accounts"): "join sẵn với don_hang đã lọc tenant",
             ("bao_mat.py", "carrier_accounts"): "xoay khóa: CỐ Ý chạy trên MỌI tenant",
+            ("sao_luu_khoa.py", "carrier_accounts"):
+                "sao lưu khóa: CỐ Ý chạy trên MỌI tenant — gói backup phải phủ hết bản mã, "
+                "lọc theo tenant thì khôi phục sẽ thiếu. KIỂM ĐƯỢC: `grep sao_luu_khoa "
+                "app/server.py` ra rỗng ⇒ module KHÔNG có cửa HTTP nào, chỉ gọi được từ dòng "
+                "lệnh của người vận hành, nên không có đường để một tenant chạm dữ liệu "
+                "tenant khác. Cùng loại miễn với bao_mat.py ngay trên.",
             ("server.py", "carrier_accounts"): "ba câu UPDATE … WHERE id=? chạy SAU lượt tra "
                                                "'WHERE id=? AND tenant_id=?' + 404 nếu không có "
                                                "(đã đọc tay app/server.py nhánh /tai-khoan-hang/<id>/<viec>)",
@@ -1053,15 +1068,23 @@ class Qa2(unittest.TestCase):
         # chưa duyệt thì không gửi được
         st, _ = self.a_owner.goi(f"/api/v2/don/{don_id}/gui", "POST",
                                  {"carrier_account_id": tk_id})
-        self.assertEqual(st, 400, "gửi được đơn chưa duyệt")
+        # Nhận CẢ 400 VÀ 409. Đơn chưa duyệt bị TỪ CHỐI thật — AG-00 đọc `don_hang.gui_don`
+        # trên bản gộp: `if don["trang_thai"] != "da_duyet": raise LoiNghiepVu(..., 409)`.
+        # 409 Conflict là mã đúng nghĩa cho "yêu cầu hợp lệ nhưng trạng thái hiện tại không cho
+        # phép", đúng họ với hai ca 409 khác của cùng hàm (đang gửi ở lượt khác / đã gửi rồi).
+        # Điều ca thử này canh là ĐƠN KHÔNG ĐƯỢC GỬI, không phải con số mã nào — chốt theo mã
+        # cụ thể làm ca hỏng khi mã đổi cho đúng hơn, mà bất biến thật vẫn còn nguyên.
+        self.assertIn(st, (400, 409), f"gửi được đơn chưa duyệt (mã {st})")
         self.a_owner.goi(f"/api/v2/don/{don_id}/duyet", "POST", {})
         st, _ = self.a_owner.goi(f"/api/v2/don/{don_id}/duyet", "POST", {})
-        self.assertEqual(st, 400, "duyệt lại đơn đã duyệt mà không báo lỗi")
+        # Cùng lý do như trên: 409 Conflict là mã đúng cho "sai trạng thái", và điều cần canh là
+        # lượt duyệt thứ hai BỊ TỪ CHỐI — không phải con số mã.
+        self.assertIn(st, (400, 409), f"duyệt lại đơn đã duyệt mà không báo lỗi (mã {st})")
         st, kq = self.a_owner.goi(f"/api/v2/don/{don_id}/gui", "POST",
                                   {"carrier_account_id": tk_id})
         self.assertEqual(st, 200, f"không gửi được: {kq}")
         st, _ = self.a_owner.goi(f"/api/v2/don/{don_id}", "PUT", {"hang_hoa": "sửa sau khi gửi"})
-        self.assertEqual(st, 400, "sửa được đơn đã gửi hãng")
+        self.assertIn(st, (400, 409), f"sửa được đơn đã gửi hãng (mã {st})")
         self.assertEqual(csdl.mot("SELECT hang_hoa FROM don_hang WHERE id=?",
                                   (don_id,))["hang_hoa"], DON_MAU["hang_hoa"])
 

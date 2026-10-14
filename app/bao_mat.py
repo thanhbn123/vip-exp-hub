@@ -67,7 +67,11 @@ def dang_nhap(ten_dang_nhap, mat_khau, dia_chi=None):
     if u["trang_thai"] == "khoa":
         csdl.audit("dang_nhap_that_bai", f"user:{u['id']}", "tài khoản bị quản trị khóa",
                    user_id=u["id"], dia_chi=dia_chi, ket_qua="tu_choi")
-        return None, "tài khoản đã bị khóa — liên hệ quản trị"
+        # r07: trước đây ca này trả thông điệp RIÊNG, nên người vô danh gõ mật khẩu rác vẫn
+        # phân biệt được "tên có thật đang bị khóa" với "tên không tồn tại" ⇒ dò ra tài khoản.
+        # Hai ca khóa còn lại (khóa tạm) đã trả CHUNG từ trước; ca này là chỗ sót.
+        # Người bị quản trị khóa biết lý do qua kênh khác (quản trị nói), không qua trang đăng nhập.
+        return None, CHUNG
     bay = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if u["khoa_den"] and u["khoa_den"] > bay:
         csdl.audit("dang_nhap_that_bai", f"user:{u['id']}", f"đang khóa tạm tới {u['khoa_den']}",
@@ -191,6 +195,11 @@ def tao_token_reset(ten_dang_nhap):
         return None
     token = secrets.token_urlsafe(32)
     het_han = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+    # r29: CHỈ MỘT token sống cho mỗi tài khoản. Trước đây mỗi lượt "quên mật khẩu" thêm một
+    # token mà không giết token trước, nên 5 lượt = 5 token dùng được đồng thời trong 30 phút —
+    # kẻ xấu xin một token rồi chờ, chính chủ xin token mới và đặt lại, token của kẻ xấu VẪN
+    # còn sống. Đánh dấu `da_dung` (không DELETE) để còn dấu vết cho audit — §19 luật thùng rác.
+    csdl.ghi("UPDATE reset_tokens SET da_dung=1 WHERE user_id=? AND da_dung=0", (u["id"],))
     csdl.ghi("INSERT INTO reset_tokens (token_hash, user_id, het_han, tao_luc) VALUES (?,?,?,?)",
              (_hash_token(token), u["id"], het_han, csdl.bay_gio()))
     csdl.audit("yeu_cau_reset_mat_khau", f"user:{u['id']}", "", user_id=u["id"])

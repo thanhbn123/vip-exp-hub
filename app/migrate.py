@@ -238,6 +238,105 @@ def nang_len_v6(kn):
     return buoc
 
 
+def nang_len_v7(kn):
+    """v7: gộp ba đợt WAVE 1 — AG-02 ORDERS (G04), AG-03 WEBHOOK (G06), AG-01 hạn mức nhập.
+
+    TOÀN BỘ là thao tác THÊM: `ADD COLUMN`, `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX
+    IF NOT EXISTS`. Không `DROP`, không `DELETE`, không `UPDATE` dữ liệu sẵn có, không đổi
+    kiểu hay ràng buộc cột cũ — nên dòng cũ giữ nguyên và mã cũ vẫn đọc được bảng.
+
+    Cột `NOT NULL` duy nhất (`wh_su_kien.can_soat`) có `DEFAULT 0`, nên SQLite điền được
+    cho dòng đã có. Mọi cột khác để NULL cố ý: NULL ở đây nghĩa là "sự kiện có trước đợt
+    này, hãng không gửi thông tin đó" — khác hẳn với 0 hay chuỗi rỗng.
+    """
+    buoc = []
+
+    # ---- AG-02 ORDERS (G04): don_hang + don_mat_hang -------------------------
+    co = [r[1] for r in kn.execute("PRAGMA table_info(don_hang)")]
+    them_don = [
+        ("external_reference", "TEXT"),
+        ("approved_by", "INTEGER REFERENCES users(id)"),
+        ("approved_luc", "TEXT"),
+        ("ly_do_tu_choi", "TEXT"),
+        ("tu_choi_boi", "INTEGER REFERENCES users(id)"),
+        ("tu_choi_luc", "TEXT"),
+        ("nguoi_gui_tinh", "TEXT"), ("nguoi_gui_quan", "TEXT"),
+        ("nguoi_gui_xa", "TEXT"), ("nguoi_gui_buu_chinh", "TEXT"),
+        ("nguoi_nhan_tinh", "TEXT"), ("nguoi_nhan_quan", "TEXT"),
+        ("nguoi_nhan_xa", "TEXT"), ("nguoi_nhan_buu_chinh", "TEXT"),
+    ]
+    n = 0
+    for ten, kieu in them_don:
+        if ten not in co:
+            kn.execute(f"ALTER TABLE don_hang ADD COLUMN {ten} {kieu}")
+            n += 1
+    if n:
+        buoc.append(f"don_hang +{n} cột (G04: duyệt/từ chối/địa chỉ hành chính/mã đối chiếu)")
+    kn.execute("CREATE INDEX IF NOT EXISTS ix_don_extref ON don_hang(tenant_id, external_reference)")
+
+    if not _co_bang(kn, "don_mat_hang"):
+        kn.execute("""
+            CREATE TABLE don_mat_hang (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+              don_id INTEGER NOT NULL REFERENCES don_hang(id),
+              stt INTEGER NOT NULL,
+              ten TEXT NOT NULL,
+              ma_sku TEXT NOT NULL DEFAULT '',
+              so_luong INTEGER NOT NULL DEFAULT 1,
+              don_gia INTEGER NOT NULL DEFAULT 0,
+              khoi_luong_gram INTEGER NOT NULL DEFAULT 0,
+              ghi_chu TEXT NOT NULL DEFAULT '',
+              tao_luc TEXT NOT NULL,
+              UNIQUE (don_id, stt)
+            )""")
+        buoc.append("bảng MỚI don_mat_hang (tiền là số nguyên ĐỒNG, khối lượng là GRAM — cấm float)")
+    kn.execute("CREATE INDEX IF NOT EXISTS ix_mh_don ON don_mat_hang(don_id)")
+    kn.execute("CREATE INDEX IF NOT EXISTS ix_mh_tenant ON don_mat_hang(tenant_id)")
+
+    # ---- AG-03 WEBHOOK (G06): wh_su_kien ------------------------------------
+    cw = [r[1] for r in kn.execute("PRAGMA table_info(wh_su_kien)")]
+    them_wh = [
+        ("hang_ma_goc", "TEXT"),
+        ("hang_mo_ta_goc", "TEXT"),
+        ("hang_su_kien_goc", "TEXT"),
+        ("anh_xa_do_tin_cay", "TEXT"),
+        ("anh_xa_nguon", "TEXT"),
+        ("can_soat", "INTEGER NOT NULL DEFAULT 0"),
+        ("hang_moc_thoi_gian", "TEXT"),
+        ("don_id", "INTEGER REFERENCES don_hang(id)"),
+        ("trang_thai_chuan", "TEXT"),
+    ]
+    m = 0
+    for ten, kieu in them_wh:
+        if ten not in cw:
+            kn.execute(f"ALTER TABLE wh_su_kien ADD COLUMN {ten} {kieu}")
+            m += 1
+    if m:
+        buoc.append(f"wh_su_kien +{m} cột (G06: mã gốc hãng, độ tin cậy ánh xạ, cần soát, mốc hãng)")
+    kn.execute("CREATE INDEX IF NOT EXISTS ix_wh_don  ON wh_su_kien(don_id, hang_moc_thoi_gian)")
+    kn.execute("CREATE INDEX IF NOT EXISTS ix_wh_soat ON wh_su_kien(can_soat, id)")
+
+    # ---- AG-01: hạn mức nhập ------------------------------------------------
+    # `gioi_han.py` tự tạo bảng này khi dùng lần đầu, nên hệ chạy được dù chưa migrate.
+    # Tạo sẵn ở đây để schema khai báo đủ ở một chỗ, không phụ thuộc lượt gọi đầu tiên.
+    if not _co_bang(kn, "han_muc_nhap_thang"):
+        kn.execute("""
+            CREATE TABLE han_muc_nhap_thang (
+              tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+              thang TEXT NOT NULL,
+              so_don_nhap INTEGER NOT NULL DEFAULT 0,
+              so_dong INTEGER NOT NULL DEFAULT 0,
+              so_file INTEGER NOT NULL DEFAULT 0,
+              so_byte INTEGER NOT NULL DEFAULT 0,
+              cap_nhat_luc TEXT,
+              PRIMARY KEY (tenant_id, thang)
+            )""")
+        buoc.append("bảng MỚI han_muc_nhap_thang (bộ đếm hạn mức nhập, sống qua restart)")
+
+    return buoc
+
+
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -273,6 +372,8 @@ def chay(im_lang=False):
                 buoc += nang_len_v5(kn)
             if pb < 6:
                 buoc += nang_len_v6(kn)
+            if pb < 7:
+                buoc += nang_len_v7(kn)
             kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                        " VALUES (?,?,?)",
                        (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

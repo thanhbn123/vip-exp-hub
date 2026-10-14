@@ -153,7 +153,13 @@ CHINH_SACH = {
     # --- đường VÔ DANH (chưa đăng nhập): siết chặt nhất ---
     # 5 lần sai/tài khoản/5 phút rồi chặn 15 phút. Khớp với cau_hinh.KHOA_SAU_SO_LAN_SAI=5 và
     # KHOA_TAM_PHUT=15 để hai lớp (khóa tạm trong CSDL + giới hạn tần suất) không đánh nhau.
-    "auth.dang_nhap": (Luat("ip", 20, 300), Luat("dinh_danh", 5, 300, chan_giay=900)),
+    # Chiều `dinh_danh` để 12, KHÔNG để 5. Lý do đo được: `users.khoa_den` đã khóa tạm 15 phút
+    # sau 5 lần sai cho CHÍNH tài khoản đó, nên đặt trần 5 ở đây làm trần chặn trước và lớp khóa
+    # tạm không bao giờ quan sát được từ HTTP — hai ca thử (`r06`, `thu_saas::test_14`) hỏng đúng
+    # vì vậy. Khóa tạm là lớp CHÍNH cho "sai mật khẩu": nó nằm trong CSDL nên sống qua restart và
+    # có dấu vết. Trần ở đây là lớp phụ, lo phần khóa tạm không lo: một IP dò NHIỀU tài khoản
+    # (chiều `ip`), và chi phí CPU của PBKDF2. Để 12 thì khóa tạm luôn chạm trước.
+    "auth.dang_nhap": (Luat("ip", 20, 300), Luat("dinh_danh", 12, 300, chan_giay=900)),
     # Quên mật khẩu: đây là cửa gửi thư/sinh token. Spam được là cửa quấy rối người thật.
     "auth.quen_mat_khau": (Luat("ip", 5, 900, chan_giay=900), Luat("dinh_danh", 3, 3600, chan_giay=1800)),
     # Đặt lại mật khẩu: token 32 byte không dò nổi, nhưng vẫn chặn để lượt thử không thành
@@ -169,6 +175,16 @@ CHINH_SACH = {
     "import.upload": (Luat("tenant", 30, 3600), Luat("dinh_danh", 30, 3600)),
     "import.duyet": (Luat("tenant", 60, 3600), Luat("dinh_danh", 60, 3600)),
     "platform.quan_tri": (Luat("dinh_danh", 120, 60), Luat("ip", 240, 60)),
+    # Cửa webhook VÔ DANH — hai trần, hai việc khác nhau.
+    # `webhook.nhan` đếm MỌI lượt: chỉ để chặn lụt thô. Phải rộng, vì hãng thật bắn dồn hàng
+    # loạt sự kiện sau một đợt quét kho và lượt bị chặn oan là sự kiện giao hàng bị MẤT.
+    "webhook.nhan": (Luat("dinh_danh", 600, 60), Luat("ip", 1200, 60)),
+    # `webhook.chu_ky_sai` chỉ đếm lượt SAI CHỮ KÝ, nên siết được chật mà không chạm hãng thật:
+    # hãng có secret đúng thì không bao giờ cộng vào bộ đếm này. Đây là chỗ đáng siết — mỗi lượt
+    # sai vẫn buộc hệ giải mã AES-GCM rồi tính HMAC, tức là bơm việc cho máy chủ bằng một URL
+    # không phải bí mật. Tách hai trần là để cái chật không đánh vào lưu lượng hợp lệ.
+    "webhook.chu_ky_sai": (Luat("dinh_danh", 10, 60, chan_giay=300),
+                           Luat("ip", 30, 60, chan_giay=300)),
     "ai.goi": (Luat("tenant", 120, 60), Luat("dinh_danh", 120, 60)),
 }
 

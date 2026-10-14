@@ -20,6 +20,7 @@ import billing
 import cau_hinh
 import csdl
 import don_hang
+import gioi_han
 import nhap_file
 import polling
 import quyen
@@ -43,13 +44,15 @@ class BoXuLy(BaseHTTPRequestHandler):
     def _headers_thuong(self):
         return {k.lower(): v for k, v in self.headers.items()}
 
-    def _tra(self, ma, obj, cookie=None):
+    def _tra(self, ma, obj, cookie=None, them_header=None):
         body = _json(obj)
         self.send_response(ma)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         if cookie:
             self.send_header("Set-Cookie", cookie)
+        for k, v in (them_header or {}).items():
+            self.send_header(k, str(v))
         self.end_headers()
         self.wfile.write(body)
 
@@ -78,11 +81,42 @@ class BoXuLy(BaseHTTPRequestHandler):
                 f"body quá lớn: {dai} byte, tối đa {gioi_han}", 413)
         return self.rfile.read(dai) if dai else b""
 
-    def _doc_json(self, gioi_han=None):
+    # Kiểu được phép cho một trường thường. `bool` là con của `int` trong Python nên nằm sẵn.
+    VO_HUONG = (str, int, float, type(None))
+
+    def _doc_json(self, gioi_han=None, long_khoa=()):
+        """Đọc body JSON và CHẶN NGAY Ở BIÊN mọi trường mang list/dict không được khai trước.
+
+        Vì sao chặn ở đây chứ không ở từng endpoint: cấu trúc "để handler tự lo kiểu" đã hỏng
+        BỐN lần cùng một kiểu — `gioi_han=abc`, `cod` không phải số, `tenant_id=[1]`, rồi
+        `ten={"x":1}` làm `.strip()` nổ thành HTTP 500. §12.2: hỏng lần thứ hai cùng kiểu thì
+        ĐỔI CẤU TRÚC, đừng vá thêm một tham số nữa. 500 nghĩa là "máy chủ hỏng"; gửi sai kiểu
+        là lỗi của bên gửi, phải là 400 — lẫn hai thứ này vừa làm người gửi không biết sửa gì,
+        vừa làm biểu đồ 5xx đầy rác nên lúc máy chủ hỏng thật thì không ai nhận ra.
+
+        `long_khoa` là DANH SÁCH TRẮNG các khóa được phép mang cấu trúc lồng. Danh sách trắng ở
+        đây là đúng theo chính câu hỏi phân biệt của §12.2 — *quên một dòng thì kết quả là an
+        toàn hay hỏng?* Quên khai một khóa lồng thì endpoint đó trả 400 và bộ thử kêu ngay: hỏng
+        ỒN ÀO, không mất im lặng. Ngược lại dùng danh sách đen mà quên một khóa thì 500 quay lại.
+
+        PHẠM VI ĐÃ ĐÓNG (nói đúng chỗ đo được, §12.1 luật 3): lớp list/dict ở chỗ chờ vô hướng,
+        tại tầng trên cùng của body. CHƯA ĐÓNG: số ở chỗ chờ chuỗi (`ten=5` vẫn làm `.strip()`
+        nổ) và cấu trúc lồng sai kiểu ở tầng sâu bên trong một khóa đã khai. Ghi ra vì rủi ro
+        không ghi là rủi ro bị bỏ quên — việc V-10710.
+        """
         try:
-            return json.loads(self._doc_body(gioi_han) or b"{}")
+            d = json.loads(self._doc_body(gioi_han) or b"{}")
         except ValueError:
             raise don_hang.LoiNghiepVu("body không phải JSON")
+        if not isinstance(d, dict):
+            raise don_hang.LoiNghiepVu("body phải là một đối tượng JSON")
+        xau = [k for k, v in d.items()
+               if k not in long_khoa and not isinstance(v, self.VO_HUONG)]
+        if xau:
+            raise don_hang.LoiNghiepVu(
+                f"trường sai kiểu (phải là chuỗi/số, không phải danh sách hay đối tượng): "
+                f"{', '.join(sorted(xau)[:10])}")
+        return d
 
     def _token(self):
         m = re.search(r"(?:^|;\s*)phien=([^;]+)", self.headers.get("Cookie", ""))
@@ -113,6 +147,27 @@ class BoXuLy(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             raise don_hang.LoiNghiepVu(f"tham số '{ten}' phải là số nguyên", 400)
         return max(nho_nhat, min(n, lon_nhat))
+
+    def _gioi_han(self, nhan, dinh_danh=None, tenant_id=None, ghi_nhan=True):
+        """Kiểm trần tần suất. Trả True nghĩa là ĐÃ TRẢ 429 — người gọi phải `return` ngay.
+
+        `dinh_danh`/`tenant_id` với đường đã đăng nhập LUÔN lấy từ `nc` (ngữ cảnh phiên), không
+        từ body — body là thứ kẻ gọi tự khai. Hai đường vô danh (đăng nhập, quên mật khẩu) buộc
+        phải lấy tên tự khai trong body, nên ở đó luật `ip` luôn đi kèm để tên tự khai không
+        thành đường lách. Chặn theo tên tự khai KHÔNG mở thêm mặt tấn công: lớp `users.khoa_den`
+        (5 lần sai → khóa tạm 15 phút) đã chặn đúng như vậy từ trước, và cả hai đều TẠM THỜI.
+        """
+        # `ghi_nhan=False` nghĩa là CHỈ XEM: dùng cho cổng chặn đặt trước một việc mà lượt
+        # cộng phải tính theo KẾT QUẢ (ví dụ chỉ cộng khi chữ ký sai), không theo lượt gọi.
+        kq = gioi_han.kiem(nhan, ip=gioi_han.dia_chi_that(self.client_address[0],
+                                                          self._headers_thuong()),
+                           dinh_danh=dinh_danh, tenant_id=tenant_id, ghi_nhan=ghi_nhan)
+        if kq.cho_phep:
+            return False
+        self._tra(429, {"loi": "quá nhiều yêu cầu — thử lại sau",
+                        "cho_bao_lau_giay": kq.cho_bao_lau, "chieu": kq.chieu},
+                  them_header=gioi_han.tieu_de(kq))
+        return True
 
     def _can(self, nc, hanh_dong):
         """AUTHORIZE: tra quyền trong CSDL. Từ chối thì ghi audit rồi ném 403."""
@@ -164,6 +219,10 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._api(duong, method)
         except don_hang.LoiNghiepVu as e:
             self._tra(e.ma, {"loi": str(e)})
+        except gioi_han.VuotHanMucNhap as e:
+            # Cố ý bắt TRƯỚC billing.VuotHanMuc và KHÔNG kế thừa nó: `e.ma` là 429 hoặc 413
+            # (quá tần suất / quá cỡ), còn 402 nghĩa là "phải trả thêm tiền" — hai việc khác nhau.
+            self._tra(e.ma, {"loi": str(e)})
         except billing.VuotHanMuc as e:
             self._tra(402, {"loi": f"vượt hạn mức gói: {e}"})
         except PermissionError as e:
@@ -189,11 +248,23 @@ class BoXuLy(BaseHTTPRequestHandler):
         # --- webhook ingest: không cần phiên, xác thực bằng chữ ký của chính carrier account ---
         m = re.fullmatch(r"/api/v2/webhook/nhan/([A-Za-z0-9_-]+)", duong)
         if m and method == "POST":
+            # r33: chặn TRƯỚC khi tra account và so chữ ký. Mỗi lượt sai chữ ký vẫn phải giải
+            # mã secret (AES-GCM) rồi tính HMAC — việc đó tốn CPU và đụng vào khóa, nên cửa
+            # webhook vô danh không có trần là đường làm kiệt máy miễn phí. `dinh_danh` là mã
+            # webhook trong URL: nó khoanh đúng một tài khoản hãng, không phải thứ tự khai.
+            if self._gioi_han("webhook.nhan", dinh_danh=m.group(1)):
+                return
+            # Cổng theo số lượt SAI CHỮ KÝ: chỉ XEM ở đây (chưa cộng), vì lượt này có thể là
+            # hãng thật với chữ ký đúng. Cộng ở chỗ chữ ký sai bên dưới.
+            if self._gioi_han("webhook.chu_ky_sai", dinh_danh=m.group(1), ghi_nhan=False):
+                return
             tk = webhook.tim_account_theo_webhook_ma(m.group(1))
             if not tk:
                 return self._tra(404, {"loi": "webhook không tồn tại"})
             body = self._doc_body()
             if not webhook.kiem_chu_ky(tk, self._headers_thuong(), body):
+                # Chỉ lượt SAI mới cộng vào bộ đếm — hãng thật không bao giờ chạm trần này.
+                self._gioi_han("webhook.chu_ky_sai", dinh_danh=m.group(1))
                 return self._tra(401, {"loi": "chữ ký webhook sai hoặc thiếu"})
             sk_id, trung = webhook.nhan_su_kien(tk, body, self._headers_thuong())
             if trung:
@@ -204,15 +275,26 @@ class BoXuLy(BaseHTTPRequestHandler):
         if duong == "/api/v2/auth/dang-nhap" and method == "POST":
             self._can_csrf()
             d = self._doc_json()
-            token, kq = bao_mat.dang_nhap(d.get("ten_dang_nhap", ""), d.get("mat_khau", ""),
+            ten = str(d.get("ten_dang_nhap", ""))[:200]
+            # Kiểm TRƯỚC khi gọi dang_nhap: băm mật khẩu là PBKDF2 200k vòng, để lượt thử chạy
+            # tới đó rồi mới chặn thì trần không che được chi phí CPU.
+            if self._gioi_han("auth.dang_nhap", dinh_danh=ten):
+                return
+            token, kq = bao_mat.dang_nhap(ten, d.get("mat_khau", ""),
                                           self.client_address[0])
             if token is None:
                 return self._tra(401, {"loi": kq})
+            # CHỈ đặt lại khi thành công — thiếu bước này thì người thật gõ sai 4 lần rồi gõ
+            # đúng vẫn bị trần đè cho tới hết cửa sổ.
+            gioi_han.dat_lai("auth.dang_nhap", ip=self.client_address[0], dinh_danh=ten)
             cookie = f"phien={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={cau_hinh.PHIEN_SONG_GIO * 3600}"
             return self._tra(200, {"ok": True}, cookie=cookie)
         if duong == "/api/v2/auth/quen-mat-khau" and method == "POST":
             self._can_csrf()
-            tk = bao_mat.tao_token_reset(self._doc_json().get("ten_dang_nhap", ""))
+            ten = str(self._doc_json().get("ten_dang_nhap", ""))[:200]
+            if self._gioi_han("auth.quen_mat_khau", dinh_danh=ten):
+                return
+            tk = bao_mat.tao_token_reset(ten)
             # Luôn trả cùng một thông báo — không tiết lộ tài khoản nào có thật.
             ra = {"ok": True, "thong_bao": "Nếu tài khoản tồn tại, liên kết đặt lại đã được tạo."}
             if tk and cau_hinh.HIEN_TOKEN_RESET:
@@ -222,6 +304,8 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, ra)
         if duong == "/api/v2/auth/dat-lai-mat-khau" and method == "POST":
             self._can_csrf()
+            if self._gioi_han("auth.dat_lai_mat_khau"):
+                return
             d = self._doc_json()
             ok, ly_do = bao_mat.dat_lai_mat_khau(d.get("token", ""), d.get("mat_khau_moi", ""))
             return self._tra(200 if ok else 400, {"ok": ok} if ok else {"loi": ly_do})
@@ -250,12 +334,22 @@ class BoXuLy(BaseHTTPRequestHandler):
                 "goi": dict(goi) if goi else None})
         if duong == "/api/v2/auth/doi-tenant" and method == "POST":
             # tenant_id ở đây CHỈ là lựa chọn; backend vẫn xác minh membership trước khi đổi.
+            # r48: `tenant_id` là thứ kẻ gọi tự khai — kiểu lạ (dict/list/chuỗi) phải thành
+            # 400, không được rơi xuống handler 500. 500 là lỗi của hệ; đây là lỗi của yêu cầu.
             muc_tieu = self._doc_json().get("tenant_id")
+            if isinstance(muc_tieu, bool) or not isinstance(muc_tieu, (int, str)):
+                return self._tra(400, {"loi": "tenant_id phải là số nguyên"})
+            try:
+                muc_tieu = int(muc_tieu)
+            except (TypeError, ValueError):
+                return self._tra(400, {"loi": "tenant_id phải là số nguyên"})
             m = bao_mat.doi_tenant(nc, muc_tieu)
             if not m:
                 return self._tra(403, {"loi": "bạn không có quyền vào doanh nghiệp này"})
             return self._tra(200, {"ok": True, "tenant_id": m["tenant_id"], "vai_tro": m["role"]})
         if duong == "/api/v2/auth/doi-mat-khau" and method == "POST":
+            if self._gioi_han("auth.doi_mat_khau", dinh_danh=nc.user_id, tenant_id=nc.tenant_id):
+                return
             d = self._doc_json()
             if not bao_mat.kiem_mat_khau(d.get("mat_khau_cu", ""), nc.user["mat_khau_hash"]):
                 return self._tra(400, {"loi": "mật khẩu cũ sai"})
@@ -280,6 +374,8 @@ class BoXuLy(BaseHTTPRequestHandler):
 
     # ---------- platform ----------
     def _api_platform(self, duong, method, nc):
+        if self._gioi_han("platform.quan_tri", dinh_danh=nc.user_id):
+            return
         # MỘT cổng chung cho mọi đường /platform/* — endpoint mới tự động được bảo vệ.
         # Trước đây mỗi đường tự gọi _can, nên hai đường (/goi, /vai-tro) quên gọi là hở
         # (AG-07 QA, ca q03/q03b: TENANT_VIEWER đọc được trọn ma trận RBAC).
@@ -359,8 +455,13 @@ class BoXuLy(BaseHTTPRequestHandler):
             csdl.audit(f"tenant_{viec}", f"tenant:{t_id}", "", user_id=nc.user_id)
             return self._tra(200, {"ok": True})
         if duong == "/api/v2/platform/goi":
+            # r19: trước đây hai cửa này chỉ được chặn ở cổng platform, không tra quyền — nên
+            # một PLATFORM_ADMIN bị gỡ sạch quyền trong `role_permissions` vẫn đọc trọn bảng giá
+            # và ma trận RBAC. Luật "mọi endpoint đều tra quyền" không được có ngoại lệ nào.
+            self._can(nc, "platform.goi.doi" if method != "GET" else "platform.tenant.xem")
             return self._tra(200, {"goi": [dict(x) for x in csdl.nhieu("SELECT * FROM goi_dich_vu")]})
         if duong == "/api/v2/platform/vai-tro":
+            self._can(nc, "platform.tenant.xem")   # quyền đọc platform có sẵn; không thêm quyền mới để khỏi phải seed
             return self._tra(200, {
                 "roles": [dict(x) for x in csdl.nhieu("SELECT * FROM roles ORDER BY pham_vi, ma")],
                 "permissions": [dict(x) for x in csdl.nhieu("SELECT * FROM permissions ORDER BY ma")],
@@ -401,6 +502,8 @@ class BoXuLy(BaseHTTPRequestHandler):
                 " WHERE m.tenant_id=? ORDER BY m.id", (tenant_id,))
             return self._tra(200, {"memberships": [dict(x) for x in ds]})
         if duong == "/api/v2/memberships" and method == "POST":
+            if self._gioi_han("membership.tao", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
             # Mời/thêm thành viên: user đã có thì chỉ thêm membership (một user nhiều tenant)
             self._can(nc, "tenant.membership.quan_ly")
             d = self._doc_json()
@@ -434,6 +537,8 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/memberships/(\d+)", duong)
         if m and method in ("PUT", "POST", "DELETE"):
             self._can(nc, "tenant.membership.quan_ly")
+            if self._gioi_han("membership.sua", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
             mem = csdl.mot("SELECT * FROM tenant_memberships WHERE id=? AND tenant_id=?",
                            (int(m.group(1)), tenant_id))
             if not mem:
@@ -507,7 +612,7 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, {"tai_khoan": [dict(x) for x in ds]})  # KHÔNG trả secret
         if duong == "/api/v2/tai-khoan-hang" and method == "POST":
             self._can(nc, "tenant.hang.quan_ly")
-            d = self._doc_json()
+            d = self._doc_json(long_khoa=("credentials",))
             if not csdl.mot("SELECT ma FROM carrier_providers WHERE ma=?", (d.get("hang"),)):
                 return self._tra(400, {"loi": "hãng chưa có adapter"})
             if d.get("moi_truong", "mock") != "mock":
@@ -529,6 +634,8 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/tai-khoan-hang/(\d+)/(khoa|mo|rotate|revoke)", duong)
         if m and method == "POST":
             self._can(nc, "tenant.hang.quan_ly")
+            if self._gioi_han("tai_khoan_hang.quan_ly", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
             tk = csdl.mot("SELECT * FROM carrier_accounts WHERE id=? AND tenant_id=?",
                           (int(m.group(1)), tenant_id))
             if not tk:
@@ -537,7 +644,7 @@ class BoXuLy(BaseHTTPRequestHandler):
             ra = {"ok": True}
             if viec == "rotate":
                 cred_mh, duoi = bao_mat.ma_hoa_cred(
-                    self._doc_json().get("credentials") or {}, tenant_id, tk["hang"])
+                    self._doc_json(long_khoa=("credentials",)).get("credentials") or {}, tenant_id, tk["hang"])
                 csdl.ghi("UPDATE carrier_accounts SET credentials_ma_hoa=?, credentials_duoi=?,"
                          " credentials_doi_luc=? WHERE id=?", (cred_mh, duoi, csdl.bay_gio(), tk["id"]))
             elif viec == "revoke":
@@ -629,6 +736,8 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, {"batch": [dict(x) for x in ds]})
         if duong == "/api/v2/import" and method == "POST":
             self._can(nc, "tenant.import.ghi")
+            if self._gioi_han("import.upload", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
             d = self._doc_json(self.GIOI_HAN_BODY_IMPORT)   # chỉ đường này được body lớn
             if not d.get("ten_file") or not d.get("noi_dung_base64"):
                 return self._tra(400, {"loi": "cần ten_file và noi_dung_base64"})
@@ -636,6 +745,9 @@ class BoXuLy(BaseHTTPRequestHandler):
                 du_lieu = base64.b64decode(d["noi_dung_base64"])
             except Exception:
                 return self._tra(400, {"loi": "noi_dung_base64 không hợp lệ"})
+            # Hạn mức nhập theo THÁNG, đếm trong CSDL nên sống qua restart. Đo trên số byte
+            # SAU khi giải base64 — đó là cỡ file thật, không phải cỡ body đã phình 4/3 lần.
+            gioi_han.kiem_file_nhap(tenant_id, len(du_lieu))
             batch_id = nhap_file.tao_batch(tenant_id, nc.user_id, d["ten_file"], du_lieu)
             csdl.audit("import_upload", f"batch:{batch_id}", d["ten_file"],
                        tenant_id=tenant_id, user_id=nc.user_id)
@@ -682,7 +794,9 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/import/(\d+)/duyet", duong)
         if m and method == "POST":
             self._can(nc, "tenant.import.duyet")
-            d = self._doc_json(1024 * 1024)      # đủ chỗ để ĐẾM rồi từ chối có thông điệp rõ
+            if self._gioi_han("import.duyet", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
+            d = self._doc_json(1024 * 1024, long_khoa=("nguoi_gui", "dong_ids"))      # đủ chỗ để ĐẾM rồi từ chối có thông điệp rõ
             ng = d.get("nguoi_gui") or {}
             if not all((ng.get(k) or "").strip() for k in ("ten", "sdt", "dia_chi")):
                 return self._tra(400, {"loi": "cần nguoi_gui {ten, sdt, dia_chi}"})
@@ -692,7 +806,17 @@ class BoXuLy(BaseHTTPRequestHandler):
             if len(dong_ids) > 1000:
                 return self._tra(400, {"loi": f"quá nhiều dòng trong một lượt duyệt "
                                               f"({len(dong_ids)}), tối đa 1000"})
-            kq = nhap_file.duyet_batch(tenant_id, nc.user_id, int(m.group(1)), dong_ids, ng)
+            # ĐẶT TRƯỚC suất rồi hoàn phần không dùng: đặt trước thì hai lượt song song không
+            # cùng lọt qua trần; hoàn lại thì dòng hỏng không ăn mất suất của tenant.
+            da_dat = gioi_han.dat_truoc_don_nhap(tenant_id, len(dong_ids))
+            try:
+                kq = nhap_file.duyet_batch(tenant_id, nc.user_id, int(m.group(1)), dong_ids, ng)
+            except Exception:
+                gioi_han.nha_don_nhap(tenant_id, da_dat)
+                raise
+            du = da_dat - int(kq.get("SUCCESS", 0))
+            if du > 0:
+                gioi_han.nha_don_nhap(tenant_id, du)
             return self._tra(200, kq)
 
         # --- webhook monitor ---
@@ -740,6 +864,8 @@ class BoXuLy(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/v2/ai/(chuan-hoa-dia-chi|phat-hien-bat-thuong|goi-y-hang)", duong)
         if m and method == "POST":
             self._can(nc, "tenant.ai.dung")
+            if self._gioi_han("ai.goi", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
             d = self._doc_json()
             viec = m.group(1)
             if viec == "chuan-hoa-dia-chi":

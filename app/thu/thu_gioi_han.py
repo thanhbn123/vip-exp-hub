@@ -20,6 +20,7 @@ _tam = tempfile.mkdtemp(prefix="vip-hub-gioihan-")
 os.environ["VIP_HUB_DATA"] = _tam
 
 import csdl        # noqa: E402
+import cau_hinh
 import gioi_han    # noqa: E402
 import quyen       # noqa: E402
 
@@ -80,29 +81,51 @@ class B_GioiHanTanSuat(unittest.TestCase):
         gioi_han.xoa_het()
 
     def test_b1_dung_tran_thi_chan_va_noi_cho_bao_lau(self):
-        """Luật `auth.dang_nhap` chiều `dinh_danh`: 5 lượt/300s rồi chặn 900s."""
+        """Luật `auth.dang_nhap` chiều `dinh_danh`: chặn khi dùng hết trần, nói rõ chờ bao lâu.
+
+        AG-00 sửa 15/10: bản đầu chốt cứng `so_lan == 5`. Con số đó đã đổi thành 12 vì CÓ LÝ DO
+        ĐO ĐƯỢC — trần 5 trùng mốc `cau_hinh.KHOA_SAU_SO_LAN_SAI` nên nó chặn TRƯỚC lớp khóa
+        tạm trong CSDL, làm lớp khóa tạm không bao giờ quan sát được từ HTTP (hai ca
+        `qa2::r06` và `thu_saas::test_14` hỏng đúng vì vậy).
+
+        Nên ca này giờ chốt BẤT BIẾN, không chốt con số: trần ở đây phải LỎNG HƠN mốc khóa tạm,
+        để lớp khóa tạm — lớp nằm trong CSDL, sống qua restart, có dấu vết audit — luôn là lớp
+        chạm trước. Chốt theo con số làm ca vỡ mỗi lần ai tinh chỉnh; chốt theo bất biến thì ca
+        chỉ vỡ khi quan hệ giữa hai lớp bị phá, mà đó mới là thứ cần canh.
+        """
         lt = [x for x in gioi_han.luat_cua("auth.dang_nhap") if x.chieu == "dinh_danh"][0]
-        self.assertEqual((lt.so_lan, lt.cua_so_giay, lt.chan_giay), (5, 300.0, 900.0))
+        self.assertGreater(
+            lt.so_lan, cau_hinh.KHOA_SAU_SO_LAN_SAI,
+            f"trần tần suất ({lt.so_lan}) phải LỎNG hơn mốc khóa tạm "
+            f"({cau_hinh.KHOA_SAU_SO_LAN_SAI}), nếu không nó che mất lớp khóa tạm")
+        self.assertEqual((lt.cua_so_giay, lt.chan_giay), (300.0, 900.0))
         for i in range(lt.so_lan):
             kq = gioi_han.kiem("auth.dang_nhap", ip="1.1.1.1", dinh_danh="nan-nhan")
             self.assertTrue(kq.cho_phep, f"lượt {i + 1} bị chặn sớm: {kq}")
         kq = gioi_han.kiem("auth.dang_nhap", ip="1.1.1.1", dinh_danh="nan-nhan")
-        self.assertFalse(kq.cho_phep, "lượt thứ 6 phải bị chặn")
+        self.assertFalse(kq.cho_phep, f"lượt thứ {lt.so_lan + 1} phải bị chặn")
         self.assertEqual(kq.chieu, "dinh_danh")
         self.assertGreater(kq.cho_bao_lau, 800, "chan_giay=900 → phải chờ gần 900 giây")
         self.assertEqual(gioi_han.tieu_de(kq)["Retry-After"], str(int(kq.cho_bao_lau)))
 
     def test_b2_tach_theo_endpoint(self):
-        for _ in range(6):
+        # Đọc trần từ chính chính sách — số lượt cần để chạm trần không được viết cứng.
+        _tran = [x for x in gioi_han.luat_cua("auth.dang_nhap") if x.chieu == "dinh_danh"][0].so_lan
+        for _ in range(_tran + 1):
             gioi_han.kiem("auth.dang_nhap", ip="2.2.2.2", dinh_danh="u1")
         self.assertFalse(gioi_han.kiem("auth.dang_nhap", ip="2.2.2.2", dinh_danh="u1").cho_phep)
         # Endpoint khác của CÙNG người vẫn đi được — bucket mang tên endpoint
         self.assertTrue(gioi_han.kiem("auth.doi_mat_khau", ip="2.2.2.2", dinh_danh="u1").cho_phep)
 
     def test_b3_tach_theo_dinh_danh_va_theo_ip(self):
-        for _ in range(6):
+        # Đọc trần từ chính chính sách — số lượt cần để chạm trần không được viết cứng.
+        _tran = [x for x in gioi_han.luat_cua("auth.dang_nhap") if x.chieu == "dinh_danh"][0].so_lan
+        for _ in range(_tran + 1):
             gioi_han.kiem("auth.dang_nhap", ip="3.3.3.3", dinh_danh="ke-xau")
-        # Người khác trên CÙNG IP vẫn đi được (trần IP là 20/300s, chưa đụng)
+        # Người khác trên CÙNG IP vẫn đi được. Lượt bị chặn KHÔNG cộng vào bucket IP (ca b6),
+        # nên bucket IP chỉ mới tiêu đúng `_tran` lượt — còn chỗ, miễn là trần IP lỏng hơn.
+        _ip = [x for x in gioi_han.luat_cua("auth.dang_nhap") if x.chieu == "ip"][0].so_lan
+        self.assertGreater(_ip, _tran, "trần IP phải lỏng hơn trần định danh")
         self.assertTrue(gioi_han.kiem("auth.dang_nhap", ip="3.3.3.3", dinh_danh="nguoi-khac").cho_phep)
         # Cùng định danh từ IP khác thì VẪN bị chặn — nếu không, đổi IP là lách được
         self.assertFalse(gioi_han.kiem("auth.dang_nhap", ip="4.4.4.4", dinh_danh="ke-xau").cho_phep)
@@ -125,7 +148,9 @@ class B_GioiHanTanSuat(unittest.TestCase):
 
     def test_b6_bi_chan_thi_khong_cong_luot_cho_chieu_nao(self):
         """Kẻ bị chặn ở chiều `dinh_danh` không được đẩy trần `ip` của người khác lên."""
-        for _ in range(6):
+        # Đọc trần từ chính chính sách — số lượt cần để chạm trần không được viết cứng.
+        _tran = [x for x in gioi_han.luat_cua("auth.dang_nhap") if x.chieu == "dinh_danh"][0].so_lan
+        for _ in range(_tran + 1):
             gioi_han.kiem("auth.dang_nhap", ip="7.7.7.7", dinh_danh="x")
         truoc = gioi_han.kiem("auth.dang_nhap", ip="7.7.7.7", dinh_danh="y",
                               ghi_nhan=False).con_lai
@@ -146,12 +171,13 @@ class B_GioiHanTanSuat(unittest.TestCase):
         self.assertFalse(gioi_han.kiem("endpoint.chua-ai-khai", ip="8.8.8.8", dinh_danh="u").cho_phep)
 
     def test_b8_dat_lai_sau_dang_nhap_thanh_cong(self):
-        for _ in range(4):
+        _tran = [x for x in gioi_han.luat_cua("auth.dang_nhap") if x.chieu == "dinh_danh"][0].so_lan
+        for _ in range(_tran - 1):
             gioi_han.kiem("auth.dang_nhap", ip="9.9.9.9", dinh_danh="nguoi-that")
         gioi_han.dat_lai("auth.dang_nhap", ip="9.9.9.9", dinh_danh="nguoi-that")
         kq = gioi_han.kiem("auth.dang_nhap", ip="9.9.9.9", dinh_danh="nguoi-that",
                            ghi_nhan=False)
-        self.assertEqual(kq.con_lai, 5, f"đặt lại rồi phải đầy trần lại: {kq}")
+        self.assertEqual(kq.con_lai, _tran, f"đặt lại rồi phải đầy trần lại: {kq}")
 
     def test_b9_vo_danh_chua_biet_ten_khong_gop_vao_mot_bucket_chung(self):
         """`dinh_danh=None` thì bỏ qua chiều đó — gộp mọi người vô danh là để một người chặn tất cả."""

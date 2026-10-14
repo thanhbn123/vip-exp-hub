@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 import cau_hinh
 
-PHIEN_BAN_SCHEMA = 6
+PHIEN_BAN_SCHEMA = 7
 
 MUI_GIO_VN = timezone(timedelta(hours=7))
 khoa_ghi = threading.RLock()   # serialize mọi lượt GHI (WAL: một writer tại một thời điểm)

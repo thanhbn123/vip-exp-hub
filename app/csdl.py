@@ -180,7 +180,11 @@ CREATE TABLE IF NOT EXISTS import_batch (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id INTEGER NOT NULL REFERENCES tenants(id),
   ten_file TEXT NOT NULL, loai_file TEXT NOT NULL,
-  trang_thai TEXT NOT NULL DEFAULT 'moi',
+  -- UPLOADED PARSING VALIDATING READY APPROVED PROCESSING COMPLETED PARTIAL_FAILED FAILED
+  -- (SHARED_CONTRACTS mục 6). Giá trị cũ 'moi'/'da_duyet_mot_phan'/'xong' vẫn ĐỌC được
+  -- qua nhap_file.trang_thai_batch() — không cần migrate dữ liệu để mã chạy.
+  trang_thai TEXT NOT NULL DEFAULT 'UPLOADED',
+  loi TEXT,                                        -- lý do khi batch ở FAILED
   nguoi_tao INTEGER NOT NULL REFERENCES users(id), tao_luc TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS import_dong (
@@ -188,8 +192,9 @@ CREATE TABLE IF NOT EXISTS import_dong (
   batch_id INTEGER NOT NULL REFERENCES import_batch(id),
   stt INTEGER NOT NULL,
   du_lieu_json TEXT NOT NULL,
+  -- VALID INVALID READY SUBMITTED SUCCESS FAILED UNSUPPORTED NEEDS_REVIEW
   trang_thai TEXT NOT NULL,
-  loi TEXT,
+  loi TEXT,                                        -- lỗi chặn HOẶC cảnh báo 'cần xem: ...'
   don_id INTEGER REFERENCES don_hang(id)
 );
 CREATE TABLE IF NOT EXISTS usage_thang (

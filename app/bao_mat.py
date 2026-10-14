@@ -203,10 +203,38 @@ def dat_lai_mat_khau(token, mat_khau_moi):
     return True, ""
 
 
-# ====== Mã hóa credentials (secret storage abstraction, mức local) ======
-# Encrypt-then-MAC trên stdlib: keystream = SHA256(key || nonce || counter), MAC = HMAC-SHA256.
-# GIỚI HẠN GHI RÕ: đủ cho local; production phải dùng AES-GCM/KMS (thư viện vetted).
+# ====== Mã hóa credentials: AES-256-GCM ======
+# Owner duyệt 14/10/2026: chuyển từ bản tự dựng (XOR+HMAC) sang AES-256-GCM chuẩn.
+# Dùng `cryptography` (thư viện đã được kiểm định) — KHÔNG tự cài đặt AES.
+#
+# Định dạng bản mã:
+#   v2$<nonce_hex>$<ciphertext_hex>   ← AES-256-GCM (nonce 96 bit, tag nằm trong ciphertext)
+#   <nonce>$<ct>$<mac>                ← v1 cũ (XOR+HMAC), CHỈ còn đọc được để migrate
+#
+# AAD (additional authenticated data) buộc bản mã vào ĐÚNG chỗ của nó: chép bản mã của tenant A
+# sang hàng của tenant B sẽ giải mã HỎNG. Xây AAD ở một nơi duy nhất để bên ghi và bên đọc
+# không thể lệch nhau.
+try:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+except ImportError as _e:   # KHÔNG âm thầm tụt về sơ đồ yếu — hỏng thì phải hỏng to
+    raise ImportError(
+        "Thiếu thư viện 'cryptography' — bắt buộc cho AES-256-GCM. Cài: python3 -m pip install cryptography. "
+        "Hệ thống CỐ Ý không chạy tiếp bằng sơ đồ mã hóa yếu."
+    ) from _e
+
+
+def aad_credentials(tenant_id, hang) -> str:
+    """AAD cho credentials của tài khoản hãng — buộc vào tenant + hãng."""
+    return f"cred:{tenant_id}:{hang}"
+
+
+def aad_webhook(webhook_ma) -> str:
+    """AAD cho webhook secret — buộc vào định danh webhook công khai."""
+    return f"wh:{webhook_ma}"
+
+
 def _khoa_noi_bo() -> bytes:
+    """Khóa 32 byte (AES-256) trong file 0600, ngoài git. Tạo lần đầu nếu chưa có."""
     duong = cau_hinh.DUONG_DAN_KHOA
     if not os.path.exists(duong):
         os.makedirs(os.path.dirname(duong), exist_ok=True)
@@ -214,39 +242,77 @@ def _khoa_noi_bo() -> bytes:
             f.write(secrets.token_bytes(32))
         os.chmod(duong, 0o600)
     with open(duong, "rb") as f:
-        return f.read()
+        khoa = f.read()
+    if len(khoa) != 32:
+        raise ValueError(f"Khóa nội bộ phải đúng 32 byte cho AES-256, đang có {len(khoa)} byte")
+    return khoa
 
 
-def _keystream(key: bytes, nonce: bytes, dai: int) -> bytes:
-    ra = b""
-    dem = 0
-    while len(ra) < dai:
-        ra += hashlib.sha256(key + nonce + dem.to_bytes(4, "big")).digest()
-        dem += 1
-    return ra[:dai]
+def ma_hoa(ro: str, aad: str = "") -> str:
+    """Mã hóa bằng AES-256-GCM. aad buộc bản mã vào ngữ cảnh của nó (xem aad_*)."""
+    nonce = secrets.token_bytes(12)          # 96 bit — kích thước chuẩn cho GCM
+    ct = AESGCM(_khoa_noi_bo()).encrypt(nonce, ro.encode(), aad.encode() if aad else None)
+    return "v2$" + nonce.hex() + "$" + ct.hex()
 
 
-def ma_hoa(ro: str) -> str:
-    key = _khoa_noi_bo()
-    nonce = secrets.token_bytes(16)
-    data = ro.encode()
-    ct = bytes(a ^ b for a, b in zip(data, _keystream(key, nonce, len(data))))
-    mac = hmac.new(key, nonce + ct, hashlib.sha256).hexdigest()
-    return nonce.hex() + "$" + ct.hex() + "$" + mac
-
-
-def giai_ma(goi: str) -> str:
+def _giai_ma_v1(goi: str) -> str:
+    """Đọc bản mã ĐỊNH DẠNG CŨ (XOR keystream + HMAC). Chỉ dùng khi migrate, không mã hóa mới nữa."""
     key = _khoa_noi_bo()
     nonce_hex, ct_hex, mac = goi.split("$")
     nonce, ct = bytes.fromhex(nonce_hex), bytes.fromhex(ct_hex)
-    mac_dung = hmac.new(key, nonce + ct, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(mac, mac_dung):
-        raise ValueError("MAC sai — dữ liệu mã hóa đã bị sửa")
-    return bytes(a ^ b for a, b in zip(ct, _keystream(key, nonce, len(ct)))).decode()
+    if not hmac.compare_digest(mac, hmac.new(key, nonce + ct, hashlib.sha256).hexdigest()):
+        raise ValueError("MAC sai — dữ liệu mã hóa (v1) đã bị sửa")
+    ra, dem = b"", 0
+    while len(ra) < len(ct):
+        ra += hashlib.sha256(key + nonce + dem.to_bytes(4, "big")).digest()
+        dem += 1
+    return bytes(a ^ b for a, b in zip(ct, ra[:len(ct)])).decode()
 
 
-def luu_credentials(cred: dict):
-    """Trả (bản_mã_hóa, đuôi_hiển_thị). Secret không bao giờ ra frontend/log."""
+def giai_ma(goi: str, aad: str = "") -> str:
+    """Giải mã. Tự nhận biết v2 (AES-GCM) hay v1 (cũ). Sai AAD → hỏng, đúng như thiết kế."""
+    if goi.startswith("v2$"):
+        _, nonce_hex, ct_hex = goi.split("$")
+        try:
+            ro = AESGCM(_khoa_noi_bo()).decrypt(
+                bytes.fromhex(nonce_hex), bytes.fromhex(ct_hex), aad.encode() if aad else None)
+        except Exception as e:
+            raise ValueError(f"Giải mã AES-GCM hỏng (sai khóa, sai AAD, hoặc dữ liệu bị sửa): {type(e).__name__}")
+        return ro.decode()
+    return _giai_ma_v1(goi)
+
+
+def la_dinh_dang_cu(goi: str) -> bool:
+    return not str(goi).startswith("v2$")
+
+
+# --- CẶP hàm theo từng loại secret ---
+# Bên ghi và bên đọc dùng CHUNG một hàm dựng AAD, nên không thể lệch nhau. Trước đây hai bên
+# tự gọi ma_hoa()/giai_ma() rồi tự truyền AAD: chỉ cần một chỗ quên là bản mã thành không đọc được
+# (đã dính thật 14/10/2026 — webhook trả 500 vì bên ghi quên AAD). Đừng dùng ma_hoa/giai_ma trần
+# cho credentials và webhook secret nữa; dùng bốn hàm dưới đây.
+
+def ma_hoa_cred(cred: dict, tenant_id, hang):
+    """Mã hóa credentials của tài khoản hãng. Trả (bản_mã, đuôi_hiển_thị)."""
     ro = json.dumps(cred, ensure_ascii=False)
     duoi = next((str(v)[-4:] for v in cred.values() if v), "")
-    return ma_hoa(ro), duoi
+    return ma_hoa(ro, aad_credentials(tenant_id, hang)), duoi
+
+
+def giai_ma_cred(ban_ma, tenant_id, hang) -> dict:
+    return json.loads(giai_ma(ban_ma, aad_credentials(tenant_id, hang)))
+
+
+def ma_hoa_wh(secret: str, webhook_ma: str) -> str:
+    return ma_hoa(secret, aad_webhook(webhook_ma))
+
+
+def giai_ma_wh(ban_ma: str, webhook_ma: str) -> str:
+    return giai_ma(ban_ma, aad_webhook(webhook_ma))
+
+
+def luu_credentials(cred: dict, aad: str = ""):
+    """CŨ — giữ cho tương thích. Dùng ma_hoa_cred() để khỏi tự dựng AAD."""
+    ro = json.dumps(cred, ensure_ascii=False)
+    duoi = next((str(v)[-4:] for v in cred.values() if v), "")
+    return ma_hoa(ro, aad), duoi

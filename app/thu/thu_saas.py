@@ -119,6 +119,7 @@ class ThuSaaS(unittest.TestCase):
                             {"ten": ten, "goi_id": "basic", "owner_ten_dang_nhap": f"{dn}-owner",
                              "owner_mat_khau": MK, "owner_ho_ten": f"Chủ {ten}"})
             assert st == 201, kq
+            setattr(cls, "tid_a" if dn == "a" else "tid_b", kq["id"])
         cls.po = po
         cls.a = tao_phien("a-owner", MK)
         cls.b = tao_phien("b-owner", MK)
@@ -369,7 +370,8 @@ class ThuSaaS(unittest.TestCase):
         # CSDL lưu bản mã hóa, không plaintext
         tho = csdl.mot("SELECT credentials_ma_hoa FROM carrier_accounts WHERE id=?", (self.tk_a["id"],))
         self.assertNotIn("demo-key-cua-A-9999", tho["credentials_ma_hoa"])
-        self.assertEqual(json.loads(bao_mat.giai_ma(tho["credentials_ma_hoa"]))["api_key"], "demo-key-cua-A-9999")
+        self.assertEqual(bao_mat.giai_ma_cred(tho["credentials_ma_hoa"], self.tid_a, "vtp")["api_key"],
+                         "demo-key-cua-A-9999")
 
     def test_13_frontend_khong_cam_secret_va_csrf(self):
         # mã admin/ không chứa khóa hãng nào; mọi gọi hãng qua backend

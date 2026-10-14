@@ -64,13 +64,13 @@ def chay():
         gan(uid_da_tenant, tid, "TENANT_ADMIN" if code == "shop-a" else "TENANT_VIEWER")
         for hang in ("vtp", "jt"):
             cred = {"ghi_chu": "credentials demo mock", "ma_demo": secrets.token_hex(6)}
-            cred_mh, duoi = bao_mat.luu_credentials(cred)
             wh_secret, wh_ma = secrets.token_urlsafe(24), secrets.token_urlsafe(12)
+            cred_mh, duoi = bao_mat.ma_hoa_cred(cred, tid, hang)
             csdl.ghi("INSERT INTO carrier_accounts (tenant_id, hang, ten, moi_truong, credentials_ma_hoa,"
                      " credentials_duoi, webhook_ma, webhook_secret_ma_hoa, tao_luc)"
                      " VALUES (?,?,?,?,?,?,?,?,?)",
                      (tid, hang, f"{hang.upper()} mock của {ten_tenant}", "mock", cred_mh, duoi,
-                      wh_ma, bao_mat.ma_hoa(wh_secret), csdl.bay_gio()))
+                      wh_ma, bao_mat.ma_hoa_wh(wh_secret, wh_ma), csdl.bay_gio()))
             dong.append(f"  - hãng `{hang}`: webhook_ma=`{wh_ma}` · webhook_secret=`{wh_secret}`")
         csdl.ghi("INSERT INTO khach_hang (tenant_id, ten, sdt, dia_chi, tao_luc) VALUES (?,?,?,?,?)",
                  (tid, f"Khách demo của {ten_tenant}", "0900000000", "Địa chỉ demo", csdl.bay_gio()))

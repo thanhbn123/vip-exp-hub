@@ -136,7 +136,7 @@ def _adapter_cua_account(tenant_id, account_id):
                   (account_id, tenant_id))
     if not tk:
         raise LoiNghiepVu("tài khoản hãng không tồn tại hoặc không thuộc doanh nghiệp này", 404)
-    cred = json.loads(bao_mat.giai_ma(tk["credentials_ma_hoa"]))
+    cred = bao_mat.giai_ma_cred(tk["credentials_ma_hoa"], tk["tenant_id"], tk["hang"])
     return adapter.tao_adapter(tk["hang"], cred, tk["moi_truong"]), tk
 
 

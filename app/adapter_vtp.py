@@ -1,7 +1,22 @@
 # G05 — Adapter Viettel Post.
-# TRẠNG THÁI: MOCK hoàn toàn. Dự án `vip-viettelpost` (repo riêng, ngoài thư mục này) có tích hợp
-# VTP thật — việc tái dùng mã đó cần Owner cho phép đọc repo (ghi BLOCKED trong ACCEPTANCE_CHECKLIST).
-# Khi được phép: chuyển logic gọi API thật vào đây sau capability tương ứng, giữ nguyên interface.
+# TRẠNG THÁI: MOCK hoàn toàn.
+#
+# ĐÃ ĐỌC repo `vip-viettelpost` ngày 14/10/2026 (Owner cho phép) — KẾT QUẢ: repo đó là SCAFFOLD RỖNG,
+# không có gì để tái dùng. Đo được:
+#   - app/providers/viettel_post/status_mapper.py : STATUS_MAP = {} rỗng, kèm
+#     "TODO: Fill only after verifying official VTP status codes."
+#   - auth.py       : raise NotImplementedError — chưa có contract xác thực
+#   - provider.py   : get_services / calculate_fee / create_shipment / get_shipment / cancel_shipment
+#                     đều raise NotImplementedError
+#   - docs/VIETTEL_POST_INTEGRATION.md : "Scaffold cố ý không điền endpoint/path cụ thể"
+#   - docs/STATUS_MAPPING.md           : "Không điền mã trạng thái Viettel Post bằng suy đoán"
+# Thứ DUY NHẤT cụ thể lấy được (và vẫn CHƯA XÁC MINH với tài liệu Partner chính thức):
+#   - host: https://partner.viettelpost.vn   (app/core/config.py: vtp_base_url, .env.example)
+#   - kiểu xác thực dự kiến: Bearer token, cấu hình vtp_username/vtp_password/vtp_token
+#     → đây là PHỎNG ĐOÁN CỦA REPO ĐÓ, không phải tài liệu hãng. Không dùng làm căn cứ.
+#
+# ⇒ Nút thắt thật của VTP là TÀI LIỆU PARTNER API + credentials, KHÔNG phải quyền đọc repo.
+VTP_HOST_CHUA_XAC_MINH = "https://partner.viettelpost.vn"
 import random
 
 from adapter import CarrierAdapter, KetQuaHang, dang_ky

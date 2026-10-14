@@ -72,7 +72,7 @@ def chay_mot_luot(tenant_id=None, chi_hang_khong_webhook=False):
         for lo in _gom_lo(nhom, so_van_don_moi_luot(ma_hang)):
             for d in lo:
                 try:
-                    cred = json.loads(bao_mat.giai_ma(d["credentials_ma_hoa"]))
+                    cred = bao_mat.giai_ma_cred(d["credentials_ma_hoa"], d["tenant_id"], d["hang"])
                     ad = adapter.tao_adapter(ma_hang, cred, d["moi_truong"])
                     kq = ad.trackOrder(d["ma_van_don"])
                     tk["da_hoi"] += 1

@@ -464,13 +464,13 @@ class BoXuLy(BaseHTTPRequestHandler):
                 return self._tra(403, {"loi": "môi trường sandbox/production đang khóa — chờ Owner duyệt (BLOCKED)"})
             billing.kiem_han_muc_tai_khoan_hang(tenant_id)
             import secrets as _s
-            cred_mh, duoi = bao_mat.luu_credentials(d.get("credentials") or {})
             wh_secret, wh_ma = _s.token_urlsafe(24), _s.token_urlsafe(12)
+            cred_mh, duoi = bao_mat.ma_hoa_cred(d.get("credentials") or {}, tenant_id, d["hang"])
             con = csdl.ghi("INSERT INTO carrier_accounts (tenant_id, hang, ten, moi_truong,"
                            " credentials_ma_hoa, credentials_duoi, webhook_ma, webhook_secret_ma_hoa, tao_luc)"
                            " VALUES (?,?,?,?,?,?,?,?,?)",
                            (tenant_id, d["hang"], d.get("ten", d["hang"]), "mock", cred_mh, duoi,
-                            wh_ma, bao_mat.ma_hoa(wh_secret), csdl.bay_gio()))
+                            wh_ma, bao_mat.ma_hoa_wh(wh_secret, wh_ma), csdl.bay_gio()))
             csdl.audit("tao_tai_khoan_hang", f"carrier_account:{con.lastrowid}", d["hang"],
                        tenant_id=tenant_id, user_id=nc.user_id)
             return self._tra(201, {"id": con.lastrowid, "webhook_ma": wh_ma,
@@ -486,11 +486,12 @@ class BoXuLy(BaseHTTPRequestHandler):
             viec = m.group(2)
             ra = {"ok": True}
             if viec == "rotate":
-                cred_mh, duoi = bao_mat.luu_credentials(self._doc_json().get("credentials") or {})
+                cred_mh, duoi = bao_mat.ma_hoa_cred(
+                    self._doc_json().get("credentials") or {}, tenant_id, tk["hang"])
                 csdl.ghi("UPDATE carrier_accounts SET credentials_ma_hoa=?, credentials_duoi=?,"
                          " credentials_doi_luc=? WHERE id=?", (cred_mh, duoi, csdl.bay_gio(), tk["id"]))
             elif viec == "revoke":
-                cred_mh, _ = bao_mat.luu_credentials({})
+                cred_mh, _ = bao_mat.ma_hoa_cred({}, tenant_id, tk["hang"])
                 csdl.ghi("UPDATE carrier_accounts SET credentials_ma_hoa=?, credentials_duoi='',"
                          " kich_hoat=0, credentials_doi_luc=? WHERE id=?",
                          (cred_mh, csdl.bay_gio(), tk["id"]))

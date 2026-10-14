@@ -213,12 +213,13 @@ class D_Polling(unittest.TestCase):
                            (csdl.bay_gio(),)).lastrowid
         csdl.ghi("INSERT INTO tenant_memberships (user_id,tenant_id,role,tao_luc) VALUES (?,?,?,?)",
                  (cls.uid, cls.tid, "TENANT_OWNER", csdl.bay_gio()))
-        cred, duoi = bao_mat.luu_credentials({"k": "v"})
+        # AAD buộc bản mã vào (tenant, hãng) và (webhook_ma) — fixture phải mã hóa ĐÚNG như bản chạy
+        cred, duoi = bao_mat.luu_credentials({"k": "v"}, bao_mat.aad_credentials(cls.tid, "vtp"))
         cls.tk = csdl.ghi("INSERT INTO carrier_accounts (tenant_id,hang,ten,moi_truong,"
                           "credentials_ma_hoa,credentials_duoi,webhook_ma,webhook_secret_ma_hoa,tao_luc)"
                           " VALUES (?,?,?,?,?,?,?,?,?)",
                           (cls.tid, "vtp", "VTP", "mock", cred, duoi, "wh1",
-                           bao_mat.ma_hoa("s"), csdl.bay_gio())).lastrowid
+                           bao_mat.ma_hoa("s", bao_mat.aad_webhook("wh1")), csdl.bay_gio())).lastrowid
 
     @classmethod
     def tearDownClass(cls):
@@ -280,6 +281,95 @@ class D_Polling(unittest.TestCase):
         p = polling.BatDauNen(moi_giay=0.05)
         self.assertIsNone(p._luong, "polling tự chạy khi chưa ai bật")
         p.bat(); self.assertTrue(p._luong.is_alive()); p.tat()
+
+
+class E_MaHoaAESGCM(unittest.TestCase):
+    """Owner duyệt 14/10/2026: credentials phải mã hóa bằng AES-256-GCM chuẩn."""
+
+    def test_e1_dung_aes_gcm_that_khong_phai_tu_che(self):
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
+        g = bao_mat.ma_hoa("bi mat")
+        self.assertTrue(g.startswith("v2$"), "không phải định dạng AES-GCM v2")
+        nonce = g.split("$")[1]
+        self.assertEqual(len(nonce), 24, "nonce phải 12 byte (96 bit) chuẩn GCM")
+
+    def test_e2_vong_tron_va_nonce_khac_nhau(self):
+        ro = "credentials 123 — có dấu tiếng Việt"
+        g1, g2 = bao_mat.ma_hoa(ro), bao_mat.ma_hoa(ro)
+        self.assertNotEqual(g1, g2, "cùng nội dung ra cùng bản mã → nonce bị lặp")
+        self.assertEqual(bao_mat.giai_ma(g1), ro)
+        self.assertEqual(bao_mat.giai_ma(g2), ro)
+
+    def test_e3_phat_hien_sua_ban_ma(self):
+        g = bao_mat.ma_hoa("x" * 40)
+        hong = g[:-4] + ("beef" if not g.endswith("beef") else "dead")
+        with self.assertRaises(ValueError):
+            bao_mat.giai_ma(hong)
+
+    def test_e4_aad_chan_chep_cheo_tenant(self):
+        g = bao_mat.ma_hoa("key cua tenant 1", bao_mat.aad_credentials(1, "vtp"))
+        self.assertEqual(bao_mat.giai_ma(g, bao_mat.aad_credentials(1, "vtp")), "key cua tenant 1")
+        for sai in (bao_mat.aad_credentials(2, "vtp"), bao_mat.aad_credentials(1, "jt"), ""):
+            with self.assertRaises(ValueError, msg=f"AAD sai '{sai}' vẫn giải được!"):
+                bao_mat.giai_ma(g, sai)
+
+    def test_e5_doc_duoc_dinh_dang_v1_cu(self):
+        """Phải còn đọc được bản mã cũ, nếu không là MẤT credentials khi migrate."""
+        import hashlib, hmac as _h, secrets as _s
+        key = bao_mat._khoa_noi_bo()
+        ro = b"secret dinh dang cu"
+        nonce = _s.token_bytes(16)
+        ks, dem = b"", 0
+        while len(ks) < len(ro):
+            ks += hashlib.sha256(key + nonce + dem.to_bytes(4, "big")).digest(); dem += 1
+        ct = bytes(a ^ b for a, b in zip(ro, ks[:len(ro)]))
+        mac = _h.new(key, nonce + ct, hashlib.sha256).hexdigest()
+        cu = nonce.hex() + "$" + ct.hex() + "$" + mac
+        self.assertTrue(bao_mat.la_dinh_dang_cu(cu))
+        self.assertEqual(bao_mat.giai_ma(cu), ro.decode())
+        self.assertFalse(bao_mat.la_dinh_dang_cu(bao_mat.ma_hoa("moi")))
+
+    def test_e6_khong_am_tham_tut_ve_so_do_yeu(self):
+        """Thiếu thư viện phải HỎNG TO, không được tự chuyển sang mã hóa yếu."""
+        nguon = open(os.path.join(GOC_APP, "bao_mat.py"), encoding="utf-8").read()
+        self.assertIn("raise ImportError", nguon)
+        self.assertIn("CỐ Ý không chạy tiếp bằng sơ đồ mã hóa yếu", nguon)
+        # và không còn hàm nào mã hóa MỚI bằng sơ đồ cũ
+        self.assertNotIn("def _ma_hoa_v1", nguon)
+
+    def test_e7_migrate_v3_doi_het_sang_gcm(self):
+        """Dựng carrier_account mã hóa kiểu CŨ rồi chạy nâng cấp v3, kiểm đọc lại được."""
+        import migrate
+        cu_cred = _ma_hoa_kieu_cu(json.dumps({"api_key": "KEY-CU-1234"}))
+        cu_wh = _ma_hoa_kieu_cu("secret-webhook-cu")
+        tid = csdl.ghi("INSERT INTO tenants (code,ten,goi_id,tao_luc) VALUES ('tv3','Tv3','pro',?)",
+                       (csdl.bay_gio(),)).lastrowid
+        tk = csdl.ghi("INSERT INTO carrier_accounts (tenant_id,hang,ten,moi_truong,credentials_ma_hoa,"
+                      "credentials_duoi,webhook_ma,webhook_secret_ma_hoa,tao_luc)"
+                      " VALUES (?,?,?,?,?,?,?,?,?)",
+                      (tid, "vtp", "cu", "mock", cu_cred, "1234", "wh-v3", cu_wh, csdl.bay_gio())).lastrowid
+        kn = csdl.mo()
+        with kn:
+            migrate.nang_len_v3(kn)
+        r = csdl.mot("SELECT * FROM carrier_accounts WHERE id=?", (tk,))
+        self.assertTrue(r["credentials_ma_hoa"].startswith("v2$"), "v3 không đổi credentials")
+        self.assertTrue(r["webhook_secret_ma_hoa"].startswith("v2$"), "v3 không đổi webhook secret")
+        self.assertEqual(json.loads(bao_mat.giai_ma(r["credentials_ma_hoa"],
+                         bao_mat.aad_credentials(tid, "vtp")))["api_key"], "KEY-CU-1234")
+        self.assertEqual(bao_mat.giai_ma(r["webhook_secret_ma_hoa"],
+                         bao_mat.aad_webhook("wh-v3")), "secret-webhook-cu")
+
+
+def _ma_hoa_kieu_cu(ro: str) -> str:
+    import hashlib, hmac as _h, secrets as _s
+    key = bao_mat._khoa_noi_bo()
+    data = ro.encode()
+    nonce = _s.token_bytes(16)
+    ks, dem = b"", 0
+    while len(ks) < len(data):
+        ks += hashlib.sha256(key + nonce + dem.to_bytes(4, "big")).digest(); dem += 1
+    ct = bytes(a ^ b for a, b in zip(data, ks[:len(data)]))
+    return nonce.hex() + "$" + ct.hex() + "$" + _h.new(key, nonce + ct, hashlib.sha256).hexdigest()
 
 
 if __name__ == "__main__":

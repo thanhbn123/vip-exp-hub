@@ -402,7 +402,8 @@ class ThuG01G02(unittest.TestCase):
         # KHÔNG gán tenant cho user nền tảng
         self.assertIsNone(kn.execute("SELECT 1 FROM tenant_memberships m JOIN users u ON u.id=m.user_id"
                                      " WHERE u.ten_dang_nhap='cu-po'").fetchone())
-        self.assertEqual(kn.execute("SELECT MAX(phien_ban) FROM schema_version").fetchone()[0], 2)
+        self.assertEqual(kn.execute("SELECT MAX(phien_ban) FROM schema_version").fetchone()[0],
+                         csdl.PHIEN_BAN_SCHEMA, "migrate không đưa lên phiên bản mới nhất")
         kn.close()
 
         # ROLLBACK về backup → phải trở lại schema v1 (còn cột vai_tro)
@@ -509,7 +510,7 @@ class ThuG01G02(unittest.TestCase):
                        (self.tk_a["id"],))
         self.assertNotEqual(truoc, sau["credentials_ma_hoa"])
         self.assertIsNotNone(sau["credentials_doi_luc"])
-        self.assertEqual(json.loads(bao_mat.giai_ma(sau["credentials_ma_hoa"]))["api_key"],
+        self.assertEqual(bao_mat.giai_ma_cred(sau["credentials_ma_hoa"], self.tid_a, "vtp")["api_key"],
                          "KEY-MOI-CUA-A-7777")
         # B không rotate/revoke được account của A
         self.assertEqual(self.b.goi(f"/api/v2/tai-khoan-hang/{self.tk_a['id']}/rotate", "POST",
@@ -520,7 +521,7 @@ class ThuG01G02(unittest.TestCase):
         r = csdl.mot("SELECT kich_hoat, credentials_ma_hoa FROM carrier_accounts WHERE id=?",
                      (self.tk_a["id"],))
         self.assertEqual(r["kich_hoat"], 0)
-        self.assertEqual(json.loads(bao_mat.giai_ma(r["credentials_ma_hoa"])), {})
+        self.assertEqual(bao_mat.giai_ma_cred(r["credentials_ma_hoa"], self.tid_a, "vtp"), {})
         self.a.goi(f"/api/v2/tai-khoan-hang/{self.tk_a['id']}/mo", "POST", {})
 
     def test_021_tenant_bi_khoa_thi_thanh_vien_mat_quyen(self):

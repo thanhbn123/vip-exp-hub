@@ -54,3 +54,15 @@ phần còn lại (adapter thật) phụ thuộc Owner.
 | 30 | Tài liệu `G03_CARRIER_ENGINE.md` | DONE |
 
 **Tổng test sau đợt 3: 72** (23 G03 + 21 G01/G02 + 19 nghiệp vụ + 9 gateway).
+
+
+## Đợt 4 — quyết định của Owner 14/10/2026
+
+| Việc | Quyết định | Kết quả |
+|---|---|---|
+| Credentials J&T thật | Chưa cần, để khi kiểm thử LIVE | giữ BLOCKED, `CHO_PHEP_LIVE=False` |
+| Đọc repo `vip-viettelpost` | **Cho phép ngay** | ĐÃ ĐỌC — repo là scaffold rỗng, **không có gì tái dùng được**; ghi lại trong `adapter_vtp.py` |
+| Deploy VPS | Chưa, sau nghiệm thu local | không đụng |
+| Mã hóa AES-256-GCM | **Làm ngay** | DONE — `docs/MA_HOA.md`, migration v3, 7 test |
+
+**Tổng test sau đợt 4: 79** (30 G03 + 21 G01/G02 + 19 nghiệp vụ + 9 gateway).

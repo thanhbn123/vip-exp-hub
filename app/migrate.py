@@ -149,6 +149,40 @@ def nang_len_v2(kn):
     return buoc
 
 
+def nang_len_v3(kn):
+    """v3: mã hóa lại mọi secret từ định dạng v1 (XOR+HMAC) sang AES-256-GCM, kèm AAD.
+    Giải bằng đường cũ rồi mã lại bằng đường mới — KHÔNG đụng nội dung secret."""
+    import bao_mat
+    buoc = []
+    kn.row_factory = sqlite3.Row
+    doi_cred = doi_wh = 0
+    hong = []
+    for r in kn.execute("SELECT id, tenant_id, hang, webhook_ma, credentials_ma_hoa,"
+                        " webhook_secret_ma_hoa FROM carrier_accounts").fetchall():
+        # Một hàng hỏng KHÔNG được làm nổ cả migration — ghi lại rồi đi tiếp, nhưng phải BÁO RA,
+        # không im lặng bỏ qua (secret đó sẽ còn ở định dạng cũ cho tới khi người xử lý).
+        if bao_mat.la_dinh_dang_cu(r["credentials_ma_hoa"]):
+            try:
+                ro = bao_mat.giai_ma(r["credentials_ma_hoa"])    # đọc định dạng v1
+                kn.execute("UPDATE carrier_accounts SET credentials_ma_hoa=? WHERE id=?",
+                           (bao_mat.ma_hoa(ro, bao_mat.aad_credentials(r["tenant_id"], r["hang"])), r["id"]))
+                doi_cred += 1
+            except Exception as e:
+                hong.append(f"carrier_account {r['id']} credentials: {type(e).__name__}")
+        if bao_mat.la_dinh_dang_cu(r["webhook_secret_ma_hoa"]):
+            try:
+                ro = bao_mat.giai_ma(r["webhook_secret_ma_hoa"])
+                kn.execute("UPDATE carrier_accounts SET webhook_secret_ma_hoa=? WHERE id=?",
+                           (bao_mat.ma_hoa(ro, bao_mat.aad_webhook(r["webhook_ma"])), r["id"]))
+                doi_wh += 1
+            except Exception as e:
+                hong.append(f"carrier_account {r['id']} webhook_secret: {type(e).__name__}")
+    buoc.append(f"AES-256-GCM: {doi_cred} credentials + {doi_wh} webhook secret")
+    if hong:
+        buoc.append("KHÔNG mã hóa lại được (giữ nguyên định dạng cũ, CẦN NGƯỜI XỬ): " + "; ".join(hong))
+    return buoc
+
+
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -173,7 +207,11 @@ def chay(im_lang=False):
     kn.execute("PRAGMA foreign_keys=OFF")
     try:
         with kn:
-            buoc = nang_len_v2(kn)
+            buoc = []
+            if pb < 2:
+                buoc += nang_len_v2(kn)
+            if pb < 3:
+                buoc += nang_len_v3(kn)
             kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                        " VALUES (?,?,?)",
                        (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

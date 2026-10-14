@@ -32,7 +32,7 @@ def tim_account_theo_webhook_ma(webhook_ma):
 def kiem_chu_ky(tk_row, headers, body: bytes):
     """Mức local: HMAC-SHA256 bằng webhook_secret của account (header X-Webhook-Signature).
     Khi nối hãng thật, adapter của hãng sẽ cung cấp hàm verify riêng theo sơ đồ hãng."""
-    secret = bao_mat.giai_ma(tk_row["webhook_secret_ma_hoa"])
+    secret = bao_mat.giai_ma_wh(tk_row["webhook_secret_ma_hoa"], tk_row["webhook_ma"])
     dung = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(headers.get("x-webhook-signature", ""), dung)
 

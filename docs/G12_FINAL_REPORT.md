@@ -7,18 +7,26 @@ AG-00 PROJECT CONTROLLER · ngày **15/10/2026** · chỉ thị G12 (20 mục).
 
 ## 1. FINAL LOCAL SHA (mục 20)
 
-| Cái gì | SHA |
-|---|---|
-| **commit MÃ cuối** (hết mục 5, 11–13) | `936467b5e9d782dd3100e46fd38a58b1736c9e53` |
-| **commit TÀI LIỆU** (mục 19 — gồm chính tệp này) | `0a35de1e1fd81d5574c2e053529240e9534c6ff2` |
-| **FINAL LOCAL SHA** | `0a35de1e1fd81d5574c2e053529240e9534c6ff2` |
+**Mốc MÃ đã nghiệm thu bằng bộ thử — đây là con số có nghĩa:**
 
-Ghi **hai** dòng vì một tài liệu không tự ghi được SHA của chính commit chứa nó: lúc viết thì
-SHA chưa tồn tại, lúc commit xong thì SHA đã đổi. Bản đầu của tệp này ghi `936467b` làm FINAL
-SHA — **sai**, vì commit tài liệu ngay sau đó dời `main` sang `0a35de1`. Ai chạy
-`git rev-parse HEAD` sẽ thấy lệch và không biết tin bên nào (§12.1 luật 4: trường nào là dữ
-kiện đo được thì phải lấy từ lệnh). Nên: `936467b` là mốc **mã** nghiệm thu được bằng bộ thử;
-`0a35de1` là mốc cây làm việc.
+```
+936467b5e9d782dd3100e46fd38a58b1736c9e53
+```
+
+Toàn bộ 927 ca + 9.600 lượt đo đồng thời ở §2 chạy trên đúng commit này. Mọi commit sau nó
+chỉ là tài liệu (`docs/*.md`), không một dòng mã nào.
+
+**Mốc CÂY LÀM VIỆC thì tự đo, tệp này không ghi:**
+
+```bash
+git rev-parse HEAD
+```
+
+Tệp này **cố ý không** ghi SHA của chính commit chứa nó. Lý do là một vòng lặp không thoát
+được: lúc viết thì SHA chưa tồn tại, viết xong rồi commit thì SHA đã khác. Em đã đi đúng vào
+vòng đó hai lượt — bản đầu ghi `936467b`, rồi lượt đính chính ghi `0a35de1`, và chính lượt
+đính chính ấy dời `main` sang một SHA thứ ba. Mỗi lượt sửa đều tự làm mình sai.
+§12.1 luật 4: trường nào là dữ kiện đo được thì phải **lấy từ lệnh**, không điền vào tệp.
 
 Nhánh `main`, **local**. Chưa push GitHub, chưa triển khai VPS (chỉ thị mục 16, 17).
 So với nền G12 (`9af8115`): **63 tệp, +10.628 dòng, −125 dòng**, 21 commit.

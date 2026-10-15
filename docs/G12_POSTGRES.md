@@ -478,3 +478,69 @@ nó**, và kết luận ở đây được viết mà không có phần ấy.
 Về **mục 16 (tiền là `INTEGER`)**: lượt dịch sang PostgreSQL **không đụng** luật này. Mọi cột
 tiền giữ nguyên `INTEGER`, không cột nào thành `NUMERIC` hay `REAL`. Đã kiểm trong
 `sinh_ddl_pg.py`: bốn phép dịch không chạm tên kiểu nào ngoài `BLOB`.
+
+---
+
+# PHỤ LỤC G15 (15/10/2026, AG-04) — BỐN KẾT CỤC ĐÃ ĐO, VÀ MỘT ĐIỀU ĐẢO NGƯỢC GIẢ ĐỊNH
+
+> Phần này **bổ sung**, không thay thế mục nào ở trên. Mọi số dưới đây là lượt đo mới trên
+> **cụm PostgreSQL 16.15 RIÊNG** (cổng `55432`, `listen_addresses=''`, datadir trong thư mục
+> tạm, đã dừng và xoá). Cụm `:5432` **không bị đụng** — vân tay trước/sau ở
+> [`G15_INFRA.md`](G15_INFRA.md) §2.3.
+>
+> Báo cáo đầy đủ: [`G15_INFRA.md`](G15_INFRA.md). Tái hiện:
+> `python3 trien_khai/postgres/dien_tap_chuyen.py`
+
+## P.1 Điều đảo ngược giả định: PostgreSQL **IM LẶNG** mất cập nhật
+
+Mục 1 của tài liệu này liệt ba **điều kiện kích hoạt** chuyển sang PostgreSQL. Điều kiện 1 là
+*"có từ hai tiến trình/bản trở lên ghi vào cùng một CSDL"*. Phép đo mới **không** bác điều kiện
+đó — nó cho thấy **chuyển kho KHÔNG tự giải quyết được vấn đề đang được báo**, và nếu làm sai
+thứ tự thì **làm hệ tệ hơn**.
+
+Cùng **một** khuôn đọc-rồi-ghi ngây thơ (đọc ở kết nối riêng, ghi lại giá trị đã đọc), chạy
+bằng **tiến trình hệ điều hành thật**:
+
+| Kết cục | SQLite 3.51.0 | PostgreSQL 16.15 |
+|---|---|---|
+| `CHOT_THANH_CONG` (cộng ở TẦNG CÂU) | 160/160 chốt · 0 lỗi | 480/480 chốt · 0 lỗi |
+| `KHOA_HET_GIO` | 18–51 lượt `database is locked` | SQLSTATE **`55P03`** |
+| `GIAO_DICH_HONG` | `RAISE(ABORT)` huỷ **CÂU**, câu sau vẫn chốt | **`P0001`** + **`25P02`** — huỷ **CẢ giao dịch** |
+| **`MAT_CAP_NHAT`** | **0 — nó TỪ CHỐI thay vì mất** | **84/120 lượt chốt (70%) — 0 lượt báo lỗi** |
+
+**Kết luận cứng:** SQLite **không mất dữ liệu** trong khuôn này; nó **từ chối ồn ào**. Còn
+PostgreSQL, với cùng khuôn mã đó, **mất 70% số lượt ghi mà không báo gì**.
+
+> **Chuyển CSDL mà giữ nguyên khuôn đọc-rồi-ghi là ĐỔI một lỗi ỒN ÀO lấy một lỗi IM LẶNG.**
+> Với sổ tiền thì đó là đổi một lỗi nhìn thấy được lấy một lỗi không ai thấy.
+
+PostgreSQL **không tự sửa** kết cục thứ tư. Hai cách sửa, cả hai đều sửa **MÃ**, không sửa **KHO**:
+cộng ở tầng câu (`UPDATE … SET x = x + 1`), hoặc `SELECT … FOR UPDATE` / `REPEATABLE READ` kèm
+xử `40001`.
+
+## P.2 Hệ quả cho thứ tự các chặng — mục 2 của tài liệu này phải đọc lại
+
+| Chặng | Trạng thái cũ | Điều chỉnh của G15 |
+|---|---|---|
+| **0** Gom driver | XONG | giữ nguyên |
+| **1** Lớp phương ngữ `csdl.py` | CHƯA | **KHÔNG được đi tách rời** khỏi việc soát từng chỗ đọc-rồi-ghi. Chặng 1 một mình **làm hệ TỆ HƠN** ở đúng 5 khối ghi mà `BAN_GIAO.md` §6.1 đã liệt kê (`don_hang.py:944` · `tai_chinh.py:673` · `usage.py:220` · `don_hang.py:854` · `tai_chinh.py:385`). Hai việc này phải vào **cùng một chặng**, và **V-13912 phải xong TRƯỚC** |
+| **2** Bộ thử chạy trên cả hai kho | CHƯA | +4 ca đã có sẵn bây giờ: `app/thu/thu_postgres.py` lớp `E_BonKetCuc` canh bảng P.1 **ngay trong hồi quy** |
+| **3** Migration schema | một phần | **đo thêm:** DDL THẬT (47 bảng, 431 cột) nạp trọn trong **MỘT** giao dịch; **đối chứng âm** chèn câu sai vào cuối khối → **0/47** bảng còn lại |
+| **4** Chuyển dữ liệu | CHƯA | **đo thêm:** `pg_dump -Fc` → `pg_restore` giữ nguyên số dòng **từng bảng**, **431** cột, **số bút toán + tổng tiền**, và **md5 của payload nhị phân** (`wh_su_kien.payload_tho` dịch đúng thành `BYTEA`) |
+| **5** Chạy song song chỉ-đọc | CHƯA | không đổi |
+| **6** Đổi kho ghi | CHƯA — cần anh Thành duyệt | **thêm điều kiện tiên quyết:** P.1 phải được xử ở tầng mã trước, nếu không thì chặng 6 là một lượt **mất tiền im lặng** |
+
+## P.3 Đường lùi GIẢ — `migrate.sao_luu()` (mục 4.4 của tài liệu này, nay có đề xuất)
+
+`migrate.sao_luu()` là `sqlite3.Connection.backup()`. Trên PostgreSQL nó **vô dụng mà vẫn chạy
+trót lọt**: nó tạo một tệp "bản sao" **không chứa gì** của PostgreSQL và hệ vẫn báo sao lưu
+thành công. **Đề xuất P-G15-02:** khi kho đổi sang PostgreSQL, `sao_luu()` phải **ném
+`NotImplementedError`** thay vì chạy. Một hàm không làm được việc của nó thì phải **nổ**, không
+được im lặng thành công. (`migrate.py` là tệp của AG-00 — đây là **đề xuất**, chưa sửa.)
+
+## P.4 Ngoại lệ kèm theo: khoá migration bên PostgreSQL phải viết lại
+
+Mục 4.3 nói đúng: `BEGIN IMMEDIATE` là cú pháp SQLite. **Đã đo cách thay:** hai tiến trình tranh
+`pg_advisory_xact_lock(991204)` — **nâng cấp = 1 · nhường = 1 · lỗi = 0**, phiên bản cuối đúng 8.
+**Đối chứng âm** (bỏ khoá): **1 lỗi `23505`** — tức là hai tiến trình **có** giẫm nhau khi không
+có khoá, nên phép đo có chạm thật. Đây là khuôn để viết `migrate.chay()` bản PostgreSQL.

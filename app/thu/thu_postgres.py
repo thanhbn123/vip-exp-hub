@@ -8,23 +8,32 @@ khi quyết định triển khai SaaS nhiều người dùng.* Bộ thử này *
 `app/du-lieu/hub.db`, không đổi `app/csdl.py`, không chuyển dữ liệu. Kết quả nó sinh ra là
 **bằng chứng để anh Thành quyết**, không phải một quyết định đã làm thay anh.
 
-====== VÌ SAO MẶC ĐỊNH BỎ QUA ======
-`app/thu/chay_tat_ca.sh` TỰ DÒ mọi `app/thu/thu_*.py`, nên file này sẽ bị gom vào lượt chạy
-chung. Nhưng nó cần **dựng một cụm PostgreSQL riêng** (đo trên MacBook M5, 15/10/2026:
-`initdb` + `pg_ctl start` + nghiệm thu mất ~1,5–3 giây mỗi lượt), và nó để lại một tiến
-trình `postgres` sống trong lúc chạy. Bắt mọi lượt chạy bộ thử phải trả cái giá đó là sai.
+====== CÁCH CHẠY: MẶC ĐỊNH **BẬT**, TẮT BẰNG `VIP_THU_POSTGRES=0` ======
+`app/thu/chay_tat_ca.sh` TỰ DÒ mọi `app/thu/thu_*.py`, nên tệp này bị gom vào lượt chạy chung,
+và nó cần **dựng một cụm PostgreSQL riêng** (`initdb` + `pg_ctl start`).
 
-Nên: **mặc định BỎ QUA**. Bật bằng biến môi trường:
+**Trước 15/10/2026 tệp này MẶC ĐỊNH BỎ QUA** (phải đặt `VIP_THU_POSTGRES=1`) với lý do ghi là
+*"~1,5–3 giây mỗi lượt"*. Hậu quả ĐO ĐƯỢC: nó hiện dấu ✓ trong **mọi** báo cáo hồi quy mà chạy
+**ĐÚNG 0 CA**, nên ai đọc *"27 bộ đạt"* cũng tưởng PostgreSQL đã được phủ — suốt thời gian đó
+**chưa phủ gì**. Đo lại: cả bộ chạy hết trong **~2 giây**. Cái giá đó không đáng để giấu 25 phép kiểm.
 
-    VIP_THU_POSTGRES=1 python3 app/thu/thu_postgres.py
+**Nay: MẶC ĐỊNH BẬT.** Chạy:
+
+    python3 app/thu/thu_postgres.py          # chạy thật, dựng cụm riêng, tự dọn
+    VIP_THU_POSTGRES=0 python3 app/thu/thu_postgres.py   # TẮT (chỉ khi cần nhanh)
+
+Đường TẮT **không im lặng**: `_thieu_gi()` trả lý do `"tắt bằng tay (VIP_THU_POSTGRES=0)"` và bộ
+chạy chung in nó ra. Ba đường bỏ qua khác cũng vậy — thiếu lệnh `initdb`/`pg_ctl`/`psql`, cụm
+dựng hỏng, cụm không truy vấn được. Một bộ thử bỏ qua im lặng là một bộ thử báo đạt mà không đo gì.
+Riêng `VIP_THU_POSTGRES=0` là đường bỏ qua **do người chạy cố ý chọn** — cố ý thì được, miễn là nói ra.
 
 Hai cách dùng cụm:
-  * tự dựng cụm tạm (mặc định khi bật) — bộ thử tự `initdb`, tự `pg_ctl stop`, tự xoá;
+  * tự dựng cụm tạm (mặc định) — bộ thử tự `initdb`, tự `pg_ctl stop`, tự xoá;
   * dùng cụm có sẵn: đặt `VHPG_SOCKET` (+ `VHPG_CONG`, `VHPG_NGUOI`), bộ thử **không**
     dựng và **không** xoá cụm đó.
 
-Mọi đường bỏ qua đều nói rõ **thiếu cái gì** — một bộ thử bỏ qua im lặng là một bộ thử
-báo đạt mà không đo gì (§12.1).
+**25 ca, 5 lớp** — A schema dựng được · B ràng buộc còn hiệu lực · C khác biệt hành vi ·
+D chốt chặn của chính bộ thử · **E bốn kết cục (G15/I02)**.
 
 ====== CHỐT CHẶN AN TOÀN ======
 Máy này có cụm PostgreSQL hệ thống ở **:5432** đang giữ CSDL của dự án khác
@@ -37,6 +46,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # …/app
@@ -55,9 +65,13 @@ def _thieu_gi():
     # "~1,5–3 giây". Hậu quả đo được: nó hiện dấu ✓ trong mọi lượt hồi quy mà chạy ĐÚNG 0 CA,
     # nên người đọc "27 bộ đạt" tưởng PostgreSQL đã được phủ — suốt thời gian đó chưa phủ gì.
     # Đo lại ngày 15/10/2026 trên Mac mini: cả 21 ca chạy hết trong 1,405 giây. Cái giá đó
-    # không đáng để giấu 21 phép kiểm. Nay BẬT mặc định; ai cần nhanh thì VIP_THU_POSTGRES=0.
+    # không đáng để giấu 25 phép kiểm. Nay BẬT mặc định; ai cần nhanh thì VIP_THU_POSTGRES=0.
     if os.environ.get("VIP_THU_POSTGRES", "") == "0":
-        return "tắt bằng tay (VIP_THU_POSTGRES=0)"
+        # Chuỗi này phải mang dạng `Bật bằng: <BIẾN>=<số>`: bộ chạy chung (`chay_tat_ca.sh`)
+        # TRÍCH dòng đó ra để in phán quyết BỎ QUA kèm cách bật lại. Không có nó thì người đọc
+        # thấy "BỎ QUA — không nêu cách bật" và phải tự đi tìm. Docstring nói đường tắt "không
+        # im lặng" — dòng này là chỗ giữ cho câu đó đúng.
+        return "tắt bằng tay. Bật bằng: VIP_THU_POSTGRES=1"
     co_san = os.environ.get("VHPG_SOCKET", "")
     can = ("psql",) if co_san else LENH_CAN
     thieu = [l for l in can if not shutil.which(l)]
@@ -419,6 +433,263 @@ class D_ChotChanCuaBoThu(unittest.TestCase):
         """Chặn ca bản dịch rỗng/cụt mà vẫn 'nạp đạt' — một DDL rỗng nạp bao giờ cũng đạt."""
         self.assertGreater(DDL_PG.count("CREATE TABLE"), 40)
         self.assertGreaterEqual(DDL_PG.count("CREATE TRIGGER"), 4)
+
+
+# ------------------------------------------- E. BỐN KẾT CỤC, TÁCH RIÊNG (I02, G15)
+class E_BonKetCuc(unittest.TestCase):
+    """BỐN kết cục của một lượt ghi, đo trên CẢ HAI kho, KHÔNG gộp:
+
+        CHOT_THANH_CONG · KHOA_HET_GIO · GIAO_DICH_HONG · MAT_CAP_NHAT
+
+    Ba kết cục đầu TỰ BÁO (mã lỗi). Kết cục thứ tư **IM LẶNG** — nó chỉ hiện ra khi đối
+    chiếu cuối lượt (số giao dịch *tin* đã chốt so với số *thật* trong CSDL). Nên mọi ca ở
+    đây đều làm phép đối chiếu đó, không chỉ đếm lỗi.
+
+    VÌ SAO e2/e3 LÀ QUAN TRỌNG NHẤT
+    --------------------------------
+    Cùng MỘT khuôn đọc-rồi-ghi ngây thơ (đọc ở kết nối riêng, ghi lại giá trị đã đọc), chạy
+    nhiều TIẾN TRÌNH thật:
+
+      · SQLite 3.51.0    → **TỪ CHỐI ỒN ÀO** (`database is locked`), MẤT CẬP NHẬT = 0
+      · PostgreSQL 16.15 → **IM LẶNG MẤT**, 0 lượt nào báo lỗi
+
+    Nghĩa là chuyển kho mà giữ nguyên khuôn đọc-rồi-ghi là **ĐỔI một lỗi ồn ào lấy một lỗi
+    im lặng** — tệ hơn cho tiền. PostgreSQL KHÔNG tự sửa kết cục thứ tư; chỉ cộng ở TẦNG CÂU
+    (`x = x + 1`) hoặc `SELECT … FOR UPDATE` mới sửa. Đó là lý do kỹ thuật để chặng 1 (lớp
+    phương ngữ) phải đi CÙNG chặng "soát từng chỗ đọc-rồi-ghi".
+
+    PHẠM VI: 2 tiến trình × 25 phép, socket Unix nội máy, dữ liệu nhỏ. NGOÀI phạm vi: nhiều
+    máy · mạng thật · dữ liệu lớn · tải đọc. Số ở đây là bằng chứng ĐỊNH TÍNH có định lượng,
+    KHÔNG phải một phép đo hiệu năng.
+    """
+
+    SO_TT = 2
+    SO_PHEP = 25
+
+    @classmethod
+    def setUpClass(cls):
+        q("BEGIN;\n" + DDL_PG + "\nCOMMIT;")
+        cls._dat_lai()
+
+    @staticmethod
+    def _dat_lai():
+        q("DROP TABLE IF EXISTS g15_dem;"
+          " CREATE TABLE g15_dem (id int PRIMARY KEY, gia_tri int NOT NULL);"
+          " INSERT INTO g15_dem VALUES (1,0);")
+
+    @staticmethod
+    def _psql_stdin():
+        return subprocess.Popen(["psql", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                                 "-d", CSDL_THU, "-qtAX", "-v", "ON_ERROR_STOP=1"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+
+    @staticmethod
+    def _q_verbose(sql):
+        """psql có `VERBOSITY=verbose` để stderr mang SQLSTATE. Cần SQLSTATE vì phán bằng CHỮ
+        trong thông báo là phán bằng thứ có thể đổi theo phiên bản/locale."""
+        p = subprocess.run(["psql", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                            "-d", CSDL_THU, "-qtAX", "-v", "VERBOSITY=verbose"],
+                           input=sql, capture_output=True, text=True)
+        return p.returncode, p.stdout, p.stderr, re.findall(r"ERROR:\s+([0-9A-Z]{5}):", p.stderr)
+
+    def _pg_khuon_ngay_tho(self):
+        """Một script `psql` = MỘT tiến trình. Mỗi phép là một giao dịch riêng, và nó ĐỌC
+        giá trị ở NGOÀI giao dịch rồi ghi lại giá trị đã đọc — đúng khuôn ngây thơ.
+        Dùng psql chứ không `multiprocessing` để khỏi spawn lại chính mô-đun này."""
+        mot = ("SELECT gia_tri AS v FROM g15_dem WHERE id=1 \\gset\n"
+               "BEGIN;\nSELECT pg_sleep(0.002);\n"
+               "UPDATE g15_dem SET gia_tri = :v + 1 WHERE id=1;\nCOMMIT;\n")
+        return mot * self.SO_PHEP
+
+    def test_e1_chot_thanh_cong_cong_nguyen_tu(self):
+        """CHỐT_THÀNH_CÔNG: cộng ở TẦNG CÂU (`gia_tri = gia_tri + 1`), 2 tiến trình."""
+        self._dat_lai()
+        ps = [self._psql_stdin() for _ in range(self.SO_TT)]
+        for p in ps:
+            p.stdin.write("UPDATE g15_dem SET gia_tri = gia_tri + 1 WHERE id=1;\n"
+                          * self.SO_PHEP)
+            p.stdin.close()
+        ma = [p.wait() for p in ps]
+        for p in ps:                       # đóng ống để không rò tệp (ResourceWarning)
+            p.stdout.close()
+            p.stderr.close()
+        self.assertEqual(ma, [0] * self.SO_TT, "có tiến trình thoát khác 0")
+        _, out, _ = q("SELECT gia_tri FROM g15_dem WHERE id=1")
+        self.assertEqual(int(out.strip()), self.SO_TT * self.SO_PHEP,
+                         "CHỐT_THÀNH_CÔNG mà số THẬT lệch số TIN đã ghi")
+
+    # ---- BẮT TAY BẰNG TỆP MỐC: để phép đo KHÔNG phụ thuộc tải máy ----
+    # Bản đầu của e2/e3 đo bằng CÁCH CHẠY ĐUA (2 tiến trình cùng đọc–ghi, đếm xem mất bao
+    # nhiêu). Nó ĐÚNG về bản chất nhưng **HỎNG KHI MÁY TẢI**: nếu hai tiến trình bị hệ điều
+    # hành xếp chạy nối đuôi thì không mất lượt nào, và ca thử báo hỏng trong khi hệ làm đúng
+    # — đúng loại "báo hỏng giả" mà `BAN_GIAO.md` §7.1 cảnh báo. Đo được: 1/3 lượt hồi quy
+    # đầy đủ (máy đang có agent khác chạy) so với 10/10 lượt chạy riêng.
+    #
+    # Nay ÉP thứ tự: CẢ HAI bên đọc xong (mỗi bên chạm tệp mốc của mình rồi chờ tệp mốc của
+    # bên kia) RỒI mới ghi. Không còn phụ thuộc lịch trình của hệ điều hành, và phép đo mạnh
+    # hơn: nó chỉ ra thẳng CƠ CHẾ (hai giao dịch cùng đọc một giá trị rồi cùng ghi).
+    @staticmethod
+    def _tep_moc(ten):
+        goc = CUM.thu_muc or tempfile.gettempdir()
+        return os.path.join(goc, "e23_%s.moc" % ten)
+
+    @classmethod
+    def _xoa_moc(cls):
+        for ten in ("a", "b"):
+            f = cls._tep_moc(ten)
+            if os.path.exists(f):
+                os.remove(f)
+
+    CHO_MOC = "n=0; while [ ! -f %s ] && [ $n -lt 1200 ]; do sleep 0.05; n=$((n+1)); done\n"
+
+    def test_e2_postgres_mat_cap_nhat_IM_LANG(self):
+        """**PHÁT HIỆN CHÍNH, đo TẤT ĐỊNH.** PostgreSQL + khuôn đọc-rồi-ghi ngây thơ ⇒ mất
+        cập nhật và **KHÔNG một lượt nào báo lỗi**.
+
+        Phép đo không đếm xác suất: hai phiên CÙNG đọc `gia_tri=0`, bắt tay cho chắc cả hai
+        đã đọc xong, rồi CẢ HAI ghi `0 + 1 = 1`. Hai giao dịch chốt thành công, giá trị cuối
+        là **1** — mất đúng một cập nhật, im lặng. Nếu ca này bắt đầu HỎNG thì hoặc PostgreSQL
+        đã đổi hành vi, hoặc phép đo hỏng — cả hai đều phải xem lại, ĐỪNG gỡ ca."""
+        self._dat_lai()
+        self._xoa_moc()
+        kich_ban = ("SELECT gia_tri AS v FROM g15_dem WHERE id=1 \\gset\n"
+                    "\\! touch %s\n"
+                    "\\! " + self.CHO_MOC +
+                    "UPDATE g15_dem SET gia_tri = :v + 1 WHERE id=1;\n")
+        ps = []
+        for ten, ten_kia in (("a", "b"), ("b", "a")):
+            p = self._psql_stdin()
+            p.stdin.write(kich_ban % (self._tep_moc(ten), self._tep_moc(ten_kia)))
+            p.stdin.flush()
+            ps.append(p)
+        ma, loi = [], []
+        for p in ps:
+            p.stdin.close()
+            ma.append(p.wait(timeout=180))
+            loi.append(p.stderr.read())
+            p.stdout.close()
+            p.stderr.close()
+        self.assertEqual(ma, [0, 0], "PostgreSQL báo lỗi: %s" % " | ".join(loi)[:300])
+        self.assertEqual("".join(loi).strip(), "",
+                         "có lỗi trên stderr — lượt này KHÔNG còn là 'im lặng'")
+        _, out, _ = q("SELECT gia_tri FROM g15_dem WHERE id=1")
+        self.assertEqual(int(out.strip()), 1,
+                         "HAI giao dịch cùng đọc 0 rồi cùng ghi 1, nên giá trị cuối PHẢI là 1 "
+                         "(= mất một cập nhật). Nhận %s — hành vi đã đổi, đọc "
+                         "`docs/G15_INFRA.md` §2 trước khi sửa ca này." % out.strip())
+
+    def test_e3_sqlite_tu_choi_on_ao(self):
+        """Đối chứng: SQLite với CÙNG khuôn và CÙNG cách bắt tay thì **TỪ CHỐI** thay vì mất.
+
+        Đây là vế làm cho e2 có nghĩa: không có nó thì không ai biết PostgreSQL khác SQLite ở
+        ĐÂU. Bản trước đếm xác suất (`assertGreater(loi, 0)`) nên cũng phụ thuộc tải; bản này
+        ép thứ tự đọc-trước-ghi-sau nên **tất định**."""
+        import sqlite3
+        thu_muc = tempfile.mkdtemp(prefix="vhg15-")
+        duong = os.path.join(thu_muc, "nhap.db")
+        kn = sqlite3.connect(duong, isolation_level=None)
+        kn.execute("PRAGMA journal_mode=WAL")
+        kn.execute("CREATE TABLE g15_dem (id INTEGER PRIMARY KEY, gia_tri INTEGER NOT NULL)")
+        kn.execute("INSERT INTO g15_dem VALUES (1,0)")
+        kn.close()
+        moc = (os.path.join(thu_muc, "a.moc"), os.path.join(thu_muc, "b.moc"))
+        tho = (
+            "import os, sqlite3, sys, time\n"
+            "moc, moc_kia, duong = sys.argv[1], sys.argv[2], sys.argv[3]\n"
+            "kn = sqlite3.connect(duong, timeout=5.0, isolation_level=None)\n"
+            "kn.execute('PRAGMA busy_timeout=2000')\n"
+            "kn.execute('BEGIN')\n"                       # giao dịch HOÃN, như khuôn ngây thơ
+            "cu = kn.execute('SELECT gia_tri FROM g15_dem WHERE id=1').fetchone()[0]\n"
+            "open(moc, 'w').write('x')\n"                # đã ĐỌC xong
+            "het = time.time() + 60\n"
+            "while not os.path.exists(moc_kia) and time.time() < het: time.sleep(0.02)\n"
+            "try:\n"                                      # cả hai đã đọc, giờ mới ghi
+            "    kn.execute('UPDATE g15_dem SET gia_tri=? WHERE id=1', (cu + 1,))\n"
+            "    kn.execute('COMMIT')\n"
+            "    print('TIN', cu)\n"
+            "except sqlite3.Error as e:\n"
+            "    print('LOI', type(e).__name__, str(e)[:60])\n")
+        ps = []
+        try:
+            for i in (0, 1):
+                ps.append(subprocess.Popen(
+                    [sys.executable, "-c", tho, moc[i], moc[1 - i], duong],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+            ra = [p.communicate(timeout=180) for p in ps]
+            self.assertEqual([p.returncode for p in ps], [0, 0],
+                             "tiến trình SQLite thoát khác 0: %s" % str(ra)[:300])
+            kn = sqlite3.connect(duong)
+            that = kn.execute("SELECT gia_tri FROM g15_dem WHERE id=1").fetchone()[0]
+            kn.close()
+        finally:
+            shutil.rmtree(thu_muc, ignore_errors=True)
+        tin = sum(1 for x in ra if x[0].strip().startswith("TIN"))
+        loi = [x[0].strip() for x in ra if x[0].strip().startswith("LOI")]
+        # SQLite PHẢI từ chối ít nhất một bên: sau khi bên kia chốt, ảnh đọc của bên này đã cũ
+        # nên lượt nâng khoá thất bại (`SQLITE_BUSY_SNAPSHOT`) — trả NGAY, `busy_timeout`
+        # không chờ ca này (SHARED_CONTRACTS §30.4).
+        self.assertEqual(tin, 1,
+                         "SQLite cho qua %d lượt chốt (lẽ ra đúng 1). Nếu là 2 thì nó ĐÃ âm "
+                         "thầm mất một cập nhật — TRÁI với số đo 15/10/2026, phải đo lại "
+                         "trước khi tin. Chi tiết: %s" % (tin, ra))
+        self.assertEqual(len(loi), 1, "SQLite lẽ ra phải TỪ CHỐI đúng một bên: %s" % ra)
+        self.assertEqual(that, 1, "giá trị cuối phải là 1 (một lượt chốt), nhận %s" % that)
+        print("        SQLite từ chối ồn ào: %s" % loi[0][:110])
+
+    def test_e4_khoa_het_gio_va_giao_dich_hong(self):
+        """Hai kết cục còn lại, phân biệt bằng SQLSTATE — không bằng chữ trong thông báo.
+
+        · `55P03` lock_not_available  = KHOA_HET_GIO     (thử lại được, an toàn)
+        · `P0001` + `25P02`           = GIAO_DICH_HONG   (thử lại VÔ ÍCH, phải sửa dữ liệu)
+        """
+        self._dat_lai()
+        q("UPDATE g15_dem SET gia_tri=7 WHERE id=1")
+        goc_tam = CUM.thu_muc or tempfile.gettempdir()
+        moc, tha = os.path.join(goc_tam, "e4.giu"), os.path.join(goc_tam, "e4.tha")
+        for f in (moc, tha):
+            if os.path.exists(f):
+                os.remove(f)
+        giu = subprocess.Popen(["psql", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                                "-d", CSDL_THU, "-qtAX"], stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        giu.stdin.write("BEGIN;\nUPDATE g15_dem SET gia_tri=99 WHERE id=1;\n"
+                        "\\! touch %s\n\\! while [ ! -f %s ]; do sleep 0.1; done\nROLLBACK;\n\\q\n"
+                        % (moc, tha))
+        giu.stdin.flush()
+        het = time.time() + 60
+        while not os.path.exists(moc) and time.time() < het:
+            time.sleep(0.05)
+        self.assertTrue(os.path.exists(moc), "kết nối giữ khoá không vào được giao dịch")
+        _, _, err, ma_loi = self._q_verbose(
+            "SET lock_timeout='400ms';\nBEGIN;\n"
+            "UPDATE g15_dem SET gia_tri=1 WHERE id=1;\nCOMMIT;")
+        with open(tha, "w") as _f:
+            _f.write("tha")
+        giu.wait(timeout=20)
+        giu.stdin.close()
+        giu.stdout.close()
+        giu.stderr.close()
+        self.assertIn("55P03", ma_loi,
+                      "KHOA_HET_GIO phải là SQLSTATE 55P03, nhận %s — stderr: %s"
+                      % (ma_loi or "(không có SQLSTATE)", err[-200:]))
+        _, out, _ = q("SELECT gia_tri FROM g15_dem WHERE id=1")
+        self.assertEqual(out.strip(), "7", "KHOA_HET_GIO mà vẫn ghi được — sai")
+        # GIAO_DICH_HONG: dùng chính bảng bút toán bất biến đã dựng ở lớp B.
+        rc = q("INSERT INTO tc_but_toan (tenant_id,loai,so_tien_dong,chieu,nguon,can_cu,tao_luc)"
+               " VALUES (1,'cod',1000,'ghi_no','hang','e4','x')")[0]
+        self.assertEqual(rc, 0)
+        ma_bt = q("SELECT max(id) FROM tc_but_toan")[1].strip()
+        _, _, err_all, ma_all = self._q_verbose(
+            "\\echo C1\nBEGIN;\n\\echo C2\n"
+            "UPDATE tc_but_toan SET so_tien_dong=1 WHERE id=%s;\n\\echo C3\n"
+            "INSERT INTO tc_but_toan (tenant_id,loai,so_tien_dong,chieu,nguon,can_cu,tao_luc)"
+            " VALUES (1,'cod',5000,'ghi_no','hang','sau-trigger','x');\n\\echo C4\nCOMMIT;\n"
+            % ma_bt)
+        self.assertIn("P0001", ma_all, "trigger phải ném P0001: %s" % err_all[-200:])
+        self.assertIn("25P02", ma_all,
+                      "câu SAU trigger phải bị chối bằng 25P02 — PostgreSQL huỷ CẢ giao dịch, "
+                      "khác `RAISE(ABORT)` của SQLite chỉ huỷ CÂU: %s" % err_all[-300:])
 
 
 if __name__ == "__main__":

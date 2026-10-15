@@ -460,7 +460,7 @@ def _cap_nhat_cong_no(tenant_id, so, doi_tac, delta):
 
 def ghi_but_toan(tenant_id, loai, so_tien_dong, nguon, can_cu, tao_boi=None,
                  don_id=None, carrier_account_id=None, batch_id=None, dao_cua=None):
-    """Ghi MỘT bút toán + cập nhật công nợ trong CÙNG một transaction.
+    """Ghi MỘT bút toán + cập nhật công nợ trong CÙNG một giao dịch (`csdl.giao_dich`).
 
     `so_tien_dong` phải >= 0 — hướng nằm ở `loai` (xem `TAC_DONG_CONG_NO`). Truyền số âm là
     lỗi của người gọi, không phải cách diễn đạt thứ hai: hai cách diễn đạt cùng một việc là
@@ -482,7 +482,11 @@ def ghi_but_toan(tenant_id, loai, so_tien_dong, nguon, can_cu, tao_boi=None,
 
     td = TAC_DONG_CONG_NO[loai]
     chieu = CHIEU_THEO_DAU[td[1]] if td else "ghi_no"
-    with csdl.khoa_ghi:
+    # `giao_dich()` chứ không `khoa_ghi` trần: khoá chỉ chặn hai thread giẫm nhau, nó KHÔNG
+    # làm hai câu dưới đây thành một đơn vị. Trước 15/10/2026 chỗ này dùng khoá trần và
+    # docstring vẫn ghi "CÙNG một transaction" — đo ra thì không phải: ép bước công nợ hỏng,
+    # bút toán 777.000đ vẫn vào sổ còn công nợ đứng yên, lệch đúng 777.000đ.
+    with csdl.giao_dich():
         bt = csdl.ghi(
             "INSERT INTO tc_but_toan (tenant_id, loai, don_id, carrier_account_id, so_tien_dong,"
             " chieu, nguon, can_cu, tao_boi, tao_luc, batch_id, dao_cua)"
@@ -804,7 +808,13 @@ def ghi_nhan_thanh_toan(tenant_id, user_id, dot_id, don_id, so_tien_dong, kiem_q
     phai_tra = c["so_tien_doi_soat"] if c["so_tien_doi_soat"] is not None else (
         c["so_tien_hang_bao"] if c["so_tien_hang_bao"] is not None else c["so_tien_du_kien"])
 
-    with csdl.khoa_ghi:
+    # MỘT giao dịch cho CẢ SÁU bước: dòng đợt · cộng đã-trả · chuyển COD_SETTLED · dòng
+    # chuyển trạng thái · bút toán · nhật ký. Trước 15/10/2026 đây là `khoa_ghi` trần, nên
+    # mỗi `csdl.ghi()` tự commit. Đo được hậu quả: đơn COD 100.000 đã trả 50.000, đợt mới trả
+    # 90.000 → câu 2 từ chối đúng (50+90 > 100), nhưng câu 1 ĐÃ COMMIT: tc_dot_tt_dong mang
+    # một dòng 90.000 MỒ CÔI, tổng đợt 140.000 trong khi tc_cod ghi đã trả 50.000. Tệ hơn:
+    # UNIQUE(dot_id, don_id) chặn làm lại, nên đợt đó kẹt vĩnh viễn, phải sửa tay dưới CSDL.
+    with csdl.giao_dich():
         try:
             csdl.ghi("INSERT INTO tc_dot_tt_dong (dot_id, tenant_id, don_id, so_tien_dong)"
                      " VALUES (?,?,?,?)", (dot_id, tenant_id, don_id, st))
@@ -832,13 +842,17 @@ def ghi_nhan_thanh_toan(tenant_id, user_id, dot_id, don_id, so_tien_dong, kiem_q
                      (tenant_id, don_id, moi["trang_thai"], "COD_SETTLED", "hang",
                       f"đợt thanh toán #{dot_id} trả đủ {phai_tra}", user_id, csdl.bay_gio()))
 
-    ghi_but_toan(tenant_id, "cod_hang_tra", st, "hang",
-                 f"đợt thanh toán #{dot_id} ({dot['ma_dot']}) trả {st} cho đơn {don_id}",
-                 tao_boi=user_id, don_id=don_id,
-                 carrier_account_id=c["carrier_account_id"] or dot["carrier_account_id"],
-                 batch_id=dot_id)
-    ghi_nhat_ky(tenant_id, "ghi_nhan_thanh_toan", f"don:{don_id}",
-                f"đợt #{dot_id} trả {st}; đủ={du}", user_id)
+        # Bút toán và nhật ký NẰM TRONG cùng giao dịch. Để ngoài thì có ca: tiền đã áp vào
+        # tc_cod mà sổ cái không có bút toán nào — và bút toán thì không ghi bù được bằng
+        # UPDATE (trigger bất biến), nên chênh đó nằm lại vĩnh viễn.
+        # `giao_dich()` lồng nhau được (SAVEPOINT), nên ghi_but_toan gọi trong đây vẫn đúng.
+        ghi_but_toan(tenant_id, "cod_hang_tra", st, "hang",
+                     f"đợt thanh toán #{dot_id} ({dot['ma_dot']}) trả {st} cho đơn {don_id}",
+                     tao_boi=user_id, don_id=don_id,
+                     carrier_account_id=c["carrier_account_id"] or dot["carrier_account_id"],
+                     batch_id=dot_id)
+        ghi_nhat_ky(tenant_id, "ghi_nhan_thanh_toan", f"don:{don_id}",
+                    f"đợt #{dot_id} trả {st}; đủ={du}", user_id)
     return {"da_tra": moi["so_tien_da_tt"], "phai_tra": phai_tra, "du": du,
              "con_lai": phai_tra - moi["so_tien_da_tt"],
              "trang_thai": "COD_SETTLED" if du else moi["trang_thai"]}

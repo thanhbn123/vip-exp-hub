@@ -1,5 +1,6 @@
 # CSDL SQLite của Multi-Tenant SaaS (schema v2). CSDL riêng (hub.db) — KHÔNG đụng gateway/du-lieu/gateway.db.
 # v2 đổi lõi quyền: user ↔ NHIỀU tenant qua tenant_memberships; quyền lưu trong CSDL (roles/permissions).
+import contextlib
 import os
 import sqlite3
 import threading
@@ -290,6 +291,7 @@ def dong():
     if kn is not None:
         kn.close()
         _local.kn = None
+    _local.sau_giao_dich = 0   # bậc lồng đi theo kết nối; quên xoá là lượt sau không chịu commit
     _da_khoi_tao.clear()
 
 
@@ -300,11 +302,61 @@ def phien_ban_hien_tai():
 
 
 def ghi(sql, tham_so=()):
+    """Ghi MỘT câu. Tự commit NẾU không nằm trong `giao_dich()`; nằm trong thì để khối ngoài chốt."""
     kn = mo()
     with khoa_ghi:
         con = kn.execute(sql, tham_so)
-        kn.commit()
+        if not getattr(_local, "sau_giao_dich", 0):
+            kn.commit()
         return con
+
+
+@contextlib.contextmanager
+def giao_dich():
+    """Gộp nhiều câu ghi thành MỘT đơn vị: vào hết, hoặc không câu nào vào.
+
+    Vì sao cần, đo được ngày 15/10/2026: `tai_chinh.ghi_but_toan` có docstring ghi
+    "ghi bút toán + cập nhật công nợ trong CÙNG một transaction", nhưng cả hai bước đều gọi
+    `csdl.ghi()` — mà hàm đó commit sau MỖI câu. Ép bước hai hỏng: bút toán 777.000đ VÀO SỔ,
+    công nợ KHÔNG đổi, sổ lệch đúng 777.000đ. Và bút toán ấy KHÔNG XOÁ ĐƯỢC (trigger bất
+    biến), nên sai nằm lại vĩnh viễn, chỉ chữa được bằng bút toán đảo.
+
+    Dùng SAVEPOINT cho MỌI tầng, không dùng `BEGIN IMMEDIATE`. Đo trên python 3.9.6 +
+    SQLite 3.51.0 (ca C): `BEGIN IMMEDIATE` NỔ "cannot start a transaction within a
+    transaction" nếu python đã tự mở giao dịch cho một câu DML trước đó — mà python tự mở
+    lúc nào thì mã gọi không kiểm soát được. SAVEPOINT chạy đúng ở CẢ HAI thế: ở đỉnh thì nó
+    tự mở giao dịch (đo ca F: RELEASE xong dữ liệu BỀN, đọc được từ kết nối khác; ca G:
+    ROLLBACK TO thì bỏ sạch), lồng trong thì nó là điểm lùi (ca H).
+
+    Nó cũng vá được ca nguy nhất — ca E: `RAISE(ABORT)` của SQLite chỉ huỷ CÂU, không huỷ
+    GIAO DỊCH, nên câu chạy SAU một trigger-chặn vẫn commit bình thường. Bọc SAVEPOINT thì
+    câu trước đó bị cuốn theo (đo ca I). PostgreSQL thì `RAISE EXCEPTION` huỷ cả giao dịch —
+    KHÁC BIỆT THẬT, đã ghi trong thu_postgres.test_c2.
+
+    Giữ `khoa_ghi` suốt khối: trong MỘT tiến trình thì mỗi lúc chỉ một người ghi.
+    KHÔNG phủ nhiều tiến trình — chỗ đó phải đo riêng (mục 11 của chỉ thị G12).
+    """
+    kn = mo()
+    with khoa_ghi:
+        sau = getattr(_local, "sau_giao_dich", 0)
+        ten = "gd%d" % sau
+        kn.execute("SAVEPOINT " + ten)
+        _local.sau_giao_dich = sau + 1
+        try:
+            yield kn
+        except BaseException:
+            # BaseException chứ không Exception: KeyboardInterrupt/SystemExit giữa chừng cũng
+            # phải lùi, không được để lại nửa bút toán rồi đi ra.
+            kn.execute("ROLLBACK TO " + ten)
+            kn.execute("RELEASE " + ten)
+            _local.sau_giao_dich = sau
+            if sau == 0:
+                kn.commit()
+            raise
+        kn.execute("RELEASE " + ten)
+        _local.sau_giao_dich = sau
+        if sau == 0:
+            kn.commit()
 
 
 def mot(sql, tham_so=()):

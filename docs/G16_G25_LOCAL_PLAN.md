@@ -172,3 +172,34 @@ Nếu sau này có người đọc tài liệu này rồi tưởng đó là ch�
 ### Ràng buộc riêng của G18
 **Concurrency CHỈ trên DB test riêng** — mỗi tiến trình `VIP_HUB_DATA` riêng hoặc CSDL tạm riêng; **cấm
 dùng CSDL thật**. PostgreSQL **chỉ cụm riêng**, **cấm đụng `:5432`**. Không mở cổng ra ngoài.
+
+---
+
+## 9. WAVE G19 — "ĐÓNG NỢ VẬN HÀNH ĐÃ ĐO ĐƯỢC" (chuẩn bị)
+
+**Nền dự kiến:** `integration/g18` @ `626d422` · sau khi AG-01 nghiệm thu xong.
+**Nguyên tắc giữ nguyên:** chỉ đóng lỗ hổng **đã đo được**, không thêm tính năng mới.
+
+| Làn | Việc | Nguồn — lỗ hổng CÓ THẬT |
+|---|---|---|
+| **AG-02** | `gioi_han` **PHẦN A**: trần tần suất **nhân theo số bản** | AG-02 đo G18: trần khai 20 ⇒ qua **20·40·80·160** lượt với N=1·2·4·8. **Khuôn chữa ĐÃ CÓ SẴN TRONG NHÀ** (`gioi_han` PHẦN B: `UPDATE … WHERE … + ? <= trần`) đã đo giữ đúng trần qua **4 tiến trình** |
+| **AG-03** | **Cửa lách thứ hai**: bộ đếm tần suất **mất sạch khi khởi động lại** | AG-02 ghi G18: *"đó là cửa lách thứ hai, độc lập với số tiến trình"* — đã ghi trong `gioi_han.py`, **chưa sửa** |
+| **AG-04** | **21 mã trạng thái Viettel Post** chưa ánh xạ | `BAN_GIAO.md` §6.1 |
+| **AG-05** | **`V-13910`** (CAO): 16/17 màn khai ở đợt 3 **không tồn tại trong giao diện** | `BAN_GIAO.md` §6.1 · AG-06 đo G17: `carrier_health`/`finance`/`health` = **0 lần được `admin.js` tham chiếu = MÃ CHẾT** |
+| **AG-06** | **`V-13911`** (CAO): giao diện quản trị **không dùng được bằng bàn phím** — 15 lượt Tab không rời `body` | `BAN_GIAO.md` §6.1 · `BAN_GIAO.md` §10 gọi đây là **chỗ yếu nhất của hệ** |
+| **AG-01** | QA độc lập + **nghiệm thu trên bản đã gộp** | như G18 |
+| **AG-00** | Route `truy_van.py` + `DDL_G12Q` vào **migration v9**; `P-3`/`P-4` | `BAN_GIAO.md` §6.1 — tệp `migrate.py` thuộc AG-00 |
+
+### Acceptance của G19
+1. **AG-02:** trần tần suất **giữ nguyên** qua N=1·2·4·8 tiến trình **thật**; **đối chứng âm** —
+   cố tình quay lại bộ đếm trong bộ nhớ thì phép đo **phải ĐỎ**.
+2. **AG-03:** bộ đếm **sống qua khởi động lại**; có ca chứng minh (khởi động lại rồi vượt trần ⇒ bị chặn).
+3. **AG-04:** 21 mã có **bảng ánh xạ + ca**, và mã **chưa xác minh** vẫn `NEEDS_REVIEW` (không đoán).
+4. **AG-05:** mỗi màn hoặc **có đường vào thật** (bấm được, có ca E2E), hoặc **bị bỏ kèm lý do**.
+5. **AG-06:** ca bàn phím **đi hết được** các màn quản trị; thêm ca **cùng lượt** với bản vá.
+6. **AG-00:** `truy_van.py` có route thật + E2E qua HTTP; `P-3`/`P-4` sửa xong và **không còn câu nào sai về hệ thống** trong tài liệu.
+7. **AG-01:** đối chiếu chéo + regression riêng + mục CHƯA ĐO nói thẳng.
+
+> **Ghi chú thi hành (bài học G18):** trong wave G18, AG-02 và AG-04 **kẹt ~45 phút** nhưng vẫn
+> đang làm việc thật; AG-00 **không dừng chúng** và cả hai **tự settlement**. ⇒ Với G19: khi một làn
+> có vẻ đứng yên, **thu bằng chứng trước**, và **không** dừng/abandon khi chỉ có vắng mặt.

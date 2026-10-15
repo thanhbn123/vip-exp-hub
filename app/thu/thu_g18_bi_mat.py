@@ -57,6 +57,7 @@ HANG_HEADER_VB = "HANG-HEADER-5XX-2f81ce40"                  # cùng vai, nhưng
 HANG_RIENG_2XX = "HANG-HEADER-2XX-4be27d10"                  # cùng vai, nhưng ở một lượt HTTP 200
 HANG_PHIEN = "PHIEN-1234abcd-SET-COOKIE"                     # `Set-Cookie`: bí mật phiên của hãng
 BI_MAT_DUONG = "DUONG-DAN-CHUA-BI-MAT-c41f9a2b7e"            # bí mật đặt trong ĐƯỜNG DẪN URL
+BI_MAT_QUERY = "TOKEN-QUERY-8a3f21d0"                        # bí mật đặt trong QUERY của URL
 ACC_GIA_DINH = "acct-gia-dinh-g18"
 TS_GIA_DINH = "1700000000000"
 DUONG_THAT = "/webopenplatformapi/api/order/addOrder"        # endpoint THẬT: đối chứng đường
@@ -505,6 +506,33 @@ class CaG18BiMatDuongDan(CaGocG18):
             self.assertFalse(http_jt._la_doan_bi_mat(doan),
                              f"đoạn endpoint {doan!r} bị coi là bí mật ⇒ che nhầm, hỏng chẩn đoán")
 
+    def test_k2e_bi_mat_o_QUERY_string_va_o_CA_HAI_cung_luc_khong_ro(self):
+        """Đề bài nêu *"query string / path"* — ca này giữ CẢ HAI trong cùng một bộ thân.
+
+        QUERY đã được G17 (AG-02) che bằng `_gia_tri_tu_url`; ở đây nó được đo LẠI trong cùng bộ
+        thân với đường dẫn, để một chỗ chạy được trọn câu chuyện "bí mật trong URL". Ca nặng nhất
+        là lượt **vừa có bí mật ở query, vừa có bí mật ở đường dẫn** — hai cơ chế che khác nhau
+        cùng phải làm việc, và một trong hai hỏng thì `than_da_che` vẫn sạch nếu cái kia che được
+        ⇒ nên ca này khẳng định TỪNG bí mật một, không gộp.
+        """
+        for nhan, duong in (
+                ("chỉ query", DUONG_THAT + "?tk=" + BI_MAT_QUERY),
+                ("query + đường dẫn", "/api/" + BI_MAT_DUONG + "/order/addOrder?tk=" + BI_MAT_QUERY)):
+            with self.subTest(vi_tri=nhan):
+                stub = self._stub_echo_duong()
+                with self.assertRaises(transport.LoiVinhVien) as ctx:
+                    self.gui(stub.url_voi(duong), {"digest": "D" * 24})
+                e = ctx.exception
+                than_tho = self.cho_tra_loi(stub).decode("utf-8", "replace")
+                # ĐỐI CHỨNG DƯƠNG: bí mật THẬT SỰ đi trên dây VÀ THẬT SỰ bị echo lại.
+                self.assertIn(BI_MAT_QUERY, stub.yeu_cau[-1]["duong_dan"],
+                              "bí mật query không thật sự đi trên dây ⇒ ca vô nghĩa")
+                self.assertIn(BI_MAT_QUERY, than_tho, "stub không echo query ⇒ ca vô nghĩa")
+                self.khang_dinh_sach(e, BI_MAT_QUERY, f"(query, {nhan})")
+                if "đường dẫn" in nhan:
+                    self.assertIn(BI_MAT_DUONG, than_tho, "stub không echo đường dẫn ⇒ ca vô nghĩa")
+                    self.khang_dinh_sach(e, BI_MAT_DUONG, f"(đường dẫn, {nhan})")
+
 
 # =================================================================================================
 # C. SÁU DẠNG BÍ MẬT × BA VỊ TRÍ
@@ -718,6 +746,9 @@ class CaG18TuKiem(CaGocG18):
         (CA_DUONG + ".test_k2c_bi_mat_NGAN_1_den_3_ky_tu_la_CA_MOT_DOAN_duong_dan_van_bi_che",
          "http_jt._doan_chua_bi_mat = lambda d, c: False",
          "bỏ luật 'cả đoạn BẰNG NHAU' ⇒ bí mật NGẮN trong đường dẫn lộ nguyên văn"),
+        (CA_DUONG + ".test_k2e_bi_mat_o_QUERY_string_va_o_CA_HAI_cung_luc_khong_ro",
+         "http_jt._gia_tri_tu_url = lambda u: set()",
+         "bỏ giá trị QUERY khỏi tập che ⇒ bí mật trong query lộ khi hãng echo lại"),
     )
 
     LOP_CA = (CA_HANG, CA_DUONG, "CaG18SauDang", "CaG18DoiChungDuong")
@@ -745,7 +776,7 @@ class CaG18TuKiem(CaGocG18):
     def test_l1_moi_bo_do_moi_DEU_bat_duoc_khi_bi_pha(self):
         # CHỐT NGƯỢC: một danh sách RỖNG cũng làm vòng lặp dưới đây "đạt" một cách vô nghĩa —
         # đúng khuôn hỏng mà `chay_tat_ca.sh` đã gặp với `VIP_TOI_THIEU_BO` (dòng 79–84).
-        self.assertGreaterEqual(len(self.CA), 10,
+        self.assertGreaterEqual(len(self.CA), 11,
                                 "danh sách đột biến bị thu hẹp ⇒ cổng tự kiểm mất răng")
         for ten_ca, dot_bien, vi_sao in self.CA:
             self.assertTrue(ten_ca and dot_bien and vi_sao, "mục đột biến thiếu vế")

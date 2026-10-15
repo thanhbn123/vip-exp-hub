@@ -134,6 +134,14 @@ Một chỗ in đường dẫn nguyên văn **thứ hai** đã bị đóng luôn
 bằng '/'"` trong `tach_url()`. Nhánh đó gần như không tới được (`urlsplit` đã bảo đảm đường dẫn của
 URL tuyệt đối bắt đầu bằng `/`) — nhưng "gần như" chính là lý do nó từng nằm lại.
 
+### 2.5 QUERY — đo lại trong cùng bộ thân
+
+Đề bài nêu *"query string / path"*. Query đã được **G17 (AG-02)** che bằng `_gia_tri_tu_url`; ca
+`k2e` **đo lại** nó trong cùng bộ thân với đường dẫn, để một chỗ chạy được trọn câu chuyện "bí mật
+trong URL". Ca nặng nhất là lượt **vừa có bí mật ở query, vừa có bí mật ở đường dẫn** — hai cơ chế
+che khác nhau cùng phải làm việc, nên ca khẳng định **từng bí mật một**, không gộp: gộp lại thì một
+cơ chế hỏng vẫn có thể cho `than_da_che` sạch nhờ cơ chế kia, và ca sẽ xanh một cách vô nghĩa.
+
 ---
 
 ## 3. MỞ RỘNG BỘ DÒ — SÁU DẠNG × BA VỊ TRÍ
@@ -184,7 +192,7 @@ rỗng", chứ không chứng minh ngưỡng còn tác dụng.
 ## 5. TỰ KIỂM BỘ DÒ — ĐỘT BIẾN MÃ SẢN PHẨM TRONG TIẾN TRÌNH CON
 
 Luật 1 của `docs/QA_G13_G15.md` §6.3. Mỗi dòng là một **hồi quy có thật**, không phải một phép đột
-biến cho vui. Ca `l1` chạy **10 phép đột biến**, mỗi phép trong một **tiến trình con**; ca phải **ĐỎ**.
+biến cho vui. Ca `l1` chạy **11 phép đột biến**, mỗi phép trong một **tiến trình con**; ca phải **ĐỎ**.
 
 | # | Đột biến | Hồi quy được canh |
 |---|---|---|
@@ -198,6 +206,7 @@ biến cho vui. Ca `l1` chạy **10 phép đột biến**, mỗi phép trong m�
 | 8 | `_gia_tri_tu_duong_dan = lambda url, moc: set()` | che lúc IN mà không đưa vào **TẬP CHE** ⇒ cửa sau |
 | 9 | `_la_doan_bi_mat = lambda d: False` | bỏ luật HÌNH DẠNG |
 | 10 | `_doan_chua_bi_mat = lambda d, c: False` | bỏ luật "cả đoạn BẰNG NHAU" ⇒ bí mật NGẮN trong đường dẫn lộ |
+| 11 | `_gia_tri_tu_url = lambda u: set()` | bỏ giá trị **QUERY** khỏi tập che ⇒ bí mật trong query lộ khi hãng echo lại |
 
 Hai điều đáng ghi lại, vì cả hai đều là **bẫy thật** gặp phải trong lượt làm này:
 
@@ -214,7 +223,7 @@ Ca `l2` là **ĐỐI CHỨNG ĐƯỜNG** của chính cổng tự kiểm: chạy
 biến, trong tiến trình con — phải **XANH**. Không có nó thì "đột biến làm ca đỏ" không chứng minh
 được gì, vì một bộ chạy con **luôn-đỏ** cũng làm mọi dòng ở bảng trên "đạt".
 
-Chốt ngược: `l1` khẳng định `len(CA) >= 10` và `l2` khẳng định `len(LOP_CA) >= 4` — một danh sách
+Chốt ngược: `l1` khẳng định `len(CA) >= 11` và `l2` khẳng định `len(LOP_CA) >= 4` — một danh sách
 **rỗng** cũng làm vòng lặp "đạt" một cách vô nghĩa (đúng khuôn hỏng mà `chay_tat_ca.sh` đã gặp với
 `VIP_TOI_THIEU_BO`).
 
@@ -280,7 +289,7 @@ trăm byte ⇒ ≈ 18 µs), và nó luôn nằm cạnh một lượt đi-về m�
 > `env GIT_CONFIG_COUNT=0`; `chay_tat_ca.sh` được gọi kèm biến đó.
 
 ```sh
-# 1. Bộ thử của làn này — 14 ca
+# 1. Bộ thử của làn này — 15 ca
 python3 app/thu/thu_g18_bi_mat.py > /tmp/g18.log 2>&1 ; echo "EXIT=$?" ; tail -4 /tmp/g18.log
 
 # 2. Không hồi quy trên các bộ đang canh http_jt
@@ -294,13 +303,13 @@ env GIT_CONFIG_COUNT=0 VIP_HUB_DATA=/tmp/veh_g18_ag03_data \
 
 | Lệnh | Số ca | Bỏ qua | Mã thoát |
 |---|---|---|---|
-| `python3 app/thu/thu_g18_bi_mat.py` | **14** | 0 | **0** |
+| `python3 app/thu/thu_g18_bi_mat.py` | **15** | 0 | **0** |
 | `python3 app/thu/thu_http_jt.py` | **57** | 0 | **0** |
 | `python3 app/thu/thu_qa_g16.py` | **61** | 0 | **0** |
-| `env GIT_CONFIG_COUNT=0 … sh app/thu/chay_tat_ca.sh` | xem §6.6 | 1 (`thu_postgres.py` bỏ qua theo cách riêng) | xem §6.6 |
+| `env GIT_CONFIG_COUNT=0 … sh app/thu/chay_tat_ca.sh` | **1474** · 39 bộ | 0 | **0** |
 
 `thu_g18_bi_mat.py` xuất hiện trong bảng của cổng với dòng
-`✓ thu_g18_bi_mat.py  14 ca` — **không phải sửa danh sách viết cứng nào**, vì `chay_tat_ca.sh`
+`✓ thu_g18_bi_mat.py  15 ca` — **không phải sửa danh sách viết cứng nào**, vì `chay_tat_ca.sh`
 **tự dò** (`find app/thu -name 'thu_*.py'`).
 
 ### 6.5 SHA
@@ -316,7 +325,20 @@ env GIT_CONFIG_COUNT=0 VIP_HUB_DATA=/tmp/veh_g18_ag03_data \
 
 ### 6.6 LƯỢT ĐÓNG BĂNG
 
-Xem khối dưới cùng của tệp này.
+Ba commit, tất cả **trên nhánh riêng** `g18-ag03-secretpaths`. **KHÔNG push, KHÔNG deploy, KHÔNG
+tunnel, KHÔNG đụng `main`.**
+
+| Commit | Nội dung | Vì sao tách |
+|---|---|---|
+| `7b741c88b3b280d65f80b5e11301f17ebd767b26` | **nền** (`integration/g17`) | điểm rẽ của làn |
+| `d23d875b47cc4696efbe2bd488181fb881721779` | mã + bộ thử + tài liệu | lượt chạy cổng **XANH** đầu tiên (§8) |
+| *(commit kế)* | + ca `k2e` (query) và các số cuối | xem §6.7 |
+
+Xem §6.7 cho bảng số cuối cùng của lượt chạy đóng băng.
+
+### 6.7 BẢNG SỐ CUỐI CÙNG
+
+*(điền ở commit chứa chính tệp này — xem khối "LƯỢT ĐÓNG BĂNG" ở cuối tệp)*
 
 ---
 

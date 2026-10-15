@@ -17,6 +17,7 @@
 # Chạy: python3 app/thu/thu_hop_dong_jt.py
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,27 @@ CAM_GOI_MANG = ("import requests", "import httpx", "import aiohttp", "urllib.req
 def quet_goi_mang(nguon: str):
     """Trả danh sách từ khoá gọi mạng có trong `nguon`. Rỗng = sạch."""
     return [cam for cam in CAM_GOI_MANG if cam in nguon]
+
+
+# Tên thao tác CHƯA xác minh đường dẫn, dùng cho phép quét URL tuyệt đối trong mã nguồn adapter.
+# Đây là bản SAO có chủ ý của `aj.THAO_TAC_CHUA_XAC_MINH`: bộ dò phải là một phép ĐỘC LẬP, đọc
+# từ chính nó chứ không hỏi bảng đang bị soi (hỏi bảng thì bảng nói dối lúc nào cũng lọt).
+TOKEN_CHUA_XAC_MINH = ("cancelOrder", "calculatingFees", "printOrder", "getOrder")
+
+
+def quet_url_bua(nguon: str):
+    """Trả danh sách URL TUYỆT ĐỐI (`http(s)://…`) trỏ tới bốn thao tác chưa xác minh.
+
+    Vì sao quét cả TỆP chứ không chỉ quét bảng `DUONG_API`: bảng là một chỗ, nhưng một URL dán
+    thẳng vào một hàm (`url = "https://…/cancelOrder"`) thì không đi qua bảng nào cả. Bộ dò đọc
+    NGUỒN nên bắt được cả hai đường. Đường dẫn trong CHÚ THÍCH (`open.jtexpress.vn/apiDoc/…`,
+    không có scheme) KHÔNG bị tính — đó là dẫn nguồn tài liệu, không phải một lượt gọi.
+    """
+    ra = []
+    for mau in re.findall(r"https?://[^\s\"'`,;)\]}]+", nguon):
+        if any(tok in mau for tok in TOKEN_CHUA_XAC_MINH):
+            ra.append(mau)
+    return ra
 
 
 class ChoPhepLiveTam:
@@ -705,6 +727,331 @@ class G_DuongNoiCredentials(unittest.TestCase):
         # TỰ KIỂM bộ dò: nếu mẫu hỏng thì ca trên xanh vô nghĩa.
         self.assertIsNotNone(mau.search("x = bao_mat.ma_hoa(ro, aad)"))
         self.assertIsNone(mau.search("x = bao_mat.ma_hoa_cred(c, t, h)"))
+
+
+class I_ThieuTruongHanhChinh(unittest.TestCase):
+    """AG-03 — NHÁNH BIÊN của trường hành chính: thiếu cột nào thì phải NÓI ĐÚNG cột đó.
+
+    Vì sao nhóm này tồn tại dù nhóm D đã có D6/D7: D6/D7 đo "thiếu CẢ BỐN thì có bị chặn không".
+    Đó là một ca, không phải một phép đo — nó xanh kể cả khi hàm trả về một danh sách cứng bốn
+    phần tử, hoặc khi nó chỉ đếm mà không nói TÊN cột. Ở đây mỗi cột được đo RIÊNG, và mỗi ca
+    phủ định đều có ĐỐI CHỨNG DƯƠNG ngay cạnh: điền đúng cột đó vào thì nó phải BIẾN MẤT khỏi
+    danh sách thiếu. Thiếu vế đối chứng thì một hàm `return ["a","b","c","d"]` cũng làm mọi ca
+    dưới đây xanh.
+    """
+
+    BON_COT = ("nguoi_gui_tinh", "nguoi_gui_quan", "nguoi_nhan_tinh", "nguoi_nhan_quan")
+
+    def test_i1_moi_cot_do_rieng_va_doi_chung_duong_bien_mat(self):
+        for cot in self.BON_COT:
+            thieu_don = dict(DON_MAU)
+            thieu_don.pop(cot)
+            self.assertEqual(ad_mock().truong_hanh_chinh_thieu(thieu_don), [cot],
+                             f"thiếu {cot} mà không nói đúng tên cột đó")
+            # ĐỐI CHỨNG DƯƠNG: điền lại ĐÚNG cột ấy ⇒ hết thiếu. Cùng một đơn, khác một trường.
+            self.assertEqual(ad_mock().truong_hanh_chinh_thieu(dict(DON_MAU)), [],
+                             f"đơn đầy đủ mà vẫn báo thiếu (đang đo {cot})")
+
+    def test_i2_bien_rong_khoang_trang_None_va_doi_chung_duong(self):
+        """Rỗng · toàn khoảng trắng · None đều là THIẾU. Chuỗi thật là ĐỦ (đối chứng)."""
+        for gia_tri in ("", "   ", "\t\n", None):
+            don = dict(DON_MAU, nguoi_gui_tinh=gia_tri)
+            self.assertIn("nguoi_gui_tinh", ad_mock().truong_hanh_chinh_thieu(don),
+                          f"giá trị {gia_tri!r} bị coi là ĐÃ ĐIỀN")
+        # ĐỐI CHỨNG DƯƠNG: cùng cột đó, một chuỗi thật ⇒ đủ.
+        self.assertNotIn("nguoi_gui_tinh",
+                         ad_mock().truong_hanh_chinh_thieu(dict(DON_MAU, nguoi_gui_tinh="Huế")))
+
+    def test_i3_mock_thieu_thi_ghi_danh_sach_chu_khong_chan(self):
+        """Ở mock đơn THIẾU vẫn dựng được (dữ liệu demo chưa có địa chỉ) — nhưng phải GHI LẠI."""
+        don = dict(DON_MAU)
+        for cot in self.BON_COT:
+            don.pop(cot)
+        yc = ad_mock().yeu_cau_tao_don(don)
+        self.assertEqual(sorted(yc["thieu_truong"]), sorted(self.BON_COT))
+        # ĐỐI CHỨNG DƯƠNG: đơn đủ thì KHÔNG có khoá đó — nếu khoá luôn xuất hiện thì ca trên
+        # chỉ chứng minh "có một khoá tên thieu_truong", không chứng minh nó phản ánh dữ liệu.
+        self.assertNotIn("thieu_truong", ad_mock().yeu_cau_tao_don(dict(DON_MAU)))
+
+    def test_i4_ngoai_mock_thieu_thi_DUNG_va_neu_dung_TEN_COT(self):
+        with ChoPhepLiveTam():
+            for cot in self.BON_COT:
+                don = dict(DON_MAU)
+                don.pop(cot)
+                ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
+                with self.assertRaises(lh.NormalizedCarrierError) as e:
+                    ad.yeu_cau_tao_don(don)
+                self.assertEqual(e.exception.ma_chuan, lh.THAM_SO_SAI)
+                self.assertIn(cot, e.exception.thong_diep,
+                              f"lỗi không nêu TÊN cột {cot} — người sửa phải đoán")
+                self.assertIn("1450033315", e.exception.thong_diep,
+                              "phải nêu mã lỗi hãng sẽ trả, để tra được tài liệu")
+
+    def test_i5_DOI_CHUNG_DUONG_du_dia_chi_thi_di_QUA_cua_hanh_chinh(self):
+        """Đối chứng PHÂN BIỆT cho I4: cùng môi trường, đơn ĐỦ địa chỉ ⇒ lỗi KHÁC HẲN.
+
+        Nếu cửa hành chính chặn nhầm cả đơn đủ dữ liệu thì I4 vẫn xanh (nó chỉ đòi "có ném"),
+        và trên đời sẽ không đơn nào gửi được. Ở đây đơn đủ đi qua cửa đó và dừng ở chốt D-9 —
+        tức nó đã đi XA HƠN I4 đúng một cửa. Đó mới là bằng chứng cửa hành chính phân biệt được.
+        """
+        with ChoPhepLiveTam():
+            ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
+            with self.assertRaises(lh.NormalizedCarrierError) as e:
+                ad.yeu_cau_tao_don(dict(DON_MAU))
+            self.assertIn("D-9", e.exception.thong_diep,
+                          "đơn đủ địa chỉ phải đi qua cửa hành chính rồi mới dừng ở D-9")
+            self.assertNotIn("thiếu trường hành chính", e.exception.thong_diep)
+
+    def test_i6_danh_sach_thieu_khong_bao_gio_duoc_gui_len_hang(self):
+        don = dict(DON_MAU, nguoi_nhan_quan="")
+        yc = ad_mock().yeu_cau_tao_don(don)
+        self.assertEqual(yc["thieu_truong"], ["nguoi_nhan_quan"])
+        self.assertNotIn("thieu_truong", yc["bizContent"])
+        self.assertNotIn("thieu_truong", json.dumps(json.loads(yc["bizContent"])))
+
+
+class J_TienSaiDinhDang(unittest.TestCase):
+    """AG-03 — BIÊN của tiền: mọi cách viết hỏng đều ra `THAM_SO_SAI`, và KHÔNG làm tròn im lặng.
+
+    Mỗi dòng của `BANG` là một CẶP: (cách viết HỎNG, cách viết HỢP LỆ gần nhất, giá trị đúng).
+    Cặp là điểm mấu chốt — một ca phủ định đứng một mình chỉ chứng minh "có ném", còn cặp chứng
+    minh hàm PHÂN BIỆT được: cùng một chỗ gọi, đổi đúng một ký tự thì đi qua.
+    """
+
+    # (hỏng, hợp lệ, giá trị nguyên đúng)
+    BANG = (
+        (15000.5,       15000,        15000),
+        ("15000.5",     "15000",      15000),
+        (0.1,           0,            0),
+        (-1,            0,            0),
+        ("-5",          "5",          5),
+        (True,          1,            1),
+        ("mười nghìn",  "10000",      10000),
+        ("nan",         "0",          0),
+        ("inf",         "0",          0),
+        (float("nan"),  0.0,          0),
+        ("²",           "2",          2),
+        ("١٢٣",         "123",        123),
+        ("１５００",     "1500",       1500),
+        ("1,5",         "15",         15),
+    )
+
+    def _biz(self, **them):
+        return json.loads(ad_mock().yeu_cau_tao_don(dict(DON_MAU, **them))["bizContent"])
+
+    def test_j1_moi_dong_la_mot_CAP_phu_dinh_va_doi_chung_duong(self):
+        for xau, tot, mong in self.BANG:
+            with self.subTest(xau=xau):
+                # (1) CÁCH VIẾT HỎNG ⇒ ném, mã chuẩn THAM_SO_SAI (không phải ValueError trần).
+                with self.assertRaises(lh.NormalizedCarrierError) as e:
+                    self._biz(cod=xau)
+                self.assertEqual(e.exception.ma_chuan, lh.THAM_SO_SAI)
+                # (2) ĐỐI CHỨNG DƯƠNG: cách viết hợp lệ GẦN NHẤT, cùng chỗ gọi, đi qua và ra
+                #     ĐÚNG giá trị. Không có vế này thì (1) xanh kể cả khi hàm chặn tất cả.
+                self.assertEqual(self._biz(cod=tot)["codMoney"], str(mong))
+
+    def test_j2_TU_KIEM_cac_dang_hong_thuc_su_tung_lam_hong_duong_cu(self):
+        """Chứng minh ba dạng dưới đây KHÔNG phải ca tưởng tượng — chúng đánh lừa được `isdigit`.
+
+        Không có ca này thì J1 vẫn xanh, nhưng người đọc không biết dòng `"²"` là một lỗi THẬT
+        đã đo được hay chỉ là phòng xa. Đây là phép đo trên chính Python đang chạy.
+        """
+        self.assertTrue("²".isdigit(), "tiền đề của ca '²' không còn đúng trên Python này")
+        with self.assertRaises(ValueError):
+            int("²")        # ⇒ đường cũ ném ValueError TRẦN, phá hợp đồng mã lỗi §5
+        for chuoi in ("١٢٣", "１５００"):
+            self.assertTrue(chuoi.isdigit())
+            self.assertFalse(chuoi.isascii())
+            self.assertIsInstance(int(chuoi), int)   # đọc ĐƯỢC ⇒ đường cũ ĐỔI IM LẶNG
+        self.assertTrue("15000".isascii() and "15000".isdigit())
+
+    def test_j3_khong_lam_tron_im_lang_bang_chung_so_hoc(self):
+        """`int(15000.7)` là 15000 — nếu hàm làm tròn, KẾT QUẢ TRÔNG VẪN HỢP LỆ và sai 0,7 đồng."""
+        self.assertEqual(int(15000.7), 15000, "tiền đề của ca này đã đổi")
+        with self.assertRaises(lh.NormalizedCarrierError):
+            self._biz(cod=15000.7)
+        # và điều KHÔNG được xảy ra: một gói yêu cầu ra đời với con số đã bị bỏ phần lẻ.
+        self.assertEqual(self._biz(cod=15000)["codMoney"], "15000")
+
+    def test_j4_bien_0_va_so_nguyen_lon_di_DUNG_duong_int(self):
+        """BIÊN: 0 đi qua (COD 0 là đơn không thu tiền, KHÁC với 'thiếu dữ liệu').
+
+        Số nguyên lớn là ca biên thật: `float(2**53+1)` mất đúng 1 đồng. Đi qua `float()` là một
+        đường làm lệch tiền mà không có lỗi nào báo, nên ca này ghim cả giá trị LẪN đường đi.
+        """
+        self.assertEqual(self._biz(cod=0)["codMoney"], "0")
+        lon = 2 ** 53 + 1
+        self.assertEqual(self._biz(cod=lon)["codMoney"], str(lon))
+        self.assertEqual(self._biz(cod=str(lon))["codMoney"], str(lon))
+        self.assertNotEqual(int(float(lon)), lon, "tiền đề: float() thật sự làm lệch số nguyên lớn")
+
+    def test_j5_GIOI_HAN_DO_DUOC_float_mat_tien_TRUOC_khi_vao_adapter(self):
+        """GIỚI HẠN ĐÃ ĐO, ghi lại bằng ca kiểm thay vì bằng lời hứa.
+
+        `tien_nguyen_vnd(9007199254740993.0)` KHÔNG ném: giá trị đã thành `...992.0` từ TRƯỚC,
+        ở chỗ gọi, và thông tin đã mất — không hàm nào đọc lại được. Đây không phải lỗi của hàm
+        kiểm (nó vẫn đúng: nhận được một số nguyên), mà là một ĐƯỜNG ỐNG còn hở: tiền đi vào
+        bằng `float` thì có thể lệch 1 đồng mà không ai báo.
+
+        Ca này GHIM sự thật đó lại, để:
+          · không ai đọc docstring rồi tin rằng float luôn bị chặn (nó chỉ bị chặn khi CÓ phần lẻ);
+          · đường ĐÚNG (`int` hoặc chuỗi) được đo ngay cạnh và giữ nguyên giá trị;
+          · việc còn phải làm hiện ra: chặn `float` ở tầng nhập liệu là việc của Order Service,
+            NẰM NGOÀI phạm vi tệp adapter này.
+        """
+        lon = 2 ** 53 + 1
+        mat = int(float(lon))
+        self.assertNotEqual(mat, lon)
+        self.assertEqual(self._biz(cod=float(lon))["codMoney"], str(mat),
+                         "float vào thẳng hàm kiểm mà không bị chặn — đúng như đã đo")
+        self.assertEqual(self._biz(cod=lon)["codMoney"], str(lon), "đường int giữ nguyên")
+        self.assertEqual(self._biz(cod=str(lon))["codMoney"], str(lon), "đường chuỗi giữ nguyên")
+        # Và cái CHẮC CHẮN phải chặn thì vẫn chặn: float có phần lẻ.
+        self.assertEqual(float(lon) + 0.5, float(lon),
+                         "tiền đề: ở cỡ này float không còn biểu diễn được nửa đồng")
+        with self.assertRaises(lh.NormalizedCarrierError):
+            self._biz(cod=15000.5)
+
+    def test_j6_cung_bien_do_cho_gia_tri_khai_va_khoi_luong(self):
+        """Ba trường tiền dùng CHUNG một hàm — đo cả ba, không chỉ `cod` (chỗ dễ nhìn nhất)."""
+        for truong in ("gia_tri_khai", "khoi_luong_gram", "cod"):
+            for xau in (15000.5, "15000.5", "²", "١٢٣"):
+                with self.assertRaises(lh.NormalizedCarrierError, msg=f"{truong}={xau!r}"):
+                    self._biz(**{truong: xau})
+            self.assertTrue(self._biz(**{truong: 15000}))
+
+    def test_j7_mock_KHONG_duoc_du_dai_hon_duong_that(self):
+        """Ở mock tiền hỏng vẫn phải NỔ: mock không được là chỗ duy nhất bỏ qua phép kiểm."""
+        with self.assertRaises(lh.NormalizedCarrierError) as e:
+            ad_mock().yeu_cau_tao_don(dict(DON_MAU, cod="15000.5"))
+        self.assertEqual(e.exception.ma_chuan, lh.THAM_SO_SAI)
+        # ĐỐI CHỨNG DƯƠNG: cùng adapter, cùng đơn, tiền hợp lệ ⇒ dựng được gói.
+        self.assertTrue(ad_mock().yeu_cau_tao_don(dict(DON_MAU))["bizContent"])
+
+
+class K_ChotCungBonDuongChuaXacMinh(unittest.TestCase):
+    """AG-03 — CA CANH cho chốt cứng: bốn thao tác chưa xác minh phải giữ `duong=None`.
+
+    Vì sao cần một ca RIÊNG ngoài B2/E3/E10/E11: những ca kia khẳng định TRẠNG THÁI ("đang là
+    None"). Chúng xanh miễn là chưa ai sửa gì, và chúng không phân biệt được hai tình huống:
+    (a) bảng sạch, (b) bộ dò hỏng nên không thấy gì. Nhóm này khẳng định thêm hai điều:
+      · bộ dò `vi_pham_chot_duong_dan()` THẬT SỰ bắt được một URL bừa (TỰ KIỂM, có bơm dữ liệu);
+      · khi bảng bị bơm URL bừa vào CHÍNH module đang chạy thì ĐƯỜNG CHẠY vẫn không có URL —
+        tức chốt không chỉ nằm trong bộ thử.
+    """
+
+    # URL bừa điển hình của cám dỗ "ghép tiền tố cổng cho đủ sáu thao tác".
+    URL_BUA = {
+        "cancelOrder": "/webopenplatformapi/api/order/cancelOrder",
+        "getShippingFee": "/webopenplatformapi/api/fees/calculatingFees",
+        "getShippingLabel": "/webopenplatformapi/api/vip/printOrder",
+        "getOrder": "/webopenplatformapi/api/order/getOrder",
+    }
+
+    def _bang_gia(self, op=None, duong=None, muc=None, xoa=False):
+        """Bản SAO của bảng đường dẫn, có bơm lỗi. Không bao giờ chạm bảng thật."""
+        bang = {k: dict(v) for k, v in aj.DUONG_API.items()}
+        if xoa:
+            bang.pop(op, None)
+        else:
+            bang[op]["duong"] = duong
+            if muc is not None:
+                bang[op]["muc"] = muc
+        return bang
+
+    def test_k1_bang_that_hien_tai_sach(self):
+        self.assertEqual(aj.vi_pham_chot_duong_dan(), [],
+                         f"bảng đường dẫn tự mâu thuẫn: {aj.vi_pham_chot_duong_dan()}")
+
+    def test_k2_TU_KIEM_bo_do_THAT_SU_bat_duoc_URL_bua(self):
+        """Bơm URL bừa vào bảng GIẢ ⇒ bộ dò PHẢI kêu. Không có ca này thì K1 vô nghĩa."""
+        for op, duong in self.URL_BUA.items():
+            vi_pham = aj.vi_pham_chot_duong_dan(self._bang_gia(op, duong))
+            self.assertTrue(any(v.startswith(op + ":") for v in vi_pham),
+                            f"bộ dò bỏ sót URL bừa của {op}: {vi_pham}")
+        # Bơm kiểu thứ hai: đổi `muc` thành "đã xác minh" mà không có đường dẫn.
+        vi_pham = aj.vi_pham_chot_duong_dan(
+            self._bang_gia("cancelOrder", None, muc=aj.MUC_DA_DOC))
+        self.assertTrue(any("muc=" in v for v in vi_pham), vi_pham)
+        # Bơm kiểu thứ ba: xoá hẳn thao tác khỏi bảng (chốt biến mất cùng dòng).
+        vi_pham = aj.vi_pham_chot_duong_dan(self._bang_gia("getOrder", xoa=True))
+        self.assertTrue(any("BIẾN MẤT" in v for v in vi_pham), vi_pham)
+        # ĐỐI CHỨNG ÂM: bảng giả KHÔNG bơm gì thì bộ dò phải im — nếu không, nó kêu vì lý do khác.
+        self.assertEqual(aj.vi_pham_chot_duong_dan(
+            {k: dict(v) for k, v in aj.DUONG_API.items()}), [])
+
+    def test_k3_bom_URL_bua_vao_MODULE_DANG_CHAY_thi_duong_chay_VAN_tu_choi(self):
+        """Ca mạnh nhất của nhóm: sửa THẬT bảng của module rồi đo đường chạy.
+
+        Chốt phải nằm ở MÃ, không chỉ ở bộ thử. Nếu ai đó gán bừa `duong` cho `cancelOrder`:
+          · `vi_pham_chot_duong_dan()` kêu ⇒ K1/K2 ĐỎ (bộ thử bắt được);
+          · `url_cua()` vẫn None, kể cả dưới điểm cuối thay thế ⇒ chưa kịp có bộ thử thì cũng
+            không có lượt gọi nào đi ra.
+        """
+        goc = aj.DUONG_API["cancelOrder"]["duong"]
+        try:
+            aj.DUONG_API["cancelOrder"]["duong"] = self.URL_BUA["cancelOrder"]
+            self.assertNotEqual(aj.vi_pham_chot_duong_dan(), [],
+                                "bộ dò không thấy URL bừa vừa gán vào bảng THẬT")
+            self.assertIsNone(aj.url_cua("cancelOrder", "sandbox"),
+                              "gán `duong` là mở được đường ra — chốt nằm ở sai chỗ")
+            self.assertIsNone(aj.url_cua("cancelOrder", "production"))
+            with aj.DungDiemCuoiTam("http://127.0.0.1:8123"):
+                self.assertIsNone(aj.url_cua("cancelOrder", "sandbox"),
+                                  "điểm cuối thay thế biến URL bừa thành URL thật")
+            with self.assertRaises(aj.ChuaXacNhanTaiLieu) as e:
+                aj.chan_duong_chua_xac_nhan("cancelOrder", "sandbox")
+            self.assertTrue(any("MÂU THUẪN" in t for t in e.exception.thieu),
+                            f"lý do chặn không nói ra mâu thuẫn: {e.exception.thieu}")
+        finally:
+            aj.DUONG_API["cancelOrder"]["duong"] = goc
+        self.assertIsNone(aj.DUONG_API["cancelOrder"]["duong"], "ca kiểm không trả lại bảng gốc")
+        self.assertEqual(aj.vi_pham_chot_duong_dan(), [])
+
+    def test_k4_bon_thao_tac_giu_None_va_muc_chua_xac_nhan(self):
+        self.assertEqual(tuple(aj.THAO_TAC_CHUA_XAC_MINH),
+                         ("cancelOrder", "getShippingFee", "getShippingLabel", "getOrder"))
+        for op in aj.THAO_TAC_CHUA_XAC_MINH:
+            self.assertIsNone(aj.DUONG_API[op]["duong"], f"{op} bị gán URL chưa xác minh")
+            self.assertEqual(aj.DUONG_API[op]["muc"], aj.MUC_CHUA_XAC_NHAN)
+            self.assertIsNone(aj.duong_da_xac_minh(op), f"{op} có đường dẫn 'đã xác minh'")
+        # ĐỐI CHỨNG DƯƠNG: hai thao tác ĐÃ xác minh vẫn có đường dẫn (chốt không chặn nhầm).
+        for op in ("createOrder", "trackOrder"):
+            self.assertTrue(str(aj.duong_da_xac_minh(op) or "").startswith("/"))
+
+    def test_k5_khong_moi_truong_nao_co_URL_cho_bon_thao_tac_nay(self):
+        for op in aj.THAO_TAC_CHUA_XAC_MINH:
+            for mt in ("mock", "sandbox", "production"):
+                self.assertIsNone(aj.url_cua(op, mt), f"{op}/{mt} có URL")
+            with self.assertRaises(aj.ChuaXacNhanTaiLieu):
+                aj.chan_duong_chua_xac_nhan(op, "sandbox")
+        self.assertIsNone(aj.DUONG_API["cancelOrder"]["duong"])
+        self.assertEqual(aj.DUONG_API["cancelOrder"]["duong_tuong_doi_da_doc"],
+                         "/api/order/cancelOrder",
+                         "đường dẫn tương đối đã đọc vẫn phải được GHI LẠI, chỉ không được dùng")
+
+    def test_k6_ten_tai_lieu_khop_voi_cau_hoi_dang_cho_hang(self):
+        """Bảng tên để người đọc nối 'việc còn thiếu' với câu hỏi đã gửi J&T."""
+        self.assertEqual(aj.TEN_TAI_LIEU_CUA_THAO_TAC["getShippingFee"], "calculatingFees")
+        self.assertEqual(aj.TEN_TAI_LIEU_CUA_THAO_TAC["getShippingLabel"], "printOrder")
+        self.assertEqual(aj.TEN_TAI_LIEU_CUA_THAO_TAC["cancelOrder"], "cancelOrder")
+        for op in aj.THAO_TAC_CHUA_XAC_MINH:
+            self.assertTrue(str(aj.TEN_TAI_LIEU_CUA_THAO_TAC.get(op) or "").strip(),
+                            f"{op} chưa có tên trang tài liệu")
+
+    def test_k7_khong_co_URL_tuyet_doi_nao_khac_trong_tep_adapter(self):
+        """Quét NGUỒN: đổi bảng là một đường, dán thẳng một URL vào chỗ khác là đường thứ hai."""
+        with open(os.path.join(GOC_APP, "adapter_jt.py"), encoding="utf-8") as f:
+            nguon = f.read()
+        self.assertEqual(quet_url_bua(nguon), [],
+                         "adapter_jt.py có URL tuyệt đối cho thao tác CHƯA xác minh")
+        # TỰ KIỂM bộ dò: nếu mẫu hỏng thì ca trên xanh vô nghĩa.
+        self.assertTrue(quet_url_bua(
+            'u = "https://ylopenapi.jtexpress.vn/webopenplatformapi/api/order/cancelOrder"\n'))
+        self.assertTrue(quet_url_bua(
+            'u = "https://demoopenapi.jtexpress.vn/api/vip/printOrder"\n'))
+        self.assertEqual(quet_url_bua(
+            'u = "https://demoopenapi.jtexpress.vn/webopenplatformapi/api/order/addOrder"\n'), [])
 
 
 if __name__ == "__main__":

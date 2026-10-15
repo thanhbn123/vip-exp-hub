@@ -1,5 +1,5 @@
-# G13 (J04/J06) — HÀNH VI CỦA ADAPTER J&T Ở MOCK: ba kết cục · đọc gói trả lời · chống trùng ·
-# cách ly tenant · các ổ khoá chặn LIVE.
+# G13 (J04/J06) + G16-A — HÀNH VI CỦA ADAPTER J&T: ba kết cục · đọc gói trả lời · chống trùng ·
+# cách ly tenant · các ổ khoá chặn LIVE · ĐƯỜNG GỬI THẬT trên stub cục bộ.
 #
 # VÌ SAO CÓ FILE NÀY
 # ------------------
@@ -7,7 +7,7 @@
 # `KetQuaHang` gì, lỗi của hãng có đi qua bảng mã lỗi thật không, và ba kết cục
 # (ok / hãng-từ-chối / KHÔNG-BIẾT) có bị gộp làm một không.
 #
-# Hai chỗ đáng chú ý:
+# Bốn chỗ đáng chú ý:
 #   · nhóm C dùng chính `doc_goi_tra_loi` của adapter với các gói `{code,msg,data}` theo quy ước
 #     tài liệu, rồi đối chiếu với `don_hang._la_khong_tim_thay` — hàm THẬT của Order Service.
 #     Nhờ vậy ca kiểm bắt được cả chỗ lệch tên khoá giữa hai lớp (`ma_chuan` vs `ma`), thứ mà
@@ -15,8 +15,20 @@
 #   · nhóm E kiểm khoá chống trùng bằng SỔ MÔ PHỎNG bật tường minh, và có CA ĐỐI CHỨNG: khi sổ
 #     TẮT thì cùng một `ma_don` tạo được hai lượt — nếu thiếu ca đối chứng này thì "phát hiện
 #     trùng" có thể chỉ là một phép kiểm luôn-đúng mà không ai biết.
+#   · **nhóm H (G16-A)** chạy ĐƯỜNG GỬI THẬT: `adapter_jt._goi_that` → `transport.goi` →
+#     `http_jt.gui_form` → socket tới stub `127.0.0.1` cổng 0 (`app/thu/stub_jt.py`, AG-02). Nó
+#     đo ĐÚNG NHỮNG BYTE trên dây: `bizContent` là chuỗi đã đem ký, digest tính lại ở PHÍA MÁY
+#     CHỦ, COD nằm ở `codMoney`, `privateKey` KHÔNG bao giờ rời đi. Bỏ qua kèm LÝ DO ĐỌC ĐƯỢC
+#     nếu tệp của AG-02 chưa có trên đĩa.
+#   · **nhóm I (G16-A)** chạy trên một lớp HTTP GIẢ rất mỏng, đúng hình dạng §36. Nó luôn chạy,
+#     và nó là chỗ chứng minh "không một byte nào rời đi" bằng PHÉP ĐẾM khi cửa môi trường hoặc
+#     chốt D-9 chặn — kèm ca tự kiểm bộ đếm (`test_i1`), vì một bộ đếm không bao giờ được gọi
+#     thì mọi khẳng định "0 lượt" đều vô nghĩa.
 #
 # Chạy: python3 app/thu/thu_adapter_jt.py
+import base64
+import hashlib
+import inspect
 import json
 import os
 import sys
@@ -24,7 +36,10 @@ import tempfile
 import unittest
 
 GOC_APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+THU_MUC_THU = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, GOC_APP)
+if THU_MUC_THU not in sys.path:
+    sys.path.insert(0, THU_MUC_THU)
 
 _tam = tempfile.mkdtemp(prefix="vip-hub-g13-ad-")
 os.environ.setdefault("VIP_HUB_DATA", _tam)
@@ -35,6 +50,21 @@ import don_hang         # noqa: E402
 import loi_hang as lh   # noqa: E402
 import trang_thai_hang as tth   # noqa: E402
 import transport as tp  # noqa: E402
+
+# Lớp HTTP THẬT và stub cục bộ đều do AG-02 sở hữu (§39). Làn này CHỈ GỌI — không sửa tệp của họ.
+# Nếu chúng chưa có trên đĩa thì nhóm H tự bỏ qua kèm LÝ DO ĐỌC ĐƯỢC, chứ không báo xanh.
+try:
+    import http_jt as http_that
+except ImportError:          # pragma: no cover — phụ thuộc thời điểm bốn làn chạy song song
+    http_that = None
+try:
+    import stub_jt
+except ImportError:          # pragma: no cover
+    stub_jt = None
+
+CO_HTTP_THAT = http_that is not None and stub_jt is not None
+LY_DO_BO_QUA = ("chưa có `app/http_jt.py` + `app/thu/stub_jt.py` (AG-02, hợp đồng §36) trên đĩa"
+                " — nhóm H chỉ chạy khi lớp HTTP thật đã có")
 
 DON_MAU = {
     "ma_don": "G13-AD-1", "nguoi_gui_ten": "Shop Thử", "nguoi_gui_sdt": "0901111111",
@@ -48,6 +78,11 @@ DON_MAU = {
 BI_MAT = ("KHOA-BI-MAT-G13", "MAT-KHAU-G13", "ACC-BI-MAT-G13")
 CRED_THU = {"apiAccount": "ACC-BI-MAT-G13", "privateKey": "KHOA-BI-MAT-G13",
             "customerCode": "CC-G13", "password": "MAT-KHAU-G13"}
+# Tài khoản THỨ HAI để đo cách ly tenant TRÊN DÂY (nhóm H). Là bí mật GIẢ của bộ thử, và cũng
+# được đưa vào bộ dò rò rỉ.
+CRED_THU_B = {"apiAccount": "ACC-B-G13", "privateKey": "KHOA-B-G13",
+              "customerCode": "CC-B-G13", "password": "MAT-KHAU-B-G13"}
+BI_MAT = BI_MAT + tuple(CRED_THU_B.values())
 
 KHOÁ_HOP_DONG = ("ma_chuan", "ma_goc_hang", "thong_diep", "co_the_thu_lai")
 
@@ -447,7 +482,11 @@ class F_CachLyTenantVaBiMat(unittest.TestCase):
         kq = ad_mock().kiem_ket_noi()
         self.assertIs(kq["chung_minh_ket_noi"], False)
         self.assertIs(kq["la_mock"], True)
-        self.assertIs(kq["transport_that_da_viet"], False)
+        # Cờ transport là ẢNH CHỤP của phép dò `app/http_jt.py` — KHÔNG phải hằng viết tay.
+        # `False` khi AG-02 chưa giao tệp, `True` khi đã giao; cả hai đều KHÔNG mở môi trường.
+        self.assertIs(kq["transport_that_da_viet"], aj._co_http_jt())
+        self.assertIs(kq["moi_truong_duoc_chay"], True, "mock phải luôn chạy được")
+        self.assertTrue(str(kq["ly_do_moi_truong"]).strip())
         self.assertIs(kq["chot_chan_D9_dang_bat"], True)
         self.assertIs(kq["city_co_gui"], False)
         self.assertTrue(str(kq["de_kiem_ket_noi_that"]).strip())
@@ -477,22 +516,522 @@ class G_KhoaAnToanChanLive(unittest.TestCase):
                 ad.createOrder(dict(DON_MAU))
             self.assertIn("D-9", e.exception.thong_diep)
 
-    def test_g4_mo_tam_cho_phep_live_thi_cac_thao_tac_khac_dung_va_noi_ro_thieu_gi(self):
+    def test_g4_mo_tam_CHO_PHEP_LIVE_KHONG_lam_production_chay_duoc(self):
+        """HAI CỬA ĐỘC LẬP — AG-00 chốt 15/10/2026, và ca này cố ý CHẶT HƠN bản G13.
+
+        Bản G13 chỉ đo "thế nào cũng ném một ngoại lệ", nên nó xanh kể cả khi cửa môi trường
+        thực ra đã mở. Bản này khẳng định đúng bất biến: mở `CHO_PHEP_LIVE` **KHÔNG** kéo theo
+        quyền môi trường, và lý do phải nêu đúng §37.
+
+        Đo đường "đã viết transport" thì đi bằng `mock` + `_goi_that` (nhóm H/I) — KHÔNG mở
+        `production` để tiện cho bộ thử.
+        """
         with ChoPhepLiveTam():
             ad = aj.AdapterJT(dict(CRED_THU), "production")
-            for ten, goi in (("cancelOrder", lambda: ad.cancelOrder("MVD1")),
+            for ten, goi in (("trackOrder", lambda: ad.trackOrder("MVD1")),
                              ("getShippingFee", lambda: ad.getShippingFee(dict(DON_MAU))),
-                             ("getShippingLabel", lambda: ad.getShippingLabel("MVD1")),
-                             ("trackOrder", lambda: ad.trackOrder("MVD1"))):
-                with self.assertRaises(aj.ChuaXacNhanTaiLieu) as e:
+                             ("getShippingLabel", lambda: ad.getShippingLabel("MVD1"))):
+                with self.assertRaises(PermissionError,
+                                       msg=f"{ten} lọt qua cửa MÔI TRƯỜNG") as e:
                     goi()
-                self.assertEqual(e.exception.thao_tac, ten)
-                self.assertTrue(e.exception.thieu, f"{ten}: phải nêu lý do còn thiếu")
+                self.assertIn("duyệt riêng", str(e.exception))
+                self.assertIn("§37", str(e.exception))
+            # `cancelOrder` dựng gói yêu cầu TRƯỚC khi hỏi cửa môi trường, mà gói đó cần đường
+            # dẫn chưa xác minh ⇒ dừng ở cửa ĐƯỜNG DẪN. Vẫn là DỪNG, chỉ khác chỗ dừng.
+            with self.assertRaises(aj.ChuaXacNhanTaiLieu):
+                ad.cancelOrder("MVD1")
+            with self.assertRaises(lh.NormalizedCarrierError) as e2:
+                ad.createOrder(dict(DON_MAU))       # dừng ở chốt D-9
+            self.assertIn("D-9", e2.exception.thong_diep)
+        # ĐỐI CHỨNG DƯƠNG: ở `mock` thì CÙNG những thao tác ấy ĐI QUA ĐƯỢC. Thiếu vế này thì
+        # một bản "chặn tất cả" cũng làm mọi khẳng định ở trên xanh một cách vô nghĩa.
+        mock = ad_mock()
+        self.assertTrue(mock.trackOrder("JTVN1").ok)
+        self.assertTrue(mock.getShippingFee(dict(DON_MAU)).ok)
+        self.assertTrue(mock.getShippingLabel("JTVN1").ok)
+        self.assertTrue(mock.cancelOrder("JTVN1").ok)
+        self.assertTrue(mock.createOrder(dict(DON_MAU)).ok)
 
     def test_g5_sau_khi_mo_tam_thi_khoa_duoc_tra_lai(self):
         with ChoPhepLiveTam():
             self.assertTrue(aj.AdapterJT.CHO_PHEP_LIVE)
         self.assertIs(aj.AdapterJT.CHO_PHEP_LIVE, False)
+
+
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+# G16-A — NỐI ADAPTER VÀO LỚP HTTP THẬT
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+# Hai nhóm, và lý do có CẢ HAI:
+#   · **H** chạy trên `app/http_jt.py` + `app/thu/stub_jt.py` THẬT của AG-02 — bằng chứng mạnh
+#     nhất, đo ĐÚNG NHỮNG BYTE đã đi trên dây.
+#   · **I** chạy trên một lớp HTTP GIẢ rất mỏng, đúng hình dạng §36 — nó luôn chạy, kể cả khi
+#     tệp của AG-02 chưa có, và nó chứng minh adapter chỉ phụ thuộc HÌNH DẠNG hợp đồng chứ không
+#     phụ thuộc bản cài đặt cụ thể. Bộ thử không được phép "xanh vì thiếu thứ để đo".
+#
+# Cả hai nhóm đều KHÔNG mở cửa môi trường: chúng đi vào đường gửi ở DƯỚI cửa đó (`_goi_that`).
+# Cửa môi trường đang ĐÓNG (đúng §37) và bộ thử không được mở nó để tiện cho mình — nhóm H có
+# ca riêng khẳng định cửa đó chặn TRƯỚC khi một byte nào rời đi.
+
+
+class TraLoiGia:
+    """`TraLoiHTTP` giả — đúng ba thuộc tính §36: `ma_http`, `than`, `headers`."""
+
+    def __init__(self, ma_http=200, than=b"", headers=None):
+        self.ma_http = int(ma_http)
+        self.than = bytes(than)
+        self.headers = dict(headers or {})
+
+
+class HttpGia:
+    """Lớp HTTP GIẢ, mỏng, ĐÚNG chữ ký §36: `gui_form(url, headers, body, *, timeout)`.
+
+    Nó GHI LẠI từng lượt được gọi. Nhờ vậy "không có byte nào rời đi" là một phép ĐẾM, không
+    phải một lời hứa — và ca đếm ấy có ca tự kiểm (`test_i1`) chứng minh bộ đếm thật sự đếm được.
+    """
+
+    def __init__(self, tra_loi=None, loi=None):
+        self.tra_loi = tra_loi
+        self.loi = loi
+        self.lan = []
+
+    def gui_form(self, url, headers, body, *, timeout):
+        self.lan.append({"url": url, "headers": dict(headers), "body": dict(body),
+                         "timeout": timeout})
+        if self.loi is not None:
+            raise self.loi
+        return self.tra_loi
+
+
+def ad_that(cred=None, **kw):
+    """Adapter ở `mock`, nhưng ĐO ĐƯỢC đường gửi thật qua `_goi_that`.
+
+    Vì sao không dựng adapter ở `sandbox`: cửa MÔI TRƯỜNG (`cau_hinh.JT_CHO_PHEP_SANDBOX`) đang
+    ĐÓNG — đúng §37 — và bộ thử KHÔNG được mở nó để tiện cho mình. Đường gửi thật nằm DƯỚI cửa
+    đó, nên vẫn đo được nguyên vẹn mà không mở gì.
+    """
+    return aj.AdapterJT(dict(CRED_THU if cred is None else cred), "mock", **kw)
+
+
+def yeu_cau_that(ad, stub, thao_tac, doi_tuong=None, **kw):
+    """Gói yêu cầu THẬT của một thao tác, URL trỏ vào stub cục bộ đang chạy.
+
+    URL lấy từ `aj.url_cua(...)` dưới `DungDiemCuoiTam` — tức là đi qua CHÍNH bảng đường dẫn của
+    adapter, không phải một chuỗi tự ghép trong bộ thử. Nhờ vậy ca kiểm đo luôn cả việc ghép
+    đường dẫn, và `test_h0` ghim lại đúng điều đó.
+    """
+    if thao_tac == "createOrder":
+        yc = ad.yeu_cau_tao_don(dict(doi_tuong or DON_MAU), **kw)
+    elif thao_tac == "trackOrder":
+        yc = ad.yeu_cau_tra_hanh_trinh(
+            doi_tuong if doi_tuong is not None else "VH000000001VN", **kw)
+    else:
+        raise ValueError(f"chưa có hàm dựng gói cho {thao_tac!r}")
+    with aj.DungDiemCuoiTam(stub.goc):
+        yc["url"] = aj.url_cua(thao_tac, "sandbox")
+    return yc
+
+
+class ChoPhepLiveTam:
+    def __enter__(self):
+        self.cu = aj.AdapterJT.CHO_PHEP_LIVE
+        aj.AdapterJT.CHO_PHEP_LIVE = True
+        return self
+
+    def __exit__(self, *a):
+        aj.AdapterJT.CHO_PHEP_LIVE = self.cu
+        return False
+
+
+def _khoa_chong_trung_tam(gia_tri):
+    """Tạm đổi cờ khoá chống trùng của lớp — CHỈ để đo ĐỐI CHỨNG về số lần thử lại."""
+
+    class _Ctx:
+        def __enter__(self):
+            self.cu = aj.AdapterJT.KHOA_CHONG_TRUNG
+            aj.AdapterJT.KHOA_CHONG_TRUNG = gia_tri
+            return self
+
+        def __exit__(self, *a):
+            aj.AdapterJT.KHOA_CHONG_TRUNG = self.cu
+            return False
+    return _Ctx()
+
+
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+@unittest.skipUnless(CO_HTTP_THAT, LY_DO_BO_QUA)
+class H_NoiTransportThat_TrenStubCucBo(unittest.TestCase):
+    """Đường gửi THẬT: `adapter_jt._goi_that` → `http_jt.gui_form` → stub `127.0.0.1:0`.
+
+    Mọi ca ở đây đi qua socket thật trên vòng lặp nội bộ. KHÔNG ca nào chạm Internet: stub chỉ
+    bind `127.0.0.1`, và danh sách trắng của `http_jt` chặn mọi host khác.
+    """
+
+    def test_h0_url_di_qua_bang_duong_dan_cua_adapter(self):
+        """ĐỐI CHỨNG DƯƠNG cho mọi ca sau: URL phải là gốc stub + ĐÚNG đường dẫn tài liệu."""
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG) as stub:
+            yc = yeu_cau_that(ad_that(), stub, "createOrder")
+            self.assertEqual(yc["url"], stub.goc + aj.DUONG_TAO_DON)
+            self.assertEqual(yc["url"], stub.url)
+            self.assertEqual(yc["url"], aj.URL_TAO_DON["sandbox"].replace(
+                "https://demoopenapi.jtexpress.vn", stub.goc))
+            yc_tr = yeu_cau_that(ad_that(), stub, "trackOrder")
+            self.assertEqual(yc_tr["url"], stub.url_cho(aj.DUONG_TRA_HANH_TRINH))
+
+    def test_h1_createOrder_thanh_cong_va_do_DUNG_BYTE_tren_day(self):
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG, ma_van_don="VH000000123VN") as stub:
+            ad = ad_that()
+            yc = yeu_cau_that(ad, stub, "createOrder")
+            kq = ad._goi_that(http_that, "createOrder", yc)
+            self.assertEqual(stub.so_yeu_cau, 1, "phải có ĐÚNG một lượt đi trên dây")
+            yeu_cau = stub.yeu_cau[-1]
+
+        self.assertTrue(kq.ok, kq.loi)
+        self.assertFalse(kq.timeout)
+        self.assertEqual(kq.ma_van_don, "VH000000123VN")
+        self.assertIs(kq.tho["mock"], False, "kết quả từ hãng KHÔNG được tự nhận là mock")
+        self.assertEqual(kq.tho["so_lan_goi"], 1)
+        self.assertEqual(kq.tho["transport"], "app/http_jt.py")
+        # ── đo trên dây ──────────────────────────────────────────────────────────────────────
+        self.assertEqual(yeu_cau.phuong_thuc, "POST")
+        self.assertEqual(yeu_cau.duong_dan, aj.DUONG_TAO_DON)
+        self.assertIn("application/x-www-form-urlencoded", yeu_cau.header("content-type"))
+        self.assertEqual(yeu_cau.header("apiAccount"), CRED_THU["apiAccount"])
+        self.assertEqual(len(str(yeu_cau.header("timestamp"))), 13, "timestamp phải là mili giây")
+        # CHỮ KÝ: tính lại Ở PHÍA MÁY CHỦ, từ CHÍNH chuỗi nhận được — độc lập với adapter.
+        biz_nhan = yeu_cau.form_value("bizContent")
+        self.assertIsInstance(biz_nhan, str)
+        tay = base64.b64encode(hashlib.md5(
+            (biz_nhan + CRED_THU["privateKey"]).encode("utf-8")).digest()).decode()
+        self.assertEqual(yeu_cau.header("digest"), tay,
+                         "digest trên dây KHÔNG khớp chuỗi bizContent đã nhận")
+        self.assertEqual(biz_nhan, yc["bizContent"], "chuỗi đem ký và chuỗi gửi phải là MỘT")
+        self.assertEqual(yeu_cau.form_value("bizContent"), yeu_cau.form()["bizContent"][0])
+        # KHÓA KÝ KHÔNG BAO GIỜ ĐI TRÊN DÂY — chỉ có digest của nó.
+        self.assertNotIn(CRED_THU["privateKey"], yeu_cau.than_tho.decode("utf-8"))
+
+    def test_h2_ba_ket_cuc_tren_day_KHONG_bi_gop(self):
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG) as stub:
+            ad = ad_that()
+            ok = ad._goi_that(http_that, "createOrder", yeu_cau_that(ad, stub, "createOrder"))
+        with stub_jt.StubJT(stub_jt.StubJT.HANG_TU_CHOI, ma_loi="145005004") as stub:
+            ad = ad_that()
+            tu_choi = ad._goi_that(http_that, "createOrder",
+                                   yeu_cau_that(ad, stub, "createOrder"))
+        with stub_jt.StubJT(stub_jt.StubJT.HTTP_500) as stub:
+            ad = ad_that()
+            khong_biet = ad._goi_that(http_that, "createOrder",
+                                      yeu_cau_that(ad, stub, "createOrder"))
+            self.assertEqual(stub.so_yeu_cau, 3,
+                             "5xx là lỗi TẠM THỜI ⇒ chính sách phải thử lại 3 lượt")
+        self.assertEqual((ok.ok, ok.timeout), (True, False))
+        self.assertEqual((tu_choi.ok, tu_choi.timeout), (False, False),
+                         "hãng TỪ CHỐI không được gộp với 'không biết'")
+        self.assertEqual((khong_biet.ok, khong_biet.timeout), (False, True),
+                         "5xx là KHÔNG BIẾT kết quả — tuyệt đối không coi là thành công")
+        self.assertEqual(khong_biet.tho["loi_chuan"]["ma_chuan"], lh.HET_GIO)
+        self.assertEqual(tu_choi.tho["loi_chuan"]["ma_chuan"], lh.HANG_TU_CHOI)
+        self.assertEqual(tu_choi.tho["loi_chuan"]["ma_goc_hang"], "145005004")
+        self.assertIsNone(khong_biet.ma_van_don)
+        self.assertEqual(khong_biet.tho["so_lan_goi"], 3)
+
+    def test_h3_don_trung_KHONG_thu_lai_va_Order_Service_nhan_ra(self):
+        """Chống trùng đơn: `145003204` ⇒ lượt TRƯỚC ĐÃ VÀO. Gửi lại là tạo đơn thứ hai."""
+        with stub_jt.StubJT(stub_jt.StubJT.HANG_TU_CHOI, ma_loi="145003204",
+                            thong_diep="订单重复") as stub:
+            ad = ad_that()
+            kq = ad._goi_that(http_that, "createOrder", yeu_cau_that(ad, stub, "createOrder"))
+            so_lan = stub.so_yeu_cau
+        self.assertEqual(so_lan, 1, "đơn trùng bị THỬ LẠI là mở đường tạo đơn thứ hai")
+        self.assertFalse(kq.ok)
+        self.assertFalse(kq.timeout)
+        self.assertEqual(kq.tho["loi_chuan"]["ma_chuan"], lh.DON_TRUNG)
+        self.assertFalse(kq.tho["loi_chuan"]["co_the_thu_lai"])
+        self.assertIs(kq.tho.get("don_da_ton_tai_tai_hang"), True)
+        self.assertIs(don_hang._la_don_trung(kq), True,
+                      "Order Service không nhận ra DON_TRUNG của đường gọi THẬT")
+        self.assertIs(don_hang._la_khong_tim_thay(kq), False,
+                      "coi đơn trùng là 'chưa vào' là mở đường gửi lại mù")
+
+    def test_h4_DOI_CHUNG_khong_co_khoa_chong_trung_thi_KHONG_thu_lai(self):
+        """Thiếu ca này thì `h3` có thể xanh chỉ vì transport không bao giờ thử lại."""
+        with stub_jt.StubJT(stub_jt.StubJT.HTTP_500) as stub:
+            ad = ad_that()
+            yc = yeu_cau_that(ad, stub, "createOrder")
+            with _khoa_chong_trung_tam(False):
+                kq = ad._goi_that(http_that, "createOrder", yc)
+            self.assertEqual(stub.so_yeu_cau, 1,
+                             "KHÔNG có khoá chống trùng thì thao tác GHI không được thử lại")
+        self.assertTrue(kq.timeout)
+        self.assertIs(aj.AdapterJT.KHOA_CHONG_TRUNG, True, "cờ phải được trả lại sau khối")
+
+    def test_h5_ma_HTTP_4xx_VINH_VIEN_duoc_phan_loai_chu_khong_gop_vao_THAM_SO_SAI(self):
+        """4xx VĨNH VIỄN đi qua ngoại lệ của `http_jt` — adapter đọc `ma_http` mà phân loại.
+
+        `408`/`429` **KHÔNG** nằm ở đây: AG-00 chốt 15/10/2026 rằng hai mã đó là TẠM THỜI, nên
+        chúng có ca riêng `test_h5b`. Tách ra như vậy để "4xx" không còn bị đối xử như một khối.
+        """
+        for che_do, ma_chuan, thu_lai in (("HTTP_401", lh.XAC_THUC_HONG, False),
+                                          ("HTTP_400", lh.THAM_SO_SAI, False),
+                                          ("HTTP_302", lh.KHONG_RO, False)):
+            with stub_jt.StubJT(getattr(stub_jt.StubJT, che_do)) as stub:
+                ad = ad_that()
+                kq = ad._goi_that(http_that, "createOrder",
+                                  yeu_cau_that(ad, stub, "createOrder"))
+                so_lan = stub.so_yeu_cau
+            chuan = kq.tho["loi_chuan"]
+            self.assertEqual(chuan["ma_chuan"], ma_chuan, f"{che_do}: sai mã chuẩn")
+            self.assertEqual(so_lan, 1, f"{che_do}: lỗi vĩnh viễn ⇒ không được thử lại")
+            self.assertIs(chuan["co_the_thu_lai"], thu_lai,
+                          f"{che_do}: cờ thử lại phải theo kết luận của lớp HTTP")
+            self.assertFalse(kq.ok)
+            self.assertFalse(kq.timeout)
+        self.assertTrue(issubclass(tp.LoiVinhVien, Exception))
+
+    def test_h5b_HAI_LOP_DONG_Y_ve_408_va_429(self):
+        """CA CANH CHỐNG LỆCH — AG-00 chốt 15/10/2026: `408` và `429` là TẠM THỜI.
+
+        Vì sao cần ca này: `http_jt` từng xếp **mọi** 4xx là vĩnh viễn, còn `loi_hang.tu_http`
+        nói hai mã này **thử lại được**. Hai lớp phát hai câu trả lời cho cùng một lượt là khuôn
+        "lệch im lặng": lượt gọi lẽ ra thành công (sau khi chờ đủ) bị bỏ, mà không có lỗi nào báo.
+        Ca này đo **cả hai lớp** và khẳng định chúng ĐỒNG Ý — cộng vế thứ ba ở tầng adapter.
+
+        Không có ca này thì lần sau ai đó gộp 408/429 trở lại vào "4xx = vĩnh viễn" cũng không ai
+        biết, và chỗ ép `co_the_thu_lai=False` trong adapter sẽ lặng lẽ hạ chúng xuống.
+        """
+        import time
+        # `timeout` mong đợi KHÁC nhau, và đây là chỗ dễ gộp sai nhất:
+        #   · 429 → `QUA_HAN_MUC`: hãng TỪ CHỐI lượt này một cách rõ ràng ⇒ `timeout=False`.
+        #   · 408 → `HET_GIO`: `loi_hang` (tệp của AG-00) xếp 408 vào "hết giờ", và
+        #     `ket_qua_tu_loi` suy `timeout` từ `HET_GIO` ⇒ `timeout=True` ("KHÔNG BIẾT kết quả").
+        #     GHI LẠI ĐỂ KHÔNG AI PHẢI ĐOÁN: hãng trả 408 nghĩa là nó KHÔNG NHẬN KỊP yêu cầu, tức
+        #     trên lý thuyết mình BIẾT là chưa xử lý gì. Nhưng đường đi hiện tại là phía THẬN
+        #     TRỌNG: `timeout=True` ⇒ Order Service giữ đơn ở `dang_gui` + bật cờ đối soát, thay
+        #     vì hoàn suất rồi gửi lại. Thận trọng ở đây chỉ tốn một lượt đối soát; làm ngược lại
+        #     mà đoán sai thì tốn một vận đơn thật. Đây là chỗ lệch CÓ CHỦ Ý giữa "hãng nói gì"
+        #     và "hệ xử thế nào" — muốn đổi thì AG-00 đổi `loi_hang.tu_http`, KHÔNG đổi ở adapter.
+        for che_do, ma_http, ma_chuan, timeout_mong in (
+                ("HTTP_408", 408, lh.HET_GIO, True),
+                ("HTTP_429", 429, lh.QUA_HAN_MUC, False)):
+            # ── LỚP 1: `http_jt` nói gì? Đo MỘT lượt gọi trần, không qua adapter ──────────────
+            with stub_jt.StubJT(getattr(stub_jt.StubJT, che_do)) as stub:
+                try:
+                    http_that.gui_form(stub.url,
+                                       {"apiAccount": "A", "digest": "d" * 24,
+                                        "timestamp": "1792054650790"},
+                                       {"bizContent": "{}"}, timeout=5)
+                    loai = "khong-nem"
+                except tp.LoiTamThoi as e:
+                    loai, ma_thay = "tam-thoi", getattr(e, "ma_http", None)
+                except tp.LoiVinhVien:
+                    loai, ma_thay = "vinh-vien", None
+            # ── LỚP 2: `loi_hang` nói gì? ────────────────────────────────────────────────────
+            chuan_ll = lh.tu_http(ma_http)
+            # ── HAI LỚP PHẢI ĐỒNG Ý ──────────────────────────────────────────────────────────
+            self.assertEqual(loai, "tam-thoi",
+                             f"{ma_http}: `http_jt` KHÔNG coi là tạm thời — hai lớp lệch nhau")
+            self.assertEqual(ma_thay, ma_http, f"{ma_http}: ngoại lệ không mang đúng `ma_http`")
+            self.assertEqual(chuan_ll.ma_chuan, ma_chuan)
+            self.assertIs(chuan_ll.co_the_thu_lai, True,
+                          f"{ma_http}: `loi_hang` phải nói THỬ LẠI ĐƯỢC")
+            # ── LỚP 3: adapter phát ra ĐÚNG thế, KHÔNG bị ghi đè ─────────────────────────────
+            with stub_jt.StubJT(getattr(stub_jt.StubJT, che_do)) as stub:
+                ad = ad_that()
+                t0 = time.time()
+                kq = ad._goi_that(http_that, "createOrder",
+                                  yeu_cau_that(ad, stub, "createOrder"))
+                giay = time.time() - t0
+            c = kq.tho["loi_chuan"]
+            self.assertEqual(c["ma_chuan"], ma_chuan, f"{ma_http}: adapter đổi mã chuẩn")
+            self.assertIs(c["co_the_thu_lai"], True,
+                          f"{ma_http}: adapter ÉP CHẶT cờ thử lại — đúng chiều lệch AG-00 đã bác")
+            self.assertFalse(kq.ok, f"{ma_http}: KHÔNG BAO GIỜ được coi là thành công")
+            self.assertIs(kq.timeout, timeout_mong,
+                          f"{ma_http}: `timeout` sai — xem bảng mong đợi ở đầu ca này")
+            self.assertEqual(c["http_status"], ma_http)
+            # Stub KHÔNG gửi `Retry-After` ⇒ chỉ còn backoff chính sách (0,2 + 0,4 giây). Trần
+            # rộng 5 giây để bắt một hồi quy kiểu "ngủ trong gui_form": AG-00 đã cấm `time.sleep`
+            # ở lớp đó và có ca AST riêng, đây là vế đo hành vi.
+            self.assertLess(giay, 5.0,
+                            f"{ma_http}: lượt gọi mất {giay:.2f}s — lớp HTTP có vẻ đang TỰ NGỦ")
+
+    def test_h5d_DOI_CHUNG_DUONG_co_che_ep_chat_van_con(self):
+        """ĐỐI CHỨNG DƯƠNG cho `h5b` — cơ chế §5 phải CÒN, chỉ trừ đúng 408/429.
+
+        Không có ca này thì `h5b` xanh kể cả khi ai đó **gỡ hẳn** chỗ ép chặt: ta sẽ mất cơ chế
+        "lớp dưới nói vĩnh viễn thì adapter không được khuyên thử lại" chứ không phải sửa đúng một
+        ngoại lệ. Ca này đo ở RANH GIỚI, bằng hai ngoại lệ tổng hợp cùng loại `LoiVinhVien`:
+          · `ma_http=503` (một mã mà `loi_hang` nói THỬ LẠI ĐƯỢC)  ⇒ phải bị ÉP CHẶT về False;
+          · `ma_http=429` (ngoại lệ AG-00 đã chốt)                  ⇒ phải ĐI THẲNG, giữ True.
+        """
+        def _ngoai_le(ma):
+            e = tp.LoiVinhVien(f"lớp dưới nói vĩnh viễn, mã {ma}")
+            e.ma_http = ma
+            return e
+
+        ep_chat = aj.AdapterJT._ket_qua_tu_ngoai_le_transport(_ngoai_le(503), "createOrder")
+        self.assertIs(ep_chat.tho["loi_chuan"]["co_the_thu_lai"], False,
+                      "cơ chế §5 đã bị gỡ: lớp dưới nói VĨNH VIỄN mà adapter vẫn khuyên thử lại")
+        for ma in aj.MA_HTTP_HAI_LOP_PHAI_DONG_Y:
+            di_thang = aj.AdapterJT._ket_qua_tu_ngoai_le_transport(_ngoai_le(ma), "createOrder")
+            self.assertIs(di_thang.tho["loi_chuan"]["co_the_thu_lai"], True,
+                          f"{ma}: adapter ghi đè lớp dưới — đúng chiều lệch AG-00 đã bác")
+
+    def test_h5c_danh_sach_HAI_LOP_DONG_Y_phu_DUNG_hai_ma_va_khong_rong_hon(self):
+        """Ghim hằng số: đúng 408 và 429, không hơn. Một mã 4xx khác lọt vào đây là NỚI luật."""
+        self.assertEqual(tuple(sorted(aj.MA_HTTP_HAI_LOP_PHAI_DONG_Y)), (408, 429))
+        for ma in aj.MA_HTTP_HAI_LOP_PHAI_DONG_Y:
+            self.assertIs(lh.tu_http(ma).co_the_thu_lai, True,
+                          f"{ma} nằm trong danh sách ĐỒNG Ý nhưng `loi_hang` nói không thử lại được")
+        # ĐỐI CHỨNG ÂM: mã 4xx vĩnh viễn KHÔNG được nằm trong danh sách này.
+        for ma in (400, 401, 403, 404, 422):
+            self.assertNotIn(ma, aj.MA_HTTP_HAI_LOP_PHAI_DONG_Y,
+                             f"{ma} là lỗi VĨNH VIỄN — đưa vào danh sách ĐỒNG Ý là nới luật")
+
+    def test_h6_danh_sach_trang_chan_host_la_va_KHONG_gui_gi(self):
+        """TỰ KIỂM bộ đếm: một URL ngoài danh sách trắng phải bị chặn và stub phải ĐẾM ĐƯỢC 0."""
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG) as stub:
+            ad = ad_that()
+            yc = yeu_cau_that(ad, stub, "createOrder")
+            yc["url"] = "https://ke-tan-cong.invalid/webopenplatformapi/api/order/addOrder"
+            kq = ad._goi_that(http_that, "createOrder", yc)
+            self.assertEqual(stub.so_yeu_cau, 0,
+                             "URL ngoài danh sách trắng mà vẫn có lượt đi ⇒ chốt chặn hở")
+        self.assertFalse(kq.ok)
+        self.assertFalse(kq.timeout)
+        self.assertEqual(kq.tho["so_lan_goi"], 1, "URL sai là lỗi VĨNH VIỄN, thử lại vô ích")
+
+    def test_h7_cach_ly_tenant_tren_day_va_khong_ro_bi_mat(self):
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG) as stub:
+            a, b = ad_that(), ad_that(CRED_THU_B)
+            a._goi_that(http_that, "createOrder",
+                        yeu_cau_that(a, stub, "createOrder", dict(DON_MAU, ma_don="T-A")))
+            b._goi_that(http_that, "createOrder",
+                        yeu_cau_that(b, stub, "createOrder", dict(DON_MAU, ma_don="T-B")))
+            r1, r2 = stub.yeu_cau
+        self.assertNotEqual(r1.header("apiAccount"), r2.header("apiAccount"))
+        self.assertNotEqual(r1.header("digest"), r2.header("digest"),
+                            "hai tenant khác nhau mà cùng chữ ký ⇒ dùng chung khoá")
+        self.assertIn("T-A", r1.form_value("bizContent"))
+        self.assertIn("T-B", r2.form_value("bizContent"))
+        self.assertNotIn("T-B", r1.form_value("bizContent"),
+                         "đơn của tenant này đi lẫn sang lượt của tenant kia")
+        for r in (r1, r2):
+            self.assertNotIn(CRED_THU["privateKey"], r.than_tho.decode("utf-8"))
+            self.assertNotIn(CRED_THU_B["privateKey"], r.than_tho.decode("utf-8"))
+            self.assertNotIn(CRED_THU_B["privateKey"], json.dumps(r.headers))
+
+    def test_h8_COD_di_dung_truong_tren_day(self):
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG) as stub:
+            ad = ad_that()
+            ad._goi_that(http_that, "createOrder",
+                         yeu_cau_that(ad, stub, "createOrder", dict(DON_MAU, cod=150000)))
+            biz = json.loads(stub.yeu_cau[-1].form_value("bizContent"))
+        self.assertEqual(biz["codMoney"], "150000", "COD phải đi ở `codMoney`")
+        self.assertIsInstance(biz["codMoney"], str)
+        self.assertTrue(biz["codMoney"].isdigit(), "tiền phải là chuỗi CHỮ SỐ, không có dấu chấm")
+        self.assertNotIn("itemsValue", biz, "itemsValue KHÔNG có trong bảng tham số của hãng")
+        self.assertEqual(biz["goodsValue"], "200000")
+        self.assertEqual(biz["isInsured"], 0)
+
+    def test_h9_trackOrder_di_that_va_ton_trong_tran_30(self):
+        with stub_jt.StubJT(stub_jt.StubJT.THANH_CONG, ma_van_don="VH000000009VN",
+                            duong_mac_dinh=aj.DUONG_TRA_HANH_TRINH) as stub:
+            ad = ad_that()
+            yc = yeu_cau_that(ad, stub, "trackOrder", ["A1", "A2"])
+            kq = ad._goi_that(http_that, "trackOrder", yc)
+            self.assertEqual(stub.yeu_cau[-1].duong_dan, aj.DUONG_TRA_HANH_TRINH)
+            biz = json.loads(stub.yeu_cau[-1].form_value("bizContent"))
+        self.assertTrue(kq.ok, kq.loi)
+        self.assertEqual(biz["billcodes"], "A1,A2")
+
+    def test_h10_ket_qua_that_KHONG_tu_nhan_la_mock(self):
+        with stub_jt.StubJT(stub_jt.StubJT.HANG_TU_CHOI, ma_loi="145003050") as stub:
+            ad = ad_that()
+            kq = ad._goi_that(http_that, "createOrder", yeu_cau_that(ad, stub, "createOrder"))
+        self.assertIs(kq.tho["mock"], False)
+        self.assertNotIn("url_mock", kq.tho)
+        self.assertEqual(quet_bi_mat(kq.tho), [], f"kết quả thật lộ bí mật: {kq.tho}")
+
+
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+class I_LopHttpGia_DungHopDong36(unittest.TestCase):
+    """Adapter chỉ được phụ thuộc HÌNH DẠNG §36 — nhóm này chạy được cả khi AG-02 chưa giao tệp."""
+
+    def test_i1_TU_KIEM_lop_gia_thuc_su_duoc_goi(self):
+        """Nếu lớp giả không bao giờ được gọi thì mọi ca "không có byte nào rời đi" vô nghĩa."""
+        fake = HttpGia(tra_loi=TraLoiGia(200, b'{"code":"1","data":{"billCode":"X1"}}'))
+        ad = ad_that()
+        with aj.ThayHttpJtTam(fake):
+            yc = ad.yeu_cau_tao_don(dict(DON_MAU))
+            yc["url"] = "http://127.0.0.1:1"        # lớp GIẢ không mở socket nào
+            kq = ad._goi_that(fake, "createOrder", yc)
+        self.assertTrue(kq.ok, kq.loi)
+        self.assertEqual(kq.ma_van_don, "X1")
+        self.assertEqual(len(fake.lan), 1, "lớp HTTP giả KHÔNG được gọi ⇒ ca đếm vô nghĩa")
+        self.assertEqual(kq.tho["transport"], "tam-thay-the")
+        self.assertEqual(list(fake.lan[0]["body"]), ["bizContent"])
+        self.assertIn("digest", fake.lan[0]["headers"])
+        self.assertIsInstance(fake.lan[0]["timeout"], float)
+
+    def test_i2_cua_moi_truong_chan_TRUOC_khi_mot_byte_nao_roi_di(self):
+        """Cửa môi trường đang ĐÓNG: bộ đếm phải ở 0 sau khi thao tác bị từ chối."""
+        fake = HttpGia(tra_loi=TraLoiGia(200, b'{"code":"1"}'))
+        with ChoPhepLiveTam(), aj.ThayHttpJtTam(fake):
+            ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
+            with self.assertRaises(PermissionError) as e:
+                ad.trackOrder("VH1")
+        self.assertIn("V-G09-01", str(e.exception))
+        self.assertEqual(fake.lan, [], "có byte rời đi TRƯỚC khi cửa môi trường kịp chặn")
+
+    def test_i3_chot_D9_chan_TRUOC_khi_mot_byte_nao_roi_di(self):
+        fake = HttpGia(tra_loi=TraLoiGia(200, b'{"code":"1"}'))
+        with ChoPhepLiveTam(), aj.ThayHttpJtTam(fake):
+            ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
+            with self.assertRaises(lh.NormalizedCarrierError) as e:
+                ad.createOrder(dict(DON_MAU))
+            self.assertIn("D-9", e.exception.thong_diep)
+        self.assertEqual(fake.lan, [], "đơn đi ra trước khi chốt D-9 kịp chặn")
+
+    def test_i4_loi_tam_thoi_va_vinh_vien_thanh_hai_ket_cuc_khac_nhau(self):
+        ad = ad_that()
+        yc = ad.yeu_cau_tao_don(dict(DON_MAU))
+        yc["url"] = "http://127.0.0.1:1"
+        tam_thoi = HttpGia(loi=tp.LoiTamThoi("mạng chập"))
+        kq_tt = ad._goi_that(tam_thoi, "trackOrder", dict(yc, url="http://127.0.0.1:1"))
+        vinh_vien = HttpGia(loi=tp.LoiVinhVien("URL sai"))
+        kq_vv = ad._goi_that(vinh_vien, "trackOrder", dict(yc, url="http://127.0.0.1:1"))
+        self.assertTrue(kq_tt.timeout, "LoiTamThoi ⇒ KHÔNG BIẾT kết quả")
+        self.assertFalse(kq_tt.ok)
+        self.assertEqual(kq_tt.tho["loi_chuan"]["ma_chuan"], lh.HET_GIO)
+        self.assertFalse(kq_vv.timeout, "LoiVinhVien ⇒ biết chắc là hỏng")
+        self.assertFalse(kq_vv.ok)
+        self.assertNotEqual(kq_tt.tho["loi_chuan"]["ma_chuan"],
+                            kq_vv.tho["loi_chuan"]["ma_chuan"],
+                            "hai loại lỗi bị gộp làm một ⇒ mất phân biệt ba kết cục")
+        self.assertEqual(len(tam_thoi.lan), 3, "LoiTamThoi phải được thử lại theo chính sách")
+        self.assertEqual(len(vinh_vien.lan), 1, "LoiVinhVien KHÔNG được thử lại")
+
+    def test_i5_khong_co_url_thi_dung_chu_khong_gui_bua(self):
+        fake = HttpGia(tra_loi=TraLoiGia(200, b'{"code":"1"}'))
+        ad = ad_that()
+        yc = ad.yeu_cau_tao_don(dict(DON_MAU))
+        self.assertIsNone(yc["url"], "ở mock URL phải là None")
+        with self.assertRaises(aj.ChuaXacNhanTaiLieu):
+            ad._goi_that(fake, "createOrder", yc)
+        self.assertEqual(fake.lan, [], "gửi đi khi CHƯA biết URL")
+
+    def test_i6_lop_gia_dung_chu_ky_hop_dong_36(self):
+        """TỰ KIỂM: lớp giả phải trùng chữ ký §36, nếu không thì nhóm I đo một hợp đồng khác."""
+        r = inspect.signature(HttpGia.gui_form)
+        self.assertEqual(list(r.parameters), ["self", "url", "headers", "body", "timeout"])
+        self.assertIs(r.parameters["timeout"].kind, inspect.Parameter.KEYWORD_ONLY)
+        if http_that is not None:
+            r2 = inspect.signature(http_that.gui_form)
+            self.assertEqual(list(r2.parameters), ["url", "headers", "body", "timeout"],
+                             "lớp HTTP THẬT lệch chữ ký §36")
+            self.assertIs(r2.parameters["timeout"].kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertTrue(callable(getattr(http_that, "gui_form", None))
+                        if http_that is not None else True)
 
 
 if __name__ == "__main__":
@@ -501,10 +1040,14 @@ if __name__ == "__main__":
     print("=" * 78)
     print("PHẠM VI ĐÃ ĐO: hành vi của app/adapter_jt.py ở môi trường MOCK + hàm đọc gói trả lời")
     print("  chạy trên gói JSON dựng theo quy ước tài liệu + các chốt chặn LIVE (đo bằng cách mở")
-    print("  tạm CHO_PHEP_LIVE rồi đóng lại). KHÔNG có lượt gọi mạng nào.")
+    print("  tạm CHO_PHEP_LIVE rồi đóng lại).")
+    print("  G16-A THÊM: đường gửi THẬT (adapter → transport.goi → http_jt.gui_form → socket) đo")
+    print("  trên stub CỤC BỘ 127.0.0.1 cổng 0; nhóm H bỏ qua kèm lý do nếu AG-02 chưa giao tệp.")
+    print("  KHÔNG có lượt gọi nào ra Internet: stub chỉ bind vòng lặp nội bộ, và danh sách trắng")
+    print("  của http_jt chặn mọi host khác.")
     print("NẰM NGOÀI: J&T thật có chấp nhận chữ ký/tham số không; mã lỗi thật của hãng có đúng")
     print("  như bảng đã đọc không; sandbox hãng có sống không; callback hãng ký bằng khoá nào.")
-    print("  ⇒ G13 KHÔNG được báo 'LIVE VERIFIED': V-G09-01 và V-13906-05 CHƯA CẤP.")
+    print("  ⇒ KHÔNG được báo 'LIVE VERIFIED': V-G09-01 và V-13906-05 CHƯA CẤP.")
     print(f"Tổng: {kq.testsRun} ca · hỏng {len(kq.failures)} · lỗi {len(kq.errors)} "
           f"· bỏ qua {len(kq.skipped)}")
     print("=" * 78)

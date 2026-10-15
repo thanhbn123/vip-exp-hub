@@ -51,10 +51,15 @@ const bao = (m, loai) => VIP.toast(m, loai);
 const L = window.VIPLOGIC;
 
 /* Dựng huy hiệu từ kết quả của logic.js. `la=true` nghĩa là trạng thái backend mới thêm mà
-   giao diện chưa biết tên — vẫn hiện NGUYÊN VĂN kèm dấu ⚠, không nuốt im lặng. */
-function hh(d, them) {
+   giao diện chưa biết tên — vẫn hiện NGUYÊN VĂN kèm dấu ⚠, không nuốt im lặng.
+   `xuongDong=true` ghi đè `white-space: nowrap` của `.huy-hieu` bằng style NỘI TUYẾN (mạnh
+   hơn lớp). Cần cho ô KPI: nhãn dài như "Chưa có đăng ký (đang dùng gói của tenant)" nằm
+   trong cột KPI hẹp (`.luoi-kpi` chia 4 cột đều) là tràn ngang — tầng 3 đo được 73px. Ghi đè
+   tại chỗ thay vì sửa `assets/css/style.css`: CSS ấy dùng chung cho cả mười trang demo, sửa
+   nó là đổi giao diện NGOÀI phạm vi làn này. */
+function hh(d, them, xuongDong) {
   if (!d) return "—";
-  return `<span class="huy-hieu ${d.lop}${d.la ? " hh-la" : ""}" title="${T(d.ma)}${d.mo_ta ? " — " + T(d.mo_ta) : ""}">${T(d.ten)}${d.la ? " ⚠" : ""}</span>${them || ""}`;
+  return `<span class="huy-hieu ${d.lop}${d.la ? " hh-la" : ""}"${xuongDong ? ' style="white-space:normal"' : ""} title="${T(d.ma)}${d.mo_ta ? " — " + T(d.mo_ta) : ""}">${T(d.ten)}${d.la ? " ⚠" : ""}</span>${them || ""}`;
 }
 /* Nhãn chế độ dữ liệu: MOCK DATA / LOCAL REAL DATA / LIVE CARRIER DATA (brief F01). */
 const nhanCheDo = (cd) => cd
@@ -241,6 +246,9 @@ function hopKhongDuQuyen(e, hanh_dong, quyen_can) {
 }
 
 /* ===== Khung sau đăng nhập ===== */
+/* Phần tử thứ TƯ (không bắt buộc) của mỗi mục là TÊN NHÓM. Nhóm để 31 mục menu không thành
+   một dãy phẳng, và để người dùng thấy màn nào thuộc mảng nào. Mục có nhóm mà bị ẩn vì thiếu
+   quyền thì tiêu đề nhóm cũng không hiện — tiêu đề rỗng là một câu hỏi không có câu trả lời. */
 const MAN_TENANT = [
   ["tong-quan", "📊 Tổng quan", null],
   ["don", "📦 Đơn hàng", "tenant.don.xem"],
@@ -252,12 +260,41 @@ const MAN_TENANT = [
   ["ket-noi-jt", "🔌 Kết nối J&T", "tenant.hang.xem"],
   ["webhook", "🔔 Webhook", "tenant.webhook.xem"],
   ["thanh-vien", "👥 Thành viên", "tenant.membership.xem"],
-  ["goi", "💳 Gói & usage", "tenant.billing.xem"],
-  ["nhat-ky", "📝 Nhật ký", "tenant.audit.xem"],
-  ["cai-dat", "⚙️ Cài đặt", null],
+  /* G19 · AG-05 — ĐƯỜNG VÀO cho các màn mà bốn module `finance/billing/ai/health.js` đã khai
+     từ đợt 3 nhưng CHƯA AI GỌI (V-13910). Mã màn ở đây PHẢI khớp mã trong bảng khai của
+     module, vì `thu_giao_dien/04_nhan_va_man_dot3.spec.js` đối chiếu hai bên: khai một màn mà
+     menu không có là khai suông, và ca thử ấy tự bắt đầu đo khi màn được cắm. */
+  ["goi", "💳 Gói & usage", "tenant.billing.xem", "Gói & tính phí"],
+  ["dang-ky", "📋 Chi tiết đăng ký", "tenant.billing.xem", "Gói & tính phí"],
+  ["muc-dung", "📈 Bảng mức dùng", "tenant.billing.xem", "Gói & tính phí"],
+  ["canh-bao", "⏳ Cảnh báo hạn mức", "tenant.billing.xem", "Gói & tính phí"],
+  ["lich-su", "🧾 Lịch sử tính phí", "tenant.billing.xem", "Gói & tính phí"],
+  ["du-thao", "📄 Dự thảo hoá đơn", "tenant.billing.xem", "Gói & tính phí"],
+  ["cod", "💰 Bảng COD", "tenant.taichinh.xem", "Tài chính"],
+  ["dot", "📑 Đợt đối soát", "tenant.taichinh.xem", "Tài chính"],
+  ["bang_ke", "📃 Bảng kê của hãng", "tenant.taichinh.xem", "Tài chính"],
+  ["chenh_lech", "⚖️ Chênh lệch đối soát", "tenant.taichinh.xem", "Tài chính"],
+  ["phai_thu", "📥 Công nợ phải thu", "tenant.taichinh.xem", "Tài chính"],
+  ["phai_tra", "📤 Công nợ phải trả", "tenant.taichinh.xem", "Tài chính"],
+  ["dieu_chinh", "✍️ Lịch sử điều chỉnh", "tenant.taichinh.xem", "Tài chính"],
+  ["ai", "🤖 Trợ lý AI — lô import", "tenant.ai.dung", "Trợ lý AI"],
+  ["ai-goi-y", "💡 Gợi ý AI cho người duyệt", "tenant.ai.dung", "Trợ lý AI"],
+  ["ai-canh-bao", "⚠️ Cảnh báo kiểm tra", "tenant.ai.dung", "Trợ lý AI"],
+  ["ai-trang-thai", "🗂️ Trạng thái việc AI", "tenant.ai.dung", "Trợ lý AI"],
+  ["ai-lich-su-duyet", "✅ Lịch sử duyệt AI", "tenant.ai.dung", "Trợ lý AI"],
+  ["ai-thong-ke", "📊 Thống kê mức dùng AI", "tenant.ai.dung", "Trợ lý AI"],
+  /* Màn sức khoẻ KHÔNG đòi quyền: `/api/v2/suc-khoe` và `/api/v2/san-sang` là đường công
+     khai, và người vận hành cần thấy chúng kể cả khi quyền tenant đã bị thu. Phần metric
+     (`GET /api/v2/platform/quan-sat/metric`) hỏi quyền riêng — thiếu thì màn nói thẳng. */
+  ["health", "🩺 Sức khoẻ hệ thống", null, "Hệ thống"],
+  ["nhat-ky", "📝 Nhật ký", "tenant.audit.xem", "Hệ thống"],
+  ["cai-dat", "⚙️ Cài đặt", null, "Hệ thống"],
 ];
 const MAN_PLATFORM = [
   ["tenants", "🏢 Tenants", "platform.tenant.xem"],
+  /* G19 · AG-05 — `admin/billing.js` khai màn `quan-tri-goi` với quyền `platform.goi.doi`.
+     Đường đọc `GET /api/v2/platform/goi` đã đo được HTTP 200 bằng tài khoản nền tảng. */
+  ["quan-tri-goi", "🎛️ Quản trị gói", "platform.goi.doi", "Gói dịch vụ"],
   ["vai-tro", "🔑 Vai trò & quyền", null],
   ["audit-nen-tang", "📝 Audit nền tảng", "platform.audit.xem"],
   ["cai-dat", "⚙️ Cài đặt", null],
@@ -271,7 +308,17 @@ function dungKhung() {
   <div class="khung">
     <aside class="sidebar" id="sidebar">
       <div class="logo"><span class="dau">V</span> VIP Express Hub</div>
-      <nav class="menu-quan-tri">${menu.map(([id, ten]) => `<a data-man="${id}">${ten}</a>`).join("")}</nav>
+      <nav class="menu-quan-tri">${(() => {
+        /* Tiêu đề nhóm in MỘT lần, trước mục đầu tiên CÒN LẠI của nhóm. Duyệt trên `menu` đã
+           lọc quyền, nên nhóm chỉ toàn mục bị ẩn sẽ biến mất cùng các mục ấy. */
+        const da = {};
+        return menu.map(([id, ten, , nhom]) => {
+          const dau = nhom && !da[nhom]
+            ? (da[nhom] = 1, `<div class="nhom-menu" style="padding:12px 16px 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.45)">${T(nhom)}</div>`)
+            : "";
+          return `${dau}<a data-man="${id}">${ten}</a>`;
+        }).join("");
+      })()}</nav>
       <div class="chan">${T(TOI.ho_ten)}<br><b>${T(TOI.vai_tro)}</b>${TOI.tenant ? "<br>" + T(TOI.tenant.ten) : "<br>Nền tảng"}<br>
         <a id="nut-thoat" style="color:#fff;cursor:pointer">Đăng xuất</a></div>
     </aside>
@@ -1211,6 +1258,14 @@ Secret: ${T(kq.webhook_secret_mot_lan)}</pre>`,
 
   async goi() {
     const b = await api("/api/v2/billing");
+    /* G19 · AG-05 — màn này ĐÃ TỒN TẠI từ trước, nhưng `admin/billing.js` khai một màn CÙNG
+       MÃ `goi` tên "Danh sách gói" mà nó KHÔNG hề vẽ: menu có `goi`, nên bộ đếm của tầng 3
+       (và bộ đo tĩnh) tưởng màn của billing.js đã được cắm — một XANH GIẢ đúng một màn.
+       Cách đóng chỗ ấy KHÔNG phải đổi mã màn cho khác đi (thế là xoá dấu vết), mà là làm cho
+       cái tên ấy ĐÚNG: màn `goi` nay đọc thêm `GET /api/v2/goi` và hiện ĐÚNG danh sách gói
+       như billing.js khai. Không có màn thứ hai, không có mã màn thứ hai. */
+    const ds = await apiNeuDuoc("/api/v2/goi", "tenant.billing.xem");
+    const goi = (ds && ds.goi) || [];
     datMan("Gói & usage", `
       <div class="luoi luoi-kpi">
         <div class="the kpi"><div class="nhan">Gói hiện tại</div><div class="so" style="font-size:18px">${T(b.goi.ten)}</div>
@@ -1220,6 +1275,32 @@ Secret: ${T(kq.webhook_secret_mot_lan)}</pre>`,
         <div class="the kpi"><div class="nhan">Hạn mức khác</div>
           <div class="phu" style="margin-top:8px">${b.goi.so_nhan_vien} thành viên · ${b.goi.so_tai_khoan_hang} kết nối hãng</div></div>
       </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Danh sách gói</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${goi.length} gói</span></div></div>
+        <div class="the-than">${goi.length ? `<div class="cuon-ngang"><table class="bang">
+          <thead><tr><th>Gói</th><th>Phiên bản</th><th class="so-tien">Giá tháng</th>
+            <th class="so-tien">Đơn/tháng</th><th class="so-tien">AI/tháng</th>
+            <th class="so-tien">Nhân viên</th><th class="so-tien">Kết nối hãng</th><th>Đang dùng</th></tr></thead>
+          <tbody>${goi.map((g) => `<tr>
+            <td><b>${T(g.ten)}</b> <code>${T(g.goi_id)}</code></td>
+            <td class="so-tien">${T(String(g.phien_ban))}</td>
+            <td class="so-tien">${tien(g.gia_thang_dong)}</td>
+            <td class="so-tien">${T(String(g.han_muc_don_thang))}</td>
+            <td class="so-tien">${T(String(g.han_muc_ai_thang))}</td>
+            <td class="so-tien">${T(String(g.so_nhan_vien))}</td>
+            <td class="so-tien">${T(String(g.so_tai_khoan_hang))}</td>
+            <td>${g.goi_id === b.goi.id ? '<span class="huy-hieu hh-xanh">gói hiện tại</span>' : "—"}</td>
+          </tr>`).join("")}</tbody></table></div>`
+          : '<div class="trang-thai-rong">Không đọc được danh mục gói — thiếu quyền <code>tenant.billing.xem</code> hoặc máy chủ không trả</div>'}</div></div>
+      <div class="hop-nguon" style="margin-top:14px"><b>Nguồn số liệu màn này</b>
+        — <span class="tag-demo">DỮ LIỆU LOCAL</span>
+        <ul>
+          <li>Gói hiện tại + mức dùng: <code>GET /api/v2/billing</code>.</li>
+          <li>Danh mục gói: <code>GET /api/v2/goi</code> (${goi.length} gói).</li>
+          <li><b>KHÁC bảng khai của module:</b> <code>admin/billing.js</code> ghi màn này cần
+            <code>GET /api/v2/billing/goi</code> — đo ra <b>HTTP 404</b>. Đường thật là
+            <code>/api/v2/goi</code>.</li>
+        </ul></div>
       <p style="font-size:12.5px;color:var(--chu-mo)">Usage đo từ backend. Nâng/hạ gói do quản trị nền tảng thực hiện. Thanh toán thật chưa bật.</p>`);
   },
 
@@ -1861,6 +1942,868 @@ function gocAnhXaCot(id, ax, kq) {
     }
   });
 }
+
+/* ============================================================================
+   G19 · AG-05 — ĐƯỜNG VÀO CHO CÁC MÀN ĐỢT 3 CHƯA AI GỌI (V-13910)
+   ============================================================================
+   ĐO ĐƯỢC (xem `docs/G19_MAN_MA.md` §2, có lệnh + mã thoát): năm module
+   `admin/{finance,billing,carrier_health,ai,health}.js` khai 17 màn; `admin.js` chỉ tham
+   chiếu ĐÚNG MỘT (`window.VIPCARRIERHEALTH`, màn `ket-noi-jt` do AG-06 cắm ở G17). Mười sáu
+   màn còn lại là mã không có đường vào: không mục menu, không nhánh trong `CAC_MAN`.
+
+   KHỐI DƯỚI ĐÂY CẮM CHÚNG VÀO. Bốn luật tự đặt, ghi ra để lượt sau không phá:
+
+     1. MỖI MÀN PHẢI CÓ DỮ LIỆU THẬT. Không màn nào chỉ để "tệp tồn tại": màn nào cũng gọi
+        một đường HTTP đã ĐO là có thật. Chỗ nào API không trả thì hiện "CHƯA ĐO ĐƯỢC" kèm
+        lý do — KHÔNG hiện số 0 như thể đã đo, KHÔNG bịa số minh hoạ.
+
+     2. KHÔNG TỰ CHẾ ENDPOINT, VÀ KHÔNG TIN BẢNG KHAI CỦA MODULE. `admin/billing.js` khai
+        cần `/api/v2/billing/{goi,dang-ky,muc-dung,canh-bao,lich-su}` — ĐO RA CẢ NĂM ĐỀU 404.
+        Chức năng ấy nằm ở `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage/…`. Màn gọi
+        đường CÓ THẬT và ghi rõ đường nào đã dùng, để lần sau không ai đi tìm đường cũ.
+
+     3. QUYẾT ĐỊNH Ở MODULE, HTML Ở ĐÂY. Nhãn, màu, cách gom nhóm, câu cảnh báo đều hỏi
+        `window.VIPFINANCE` / `VIPBILLING` / `VIPAI` / `VIPHEALTH`; tệp này chỉ dựng DOM.
+        Sửa luật thì sửa ở module — nơi `thu_frontend/thu_logic.mjs` kiểm được không cần
+        trình duyệt. Chép luật vào đây là tạo bản thứ hai sẽ lệch.
+
+     4. NẠP MUỘN. `admin/index.html` nạp `admin.js` TRƯỚC bốn module, nên mọi lời gọi
+        `window.VIP*` nằm TRONG thân hàm màn (chạy sau khi cả trang đã nạp), KHÔNG nằm ở mức
+        nạp tệp. Đọc ở mức nạp tệp là `undefined` và màn chết im lặng.
+
+   Ngoài phạm vi khối này (đã đo, ghi ở §5 báo cáo): các đường GHI chưa cắm
+   (`POST /api/v2/billing/du-thao` → 404; ba đường ghi của nền tảng → 404). Màn đọc được thì
+   làm, nút ghi chưa có đường thì KHÔNG vẽ ra nút — vẽ nút rồi báo lỗi là dạy người dùng
+   rằng nút hỏng là chuyện bình thường.
+   ============================================================================ */
+
+const VIP_F  = () => window.VIPFINANCE;
+const VIP_B  = () => window.VIPBILLING;
+const VIP_AI = () => window.VIPAI;
+const VIP_HS = () => window.VIPHEALTH;
+
+/* ---- tiện ích dựng HTML dùng chung cho cả bốn nhóm ---- */
+
+/** Bảng dữ liệu. LUÔN nằm trong `.cuon-ngang`: bảng rộng phải tự cuộn trong vùng của nó.
+ *  Tầng 3 đo `scrollWidth - clientWidth` của `<html>` và loại trừ `.cuon-ngang` — một bảng
+ *  không bọc là kéo cả trang tràn ngang ở 375px, và đó là ca HỎNG thật, không phải cảnh đẹp. */
+function bangDuLieu(cot, dong, tc) {
+  tc = tc || {};
+  const giua = (c) => `${c.nut ? ` class="so-tien"` : ""}`;
+  return `<div class="cuon-ngang"><table class="bang${tc.hep ? " bang-hep" : ""}">
+    <thead><tr>${cot.map((c) => `<th${giua(c)}>${T(c.ten)}</th>`).join("")}</tr></thead>
+    <tbody>${(dong && dong.length)
+      ? dong.map((r) => `<tr>${cot.map((c) => `<td${giua(c)}>${c.o ? c.o(r) : T(r[c.k])}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="${cot.length}"><div class="trang-thai-rong">${T(tc.rong || "Chưa có dòng nào")}</div></td></tr>`}</tbody>
+  </table></div>`;
+}
+
+/** Ô KPI. `so` nhận HTML đã dựng — tệp này KHÔNG tự tính toán con số nào. */
+function oKpi(nhan, so, phu, mau) {
+  return `<div class="the kpi"><div class="nhan">${T(nhan)}</div>
+    <div class="so"${mau ? ` style="color:${mau}"` : ""}>${so}</div>
+    ${phu ? `<div class="phu">${phu}</div>` : ""}</div>`;
+}
+
+/** Hộp NGUỒN SỐ LIỆU. Luật số liệu của dự án: mỗi con số phải nói ĐO TỪ ĐÂU và TRONG PHẠM VI
+ *  NÀO. Nhãn "DỮ LIỆU LOCAL" ở đây KHÔNG phải nhãn "CHỜ BACKEND" — tầng 3 bắt mọi nhãn chờ
+ *  phải khớp thực tế của máy chủ, nên chỉ dán nhãn chờ cho đường ĐO ĐƯỢC là chưa có. */
+function hopNguon(ds) {
+  return `<div class="hop-nguon" style="margin-top:14px"><b>Nguồn số liệu màn này</b>
+    — <span class="tag-demo">DỮ LIỆU LOCAL / HÃNG MOCK</span>
+    <ul>${ds.filter(Boolean).map((x) => `<li>${x}</li>`).join("")}</ul></div>`;
+}
+
+/** CHƯA ĐO ĐƯỢC — khác "số 0", khác "hệ hỏng". Không mượn màu xanh, không bịa số. */
+function oChuaDo(lyDo) {
+  return `<div class="trang-thai-rong"><div class="to">🕳️</div>CHƯA ĐO ĐƯỢC
+    <div class="ghi-chu-nguon" style="margin-top:6px">${T(lyDo)}</div></div>`;
+}
+
+/** Số tiền tài chính — hỏi `finance.js`, KHÔNG tự định dạng ở đây. */
+function tcTien(v) {
+  const d = VIP_F().dinhDangTien(v);
+  return d.la ? `<span class="huy-hieu hh-xam" title="${T(d.ly_do || "giá trị lạ")}">${T(d.van_ban)}</span>`
+              : T(d.van_ban);
+}
+/** Số tiền gói/usage — hỏi `billing.js`. */
+function bTien(v) {
+  const d = VIP_B().dinhDangDong(v);
+  return d.ok ? T(d.chu) : `<span class="huy-hieu hh-vang" title="${T(d.ly_do || "giá trị lạ")}">${T(d.chu)}</span>`;
+}
+
+
+/* ---- chọn ĐỢT ĐỐI SOÁT: hai màn (`bang_ke`, `chenh_lech`) cần <id> có thật ---- */
+let TC_DOT = null;
+async function tcChonDot() {
+  const ds = (await api("/api/v2/doi-soat/dot")).dot || [];
+  if (!ds.length) return { ds, id: null, html: "" };
+  const id = (TC_DOT && ds.some((x) => String(x.id) === String(TC_DOT))) ? String(TC_DOT) : String(ds[0].id);
+  TC_DOT = id;
+  /* Danh sách đợt hiện NGUYÊN VĂN mã hãng và tên tệp: hai đợt cùng kỳ của hai hãng là hai
+     đợt khác nhau, chọn nhầm là đọc số của hãng khác. */
+  return { ds, id, html: `<div style="margin-bottom:12px">
+    <label for="tc-dot" style="font-size:12.5px;color:var(--chu-mo)">Đợt đối soát:</label>
+    <select id="tc-dot" class="nut" style="padding:6px 10px;margin-left:8px">
+      ${ds.map((x) => `<option value="${x.id}"${String(x.id) === id ? " selected" : ""}>#${x.id} · ${T(x.hang)} · ${T(x.ten_file)} · ${x.so_dong} dòng · ${T(x.trang_thai)}</option>`).join("")}
+    </select></div>` };
+}
+function tcNoiDot(man) {
+  const s = document.getElementById("tc-dot");
+  if (s) s.addEventListener("change", () => { TC_DOT = s.value; moMan(man); });
+}
+
+/* ======================= NHÓM TÀI CHÍNH — 7 màn =======================
+   Cột và tên màn đọc từ `VIPFINANCE.manHinh(ma)` (bảng `MAN_HINH` trong `admin/finance.js`).
+   Tệp này KHÔNG chép lại danh sách cột: chép là hai bản sẽ lệch, và bản trong giao diện là
+   bản không ai nhớ cập nhật khi backend thêm cột. */
+const TC_COT = {
+  id: "ID", ma_don: "Mã đơn", ma_van_don: "Mã vận đơn", hang: "Hãng",
+  so_tien_du_kien: "Dự kiến thu", so_tien_hang_bao: "Hãng báo", so_tien_da_tt: "Đã thu",
+  trang_thai: "Trạng thái", ten_file: "Tệp", ky_thanh_toan: "Kỳ thanh toán",
+  so_dong: "Số dòng", so_chenh_lech: "Chênh lệch", stt: "STT",
+  cod_hang_bao: "COD hãng báo", phi_hang_bao: "Phí hãng báo", ket_qua: "Kết quả",
+  doi_tac: "Đối tác", so_du_dong: "Số dư", loai: "Loại",
+  so_he: "Số hệ", so_hang: "Số hãng", lech_dong: "Lệch", xu_ly: "Xử lý",
+  luc: "Lúc", don_id: "Đơn", so_tien_dong: "Số tiền", ly_do: "Lý do", nguoi_ten: "Người",
+};
+const TC_COT_TIEN = ["so_tien_du_kien", "so_tien_hang_bao", "so_tien_da_tt", "cod_hang_bao",
+                     "phi_hang_bao", "so_du_dong", "so_he", "so_hang", "lech_dong", "so_tien_dong"];
+/** Dựng bảng theo ĐÚNG bảng cột module khai. `o` để màn chỉ định cách vẽ riêng một cột. */
+function tcBang(ma, dong, tc) {
+  tc = tc || {};
+  const m = VIP_F().manHinh(ma);
+  const cot = (m ? m.cot : []).map((c) => ({
+    ten: TC_COT[c] || c,
+    nut: TC_COT_TIEN.indexOf(c) >= 0,
+    o: tc.o && tc.o[c] ? tc.o[c] : (TC_COT_TIEN.indexOf(c) >= 0 ? ((r) => tcTien(r[c])) : null),
+    k: c,
+  }));
+  return bangDuLieu(cot, dong, { rong: tc.rong });
+}
+/** Khung chung: thân màn + hộp nguồn. `dsNguon` nói rõ đường nào đã đọc. */
+function tcKhung(than, dsNguon) {
+  return `${than}${hopNguon(dsNguon)}`;
+}
+
+const MAN_TAICHINH = {
+  async cod() {
+    const F2 = VIP_F();
+    const [d, t2] = await Promise.all([
+      api("/api/v2/tai-chinh/cod"),
+      apiNeuDuoc("/api/v2/tai-chinh/tong-so", "tenant.taichinh.xem"),
+    ]);
+    const dong = d.cod || [];
+    /* Cảnh báo đọc từ DỮ LIỆU backend (công nợ lệch, móc băm hỏng, COD tranh chấp) — không
+       phải câu viết tay trong giao diện. */
+    const canh = t2 ? F2.canhBao(t2) : [];
+    datMan("Bảng COD", tcKhung(`
+      ${canh.length ? canh.map((c) => `<div class="hop-loi" style="margin-bottom:10px">
+        <b>${T(c.muc === "nang" ? "⚠️ Nặng" : c.muc === "vua" ? "Cần xem" : "Lưu ý")}</b>
+        — ${T(c.thong_diep)}</div>`).join("") : ""}
+      <div class="luoi luoi-kpi">
+        ${oKpi("Dòng COD", String(dong.length), "trong phạm vi API trả về")}
+        ${t2 ? oKpi("Hãng đang giữ", T(F2.dinhDangTien(t2.cod.con_cho).van_ban), "chưa trả về", "var(--do-vip)") : ""}
+        ${t2 ? oKpi("Đã thanh toán", T(F2.dinhDangTien(t2.cod.da_thanh_toan).van_ban), "hãng đã trả tiền") : ""}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Dòng COD theo đơn</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${dong.length} dòng</span></div></div>
+        <div class="the-than">${tcBang("cod", dong, {
+          rong: "Chưa có dòng COD nào — cần một đơn đã gửi hãng",
+          o: { trang_thai: (r) => hh(F2.nhanCod(r.trang_thai)) },
+        })}</div></div>`,
+      [`Đường đọc: <code>GET /api/v2/tai-chinh/cod</code> (${dong.length} dòng).`,
+       t2 ? `Cảnh báo đọc từ <code>GET /api/v2/tai-chinh/tong-so</code> — móc băm nhật ký tài chính: <b>${t2.nhat_ky && t2.nhat_ky.ok ? "khớp" : "HỎNG"}</b>; công nợ khớp bảng bút toán: <b>${t2.cong_no_khop ? "có" : "KHÔNG"}</b>.` : "",
+       "Mọi đơn ở đây tạo qua <b>adapter MOCK</b>, chưa phải đơn thật của hãng vận chuyển."]));
+  },
+
+  async dot() {
+    const F2 = VIP_F();
+    const dong = (await api("/api/v2/doi-soat/dot")).dot || [];
+    datMan("Đợt đối soát", tcKhung(`
+      <div class="the"><div class="the-dau"><h2>Các đợt đã nạp</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${dong.length} đợt</span></div></div>
+        <div class="the-than">${tcBang("dot", dong, {
+          rong: "Chưa nạp bảng kê nào — đợt sinh ra khi nạp bảng kê của hãng",
+          o: { trang_thai: (r) => hh(F2.nhanDot(r.trang_thai)) },
+        })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Màn này <b>chỉ đọc</b>. Nạp bảng kê
+          (<code>POST /api/v2/doi-soat/nap</code>, đã đo HTTP 400 khi thiếu thân — đường CÓ
+          thật) và duyệt đợt (<code>POST /api/v2/doi-soat/dot/&lt;id&gt;/duyet</code>) là thao
+          tác GHI, cần quyền <code>tenant.taichinh.ghi</code> / <code>tenant.taichinh.duyet</code>.
+          G19 chưa vẽ nút cho chúng — xem <code>docs/G19_MAN_MA.md</code> §5.</p></div></div>`,
+      [`Đường đọc: <code>GET /api/v2/doi-soat/dot</code> (${dong.length} đợt).`,
+       "Trạng thái đợt lấy từ <code>admin/finance.js → TT_DOT</code>; giá trị lạ hiện nguyên văn kèm dấu ⚠."]));
+  },
+
+  async bang_ke() {
+    const { ds, id, html } = await tcChonDot();
+    if (!id) {
+      datMan("Bảng kê của hãng", tcKhung(oChuaDo(
+        "Chưa có ĐỢT ĐỐI SOÁT nào, mà bảng kê là dòng CỦA MỘT ĐỢT. Đường "
+        + "GET /api/v2/doi-soat/dot/<id>/bang-ke đã đo được HTTP 200 khi có đợt thật — "
+        + "ở đây thiếu DỮ LIỆU, không phải thiếu đường."),
+        ["Đường đọc: <code>GET /api/v2/doi-soat/dot/&lt;id&gt;/bang-ke</code>."]));
+      return;
+    }
+    const dong = (await api(`/api/v2/doi-soat/dot/${id}/bang-ke`)).dong || [];
+    datMan("Bảng kê của hãng", tcKhung(`
+      ${html}
+      <div class="the"><div class="the-dau"><h2>Dòng bảng kê — đợt #${id}</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${dong.length} dòng</span></div></div>
+        <div class="the-than">${tcBang("bang_ke", dong, { rong: "Đợt này không có dòng nào" })}</div></div>`,
+      [`Đường đọc: <code>GET /api/v2/doi-soat/dot/${id}/bang-ke</code> (${dong.length} dòng của đợt #${id}).`,
+       "Cột lấy từ <code>admin/finance.js → MAN_HINH</code> mục <code>bang_ke</code>."]));
+    tcNoiDot("bang_ke");
+  },
+
+  async chenh_lech() {
+    const F2 = VIP_F();
+    const { ds, id, html } = await tcChonDot();
+    if (!id) {
+      datMan("Chênh lệch đối soát", tcKhung(oChuaDo(
+        "Chưa có ĐỢT ĐỐI SOÁT nào. Đường GET /api/v2/doi-soat/dot/<id>/chenh-lech đã đo được "
+        + "HTTP 200 — thiếu dữ liệu, không phải thiếu đường."),
+        ["Đường đọc: <code>GET /api/v2/doi-soat/dot/&lt;id&gt;/chenh-lech</code>."]));
+      return;
+    }
+    const dong = (await api(`/api/v2/doi-soat/dot/${id}/chenh-lech`)).chenh_lech || [];
+    /* `nhomChenhLech` giữ ĐÚNG bảy nhóm kể cả nhóm rỗng — nhóm rỗng biến mất là người xem
+       tưởng loại đó chưa từng xảy ra. */
+    const nhom = F2.nhomChenhLech(dong);
+    datMan("Chênh lệch đối soát", tcKhung(`
+      ${html}
+      <div class="luoi luoi-kpi">
+        ${oKpi("Tổng dòng lệch", String(dong.length), `trong đợt #${id}`, dong.length ? "var(--do-vip)" : null)}
+        ${oKpi("Nhóm có dòng", String(nhom.filter((g) => g.muc.length).length), "trên 7 nhóm luật")}
+      </div>
+      ${nhom.map((g) => `<div class="the" style="margin-top:12px">
+        <div class="the-dau"><h2>${T(g.ten)}</h2><div class="phai">
+          <span class="huy-hieu ${g.lop}">${g.muc.length} dòng</span></div></div>
+        <div class="the-than">
+          ${g.cach_xu ? `<p class="ghi-chu-nguon" style="margin-top:0">Cách xử: ${T(g.cach_xu)}</p>` : ""}
+          ${g.muc.length ? tcBang("chenh_lech", g.muc, { o: { loai: (r) => hh(F2.nhanChenhLech(r.loai)) } })
+            : '<div class="trang-thai-rong" style="padding:12px">Nhóm này không có dòng nào — hiện ra để bạn biết nó đã được kiểm</div>'}
+        </div></div>`).join("")}`,
+      [`Đường đọc: <code>GET /api/v2/doi-soat/dot/${id}/chenh-lech</code> (${dong.length} dòng).`,
+       "Bảy nhóm và cách xử lấy từ <code>admin/finance.js → LOAI_CHENH_LECH</code>, KHÔNG chép vào đây."]));
+    tcNoiDot("chenh_lech");
+  },
+
+  async phai_thu() { return manCongNo("phai_thu"); },
+  async phai_tra() { return manCongNo("phai_tra"); },
+
+  async dieu_chinh() {
+    const dong = (await api("/api/v2/tai-chinh/dieu-chinh")).dieu_chinh || [];
+    datMan("Lịch sử điều chỉnh", tcKhung(`
+      <div class="the"><div class="the-dau"><h2>Bút toán điều chỉnh</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${dong.length} dòng</span></div></div>
+        <div class="the-than">${tcBang("dieu_chinh", dong, { rong: "Chưa có điều chỉnh nào" })}</div></div>`,
+      [`Đường đọc: <code>GET /api/v2/tai-chinh/dieu-chinh</code> (${dong.length} dòng).`,
+       "Điều chỉnh là thao tác GHI có lý do bắt buộc (<code>POST /api/v2/tai-chinh/dieu-chinh</code>, đã đo HTTP 403 với vai trò nền tảng ⇒ đường CÓ thật). G19 chưa vẽ form ghi."]));
+  },
+};
+
+/** Hai màn công nợ dùng CHUNG một đường `/api/v2/tai-chinh/cong-no` (backend trả cả hai vế).
+ *  Ghi ra vì đây là chỗ dễ tưởng sai: hai màn KHÁC NHAU, một đường. */
+async function manCongNo(ve) {
+  const d = await api("/api/v2/tai-chinh/cong-no");
+  const la_thu = ve === "phai_thu";
+  const goc = (la_thu ? d.phai_thu : d.phai_tra) || {};
+  const dong = Object.keys(goc).map((k) => ({ doi_tac: k, so_du_dong: goc[k] }));
+  const tong = la_thu ? d.tong_phai_thu : d.tong_phai_tra;
+  datMan(la_thu ? "Công nợ phải thu" : "Công nợ phải trả", tcKhung(`
+    <div class="luoi luoi-kpi">
+      ${oKpi("Tổng " + (la_thu ? "phải thu" : "phải trả"), T(tcTien(tong)), "backend tính bằng số nguyên đồng")}
+      ${oKpi("Số đối tác", String(dong.length), "có số dư khác 0")}
+    </div>
+    <div class="the" style="margin-top:16px"><div class="the-dau"><h2>${la_thu ? "Phải thu" : "Phải trả"} theo đối tác</h2></div>
+      <div class="the-than">${bangDuLieu([
+        { ten: "Đối tác", k: "doi_tac" },
+        { ten: "Số dư", nut: true, o: (r) => tcTien(r.so_du_dong) },
+      ], dong, { rong: "Không có đối tác nào còn số dư" })}
+      <p class="ghi-chu-nguon" style="margin-top:10px">Bảng này là <b>số dư hiện tại</b>, không
+        phải sao kê theo kỳ. Muốn xem theo kỳ thì dùng màn <b>Đợt đối soát</b>.</p></div></div>`,
+    [`Đường đọc: <code>GET /api/v2/tai-chinh/cong-no</code> — MỘT đường trả CẢ HAI vế
+      (<code>phai_thu</code>, <code>phai_tra</code>, <code>tong_phai_thu</code>, <code>tong_phai_tra</code>).`,
+     `Màn này hiện vế <b>${la_thu ? "phải thu" : "phải trả"}</b>; vế kia ở màn <b>${la_thu ? "Công nợ phải trả" : "Công nợ phải thu"}</b>.`,
+     "Số dư do backend tính; giao diện chỉ định dạng, KHÔNG cộng trừ."]));
+}
+
+/* ======================= NHÓM GÓI & TÍNH PHÍ — 7 màn =======================
+   SÁU TRONG BẢY màn gọi đường KHÁC bảng khai của `admin/billing.js`: bảng ấy trỏ
+   `/api/v2/billing/{goi,dang-ky,muc-dung,canh-bao,lich-su}` và ĐO RA CẢ NĂM ĐỀU 404. Chức
+   năng thật nằm ở `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage…`. Xem §2 báo cáo. */
+
+const MAN_GOI = {
+  async "dang-ky"() {
+    const B2 = VIP_B();
+    const d = await api("/api/v2/dang-ky");
+    const hm = d.han_muc || {};
+    const ls = d.lich_su || [];
+    datMan("Chi tiết đăng ký", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Trạng thái đăng ký", hh(B2.nhanDangKy(hm.trang_thai), "", true), d.dang_ky ? "có bản ghi đăng ký" : "chưa có bản ghi — đang dùng gói của tenant")}
+        ${oKpi("Gói hiệu lực", T(hm.goi_ten || "—"), `phiên bản ${T(hm.phien_ban == null ? "—" : String(hm.phien_ban))}`)}
+        ${oKpi("Giá tháng", T(bTien(hm.gia_thang_dong)), "chưa thu tiền thật")}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Lịch sử đổi gói</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${ls.length} mục</span></div></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Lúc", k: "luc" },
+          { ten: "Việc", o: (r) => hh(B2.nhanLichSu(r.loai_su_kien)) },
+          { ten: "Từ gói", k: "tu_goi_id" },
+          { ten: "Sang gói", k: "sang_goi_id" },
+          { ten: "Người", k: "boi" },
+          { ten: "Lý do", k: "ly_do" },
+        ], ls, { rong: "Chưa có lần đổi gói nào" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Đổi gói là thao tác GHI
+          (<code>POST /api/v2/dang-ky/doi-goi</code>; đo được HTTP 404 kèm lời
+          <i>“gói &#39;&#39; không tồn tại”</i> ⇒ đường CÓ thật, 404 là lỗi nghiệp vụ chứ không
+          phải thiếu đường). G19 chưa vẽ nút đổi gói — xem §5 báo cáo.</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/dang-ky</code>.`,
+        "Trạng thái và loại sự kiện lấy từ <code>admin/billing.js → TT_DANG_KY / LOAI_LICH_SU</code>.",
+        "<b>KHÁC bảng khai của module:</b> <code>admin/billing.js</code> ghi cần <code>GET /api/v2/billing/dang-ky</code> — đo ra HTTP 404."])}`);
+  },
+
+  async "muc-dung"() {
+    const B2 = VIP_B();
+    const u = await api("/api/v2/usage");
+    const b = B2.dungBangMucDung(u.trang_thai);
+    datMan("Bảng mức dùng", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Kỳ", T(b.ky || "—"), `gói ${T(b.goi || "—")} · phiên bản ${T(b.phien_ban == null ? "—" : String(b.phien_ban))}`)}
+        ${oKpi("Trạng thái đăng ký", hh(b.trang_thai, "", true), "hạn mức lấy theo gói hiệu lực")}
+        ${oKpi("Loại sắp hết", String(b.sap_het.length), "ngưỡng do backend trả (điểm cơ bản)", b.sap_het.length ? "var(--do-vip)" : null)}
+      </div>
+      ${b.canh_bao_chua_ghim ? `<div class="hop-loi" style="margin-top:12px">${T(b.canh_bao_chua_ghim)}</div>` : ""}
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Trần và mức đã dùng</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Loại", k: "ten" },
+          { ten: "Đã dùng", nut: true, o: (r) => T(String(r.da_dung)) },
+          { ten: "Trần", nut: true, o: (r) => r.tran == null ? '<span class="huy-hieu hh-xam" title="trần do nơi khác quyết, KHÔNG phải không giới hạn">do nơi khác quyết</span>' : T(String(r.tran)) },
+          { ten: "Còn lại", nut: true, o: (r) => r.con_lai == null ? "—" : T(String(r.con_lai)) },
+          { ten: "Tỷ lệ", nut: true, k: "ty_le" },
+          { ten: "Mức", o: (r) => hh(r.canh_bao) },
+          { ten: "Nguồn đo", k: "nguon_do" },
+          { ten: "Nguồn trần", k: "nguon_tran" },
+        ], b.hang, { rong: "Gói này chưa khai loại hạn mức nào" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Hai cột <b>nguồn đo</b> và <b>nguồn
+          trần</b> hiện lên có chủ ý: hai con số lệch nhau mà không biết số nào đến từ bảng nào
+          thì không ai biết tin bên nào.</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/usage</code> (khoá <code>trang_thai</code> là payload <code>usage.trang_thai_han_muc</code>).`,
+        "Bảng do <code>admin/billing.js → dungBangMucDung()</code> dựng — giao diện không tự tính tỷ lệ.",
+        "<b>KHÁC bảng khai của module:</b> module ghi cần <code>GET /api/v2/billing/muc-dung</code> — đo ra HTTP 404."])}`);
+  },
+
+  async "canh-bao"() {
+    const B2 = VIP_B();
+    const u = await api("/api/v2/usage");
+    const ds = u.canh_bao || [];
+    datMan("Cảnh báo hạn mức", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Loại đang cảnh báo", String(ds.length), `ngưỡng ${B2.chuTyLe(B2.NGUONG_SAP_HET)} — khớp app/usage.py`)}
+        ${oKpi("Đã hết hạn mức", String(ds.filter((x) => x.het).length), "backend CHẶN khi hết, không thu thêm", ds.some((x) => x.het) ? "var(--do-vip)" : null)}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Loại sắp chạm trần</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Loại", k: "ten" },
+          { ten: "Đã dùng", nut: true, o: (r) => T(String(r.da_dung)) },
+          { ten: "Trần", nut: true, o: (r) => T(String(r.tran)) },
+          { ten: "Tỷ lệ", nut: true, o: (r) => T(B2.chuTyLe(r.ty_le_diem_co_ban)) },
+          { ten: "Mức", o: (r) => hh(B2.mucCanhBao({ tran: r.tran, ty_le_diem_co_ban: r.ty_le_diem_co_ban, con_lai: r.het ? 0 : 1 })) },
+        ], ds, { rong: "Không loại nào chạm ngưỡng cảnh báo" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Cảnh báo chỉ để <b>báo</b>. Hệ KHÔNG tự
+          nâng gói và không thu thêm khi vượt: backend CHẶN khi hết hạn mức.</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/usage</code> (khoá <code>canh_bao</code> = <code>usage.canh_bao_sap_het</code>).`,
+        "Ngưỡng và cách vẽ mức lấy từ <code>admin/billing.js → NGUONG_SAP_HET / mucCanhBao</code>.",
+        "Cũng có bản đầy đủ hơn ở <code>GET /api/v2/usage/bao-cao</code> — màn này dùng bản gọn vì đó là thứ backend trả cho mọi lượt mở màn."])}`);
+  },
+
+  async "lich-su"() {
+    const B2 = VIP_B();
+    const [tp, sk] = await Promise.all([
+      api("/api/v2/usage/tinh-phi"),
+      api("/api/v2/usage/su-kien"),
+    ]);
+    const chang = tp.chang || [];
+    const su_kien = sk.su_kien || [];
+    datMan("Lịch sử tính phí", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Kỳ", T(tp.ky), `${T(tp.bat_dau)} → ${T(tp.ket_thuc)} · ${tp.so_ngay_ky} ngày`)}
+        ${oKpi("Tiền gói", T(bTien(tp.tien_goi_dong)), "tính theo đoạn, có chia tỷ lệ ngày")}
+        ${oKpi("Tiền vượt", T(bTien(tp.tien_vuot_dong)), T(tp.ly_do_khong_thu_vuot || ""))}
+        ${oKpi("Tổng", T(bTien(tp.tong_dong)), `phần dư bỏ đi: ${bTien(tp.phan_du_bo_dong)}`)}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Các đoạn (chang) của kỳ</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Gói", k: "ten" },
+          { ten: "Phiên bản", nut: true, k: "phien_ban" },
+          { ten: "Từ ngày", nut: true, k: "ngay_bat_dau" },
+          { ten: "Số ngày", nut: true, k: "so_ngay" },
+          { ten: "Giá tháng", nut: true, o: (r) => bTien(r.gia_thang_dong) },
+          { ten: "Thành tiền", nut: true, o: (r) => bTien(r.so_tien_dong) },
+        ], chang, { rong: "Kỳ này chưa có đoạn tính phí nào" })}</div></div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Sự kiện dùng trong kỳ</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${su_kien.length} sự kiện</span></div></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Lúc", k: "luc" },
+          { ten: "Loại", k: "loai" },
+          { ten: "Số lượng", nut: true, k: "so_luong" },
+          { ten: "Khoá chống trùng", k: "idem_key" },
+          { ten: "Ghi chú", k: "ghi_chu" },
+        ], su_kien, { rong: "Chưa ghi sự kiện dùng nào trong kỳ" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">${T(tp.nhan_phap_ly || "")}</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/usage/tinh-phi</code> (${chang.length} đoạn) và <code>GET /api/v2/usage/su-kien</code> (${su_kien.length} sự kiện).`,
+        "Nhãn pháp lý <b>hiện nguyên văn từ backend</b> — giao diện không tự viết lại câu ấy.",
+        "Số tiền định dạng bằng <code>admin/billing.js → dinhDangDong</code>: số thập phân bị coi là LẠ và hiện nguyên văn, không tự làm tròn."])}`);
+  },
+
+  async "du-thao"() {
+    const B2 = VIP_B();
+    const [dt, tp] = await Promise.all([
+      api("/api/v2/billing/du-thao"),
+      api("/api/v2/usage/tinh-phi"),
+    ]);
+    const ds = dt.du_thao || [];
+    const t = B2.tomTatDuThao(tp);
+    const dong = ds.map((x) => (x.du_thao && typeof x.du_thao === "object") ? x.du_thao : x);
+    datMan("Dự thảo hoá đơn", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Kỳ hiện tại", T(t.ky || tp.ky), t.co ? "dựng từ GET /api/v2/usage/tinh-phi" : "chưa có")}
+        ${oKpi("Tổng dự thảo", T(t.tong ? t.tong.chu : "—"), "BẢN NHÁP NỘI BỘ")}
+        ${oKpi("Đã lưu", String(dong.length), "bản ghi trong GET /api/v2/billing/du-thao")}
+      </div>
+      ${t.canh_bao ? `<div class="hop-loi" style="margin-top:12px">${T(t.canh_bao)}</div>` : ""}
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Bản nháp kỳ ${T(tp.ky)}</h2>
+        <div class="phai"><span class="huy-hieu hh-vang">${T(B2.NHAN_BAT_BUOC)}</span></div></div>
+        <div class="the-than">
+          <p style="margin-top:0">${T(t.nhan || "Chưa có nhãn pháp lý từ backend")}</p>
+          ${bangDuLieu([
+            { ten: "Khoản", k: "ten" },
+            { ten: "Số tiền", nut: true, o: (r) => T(r.tien) },
+          ], [
+            { ten: "Tiền gói", tien: t.tien_goi ? t.tien_goi.chu : "—" },
+            { ten: "Tiền vượt hạn mức", tien: t.tien_vuot ? t.tien_vuot.chu : "—" },
+            { ten: "Phần dư bỏ đi", tien: t.phan_du_bo ? t.phan_du_bo.chu : "—" },
+            { ten: "TỔNG", tien: t.tong ? t.tong.chu : "—" },
+          ], { hep: true })}
+          <ul class="ghi-chu-nguon" style="margin-top:10px">${(t.khoa_hanh_dong || []).map((x) => `<li>${T(x)}</li>`).join("")}</ul>
+        </div></div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Dự thảo đã lưu</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Kỳ", k: "ky" },
+          { ten: "Tổng", nut: true, o: (r) => bTien(r.tong_dong) },
+          { ten: "Nhãn pháp lý", k: "nhan_phap_ly" },
+          { ten: "Lúc tạo", k: "tao_luc" },
+        ], dong, { rong: "Chưa có dự thảo nào được lưu" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Lập dự thảo là thao tác GHI và <b>đường
+          ấy CHƯA ĐƯỢC CẮM</b>: <code>POST /api/v2/billing/du-thao</code> đo được <b>HTTP 404</b>
+          (lý do ghi trong <code>app/server.py</code>: lệnh ghi cần quyền
+          <code>tenant.billing.lap_du_thao</code> chưa có — việc V-13909). Đường ĐỌC thì có.</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/billing/du-thao</code> (${dong.length} bản ghi) và <code>GET /api/v2/usage/tinh-phi</code>.`,
+        "Nhãn và cách tóm tắt lấy từ <code>admin/billing.js → tomTatDuThao / NHAN_BAT_BUOC</code> — thiếu nhãn là chính module báo lỗi ra màn.",
+        "Màn này KHÔNG có nút thanh toán, và đó là chủ ý: G08 chưa nối cổng thanh toán, chưa từng trừ tiền."])}`);
+  },
+};
+
+/* `quan-tri-goi` thuộc menu NỀN TẢNG — cùng một màn, khác khu. */
+const MAN_GOI_NEN_TANG = {
+  async "quan-tri-goi"() {
+    const d = await api("/api/v2/platform/goi");
+    const ds = d.goi || [];
+    datMan("Quản trị gói", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Số gói", String(ds.length), "danh mục gói của nền tảng")}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Danh mục gói</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Mã gói", k: "id" },
+          { ten: "Tên", k: "ten" },
+          { ten: "Giá tháng", nut: true, o: (r) => bTien(r.gia_thang) },
+          { ten: "Hạn mức đơn/tháng", nut: true, k: "han_muc_don_thang" },
+          { ten: "Hạn mức AI/tháng", nut: true, k: "han_muc_ai_thang" },
+          { ten: "Nhân viên", nut: true, k: "so_nhan_vien" },
+          { ten: "Tài khoản hãng", nut: true, k: "so_tai_khoan_hang" },
+        ], ds, { rong: "Chưa có gói nào trong danh mục" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Phát hành phiên bản gói và đổi gói cho
+          tenant là thao tác GHI và <b>CHƯA có đường</b>: <code>POST /api/v2/platform/goi/phien-ban</code>,
+          <code>POST /api/v2/platform/tenants/&lt;id&gt;/doi-goi</code>,
+          <code>POST /api/v2/platform/tenants/&lt;id&gt;/tam-ngung</code> đo được <b>HTTP 404</b>.
+          Màn này vì thế <b>chỉ đọc</b>, không vẽ nút.</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/platform/goi</code> (${ds.length} gói) — đo bằng tài khoản nền tảng: HTTP 200; bằng tài khoản tenant: HTTP 403 (đúng RBAC).`,
+        "Màn này nằm trong menu <b>nền tảng</b>: tài khoản tenant không thấy mục, và backend cũng chặn bằng <code>platform.tenant.xem</code>-cấp quyền nền tảng."])}`);
+  },
+};
+
+/* ======================= NHÓM TRỢ LÝ AI — 6 màn =======================
+   `admin/ai.js` KHÔNG khai bảng `MAN_HINH`; nó xuất sáu hàm DỰNG MÔ HÌNH màn (trả dữ liệu đã
+   gom nhóm, không trả HTML). Tầng 3 vì thế coi module này là MỘT màn và suy mã màn từ tên
+   tệp — nên màn đầu tiên mang đúng mã `ai`, năm màn còn lại là màn phụ có mã riêng.
+
+   Nguồn dữ liệu: NĂM đường GET (đã đo HTTP 200) + MỘT đường POST chỉ-đọc. Vì sao có POST:
+   `ai_job.de_xuat_cho_nguoi_duyet()` là hàm DUY NHẤT biết cách ghép gợi ý AI với dòng gốc
+   nằm ở máy (SĐT và COD không hề được gửi cho nhà cung cấp), và nó chỉ được phơi ra ở
+   `POST /api/v2/ai/job/<id>/de-xuat`. Docstring của chính hàm ghi rõ “KHÔNG ghi CSDL”, và
+   `app/server.py` cấp cho nó quyền ĐỌC `tenant.ai.dung`, không phải quyền ghi. Chép lại phép
+   ghép ấy vào giao diện là tạo bản thứ hai sẽ lệch. */
+
+/** Nạp chung cho cả nhóm. Trả cả `batch` (lô mới nhất) để màn nói được "chưa có lô nào". */
+async function aiDuLieu() {
+  const [j, sk, tk, im] = await Promise.all([
+    api("/api/v2/ai/job"),
+    api("/api/v2/ai/su-kien"),
+    api("/api/v2/ai/thong-ke"),
+    apiNeuDuoc("/api/v2/import", "tenant.don.xem"),
+  ]);
+  const job = j.job || [];
+  const batch = (im && im.batch && im.batch[0]) || null;
+  let lo = null;
+  if (batch) {
+    try { lo = await api("/api/v2/ai/lo/" + batch.id); }
+    catch (e) { if (!e.daXuLy && e.ma !== 404) throw e; }
+  }
+  return { job, su_kien: sk.su_kien || [], tk, batch, lo };
+}
+/** Băng nhãn MÔ PHỎNG/THẬT — luật quan trọng nhất của màn AI. Câu chữ do `ai.js` đặt. */
+function aiBangKetQua(kq) {
+  return `<div class="the" style="border-left:4px solid var(--vien);margin-top:12px"><div class="the-than">
+    <span class="huy-hieu ${kq.lop}">${T(kq.nhan)}</span>
+    <div class="ghi-chu-nguon" style="margin-top:6px">${T(kq.chi_tiet)}</div>
+    <div class="ghi-chu-nguon">${T(kq.cau_an_toan)}</div></div></div>`;
+}
+/** Chọn JOB cho các màn cần một việc cụ thể. Mặc định: việc CHỜ DUYỆT mới nhất, nếu không có
+ *  thì việc mới nhất. Chọn hộ nhưng NÓI RA đang xem việc nào — không im lặng chọn thay. */
+let AI_JOB = null;
+async function aiChonJob(ds) {
+  if (!ds.length) return null;
+  const uu = ds.filter((x) => x.can_nguoi_duyet === 1 || x.can_nguoi_duyet === true);
+  const chon = (AI_JOB && ds.some((x) => String(x.id) === String(AI_JOB)))
+    ? ds.filter((x) => String(x.id) === String(AI_JOB))[0]
+    : (uu[0] || ds[0]);
+  AI_JOB = chon.id;
+  return chon;
+}
+function aiThanhChonJob(ds) {
+  return `<div style="margin-bottom:12px">
+    <label for="ai-job" style="font-size:12.5px;color:var(--chu-mo)">Công việc AI:</label>
+    <select id="ai-job" class="nut" style="padding:6px 10px;margin-left:8px">
+      ${ds.map((x) => `<option value="${x.id}"${String(x.id) === String(AI_JOB) ? " selected" : ""}>#${x.id} · ${T(x.loai)} · ${T(x.trang_thai)}${(x.can_nguoi_duyet === 1 || x.can_nguoi_duyet === true) ? " · CHỜ DUYỆT" : ""}</option>`).join("")}
+    </select></div>`;
+}
+function aiNoiChonJob(man) {
+  const s = document.getElementById("ai-job");
+  if (s) s.addEventListener("change", () => { AI_JOB = s.value; moMan(man); });
+}
+/** Gói `de_xuat` cho một việc — POST chỉ-đọc, xem khối chú thích đầu nhóm. */
+async function aiDeXuat(jobId) {
+  try { return await api(`/api/v2/ai/job/${jobId}/de-xuat`, "POST", {}); }
+  catch (e) {
+    if (e.daXuLy) throw e;
+    if (e.ma === 404) return null;                 // việc không còn (tenant khác xoá?) — màn tự nói
+    throw e;
+  }
+}
+
+const MAN_AI = {
+  async ai() {
+    const A2 = VIP_AI();
+    const d = await aiDuLieu();
+    if (!d.batch) {
+      datMan("Trợ lý AI — lô import", `${oChuaDo("Chưa có LÔ IMPORT nào để trợ lý đọc. Màn này làm việc trên một lô import có thật; không có lô thì không có gì để hiện — KHÔNG dựng một lô giả để màn trông đầy đủ.")}
+        ${hopNguon([`Đường đọc: <code>GET /api/v2/import</code> (danh sách lô) → <code>GET /api/v2/ai/lo/&lt;id&gt;</code> → <code>GET /api/v2/ai/job</code>.`])}`);
+      return;
+    }
+    const job = d.job.filter((x) => String(x.batch_id) === String(d.batch.id))[0] || null;
+    const m = A2.manTroLyImport(
+      Object.assign({}, d.lo, { batch_id: d.batch.id, ten_file: (d.lo && d.lo.tom_tat && d.lo.tom_tat.ten_file) || d.batch.ten_file }),
+      job);
+    datMan("Trợ lý AI — lô import", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Lô import", "#" + m.batch_id, T(m.ten_file))}
+        ${oKpi("Dòng đọc được", String(m.tong_dong), Object.keys(m.dem).length + " trạng thái")}
+        ${oKpi("Việc AI của lô", job ? "#" + job.id : "chưa có", job ? T(job.trang_thai) : "chưa tạo việc nào cho lô này")}
+      </div>
+      ${aiBangKetQua(m.ket_qua)}
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Sáu bước của một lô</h2>
+        <div class="phai"><span class="huy-hieu ${m.cho_phep_goi_ai ? "hh-xanh" : "hh-xam"}">${m.cho_phep_goi_ai ? "đọc được" : "chưa gọi được"}</span></div></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Bước", k: "ten" },
+          { ten: "Xong", o: (r) => r.xong ? '<span class="huy-hieu hh-xanh">xong</span>' : '<span class="huy-hieu hh-xam">chưa</span>' },
+          { ten: "Ghi chú", o: (r) => T(r.ghi_chu || "") },
+        ], m.buoc, { hep: true })}</div></div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Dòng theo trạng thái kiểm</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Trạng thái", k: "k" },
+          { ten: "Số dòng", nut: true, o: (r) => T(String(r.v)) },
+        ], Object.keys(m.dem).map((k) => ({ k, v: m.dem[k] })), { rong: "Lô chưa có dòng nào đọc được", hep: true })}
+        ${m.ly_do_khong_goi ? `<p class="ghi-chu-nguon">${T(m.ly_do_khong_goi)}</p>` : ""}</div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/import</code> → <code>GET /api/v2/ai/lo/${d.batch.id}</code> → <code>GET /api/v2/ai/job</code>.`,
+        "Sáu bước và kết luận lấy từ <code>admin/ai.js → manTroLyImport</code>. Bước cuối CỐ Ý ghi là chưa xong: trợ lý AI không tạo đơn.",
+        "Màn này <b>không</b> có nút gọi AI: tạo việc là <code>POST /api/v2/ai/job</code> (đã đo HTTP 400 khi thiếu thân ⇒ đường CÓ thật) nhưng G19 chỉ cắm phần ĐỌC — xem §5."])}`);
+  },
+
+  async "ai-goi-y"() {
+    const A2 = VIP_AI();
+    const d = await aiDuLieu();
+    const job = await aiChonJob(d.job);
+    if (!job) {
+      datMan("Gợi ý AI cho người duyệt", `${oChuaDo("Chưa có CÔNG VIỆC AI nào. Gợi ý chỉ tồn tại sau khi một việc AI đã chạy và sinh kết quả.")}
+        ${hopNguon(["Đường đọc: <code>GET /api/v2/ai/job</code> → <code>POST /api/v2/ai/job/&lt;id&gt;/de-xuat</code>."])}`);
+      return;
+    }
+    const dx = await aiDeXuat(job.id);
+    if (!dx) {
+      datMan("Gợi ý AI cho người duyệt", `${oChuaDo(`Máy chủ trả 404 cho việc #${job.id} — việc không còn.`)}
+        ${hopNguon(["Đường đọc: <code>POST /api/v2/ai/job/&lt;id&gt;/de-xuat</code>."])}`);
+      return;
+    }
+    const m = A2.manGoiY(dx);
+    datMan("Gợi ý AI cho người duyệt", `
+      ${aiThanhChonJob(d.job)}
+      <div class="luoi luoi-kpi">
+        ${oKpi("Dòng có gợi ý", String(m.dong.length), `việc #${job.id}`)}
+        ${oKpi("Hợp lệ theo phép kiểm", String(m.so_hop_le), "kiểm bằng don_hang.kiem_don")}
+        ${oKpi("Không hợp lệ", String(m.so_sai), "phải sửa trước khi dùng", m.so_sai ? "var(--do-vip)" : null)}
+      </div>
+      ${aiBangKetQua(m.ket_qua)}
+      ${m.canh_bao_tiem ? `<div class="hop-loi" style="margin-top:12px">${T(m.canh_bao_tiem)}</div>` : ""}
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Gốc ↔ gợi ý</h2></div>
+        <div class="the-than">
+          ${m.dong.length ? m.dong.map((r) => `
+            <div class="the" style="box-shadow:none;margin-top:10px"><div class="the-than">
+              <b>Dòng ${T(String(r.stt))}</b>
+              <span class="huy-hieu ${r.hop_le ? "hh-xanh" : "hh-do"}">${r.hop_le ? "hợp lệ" : "KHÔNG hợp lệ"}</span>
+              ${r.do_tin_cay != null ? `<span class="huy-hieu hh-xam">độ tin cậy ${T(String(r.do_tin_cay))}</span>` : ""}
+              <div class="cuon-ngang"><table class="bang bang-hep"><thead><tr>
+                <th>Trường</th><th>Giá trị</th><th>Nguồn</th></tr></thead><tbody>
+                ${r.truong.map((t) => `<tr><td>${T(t.ten)}</td><td>${T(String(t.gia_tri))}</td>
+                  <td>${t.tu_ai ? '<span class="huy-hieu hh-vang">trợ lý đổi</span>' : '<span class="huy-hieu hh-xam">dòng gốc</span>'}</td></tr>`).join("")}
+              </tbody></table></div>
+              ${r.do_tin_cay_ghi_chu ? `<div class="ghi-chu-nguon">${T(r.do_tin_cay_ghi_chu)}</div>` : ""}
+              ${r.loi.length ? `<div class="hop-loi">${r.loi.map((x) => T(String(x))).join("<br>")}</div>` : ""}
+              ${r.canh_bao.length ? `<div class="ghi-chu-nguon">${r.canh_bao.map((x) => T(String(x))).join("<br>")}</div>` : ""}
+            </div></div>`).join("")
+            : '<div class="trang-thai-rong">Việc này không sinh gợi ý theo dòng (chỉ loại việc <code>trich_don_tu_file</code> mới có)</div>'}
+          <p class="ghi-chu-nguon" style="margin-top:10px">
+            Trường đã gửi cho nhà cung cấp: <b>${m.truong_da_gui.map(T).join(", ") || "—"}</b>.
+            Trường <b>KHÔNG</b> gửi: <b>${m.truong_khong_gui.map(T).join(", ") || "—"}</b>.
+            ${m.thieu_nguoi_gui ? "Thiếu thông tin người gửi nên phép kiểm có thể báo lỗi GIẢ." : ""}</p>
+        </div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/ai/job</code> → <code>POST /api/v2/ai/job/${job.id}/de-xuat</code>.`,
+        "Đường <code>de-xuat</code> là POST nhưng <b>CHỈ ĐỌC</b>: <code>app/ai_job.py</code> ghi rõ “KHÔNG ghi CSDL”, và <code>app/server.py</code> cấp cho nó quyền <code>tenant.ai.dung</code> (quyền dùng AI), không phải quyền ghi.",
+        "Phép ghép gốc ↔ gợi ý nằm ở module, KHÔNG chép vào giao diện."])}`);
+    aiNoiChonJob("ai-goi-y");
+  },
+
+  async "ai-canh-bao"() {
+    const A2 = VIP_AI();
+    const d = await aiDuLieu();
+    const job = await aiChonJob(d.job);
+    if (!job) {
+      datMan("Cảnh báo kiểm tra", `${oChuaDo("Chưa có CÔNG VIỆC AI nào. Khối cảnh báo của hệ đọc từ kết quả kiểm của một việc cụ thể.")}
+        ${hopNguon(["Đường đọc: <code>GET /api/v2/ai/job</code> → <code>POST /api/v2/ai/job/&lt;id&gt;/de-xuat</code>."])}`);
+      return;
+    }
+    const dx = await aiDeXuat(job.id);
+    /* Khối "hệ thống kiểm" gom từ `de_xuat[].kiem` — CÙNG một phép kiểm `don_hang.kiem_don`
+       mà module ghi ở nhãn nguồn, chỉ khác là gom qua các dòng. Không có phép kiểm nào khác
+       được gọi thêm ở đây. */
+    const kiemHeThong = { loi: [], canh_bao: [] };
+    ((dx && dx.de_xuat) || []).forEach((r) => {
+      (r.kiem && r.kiem.loi ? r.kiem.loi : []).forEach((x) => kiemHeThong.loi.push(`Dòng ${r.stt}: ${x}`));
+      (r.kiem && r.kiem.canh_bao ? r.kiem.canh_bao : []).forEach((x) => kiemHeThong.canh_bao.push(`Dòng ${r.stt}: ${x}`));
+    });
+    const batThuong = d.job.filter((x) => x.loai === "phat_hien_bat_thuong")[0] || null;
+    const m = A2.manCanhBao(kiemHeThong, batThuong);
+    datMan("Cảnh báo kiểm tra", `
+      ${aiThanhChonJob(d.job)}
+      ${m.thu_tu.map((k) => {
+        const b = m[k];
+        return `<div class="the" style="margin-top:12px"><div class="the-dau"><h2>${T(b.tieu_de)}</h2>
+          <div class="phai"><span class="huy-hieu ${b.lop}">${b.muc.length} mục</span></div></div>
+          <div class="the-than">
+            <div class="ghi-chu-nguon" style="margin-top:0">Nguồn: ${T(b.nguon)}</div>
+            ${b.muc.length ? `<ul>${b.muc.map((x) => `<li>${T(String(x))}</li>`).join("")}</ul>`
+              : '<div class="trang-thai-rong" style="padding:12px">Không có mục nào</div>'}
+            ${b.ket_qua ? aiBangKetQua(b.ket_qua) : ""}
+          </div></div>`;
+      }).join("")}
+      <p class="ghi-chu-nguon" style="margin-top:12px">Ba khối tách rời có chủ ý:
+        <b>lỗi chặn</b> ≠ <b>cảnh báo của hệ</b> ≠ <b>lưu ý của trợ lý AI</b>. Trộn ba thứ vào
+        một danh sách là cách chắc chắn nhất để người dùng bỏ qua cả ba.</p>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/ai/job</code> → <code>POST /api/v2/ai/job/${job.id}/de-xuat</code> (chỉ đọc).`,
+        `Khối “hệ thống kiểm” gom từ <code>de_xuat[].kiem</code> — đúng phép kiểm <code>don_hang.kiem_don</code> mà module ghi ở nhãn nguồn.`,
+        batThuong ? `Khối trợ lý AI đọc từ việc #${batThuong.id} (loại <code>phat_hien_bat_thuong</code>).` : "Chưa có việc loại <code>phat_hien_bat_thuong</code> nào ⇒ khối trợ lý AI để trống, KHÔNG suy diễn."])}`);
+    aiNoiChonJob("ai-canh-bao");
+  },
+
+  async "ai-trang-thai"() {
+    const A2 = VIP_AI();
+    const d = await aiDuLieu();
+    const m = A2.manTrangThai(d.job, AI_LOC);
+    datMan("Trạng thái việc AI", `
+      <div style="margin-bottom:12px">
+        <label for="ai-loc" style="font-size:12.5px;color:var(--chu-mo)">Lọc theo trạng thái:</label>
+        <select id="ai-loc" class="nut" style="padding:6px 10px;margin-left:8px">
+          ${m.bo_loc.map((x) => `<option value="${x}"${x === m.dang_loc ? " selected" : ""}>${T(x === "tat_ca" ? "tất cả" : x)}</option>`).join("")}
+        </select></div>
+      <div class="luoi luoi-kpi">
+        ${Object.keys(m.dem).map((k) => oKpi(k, String(m.dem[k]), "việc ở trạng thái này")).join("") || oKpi("Việc", "0", "chưa có việc AI nào")}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Danh sách việc</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">${m.dong.length} việc</span></div></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "ID", nut: true, k: "id" },
+          { ten: "Loại việc", o: (r) => hh(r.loai) },
+          { ten: "Trạng thái", o: (r) => hh(r.trang_thai) },
+          { ten: "Nhà cung cấp", k: "nha_cung_cap" },
+          { ten: "ms chạy", nut: true, o: (r) => r.ms_chay == null ? "—" : T(String(r.ms_chay)) },
+          { ten: "Tạo lúc", k: "tao_luc" },
+          { ten: "Cần người duyệt", o: (r) => r.can_nguoi_duyet ? '<span class="huy-hieu hh-vang">có</span>' : '<span class="huy-hieu hh-xam">không</span>' },
+          { ten: "Lỗi", o: (r) => r.loi ? `<span class="huy-hieu hh-do" title="${T(r.loi)}">có lỗi</span>` : "—" },
+        ], m.dong, { rong: "Không có việc nào ở trạng thái đang lọc" })}</div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/ai/job</code> (${d.job.length} việc).`,
+        "Lọc và đếm do <code>admin/ai.js → manTrangThai</code> quyết; giao diện chỉ vẽ.",
+        "Lý do lỗi hiện NGUYÊN VĂN trong thuộc tính <code>title</code> — rút gọn thành “có lỗi” là xoá đúng thứ người ta cần."])}`);
+    const s = document.getElementById("ai-loc");
+    if (s) s.addEventListener("change", () => { AI_LOC = s.value; moMan("ai-trang-thai"); });
+  },
+
+  async "ai-lich-su-duyet"() {
+    const A2 = VIP_AI();
+    const d = await aiDuLieu();
+    const m = A2.manLichSuDuyet(d.su_kien, d.job);
+    datMan("Lịch sử duyệt AI", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Tổng sự kiện AI", String(m.tong_su_kien), "GET /api/v2/ai/su-kien")}
+        ${oKpi("Lượt duyệt / từ chối", String(m.dong.length), "quyết định của người")}
+        ${oKpi("Lượt bị CHẶN", String(m.dong_chan.length), "hệ từ chối thay người", m.dong_chan.length ? "var(--do-vip)" : null)}
+      </div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Người duyệt đã quyết gì</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Việc", nut: true, k: "job_id" },
+          { ten: "Loại việc", o: (r) => hh(r.loai) },
+          { ten: "Sự kiện", o: (r) => hh(r.su_kien) },
+          { ten: "Người", k: "nguoi" },
+          { ten: "Lúc", k: "luc" },
+          { ten: "Chi tiết", k: "chi_tiet" },
+        ], m.dong, { rong: "Chưa có lượt duyệt nào" })}</div></div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Lượt bị chặn / hết giờ</h2>
+        <div class="phai"><span class="huy-hieu ${m.dong_chan.length ? "hh-vang" : "hh-xam"}">${m.dong_chan.length} lượt</span></div></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Việc", nut: true, k: "job_id" },
+          { ten: "Sự kiện", o: (r) => hh(r.su_kien) },
+          { ten: "Lúc", k: "luc" },
+          { ten: "Chi tiết", k: "chi_tiet" },
+        ], m.dong_chan, { rong: "Không lượt nào bị chặn" })}
+        <p class="ghi-chu-nguon" style="margin-top:10px">Khối này CỐ Ý hiện lên kể cả khi rỗng:
+          lượt bị chặn là lúc hệ từ chối thay người, và ẩn nó đi là ẩn đúng thứ cần soát.</p></div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/ai/su-kien</code> (${d.su_kien.length} sự kiện) + <code>GET /api/v2/ai/job</code> (${d.job.length} việc, để tra loại việc).`,
+        "Việc gom nhóm lấy từ <code>admin/ai.js → manLichSuDuyet</code>.",
+        "Màn này KHÔNG có nút duyệt/từ chối: hai thao tác ấy là GHI (<code>POST /api/v2/ai/job/&lt;id&gt;/duyet|tu-choi</code>, quyền <code>tenant.don.ghi</code>) và G19 chỉ cắm phần ĐỌC."])}`);
+  },
+
+  async "ai-thong-ke"() {
+    const A2 = VIP_AI();
+    const { tk } = await aiDuLieu();
+    const m = A2.manThongKe(tk);
+    const dsc = Object.keys(m.job_theo_trang_thai).map((k) => ({ k, v: m.job_theo_trang_thai[k] }));
+    const dsl = Object.keys(m.job_theo_loai).map((k) => ({ k, v: m.job_theo_loai[k] }));
+    datMan("Thống kê mức dùng AI", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Kỳ", T(m.thang), `gói ${T(m.goi)}`)}
+        ${oKpi("Lượt AI đã dùng", String(m.da_dung), m.tran == null ? "trần chưa xác định" : `trần ${m.tran} lượt`)}
+        ${oKpi("Còn lại", m.con_lai == null ? "—" : String(m.con_lai), m.phan_tram == null ? "chưa có trần" : `${m.phan_tram}% đã dùng`)}
+        ${oKpi("Chi phí", T(m.chi_phi.hien), T(m.chi_phi.ghi_chu || "có số liệu"))}
+      </div>
+      ${aiBangKetQua(m.ket_qua)}
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Hai bộ đếm — cố ý KHÔNG gộp</h2></div>
+        <div class="the-than">
+          ${bangDuLieu([
+            { ten: "Bộ đếm", k: "ten" },
+            { ten: "Giá trị", nut: true, o: (r) => r.v == null ? "—" : T(String(r.v)) },
+          ], [
+            { ten: "Từ hạn mức (bộ đếm QUYẾT ĐỊNH chặn)", v: m.doi_chieu_luot.tu_han_muc },
+            { ten: "Từ sự kiện (dấu vết từng lượt gọi)", v: m.doi_chieu_luot.tu_su_kien },
+          ], { hep: true })}
+          ${m.doi_chieu_luot.lech === true ? '<div class="hop-loi" style="margin-top:10px">Hai bộ đếm LỆCH nhau. Đọc phần giải thích bên dưới trước khi kết luận là sai.</div>' : ""}
+          <p class="ghi-chu-nguon" style="margin-top:10px">${T(m.doi_chieu_luot.ghi_chu)}</p>
+        </div></div>
+      <div class="luoi luoi-2" style="margin-top:16px">
+        <div class="the"><div class="the-dau"><h2>Việc theo trạng thái</h2></div>
+          <div class="the-than">${bangDuLieu([
+            { ten: "Trạng thái", k: "k" }, { ten: "Số việc", nut: true, o: (r) => T(String(r.v)) },
+          ], dsc, { rong: "Chưa có việc AI nào trong kỳ", hep: true })}</div></div>
+        <div class="the"><div class="the-dau"><h2>Việc theo loại</h2></div>
+          <div class="the-than">${bangDuLieu([
+            { ten: "Loại", k: "k" }, { ten: "Số việc", nut: true, o: (r) => T(String(r.v)) },
+          ], dsl, { rong: "Chưa có việc AI nào trong kỳ", hep: true })}</div></div>
+      </div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/ai/thong-ke</code> (kỳ ${T(m.thang)}, gói ${T(m.goi)}).`,
+        "Chi phí: backend trả <code>null</code> kèm LÝ DO thì màn hiện đúng lý do ấy, KHÔNG hiện “0 đ” — một con số bịa tệ hơn một ô trống.",
+        "Cách tính phần trăm và cách tách hai bộ đếm lấy từ <code>admin/ai.js → manThongKe</code>."])}`);
+  },
+};
+let AI_LOC = "tat_ca";
+
+/* ======================= NHÓM HỆ THỐNG — 1 màn =======================
+   `admin/health.js` xuất ba hàm ĐỌC (`docSucKhoe`, `docSanSang`, `docMetric`) + `tomTat`.
+   Chú thích cũ trong tệp ấy ghi “ROUTE NÀY CHƯA ĐƯỢC CẮM” — ĐO LẠI 16/10/2026: cả ba đường
+   đều CÓ (`/api/v2/suc-khoe` 200, `/api/v2/san-sang` 200, `/api/v2/platform/quan-sat/metric`
+   200 bằng tài khoản nền tảng / 403 bằng tài khoản tenant). Chú thích ấy đã cũ; màn dưới đây
+   đọc thẳng và nói ra mã HTTP thật, không dựa vào chú thích. */
+const MAN_HE_THONG = {
+  async health() {
+    const H2 = VIP_HS();
+    const [sk, ss] = await Promise.all([
+      api("/api/v2/suc-khoe"),
+      api("/api/v2/san-sang"),
+    ]);
+    const tt = H2.tomTat(H2.docSucKhoe(sk), H2.docSanSang(ss));
+    /* Metric là đường NỀN TẢNG: thiếu quyền thì `apiNeuDuoc` trả null và màn nói thẳng —
+       KHÔNG hiện 0 như thể đã đo được. */
+    const mt = await apiNeuDuoc("/api/v2/platform/quan-sat/metric", "platform.audit.xem");
+    const dm = mt ? H2.docMetric(mt) : null;
+    const ss2 = H2.docSanSang(ss);
+    datMan("Sức khoẻ hệ thống", `
+      <div class="luoi luoi-kpi">
+        ${oKpi("Tiến trình (health)", `<span class="huy-hieu ${H2.docSucKhoe(sk).lop}" style="white-space:normal">${T(tt.health)}</span>`, `mã ${T(H2.docSucKhoe(sk).phien_ban || "—")} · pid ${T(String(H2.docSucKhoe(sk).pid == null ? "—" : H2.docSucKhoe(sk).pid))}`)}
+        ${oKpi("Sẵn sàng (readiness)", `<span class="huy-hieu ${ss2.lop}" style="white-space:normal">${T(tt.readiness)}</span>`, `${ss2.so_hong == null ? "—" : ss2.so_hong} phép kiểm hỏng`)}
+        ${oKpi("Phép kiểm bị bỏ qua", String(ss2.so_bo_qua), "BỎ QUA ≠ đã đạt", ss2.so_bo_qua ? "var(--do-vip)" : null)}
+      </div>
+      ${tt.canh_bao ? `<div class="hop-loi" style="margin-top:12px">${T(tt.canh_bao)}</div>` : ""}
+      <p class="ghi-chu-nguon" style="margin-top:10px">Hai câu hỏi KHÁC NHAU và câu trả lời có
+        thể ngược nhau: tiến trình sống mà CSDL ở schema cũ thì <b>health xanh, readiness đỏ</b>.
+        Màn này vì thế không gộp thành một ô “tổng quan” một màu.</p>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Readiness — từng phép kiểm</h2></div>
+        <div class="the-than">${bangDuLieu([
+          { ten: "Phép kiểm", o: (r) => `<b>${T(r.ten)}</b><div class="ghi-chu-nguon">${T(r.ghi_chu_nhan || "")}</div>` },
+          { ten: "Trạng thái", o: (r) => `<span class="huy-hieu ${r.lop}">${T(r.trang_thai)}</span>` },
+          { ten: "Chi tiết", o: (r) => T([r.chi_tiet, r.loi, r.canh_bao, r.ghi_chu].filter(Boolean).join(" · ") || "—") },
+        ], ss2.dong, { rong: "Máy chủ không trả phép kiểm nào" })}
+        ${ss2.luc ? `<p class="ghi-chu-nguon">Đo lúc ${T(ss2.luc)}.</p>` : ""}</div></div>
+      <div class="the" style="margin-top:16px"><div class="the-dau"><h2>Metric tiến trình</h2>
+        <div class="phai"><span class="huy-hieu ${dm ? "hh-xanh" : "hh-xam"}">${dm ? "đọc được" : "không có quyền / không có đường"}</span></div></div>
+        <div class="the-than">
+          ${dm ? bangDuLieu([
+            { ten: "Chỉ số", k: "ten" },
+            { ten: "Giá trị", o: (r) => `<span class="huy-hieu ${r.lop}">${T(String(r.so == null ? "—" : r.so))}</span>` },
+            { ten: "Đơn vị", k: "don_vi" },
+          ], dm.the, { rong: "Không có chỉ số nào", hep: true })
+            : oChuaDo("Tài khoản này không có quyền platform.audit.xem, nên GET /api/v2/platform/quan-sat/metric trả 403. Đây là THIẾU QUYỀN, không phải hệ hỏng — và cũng không phải số 0.")}
+          ${dm && dm.pham_vi ? `<p class="ghi-chu-nguon">Phạm vi số đếm (nguyên văn từ backend): ${T(dm.pham_vi)}</p>` : ""}
+        </div></div>
+      ${hopNguon([`Đường đọc: <code>GET /api/v2/suc-khoe</code> (<b>${sk && sk.ok ? "200 · tiến trình sống" : "trả về ok=false"}</b>); <code>GET /api/v2/san-sang</code> (<b>${ss && ss.ok ? "200 · sẵn sàng" : "CHƯA sẵn sàng"}</b>); <code>GET /api/v2/platform/quan-sat/metric</code> (<b>${dm ? "đọc được" : "thiếu quyền platform.audit.xem"}</b>).`,
+        `Phạm vi do backend gửi kèm, hiện NGUYÊN VĂN: <i>${T((H2.docSucKhoe(sk).pham_vi) || "")}</i>`,
+        "Trạng thái lạ hiện nguyên văn; <code>null</code> là XÁM (chưa đo), KHÔNG mượn màu xanh."])}`);
+  },
+};
+
+/* Ghép sáu nhóm màn vào bảng điều phối. Dùng `Object.assign` sau khi `CAC_MAN` đã dựng xong
+   để khối G19 không phải sửa một dòng nào bên trong đối tượng 1.000 dòng kia — ít chỗ chạm
+   thì ít chỗ xung đột với làn khác đang sửa cùng tệp. */
+Object.assign(CAC_MAN, MAN_TAICHINH, MAN_GOI, MAN_GOI_NEN_TANG, MAN_AI, MAN_HE_THONG);
 
 /* ===== khởi động ===== */
 async function khoiDong() {

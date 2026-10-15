@@ -168,7 +168,21 @@
 
   /* ===== 10. Route. Đường nào BACKEND CHƯA CẮM thì ghi CHỜ BACKEND, không tuyên bố làm được. =====
      AG-00 là người cắm route (SHARED_CONTRACTS §22). Bảng này khớp bảng route trong
-     `docs/G08_FINAL_REPORT.md`. */
+     `docs/G08_FINAL_REPORT.md`.
+
+     ⚠️ G19 · AG-05 — ĐÍNH CHÍNH 16/10/2026, ĐO BẰNG HTTP THẬT (không đọc mã rồi đoán):
+     NĂM đường đầu của `API_CHO_BACKEND` KHÔNG PHẢI "chờ backend" — chúng SAI ĐƯỜNG. Đo trên
+     nền cô lập, tài khoản `shopa-owner`:
+         GET /api/v2/billing/goi      → HTTP 404      GET /api/v2/billing/canh-bao → HTTP 404
+         GET /api/v2/billing/dang-ky  → HTTP 404      GET /api/v2/billing/lich-su  → HTTP 404
+         GET /api/v2/billing/muc-dung → HTTP 404
+     Chức năng ấy ĐÃ CÓ, nằm ở đường khác: `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage`,
+     `/api/v2/usage/bao-cao`, `/api/v2/usage/su-kien`. Sáu màn đọc của module này (G19 · AG-05)
+     vì thế gọi ĐƯỜNG THẬT và ghi rõ ngay trên màn rằng bảng dưới đây sai đường.
+     GIỮ NGUYÊN nội dung bảng (không sửa dữ liệu) vì `trangThaiRoute()` đang đếm theo nó và
+     làn khác có thể đang đọc; việc SỬA bảng là việc của AG-00 — kèm một ca thử kiểu
+     `app/thu/thu_tai_chinh.py::test_j4` đang canh `finance.js` mà `billing.js` CHƯA có
+     (đo: `grep -rn "billing.js" app/thu/*.py` → 0 dòng). Xem `docs/G19_MAN_MA.md` §5. */
   const API_DANG_DUNG = [
     ["GET", "/api/v2/billing", "gói + usage hiện tại (đã có từ đợt trước)"],
   ];

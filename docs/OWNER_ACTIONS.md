@@ -101,3 +101,98 @@ SHA của chính commit chứa nó (`BAN_GIAO.md` §7.3).
 3. **B3–B6** — bốn đường dẫn còn thiếu.
 4. **A5** — biết trước là sẽ có hộp thoại cần anh bấm; AG-00 **không tự bấm**.
 5. **C1/C2** — quyết gộp nhánh (hoặc quyết **không** gộp, cũng là một quyết định).
+
+---
+
+## H. PHÂN QUYỀN / PHÊ DUYỆT — ĐIỀU TRA VÀ QUYẾT ĐỊNH (15/10/2026)
+
+### H.1 Cơ chế thật của từng hệ — đo, không suy đoán
+
+**DeepSeek Harness (`dsh`)** — đọc trực tiếp `@deepseek-ai/dsh-base` `cordis.patch.yml`:
+```yaml
+- id: approval   → @deepseek-ai/dsh-user-approval
+  config: { policy: "(DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'" }
+- id: permission → @deepseek-ai/dsh-permission-presets
+  config:
+    presets:
+      read-only:          { sandbox: read-only,          approval: ask }
+      workspace-write:    { sandbox: workspace-write,    approval: ask }
+      danger-full-access: { sandbox: danger-full-access, approval: never }
+```
+
+**HAI ĐIỀU LÀM ĐẢO NGƯỢC GIẢ ĐỊNH THÔNG THƯỜNG:**
+
+1. **`never` KHÔNG phải "tự cho phép" — nó là "tự TỪ CHỐI".** README `dsh-user-approval` nói nguyên
+   văn: *"`never` **rejects** every request deterministically … the strict headless stance for CI and
+   unattended runs."* Preset `danger-full-access` đi kèm `never` **không phải** để cho qua — mà vì
+   sandbox đã cho qua hết nên **không còn yêu cầu nào để hỏi**.
+2. **Ranh giới ghi KHÔNG nới được bằng cấu hình.** README `dsh-sandbox-policy`: `workspaceRoot` chỉ
+   là **dự phòng**; *"Normal agent calls use the session's **immutable cwd**"* — *"A switched session
+   **keeps its immutable workspace cwd** as the writable boundary."* Ranh giới **ghim lúc tạo phiên**.
+
+**`dsh` KHÔNG có allowlist theo từng lệnh.** README `dsh-permission-presets`: *"Each preset name
+bundles **one sandbox mode with one approval policy**"* — đúng **hai** trường. Tên `custom`/`auto` là
+**dành riêng**, không được xuất hiện trong bảng. Và *"Callers cannot publish another preset through a
+generic contribution API."* ⇒ **Mục 5 của chỉ thị ("nếu agent hỗ trợ allowlist") KHÔNG áp dụng được
+cho dsh** — không có allowlist nào để thiết lập.
+
+**Claude Code** — `~/.claude/settings.json` **có `autoMode`**, và nó đang làm đúng mục 4:
+```json
+"soft_deny": ["$defaults", "Bash(cp:.env *)", "Bash(git push:*develop)", "Bash(git push:*main)"]
+```
+Không có khoá `permissions`. **Đây là mẫu để copy** nếu sau này muốn ép mục 4 bằng kỹ thuật — chặn
+theo **mẫu lệnh**, không phải theo "hỏi hay không hỏi".
+
+**Orca Desktop** — **không có chính sách phê duyệt riêng.** `orca --help` không có lệnh nào về
+permission/approval (chỉ `computer permissions`, cho điều khiển GUI — không liên quan).
+`~/.orca/agent-hooks/dsh-hook.sh` là hook **spool sự kiện** `PreToolUse`/`PostToolUse` — nó **QUAN
+SÁT, KHÔNG quyết định**. Cài đặt Orca nằm trong storage Electron (`Local Storage`/`IndexedDB`), không
+phải JSON đọc được an toàn. ⇒ Hộp thoại duyệt Bash trong Orca Desktop là **giao diện hiển thị yêu cầu
+`ask` do tầng dsh phát ra**.
+
+### H.2 Kiểm chứng thực tế (mục 7 của chỉ thị) — bốn thao tác được phép
+
+| Thao tác | Kết quả |
+|---|---|
+| Đọc file trong dự án | **Không xin duyệt** |
+| Tạo + sửa file thử nghiệm trong dự án | **Không xin duyệt** |
+| Chạy test (`thu_tich_hop.py`) | **Không xin duyệt** — `exit 0 · Ran 12 · OK` |
+| Git **chỉ đọc** (`status`, `log -1`) | **Không xin duyệt** |
+| Git **ghi** (`git add` — ngoài phạm vi) | **BỊ CHẶN** — đúng như thiết kế |
+
+⇒ **Năm mục đầu của chỉ thị VỐN ĐÃ miễn phí.** Friction không đến từ chúng, mà từ **thao tác ra
+ngoài `cwd` của phiên** (ghi `.git` dùng chung, ghi sang worktree khác, chạy Playwright ở worktree
+khác). **Nới approval không sửa được cái đó.**
+
+### H.3 QUYẾT ĐỊNH CỦA OWNER: **KHÔNG ĐỔI GÌ**
+
+Owner đã chọn **giữ nguyên toàn bộ cấu hình phân quyền**. Lý do hợp lý và đã kiểm chứng: không có
+thay đổi nào cần thiết cho các thao tác được phép (H.2), và thay đổi duy nhất còn lại
+(`~/.dsh/profiles/dsh-tui/cordis.patch.yml` = preset `workspace-write` + `approval: never`) là
+**cấu hình TOÀN CỤC**, đồng thời **bỏ mất lưới kiểm của người** cho `git push` và lệnh phá hoại
+**trong** dự án. Theo **mục 6** của chỉ thị, việc đó thuộc phạm vi phải Owner duyệt — và Owner đã
+**không** duyệt.
+
+**Đã thực hiện đúng chỉ thị:** *không* dùng wildcard Bash toàn quyền (mục 5) · *không* tự sửa cấu
+hình bảo mật toàn cục (mục 6) · *có* chạy kiểm chứng bốn thao tác (mục 7) · **Git history, CSDL và
+mã nguồn giữ nguyên** (tệp thử nghiệm tạo ra đã được xoá; `git add` bị chặn nên không commit nào phát
+sinh từ lượt kiểm chứng).
+
+### H.4 ĐÍNH CHÍNH một kết luận cũ của AG-00 (mục F ở trên)
+
+Mục F ghi *"Worker DeepSeek KHÔNG commit được"*. **Điều đó KHÔNG đúng một cách phổ quát.** Đo lại
+trên 6 làn G18 (`git log 7b741c8..HEAD`):
+
+| Làn | Commit tự tạo | Ai commit |
+|---|---|---|
+| AG-02 | **3** | tự commit |
+| AG-03 | **3** | tự commit |
+| AG-04 | **2** | tự commit |
+| AG-01 | 1 | **AG-00 commit hộ** |
+| AG-05 | 1 | **AG-00 commit hộ** |
+| AG-06 | 1 | **AG-00 commit hộ** |
+
+⇒ Đúng hơn phải nói: **một số worker commit được, một số không** — nên **AG-00 phải KIỂM TỪNG LÀN**
+khi settlement, chứ **không được mặc định** là làn nào cũng cần commit hộ. Mặc định sai theo chiều nào
+cũng có giá: mặc định "không commit được" thì AG-00 commit hộ một cây đã sạch (vô hại); mặc định
+"commit được" thì công của làn **nằm trần ở cây làm việc** và `git clean -fd` xoá sạch im lặng.

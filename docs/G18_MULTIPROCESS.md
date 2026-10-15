@@ -314,6 +314,11 @@ bằng bộ G18 này. Không bộ nào khác đổi số ca.
 > có gì sai: đó là *thiết kế* của cổng (mốc đo phải đóng băng). Sau khi commit (`a9f076b`), cổng
 > xanh trở lại — 53 ca ĐẠT. Người chạy nghiệm thu nên biết điều này trước khi đọc một lượt HỎNG của
 > `thu_qa_g17` trong lúc có làn khác đang mở.
+>
+> **Sau mốc `a9f076b` chỉ có TÀI LIỆU NÀY đổi** (commit `22c85f6`, **không một dòng mã nào**), nên
+> bảng hồi quy ở trên vẫn đúng cho mã. Riêng cổng "cây sạch" đã được chạy **LẠI** ở mốc mới:
+> `python3 app/thu/thu_qa_g17.py` ⇒ **exit 0**, 53 ca, sổ đối chứng `cay-sach = {âm 0, dương 1}`,
+> `HEAD=22c85f6`. Bộ đo G18 cũng chạy lại ở mốc mới: **26 ca · 0 hỏng · 0 bỏ qua · exit 0**.
 
 ---
 
@@ -329,8 +334,9 @@ bằng bộ G18 này. Không bộ nào khác đổi số ca.
 **KHÔNG sửa**: `app/gioi_han.py`, `app/csdl.py`, `app/server.py` — việc chuyển PHẦN A sang bộ đếm
 dùng chung là **thay đổi mã của AG-01**, không thuộc làn này. Tài liệu này chỉ **đo** và **chỉ chỗ**.
 
-Toàn bộ nằm trong **một commit** trên nhánh `g18-ag02-multiprocess` (`a9f076b`, không push, không
-deploy, không tunnel). Bộ chạy hồi quy tự dò `app/thu/thu_*.py` nên **không phải sửa danh sách** nào.
+Toàn bộ nằm trong **hai commit** trên nhánh `g18-ag02-multiprocess` (`a9f076b` = mã + bộ đo + tài
+liệu; commit sau = **chỉ** tài liệu), **không push, không deploy, không tunnel**. Bộ chạy hồi quy tự
+dò `app/thu/thu_*.py` nên **không phải sửa danh sách** nào.
 
 ---
 

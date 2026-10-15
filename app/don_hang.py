@@ -646,6 +646,21 @@ def gui_don(tenant_id, user_id, don_id, carrier_account_id):
         _ghi_lich_su(don_id, f"user:{user_id}",
                      f"gửi {ad.ten_hang} TIMEOUT — chưa rõ kết quả, cần đối soát bằng"
                      f" {'getOrder' if ad.capability('getOrder') else 'trackOrder'}")
+    elif _la_don_trung(kq):
+        # ĐƠN ĐÃ TỒN TẠI Ở HÃNG (J&T `145003204 — 订单重复`): lượt TRƯỚC ĐÃ VÀO. Đây KHÔNG phải
+        # "hãng từ chối" — vận đơn ĐANG Ở HÃNG, nên trả đơn về `da_duyet` + hoàn suất là nói sai
+        # sự thật (nói "không có vận đơn nào") và mở đường gửi lại cùng `txlogisticId` ⇒ lại
+        # DON_TRUNG ⇒ MẮC VÒNG, trong khi vận đơn vẫn sống ở hãng.
+        #
+        # Xử đúng như nhánh timeout — cùng loại kết cục "KHÔNG được coi là thành công, và ở đây
+        # cũng KHÔNG được coi là thất bại" (hợp đồng §10). Giữ `dang_gui` + cờ đối soát; KHÔNG
+        # hoàn suất, vì suất ấy ứng với một vận đơn CÓ THẬT. Người dùng phải đối soát
+        # (`doi_soat_don`) để lấy mã vận đơn của lượt trước rồi mới đi tiếp.
+        csdl.ghi("UPDATE don_hang SET can_doi_soat_ket_qua=1, cap_nhat_luc=?"
+                 " WHERE id=? AND tenant_id=?", (csdl.bay_gio(), don_id, tenant_id))
+        _ghi_lich_su(don_id, f"user:{user_id}",
+                     f"gửi {ad.ten_hang}: hãng báo ĐƠN ĐÃ TỒN TẠI ({_ma_chuan_cua(kq)}) — lượt"
+                     " trước ĐÃ VÀO hãng, cần đối soát để lấy mã vận đơn; KHÔNG gửi lại mù")
     else:
         csdl.ghi("UPDATE don_hang SET trang_thai='da_duyet', cap_nhat_luc=?"
                  " WHERE id=? AND tenant_id=?", (csdl.bay_gio(), don_id, tenant_id))
@@ -740,15 +755,49 @@ def doi_soat_don(tenant_id, user_id, don_id):
             "don": dict(lay_don(tenant_id, don_id))}
 
 
+def _ma_chuan_cua(kq):
+    """Mã lỗi CHUẨN của một kết quả hãng, hoặc `None` nếu không phải lượt thất bại.
+
+    **Chỉ có MỘT tên khoá: `ma_chuan`.** `docs/SHARED_CONTRACTS.md` §5 đóng băng
+    `NormalizedCarrierError` gồm `ma_chuan` · `ma_goc_hang` · `thong_diep` · `co_the_thu_lai`,
+    và `NormalizedCarrierError.nhu_dict()` phát đúng tên đó.
+
+    LỊCH SỬ: tệp này từng đọc `ma` — một cái tên không có trong hợp đồng nào — nên kết quả của
+    adapter THẬT không bao giờ được nhận ra, và nhánh `chua_vao` của `doi_soat_don` chết im lặng.
+    Lớp lùi `ma` (bí danh tạm của G13) đã được **GỠ hẳn** ngày 15/10/2026 theo quyết định của
+    AG-00, sau khi cả hai đầu đã đổi sang tên chuẩn (`app/adapter_jt.py` và fixture H2 của
+    `app/harness_hang.py`). Ca canh `harness_hang` **H5** khẳng định tên cũ **không** còn được
+    nhận: thêm lại một dòng dự phòng là ca đó đỏ — hai tên cho một thứ đúng là khuôn lệch im lặng
+    đã sinh ra lỗi này (§14.6/§12.2).
+    """
+    if kq.ok or kq.timeout:
+        return None
+    chuan = (kq.tho or {}).get("loi_chuan") or {}
+    return chuan.get("ma_chuan")
+
+
 def _la_khong_tim_thay(kq):
     """Hãng có nói RÕ là không tìm thấy đơn hay không. Mặc định: KHÔNG (an toàn)."""
     if kq.ok or kq.timeout:
         return False
-    tho = kq.tho or {}
-    if tho.get("khong_tim_thay") is True:
+    if (kq.tho or {}).get("khong_tim_thay") is True:
         return True
-    chuan = tho.get("loi_chuan") or {}
-    return chuan.get("ma") == loi_hang.KHONG_TIM_THAY
+    return _ma_chuan_cua(kq) == loi_hang.KHONG_TIM_THAY
+
+
+def _la_don_trung(kq):
+    """Hãng có nói RÕ là ĐƠN ĐÃ TỒN TẠI (lượt trước đã vào) hay không. Mặc định: KHÔNG.
+
+    Vì sao phải phân biệt với "hãng từ chối": `don_hang.gui_don` xử hai loại này KHÁC nhau —
+    từ chối thật thì trả đơn về `da_duyet` + hoàn suất; còn đơn-trùng thì giữ `dang_gui` +
+    cờ đối soát và KHÔNG hoàn suất, vì vận đơn CÓ THẬT ở hãng. Gộp hai loại làm một là hoặc
+    nói sai sự thật về vận đơn, hoặc mở đường tạo vận đơn thứ hai.
+    """
+    if kq.ok or kq.timeout:
+        return False
+    if (kq.tho or {}).get("don_da_ton_tai_tai_hang") is True:
+        return True
+    return _ma_chuan_cua(kq) == loi_hang.DON_TRUNG
 
 
 KET_LUAN_TAY = ("da_vao", "chua_vao")
@@ -851,7 +900,12 @@ def ap_trang_thai_giao(tenant_id, don_id, loai, nguon):
     hang_moi = cau_hinh.HANG_TRANG_THAI_GIAO.get(loai)
     if hang_moi is None:
         return 0, f"loại sự kiện lạ: {loai}"
-    with csdl.khoa_ghi:
+    # V-13912 (AG-00 vá): `khoa_ghi` trần KHÔNG phải giao dịch — nó chỉ chặn hai thread giẫm
+    # nhau, còn mỗi `csdl.ghi()` vẫn tự chốt NGAY. Nên câu UPDATE trục giao vận và dòng lịch
+    # sử là HAI đơn vị rời nhau: ép dòng lịch sử hỏng thì đơn đã đổi trạng thái mà không ai
+    # ghi lại vì sao — mất dấu vết đúng ở chỗ cần dấu vết nhất. Bọc `giao_dich()` và đưa dòng
+    # lịch sử VÀO TRONG cùng một đơn vị.
+    with csdl.giao_dich():
         don = csdl.mot("SELECT * FROM don_hang WHERE id=? AND tenant_id=?", (don_id, tenant_id))
         if don is None:
             return 0, "không có đơn này trong doanh nghiệp đó"
@@ -863,7 +917,7 @@ def ap_trang_thai_giao(tenant_id, don_id, loai, nguon):
         csdl.ghi("UPDATE don_hang SET trang_thai_giao=?, hang_trang_thai_giao=?, cap_nhat_luc=?"
                  " WHERE id=? AND tenant_id=?",
                  (loai, hang_moi, csdl.bay_gio(), don_id, tenant_id))
-    _ghi_lich_su(don_id, nguon, f"trạng thái giao → {loai}")
+        _ghi_lich_su(don_id, nguon, f"trạng thái giao → {loai}")
     return 1, ""
 
 
@@ -941,7 +995,12 @@ def luu_mat_hang(tenant_id, user_id, don_id, cac_mon, kiem_quyen=True):
     mon = _kiem_mat_hang(cac_mon)
     tong_kl = sum(m["so_luong"] * m["khoi_luong_gram"] for m in mon)
     tong_gt = sum(m["so_luong"] * m["don_gia"] for m in mon)
-    with csdl.khoa_ghi:
+    # V-13912 (AG-00 vá): ba câu ghi ở đây — XOÁ hết mặt hàng cũ, CHÈN danh sách mới, ĐỒNG BỘ
+    # lại khối lượng/giá trị của đơn — phải là MỘT đơn vị. `khoa_ghi` trần để mỗi câu tự chốt,
+    # nên một lượt hỏng giữa chừng (ví dụ mất kết nối sau câu DELETE) để lại đơn KHÔNG CÒN mặt
+    # hàng nào nhưng khối lượng và giá trị vẫn là số cũ — hai con số mà adapter gửi lên hãng
+    # nay nói về một danh sách không còn tồn tại. Bọc `giao_dich()`, và đưa dòng lịch sử vào trong.
+    with csdl.giao_dich():
         csdl.ghi(f"DELETE FROM {BANG_MAT_HANG} WHERE don_id=? AND tenant_id=?",
                  (don_id, tenant_id))
         for m in mon:
@@ -954,9 +1013,9 @@ def luu_mat_hang(tenant_id, user_id, don_id, cac_mon, kiem_quyen=True):
             csdl.ghi("UPDATE don_hang SET khoi_luong_gram=?, gia_tri_khai=?, cap_nhat_luc=?"
                      " WHERE id=? AND tenant_id=?",
                      (tong_kl, tong_gt, csdl.bay_gio(), don_id, tenant_id))
-    _ghi_lich_su(don_id, f"user:{user_id}",
-                 f"đặt lại danh sách mặt hàng: {len(mon)} dòng, tổng {tong_kl}g,"
-                 f" tổng giá trị {tong_gt} đồng")
+        _ghi_lich_su(don_id, f"user:{user_id}",
+                     f"đặt lại danh sách mặt hàng: {len(mon)} dòng, tổng {tong_kl}g,"
+                     f" tổng giá trị {tong_gt} đồng")
     return {"mat_hang": lay_mat_hang(tenant_id, don_id),
             "tong_khoi_luong_gram": tong_kl, "tong_gia_tri_dong": tong_gt,
             "don": dict(lay_don(tenant_id, don_id))}

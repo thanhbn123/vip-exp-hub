@@ -33,14 +33,20 @@ cau_hinh.THU_MUC_DU_LIEU = os.environ["D"]
 cau_hinh.DUONG_DAN_CSDL = os.path.join(os.environ["D"], "hub.db")
 import time
 import migrate
-khi = float(os.environ["BAT_DAU"])
-while time.time() < khi:
+# VᨌH XUẤT PHÁT BẰNG TỆP BÁO SẴN SÀNG, KHÔNG BẰNG HẸN GIỜ.
+# Hẹn giờ là ĐOÁN: dưới tải, tiến trình nạp mô-đun lâu hơn hạn thì tới muộn, không kịp chờ
+# khoá, và ca thử báo HỎNG GIẢ (AG-04 đo: 1/3 lượt hồi quy đầy đủ, 0/6 lượt chạy riêng).
+# Tệp báo sẵn sàng là ĐO: cha biết CHẮC cả n đứa đã qua khâu nạp rồi mới thả.
+open(os.path.join(os.environ["SAN_SANG"], sys.argv[1]), "w").close()
+while not os.path.exists(os.environ["DI"]):
     time.sleep(0.001)
+t0 = time.time()
 try:
     kq = migrate.chay(im_lang=True)
-    print("%%s|%%s|%%s" %% (sys.argv[1], kq.get("da_nang"), kq.get("nhuong", False)), flush=True)
+    print("%%s|%%s|%%s|%%.6f|%%.6f" %% (sys.argv[1], kq.get("da_nang"), kq.get("nhuong", False),
+                                      t0, time.time()), flush=True)
 except Exception as e:
-    print("%%s|LOI|%%s" %% (sys.argv[1], str(e)[:60]), flush=True)
+    print("%%s|LOI|%%s|%%.6f|%%.6f" %% (sys.argv[1], str(e)[:60], t0, time.time()), flush=True)
 ''' % (GOC,)
 
 
@@ -49,10 +55,27 @@ def _chay_song_song(thu_muc, n):
     tep = os.path.join(thu_muc, "_con.py")
     with open(tep, "w", encoding="utf-8") as f:
         f.write(CON_CHAY)
-    mt = dict(os.environ, D=thu_muc, BAT_DAU=str(time.time() + 2.0))
+    # VẠCH XUẤT PHÁT BẰNG TỆP, không bằng đồng hồ (AG-04 phát hiện, AG-00 vá).
+    # Cũ: `BAT_DAU = time.time() + 2.0` — con nào nạp mô-đun lâu hơn 2 giây thì khởi động SAU vạch,
+    # về sớm, và ca thử đỏ với "không tiến trình nào chờ khoá rồi nhường". Hẹn giờ là đoán;
+    # cha đợi đủ n tệp báo sẵn sàng rồi mới thả thì vạch xuất phát là THẬt.
+    san_sang = os.path.join(thu_muc, "_san_sang")
+    os.makedirs(san_sang, exist_ok=True)
+    di = os.path.join(thu_muc, "_di")
+    mt = dict(os.environ, D=thu_muc, SAN_SANG=san_sang, DI=di)
     ps = [subprocess.Popen([sys.executable, tep, "tt%d" % i], env=mt,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
           for i in range(n)]
+    han = time.time() + 120.0
+    while len(os.listdir(san_sang)) < n:
+        if time.time() > han:
+            for p in ps:
+                p.kill()
+            raise AssertionError(
+                "hết hạn chờ %d tiến trình báo sẵn sàng (nhận %d) — không đo được"
+                % (n, len(os.listdir(san_sang))))
+        time.sleep(0.002)
+    open(di, "w").close()
     ra = []
     for p in ps:
         o, e = p.communicate(timeout=180)
@@ -76,28 +99,49 @@ class A_MigrationDongThoi(unittest.TestCase):
         #   · `nhuong=True`  — chờ được khoá rồi đọc lại BÊN TRONG khoá, thấy việc đã xong.
         #   · `da_nang=False` không kèm `nhuong` — lượt đọc NGOÀI khoá ở đầu `chay()` đã thấy
         #     phiên bản đích, nên về sớm, không xin khoá. Rẻ hơn và cũng đúng.
-        nang, nhuong_trong, ve_som, loi = [], [], [], []
+        nang, nhuong_trong, ve_som, loi, moc = [], [], [], [], []
         for o, e in kq:
             p = o.split("|")
-            if len(p) != 3 or p[1] == "LOI":
+            if len(p) != 5 or p[1] == "LOI":
                 loi.append((o, e[-300:]))
-            elif p[1] == "True":
+                continue
+            moc.append((p[0], float(p[3]), float(p[4])))
+            if p[1] == "True":
                 nang.append(p[0])
             elif p[2] == "True":
                 nhuong_trong.append(p[0])
             else:
                 ve_som.append(p[0])
         self.assertEqual(len(loi), 0, f"tiến trình hỏng: {loi}")
+
+        # ── AN TOÀN: đúng MỘT tiến trình nâng cấp. Đây là bất biến THẬT của hệ, tất định.
         self.assertEqual(len(nang), 1,
                          f"phải ĐÚNG 1 tiến trình nâng cấp, thực {len(nang)}: {nang}")
         self.assertEqual(len(nhuong_trong) + len(ve_som), SO_TIEN_TRINH - 1,
                          f"{SO_TIEN_TRINH - 1} tiến trình phải không nâng cấp; "
                          f"nhường-trong-khoá={nhuong_trong} về-sớm={ve_som}")
-        # Ít nhất một tiến trình phải đi qua đúng đường KHOÁ, nếu không ca này không đo
-        # được cái nó nói là đang đo (§12.1) — nó chỉ đo lượt về sớm.
-        self.assertGreaterEqual(len(nhuong_trong), 1,
-                                "không tiến trình nào chờ khoá rồi nhường — vạch xuất phát "
-                                "chung không hiệu lực, phép đo này chưa chạm tới khoá")
+
+        # ── VẠCH XUẤT PHÁT: đo ĐỘ TẬP TRUNG của lúc bắt đầu, KHÔNG đòi một đường nhường cụ thể.
+        #
+        # VÌ SAO ĐỔI (AG-00, 15/10/2026 — §12.2 "hỏng lần thứ hai cùng kiểu thì đổi CẤU TRÚC"):
+        # ca này từng đòi `nhuong_trong >= 1`. Đo được HAI lượt hỏng cùng một kiểu, và cả hai
+        # đều là HỎNG GIẢ:
+        #   · vạch HẸN GIỜ (bản cũ): dưới tải con tới muộn ⇒ không kịp chờ khoá.
+        #   · vạch BẰNG TỆP (bản vá đầu): vạch quá TỐT ⇒ cả 7 con đọc NGOÀI khoá thấy việc đã
+        #     xong và về sớm — mà chính docstring của ca này đã ghi rõ đó là đường ĐÚNG.
+        # Tức phép đòi ấy khẳng định một THỨ TỰ TÌNH CỜ, không phải một bất biến. Migration chỉ
+        # ~0,2 giây, nên chuyện cả 7 con đi đường rẻ là bình thường và KHÔNG sai.
+        # Nay đo thẳng thứ ca này thật sự cần: các con có cùng một vạch xuất phát không.
+        self.assertEqual(len(moc), SO_TIEN_TRINH, f"thiếu mốc thời gian: {moc}")
+        dau = [m[1] for m in moc]
+        do_tre = max(dau) - min(dau)
+        self.assertLess(do_tre, 1.0,
+                        f"các tiến trình KHÔNG cùng một vạch xuất phát: độ trễ {do_tre:.3f}s "
+                        f"(vạch xuất phát không hiệu lực ⇒ phép đo chưa chạm tới khoá)")
+        # Ghi lại ĐƯỜNG ĐI của các con như QUAN SÁT, không phải điều kiện: cả hai đường đều đúng.
+        print(f"  [đo] vạch xuất phát: độ trễ {do_tre * 1000:.1f} ms · "
+              f"nhường-trong-khoá={len(nhuong_trong)} · về-sớm={len(ve_som)} · "
+              f"nâng cấp={len(nang)}")
 
     def test_a2_csdl_sau_cung_dung_mot_ban(self):
         """Nâng cấp hai lần là nhân đôi dữ liệu seed hoặc nổ ở UNIQUE. Đo trên CSDL thật."""

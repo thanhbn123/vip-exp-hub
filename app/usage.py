@@ -217,7 +217,10 @@ def ghi_su_kien(tenant_id, loai, so_luong=1, idem_key=None, nguon="he_thong",
     cot_sk = ("tenant_id, loai, so_luong, idem_key, nguon, tham_chieu, ky, tao_luc")
     gia_tri_sk = (tenant_id, loai, so_luong, idem_key, nguon, tham_chieu, ky, csdl.bay_gio())
 
-    with csdl.khoa_ghi:
+    # V-13912 (AG-00 vá): `khoa_ghi` trần không phải giao dịch — mỗi câu tự chốt ngay. Chỗ
+    # này cần sự kiện và bộ đếm là MỘT đơn vị, nên dùng `giao_dich()`. Nhờ vậy câu DELETE bù
+    # bên dưới chỉ còn là lớp phòng thứ hai, không còn là thứ DUY NHẤT giữ cho hai bảng khớp.
+    with csdl.giao_dich():
         kn = csdl.mo()
         try:
             cur = kn.execute(f"INSERT INTO su_kien_dung ({cot_sk}) VALUES (?,?,?,?,?,?,?,?)",
@@ -241,8 +244,10 @@ def ghi_su_kien(tenant_id, loai, so_luong=1, idem_key=None, nguon="he_thong",
                 # `kn.rollback()` thành LỆNH RỖNG: nó không báo lỗi, không lùi gì, và để lại
                 # một sự kiện MỒ CÔI. Mồ côi ở đây không vô hại — lần thử lại cùng `idem_key`
                 # sẽ bị coi là TRÙNG rồi lặng lẽ không thu gì, tức mất tiền một chiều.
-                # `thu_usage.test_d2` bắt được ngay. Nay xoá thẳng theo id, không dựa vào
-                # giao dịch ngầm nào.
+                # `thu_usage.test_d2` bắt được ngay.
+                #
+                # Nay có HAI lớp: câu DELETE dưới đây, và `giao_dich()` bao ngoài — câu raise
+                # làm cả giao dịch lùi, nên sự kiện không thể sống sót kiểu mồ côi nữa.
                 kn.execute("DELETE FROM su_kien_dung WHERE id=?", (sk_id,))
                 da = _dem_g08(tenant_id, ky, loai)
                 raise billing.VuotHanMuc(

@@ -19,7 +19,17 @@ TONG=0; SO_BO=0; HONG=""; BO_QUA=""; SO_BO_QUA=0
 # KHÔNG phải để bỏ qua nó.
 for t in $(find app/thu gateway/thu -name 'thu_*.py' -type f ! -name 'thu_e2e.py' | sort); do
     SO_BO=$((SO_BO + 1))
-    OUT=$(python3 "$t" 2>&1); MA=$?
+    # VÁ 15/10/2026 (N-01, AG-01 phát hiện — AG-00 chốt): bản cũ là
+    #     OUT=$(python3 "$t" 2>&1); MA=$?
+    # Dưới `set -e`, phép gán trên MANG mã thoát của `python3`, nên bộ thử hỏng đầu tiên
+    # làm CHẾT CẢ SCRIPT ngay tại đây — trước bảng tổng kết, không một dòng báo hỏng.
+    # Bản vá ĐẦU của AG-00 (`if ! OUT=...; then MA=$?; fi`) cũng SAI: `!` đảo mã thoát nên
+    # `$?` trong `then` luôn là 0 — nó xoá luôn tiêu chí mã thoát và quay về đúng khuôn
+    # "phán bằng chữ trong output" đã gây hai lần báo hỏng giả (§7.1 BAN_GIAO).
+    # Dạng dưới đây là dạng ĐÚNG: `||` chỉ chạy khi lệnh hỏng, và lúc đó `$?` VẪN là mã thoát
+    # của chính lệnh vừa hỏng. Đã đo: mọi bộ đều được chạy, bộ hỏng được báo kèm lý do ĐÚNG.
+    MA=0
+    OUT=$(python3 "$t" 2>&1) || MA=$?
     # Đếm ca: `Ran N` của unittest, hoặc `N ca — ĐẠT` của bộ thử viết tay.
     N=$(printf '%s' "$OUT" | grep -oE 'Ran [0-9]+' | tail -1 | grep -oE '[0-9]+' || true)
     if [ -z "$N" ]; then
@@ -87,13 +97,20 @@ else
     echo "  tầng 1: BỎ QUA — không có node trên máy này"
 fi
 if [ -f thu_frontend/thu_http.py ]; then
-    O=$(python3 thu_frontend/thu_http.py 2>&1) || true
+    # L2-N1 (AG-01 phát hiện, AG-00 vá): chỗ này từng là `... || true` rồi phán bằng
+    # `grep -qE '^OK'` — tức VỨT mã thoát rồi đoán bằng CHỮ TRONG OUTPUT, đúng cái khuôn mà
+    # dòng 40 của chính tệp này tuyên bố đã từ bỏ. Nay phán bằng MÃ THOÁT + DẤU VẾT ĐÃ CHẠY
+    # (số ca > 0), cùng luật với vòng lặp python ở trên.
+    MA_FE=0
+    O=$(python3 thu_frontend/thu_http.py 2>&1) || MA_FE=$?
     FE_H=$(printf '%s' "$O" | grep -oE 'Ran [0-9]+' | tail -1 | grep -oE '[0-9]+' || echo 0)
     FE_H=${FE_H:-0}
-    if printf '%s' "$O" | grep -qE '^OK( |$)'; then
+    if [ "$MA_FE" -eq 0 ] && [ "$FE_H" -gt 0 ]; then
         printf '  tầng 2 (HTTP + tệp tĩnh):    %4s ca\n' "$FE_H"
     else
-        printf '  tầng 2: HỎNG\n'; HONG="$HONG thu_http.py"
+        printf '  tầng 2: HỎNG (mã thoát %s · %s ca)\n' "$MA_FE" "$FE_H"
+        HONG="$HONG thu_http.py"
+        printf '%s' "$O" | grep -E '^(FAIL|ERROR):' | head -5 | sed 's/^/        /'
     fi
 fi
 # Tầng 3 KHÔNG chạy trong bộ này: nó cần Chromium + máy chủ sống, mất ~34 giây, và phải
@@ -111,12 +128,15 @@ echo
 echo "══════════ E2E QUA HTTP THẬT ══════════"
 E2E=0
 if [ -f app/thu/chay_e2e.sh ]; then
-    O=$(sh app/thu/chay_e2e.sh 2>&1) || true
+    # L2-N1 (AG-01 phát hiện, AG-00 vá): như tầng 2 — bỏ `|| true` + phán bằng chuỗi
+    # "mã thoát 0" in ra, nay bắt MÃ THOÁT THẬT của chính tiến trình.
+    MA_E2E=0
+    O=$(sh app/thu/chay_e2e.sh 2>&1) || MA_E2E=$?
     E2E=$(printf '%s' "$O" | grep -oE 'KẾT QUẢ: [0-9]+/[0-9]+' | head -1 || echo "")
-    if printf '%s' "$O" | grep -q 'mã thoát 0'; then
+    if [ "$MA_E2E" -eq 0 ]; then
         echo "  ✓ $E2E phép đo đạt"
     else
-        echo "  ✗ E2E HỎNG: $E2E"; HONG="$HONG chay_e2e.sh"
+        echo "  ✗ E2E HỎNG (mã thoát $MA_E2E): $E2E"; HONG="$HONG chay_e2e.sh"
         printf '%s' "$O" | grep -E '^\s+✗' | head -8 | sed 's/^/     /'
     fi
 fi
@@ -133,9 +153,24 @@ echo "  bộ hỏng: ${HONG:- KHÔNG}"
 echo
 echo "  PHẠM VI ĐÃ ĐO — và cái gì NẰM NGOÀI:"
 echo "    đo trên: $(uname -s) $(uname -m) · python $(python3 -c 'import sys;print(".".join(map(str,sys.version_info[:3])))') · SQLite $(python3 -c 'import sqlite3;print(sqlite3.sqlite_version)')"
-echo "    máy chủ bind 127.0.0.1 · adapter hãng ở chế độ MOCK (CHO_PHEP_LIVE=False cả 5 hãng)"
-echo "    NGOÀI phạm vi: VPS · PostgreSQL · nhiều tiến trình (trần rate limit sống trong bộ"
-echo "      nhớ MỘT tiến trình) · DOM/CSS trong trình duyệt thật · nhãn hãng thật ·"
-echo "      credentials hãng thật · AI thật · dữ liệu lớn · Safari/Firefox"
+# N-02 (AG-01 phát hiện, AG-00 vá): dòng cũ VIẾT CỨNG "cả 5 hãng" trong khi sổ đăng ký chỉ có
+    # 2 adapter (jt, vtp). Sai theo hướng NÓI RỘNG HƠN sự thật — hướng nguy hiểm (§12.1 luật 3), lại nằm
+    # ngay trong khối mà người đọc dùng để tin báo cáo. Nay lấy thẳng từ sổ đăng ký: dữ kiện đo được
+    # thì phải lấy từ LỆNH, không điền vào tệp (§7.3 BAN_GIAO).
+    PHAM_VI_HANG=$(python3 -c "
+import sys; sys.path.insert(0,'app')
+import adapter, adapter_jt, adapter_vtp
+ds = adapter.danh_sach_hang()
+mo = sorted(m for m, t in ds.items() if t['live_mo'])
+print('%d hang dang ky (%s) - dang MO live: %s'
+      % (len(ds), ', '.join(sorted(ds)), ', '.join(mo) if mo else 'khong hang nao'))
+" 2>/dev/null || echo "KHONG DO DUOC so adapter dang ky")
+    echo "    máy chủ bind 127.0.0.1 · adapter hãng ở chế độ MOCK ($PHAM_VI_HANG)"
+    # N-03 (AG-01): câu cũ khai "NGOÀI phạm vi: PostgreSQL" trong khi CÙNG lượt chạy in
+    # "✓ thu_postgres.py 21 ca" — người đọc không thể biết ý là CHƯA THỬ hay CHƯA CHUYỂN.
+    echo "    NGOÀI phạm vi: VPS · CSDL NGHIỆP VỤ chưa chuyển sang PostgreSQL (mới chỉ thử schema"
+    echo "      trên cụm tạm cổng riêng) · nhiều tiến trình (bộ riêng app/thu/dong_thoi/chay.py;"
+    echo "      trần rate limit sống trong bộ nhớ MỘT tiến trình) · DOM/CSS trong trình duyệt thật ·"
+    echo "      nhãn hãng thật · credentials hãng thật · AI thật · dữ liệu lớn · Safari/Firefox"
 echo "══════════════════════════════════════════════════════════"
 [ -z "$HONG" ] || exit 1

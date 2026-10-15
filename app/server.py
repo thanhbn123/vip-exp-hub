@@ -301,6 +301,67 @@ class BoXuLy(BaseHTTPRequestHandler):
 
     # ---------- router ----------
     def _chay(self, method):
+        """MỘT chỗ bao MỌI route: mở ngữ cảnh quan sát, chạy, rồi ĐÓNG trong `finally`.
+
+        ====== VÌ SAO CÓ HÀM NÀY (P-G15-01, đo 15/10/2026 bởi AG-04) ======
+        `quan_sat` đã có đủ: sinh `request_id`, JSONL một-dòng-một-JSON, bộ che bí mật, bộ
+        đếm metric. Nhưng `server.py` CHỈ gọi nó cho `/suc-khoe`, `/san-sang`, `/metric` —
+        `bat_dau_yeu_cau()` / `ket_thuc_yeu_cau()` / `ghi()` **không được gọi ở đâu trong
+        đường yêu cầu**. Hệ quả ĐO ĐƯỢC: log máy chủ thật có **0 dòng JSON**, không lượt HTTP
+        nào có `request_id`, nên một lượt 401/404/429/500 **không để lại dấu vết có cấu trúc
+        nào**. Cùng đúng một khuôn với V-13910: mã có, không ai gọi — và bộ thử tầng 1 kiểm
+        `quan_sat` như hàm thuần nên nó vẫn XANH.
+
+        ====== VÌ SAO `finally`, KHÔNG PHẢI CUỐI HÀM ======
+        Một lượt yêu cầu HỎNG là lượt cần dấu vết nhất (§12.2). Đặt `ket_thuc_yeu_cau()` ở
+        cuối đường đi bình thường là bỏ mất đúng những lượt người ta cần đọc log để chẩn đoán.
+
+        ====== VÌ SAO GHI SAU KHI ĐÃ ĐÓNG NGỮ CẢNH ======
+        `ket_thuc_yeu_cau()` trả số mili-giây rồi XOÁ ngữ cảnh (thread của `ThreadingHTTPServer`
+        được dùng lại — ID sót lại sẽ gán sai cho lượt sau, xem docstring của chính hàm đó).
+        Nên lượt ghi này truyền thẳng `request_id`/`correlation_id` đã bắt được, không dựa vào
+        ngữ cảnh nữa. `quan_sat.ghi()` để trường truyền vào ĐÈ lên giá trị ngữ cảnh.
+
+        ====== CẤM: KHÔNG body, KHÔNG header, KHÔNG cookie, KHÔNG query ======
+        Dòng log chỉ mang: phương thức · ĐƯỜNG DẪN ĐÃ CẮT QUERY · mã trạng thái · số mili-giây.
+        Query bị cắt vì query có thể mang token; header/cookie/body không được đọc tới. Bộ che
+        của `quan_sat` là lớp THỨ HAI, không phải lớp duy nhất — dựa vào nó là dựa vào việc
+        đoán đúng tên trường.
+        """
+        rid, cid = quan_sat.bat_dau_yeu_cau(self._headers_thuong())
+        self._request_id = rid
+        self._ma_da_tra = None
+        try:
+            self._chay_that(method)
+        finally:
+            ms = quan_sat.ket_thuc_yeu_cau()
+            try:
+                # TÊN TRƯỜNG PHẢI NẰM TRONG `quan_sat.TRUONG_CHO_PHEP`: đó là DANH SÁCH TRẮNG,
+                # tên lạ bị thay bằng `***`. Lượt vá đầu dùng `phuong_thuc`/`ma` nên dòng log ra
+                # `"ma": "***"` — ca `a2` của `thu_nhat_ky_yeu_cau.py` bắt được ngay. Dùng đúng
+                # `method`/`ma_http`/`duong`/`ms` mà danh sách trắng đã khai.
+                quan_sat.ghi("yeu_cau", muc="tin", method=method,
+                             duong=self.path.split("?")[0].split("#")[0][:300],
+                             ma_http=self._ma_da_tra, ms=ms,
+                             request_id=rid, correlation_id=cid)
+            except Exception as e:                                       # noqa: BLE001
+                # Việc ghi log KHÔNG được làm chết lượt nghiệp vụ, nhưng cũng KHÔNG được nuốt
+                # im lặng (§12.2): nói thẳng ra stderr rồi đi tiếp.
+                sys.stderr.write("[hub] ghi log yeu cau that bai: %s\n" % type(e).__name__)
+    def send_response(self, code, message=None):
+        """Ghi lại mã trạng thái ĐÃ TRẢ (để dòng log nói đúng số thật) và gắn `X-Request-Id`.
+
+        `send_response` là chỗ DUY NHẤT mà `BaseHTTPRequestHandler` ghi dòng trạng thái, nên
+        nó là chỗ duy nhất cần sửa để mọi phản hồi — `_tra`, `_tra_tep`, `send_error`, và cả
+        đường tĩnh — đều có header này. Rải ra từng `_tra` là bỏ sót chỗ thứ tư.
+        """
+        self._ma_da_tra = code
+        BaseHTTPRequestHandler.send_response(self, code, message)
+        rid = getattr(self, "_request_id", None)
+        if rid:
+            self.send_header("X-Request-Id", rid)
+
+    def _chay_that(self, method):
         try:
             duong = self.path.split("?")[0]
             if method == "GET" and not duong.startswith("/api/"):
@@ -367,9 +428,20 @@ class BoXuLy(BaseHTTPRequestHandler):
                 self._gioi_han("webhook.chu_ky_sai", dinh_danh=m.group(1))
                 return self._tra(401, {"loi": "chữ ký webhook sai hoặc thiếu"})
             sk_id, trung = webhook.nhan_su_kien(tk, body, self._headers_thuong())
+            # B11 (AG-00 cắm route; hàm `phan_hoi_xac_nhan` do AG-03 dựng ở G14): trích lục J&T
+            # chỉ nói MỘT điều về phản hồi — `code` khác 1 là hỏng. Route cũ trả
+            # `{"ket_qua": ...}` KHÔNG có `code`, nên nếu hãng đúng như trích lục thì MỌI
+            # callback bị coi là hỏng và bị đẩy lại VÔ HẠN: chống trùng ở tầng CSDL cứu được
+            # DỮ LIỆU nhưng không cứu được TẢI.
+            #
+            # CỐ Ý giữ nguyên mã HTTP cũ (202 lượt mới · 200 lượt trùng): trích lục KHÔNG nói
+            # mã HTTP, nên đổi nó là ĐOÁN. Việc thêm `code`/`msg` là THÊM — ai đang đọc
+            # `ket_qua` vẫn đọc được — nên không phá hợp đồng đang chạy.
+            # Hình dạng ĐẦY ĐỦ của phản hồi vẫn là câu hỏi cho hãng (B3, docs/G14_JT_WEBHOOK.md).
+            _, than_ac = webhook.phan_hoi_xac_nhan(True, su_kien_id=sk_id)
             if trung:
-                return self._tra(200, {"ket_qua": "da_nhan_truoc_do", "su_kien_id": sk_id})
-            return self._tra(202, {"ket_qua": "da_nhan", "su_kien_id": sk_id})
+                return self._tra(200, {"ket_qua": "da_nhan_truoc_do", **than_ac})
+            return self._tra(202, {"ket_qua": "da_nhan", **than_ac})
 
         # --- auth công khai ---
         if duong == "/api/v2/auth/dang-nhap" and method == "POST":

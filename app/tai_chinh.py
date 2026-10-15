@@ -381,7 +381,12 @@ def ghi_nhat_ky(tenant_id, hanh_dong, doi_tuong, chi_tiet="", nguoi=None):
     sqlite3 CLI) làm `kiem_nhat_ky()` phát hiện ra — nghiệm thu không chỉ dựa vào trigger.
     """
     _dam_bao_bang()
-    with csdl.khoa_ghi:
+    # V-13912 (AG-00 vá): đây là ĐỌC-RỒI-GHI — đọc `bam` cuối, tính băm mới, rồi chèn. Dưới
+    # `khoa_ghi` trần, hai TIẾN TRÌNH vẫn có thể cùng đọc một `bam_truoc` rồi cùng chèn: móc
+    # băm khi đó phân nhánh và `kiem_nhat_ky()` báo hỏng dù không ai sửa gì. `khoa_ghi` là
+    # RLock của Python nên nó chỉ phủ MỘT tiến trình (§30.5). `giao_dich()` lấy `BEGIN
+    # IMMEDIATE` ngay từ đầu nên phép đọc-rồi-ghi là một đơn vị thật.
+    with csdl.giao_dich():
         truoc = csdl.mot("SELECT bam FROM tc_nhat_ky WHERE tenant_id=? ORDER BY id DESC LIMIT 1",
                          (tenant_id,))
         bam_truoc = truoc["bam"] if truoc else ""
@@ -669,7 +674,15 @@ def chuyen_cod(tenant_id, don_id, den, nguon, can_cu, nguoi=None, so_tien_hang_b
         raise LoiTaiChinh("COD hãng báo không được âm")
     ca_id = carrier_account_id or cur["carrier_account_id"]
 
-    with csdl.khoa_ghi:
+    # V-13912 (AG-00 vá): một lượt chuyển COD ghi NĂM chỗ — cập nhật `tc_cod` · dòng
+    # `tc_cod_chuyen` · bút toán · cập nhật công nợ · nhật ký. Trước bản vá: hai câu đầu nằm
+    # trong `khoa_ghi` TRẦN (mỗi `csdl.ghi()` tự chốt ngay, nên vẫn là hai đơn vị rời), ba
+    # chỗ còn lại nằm HẲN NGOÀI giao dịch. Hậu quả đo được đúng khuôn §18 — "giao hàng và thu
+    # tiền là hai sự kiện khác nhau": COD đã nhảy sang `COD_SETTLED` (hoặc `COD_COLLECTED`) mà
+    # bút toán không vào sổ, tức hệ báo tiền đã về trong khi sổ cái không có dòng nào. Bút toán
+    # là bất biến (§17) nên chênh đó không sửa được bằng UPDATE, chỉ chữa được bằng bút toán đảo.
+    # Nay cả năm nằm trong MỘT `giao_dich()`; `ghi_but_toan`/`ghi_nhat_ky` lồng vào bằng SAVEPOINT.
+    with csdl.giao_dich():
         dat = ["trang_thai=?", "cap_nhat_luc=?"]
         ts = [den, csdl.bay_gio()]
         if stb is not None:
@@ -693,12 +706,12 @@ def chuyen_cod(tenant_id, don_id, den, nguon, can_cu, nguoi=None, so_tien_hang_b
                  " VALUES (?,?,?,?,?,?,?,?)",
                  (tenant_id, don_id, tu, den, nguon, can_cu, nguoi, csdl.bay_gio()))
 
-    loai_bt = BUT_TOAN_THEO_CHUYEN.get((tu, den))
-    if loai_bt:
-        tien_bt = stb if stb is not None else cur["so_tien_du_kien"]
-        ghi_but_toan(tenant_id, loai_bt, tien_bt, nguon, can_cu, tao_boi=nguoi,
-                     don_id=don_id, carrier_account_id=ca_id, batch_id=batch_id)
-    ghi_nhat_ky(tenant_id, "chuyen_cod", f"don:{don_id}", f"{tu} → {den}: {can_cu}", nguoi)
+        loai_bt = BUT_TOAN_THEO_CHUYEN.get((tu, den))
+        if loai_bt:
+            tien_bt = stb if stb is not None else cur["so_tien_du_kien"]
+            ghi_but_toan(tenant_id, loai_bt, tien_bt, nguon, can_cu, tao_boi=nguoi,
+                         don_id=don_id, carrier_account_id=ca_id, batch_id=batch_id)
+        ghi_nhat_ky(tenant_id, "chuyen_cod", f"don:{don_id}", f"{tu} → {den}: {can_cu}", nguoi)
     return cod_cua_don(tenant_id, don_id)
 
 

@@ -18,6 +18,7 @@ import cau_hinh                                                          # noqa:
 cau_hinh.THU_MUC_DU_LIEU = _TM
 cau_hinh.DUONG_DAN_CSDL = os.path.join(_TM, "hub.db")
 import csdl                                                             # noqa: E402
+import don_hang                                                         # noqa: E402
 import migrate                                                          # noqa: E402
 import tai_chinh                                                        # noqa: E402
 
@@ -212,6 +213,122 @@ class C_HaiLoiTienDaDo(unittest.TestCase):
         dung_lai = tai_chinh.tinh_lai_cong_no(1)
         self.assertEqual(luu["tong_phai_thu"], dung_lai["tong_phai_thu"])
         self.assertEqual(luu["tong_phai_tra"], dung_lai["tong_phai_tra"])
+
+
+# ================== D. V-13912 — năm khối ghi còn lại phải là MỘT đơn vị
+class D_NamKhoiGhiConLai(unittest.TestCase):
+    """V-13912 (AG-00 vá 15/10/2026): năm khối ghi từng dùng `khoa_ghi` TRẦN.
+
+    `khoa_ghi` là RLock của Python: nó chặn hai THREAD giẫm nhau, nó KHÔNG gộp nhiều câu ghi
+    thành một đơn vị — mỗi `csdl.ghi()` vẫn tự chốt ngay. Nên mỗi ca dưới đây ÉP một bước
+    hỏng rồi đòi hỏi KHÔNG có gì bán phần nằm lại.
+
+    Điều kiện để bộ ca này có giá trị: cả ba ca đều **HỎNG trên mã TRƯỚC bản vá** (đã đo bằng
+    cách chạy chúng trên bản cũ). Một ca xanh ở cả mã cũ lẫn mã mới thì không canh được gì
+    (§12.1 luật 5). Và mỗi ca có một PHÉP ĐO ĐỐI CHỨNG: bỏ chỗ ép hỏng đi thì lượt ghi phải
+    THÀNH CÔNG — nếu không, một bản vá "chặn hết mọi thứ" cũng sẽ làm ca xanh.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import thu_tai_chinh as T
+        if T.NEN is None:
+            T.setUpModule()
+        cls.T = T
+
+    def _nen_cod(self):
+        """Đơn có sổ COD đang ở `COD_RECONCILED`, dựng bằng nền của bộ thử tài chính."""
+        ca = self.T.D_ThanhToan("test_d1_thanh_toan_TRUNG_bi_chan_o_tang_CSDL")
+        return ca._san_sang(100_000)
+
+    @staticmethod
+    def _ep_hong(mod, ten):
+        """Thay `mod.ten` bằng hàm luôn ném lỗi. Trả hàm gốc để hoàn lại."""
+        goc = getattr(mod, ten)
+        setattr(mod, ten, lambda *a, **k: (_ for _ in ()).throw(RuntimeError("ép hỏng")))
+        return goc
+
+    def test_d1_chuyen_COD_khong_doi_trang_thai_khi_but_toan_hong(self):
+        """§18: COD không được nhảy trạng thái trong khi sổ cái không có bút toán nào."""
+        t, u, don = self._nen_cod()
+        # `BUT_TOAN_THEO_CHUYEN` chỉ khai (COD_DISPUTED → COD_COLLECTED), nên phải đi qua
+        # COD_DISPUTED mới có một lượt chuyển HỢP LỆ mà sinh bút toán.
+        tai_chinh.chuyen_cod(t, don, "COD_DISPUTED", "nguoi", "tranh chấp", nguoi=u)
+        dem = lambda: (csdl.mot("SELECT COUNT(*) c FROM tc_cod_chuyen WHERE don_id=?", (don,))["c"],
+                       csdl.mot("SELECT COUNT(*) c FROM tc_but_toan WHERE don_id=?", (don,))["c"])
+        truoc = dem()
+        goc = self._ep_hong(tai_chinh, "ghi_but_toan")
+        try:
+            with self.assertRaises(RuntimeError):
+                tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo lại",
+                                     nguoi=u, so_tien_hang_bao=100_000)
+        finally:
+            tai_chinh.ghi_but_toan = goc
+        self.assertEqual(tai_chinh.cod_cua_don(t, don)["trang_thai"], "COD_DISPUTED",
+                         "COD đã đổi trạng thái dù bút toán không vào sổ")
+        self.assertEqual(dem(), truoc, "còn dòng chuyển trạng thái mồ côi")
+
+    def test_d1b_doi_chung_bo_ep_hong_thi_chuyen_COD_thanh_cong(self):
+        """Phép đo đối chứng cho d1: không ép hỏng thì lượt chuyển PHẢI đi được.
+
+        Đếm ĐỘ LỆCH chứ không đếm tuyệt đối: `_san_sang` đã đi qua một lượt
+        (COD_EXPECTED → COD_COLLECTED) và lượt đó CŨNG sinh `cod_hang_bao_thu`, nên sổ đã có
+        sẵn một dòng trước khi ca này chạy. Đòi tuyệt đối bằng 1 là đo sai thứ mình tưởng
+        đang đo — đúng lỗi mà §12.1 luật 3 cảnh báo.
+        """
+        t, u, don = self._nen_cod()
+        dem = lambda: csdl.mot(                                              # noqa: E731
+            "SELECT COUNT(*) c FROM tc_but_toan WHERE don_id=? AND loai='cod_hang_bao_thu'",
+            (don,))["c"]
+        truoc = dem()
+        tai_chinh.chuyen_cod(t, don, "COD_DISPUTED", "nguoi", "tranh chấp", nguoi=u)
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo lại",
+                             nguoi=u, so_tien_hang_bao=100_000)
+        self.assertEqual(tai_chinh.cod_cua_don(t, don)["trang_thai"], "COD_COLLECTED")
+        self.assertEqual(dem() - truoc, 1, "chuyển COD có sinh bút toán phải vào sổ thêm 1 dòng")
+
+    def test_d2_luu_mat_hang_khong_de_lai_danh_sach_ban_phan(self):
+        """Ba câu ghi (XOÁ · CHÈN · ĐỒNG BỘ đơn) phải cùng vào hoặc cùng không."""
+        t, u = self.T.NEN["t1"], self.T.NEN["u1"]
+        don = self.T._tao_don(t, u, trang_thai="nhap")
+        don_hang.luu_mat_hang(t, u, don, [{"ten": "A", "so_luong": 1, "don_gia": 1000,
+                                           "khoi_luong_gram": 500}], kiem_quyen=False)
+        truoc = [m["ten"] for m in don_hang.lay_mat_hang(t, don)]
+        kl_truoc = don_hang.lay_don(t, don)["khoi_luong_gram"]
+        goc = self._ep_hong(don_hang, "_ghi_lich_su")
+        try:
+            with self.assertRaises(RuntimeError):
+                don_hang.luu_mat_hang(t, u, don, [
+                    {"ten": "B", "so_luong": 2, "don_gia": 2000, "khoi_luong_gram": 700},
+                    {"ten": "C", "so_luong": 3, "don_gia": 3000, "khoi_luong_gram": 900}],
+                    kiem_quyen=False)
+        finally:
+            don_hang._ghi_lich_su = goc
+        self.assertEqual([m["ten"] for m in don_hang.lay_mat_hang(t, don)], truoc,
+                         "danh sách mặt hàng đã bị thay dù lượt lưu hỏng")
+        self.assertEqual(don_hang.lay_don(t, don)["khoi_luong_gram"], kl_truoc,
+                         "khối lượng của đơn đã lệch khỏi danh sách mặt hàng còn lại")
+
+    def test_d3_trang_thai_giao_khong_doi_khi_lich_su_hong(self):
+        """Trục giao vận và dòng lịch sử phải là một đơn vị: không đổi mà không có dấu vết."""
+        t, u = self.T.NEN["t1"], self.T.NEN["u1"]
+        don = self.T._tao_don(t, u, trang_thai="da_gui")
+        goc = self._ep_hong(don_hang, "_ghi_lich_su")
+        try:
+            with self.assertRaises(RuntimeError):
+                don_hang.ap_trang_thai_giao(t, don, "dang_giao", "webhook:1")
+        finally:
+            don_hang._ghi_lich_su = goc
+        d = don_hang.lay_don(t, don)
+        self.assertIsNone(d["trang_thai_giao"], "trạng thái giao đã đổi dù lịch sử không ghi được")
+        self.assertEqual(d["hang_trang_thai_giao"], 0, "hạng giao vận đã nhảy dù lượt áp hỏng")
+        # Đối chứng: không ép hỏng thì phải áp được, và lịch sử có đúng một dòng.
+        ap, ly_do = don_hang.ap_trang_thai_giao(t, don, "dang_giao", "webhook:1")
+        self.assertEqual((ap, ly_do), (1, ""), "lượt áp hợp lệ phải đi được")
+        self.assertEqual(don_hang.lay_don(t, don)["trang_thai_giao"], "dang_giao")
+        self.assertEqual(
+            csdl.mot("SELECT COUNT(*) c FROM don_lich_su WHERE don_id=? AND noi_dung LIKE '%dang_giao%'",
+                     (don,))["c"], 1, "phải có đúng một dòng lịch sử cho lượt áp")
 
 
 if __name__ == "__main__":

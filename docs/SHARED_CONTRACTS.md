@@ -356,3 +356,120 @@ Phân biệt bốn kết cục: `CHOT_THANH_CONG` · `TU_CHOI_NGHIEP_VU` · `KHO
 `GIAO_DICH_HONG`, cộng `MAT_CAP_NHAT` chỉ phát hiện được bằng đối chiếu cuối lượt.
 Đo bằng **tiến trình**, không bằng thread: `khoa_ghi` là RLock của Python, chỉ phủ MỘT tiến
 trình — đo bằng thread là đo chính cái khoá đó rồi kết luận "an toàn" cho ca nó không phủ.
+
+---
+
+# ĐÓNG BĂNG G13–G15 — 15/10/2026 (AG-00 DeepSeek chốt, agent KHÔNG tự đổi)
+
+Nền: `de740dc` (cây sạch, 0 stash, ở cả `main` lẫn worktree Orca). Mọi hợp đồng **§1–§30 vẫn
+hiệu lực nguyên vẹn** — đợt này chỉ THÊM. Baseline AG-00 tự đo lại trước khi giao việc:
+**927 ca python · 29 bộ · 0 hỏng · 0 bỏ qua** + **56 + 36 ca frontend** + **E2E 41/41** +
+**tầng 3 Chromium 26 đạt · 1 bỏ qua** (mã thoát 0 cả bốn lượt).
+
+## 31. Quyền sở hữu file — G13–G15
+
+Bốn làn chạy **đồng thời trong CÙNG một cây làm việc** (không tách worktree được — xem §33).
+Vì vậy quyền sở hữu dưới đây là **ranh giới cứng**, không phải gợi ý.
+
+| Làn | SỞ HỮU (được ghi) | CẤM chạm |
+|---|---|---|
+| **AG-01 QA/VERIFIER** | `docs/QA_G13_G15.md` (mới) · `app/thu/thu_qa_jt.py` (mới) | **mọi mã sản phẩm** (chỉ đọc) |
+| **AG-02 J&T API** | `app/adapter_jt.py` · `app/thu/thu_adapter_jt.py` (mới) · `app/thu/thu_hop_dong_jt.py` (mới) · `docs/G13_*.md` (mới) | `webhook.py`, `csdl.py`, `migrate.py`, `server.py`, `adapter.py` (lớp nền — đề xuất, không sửa) |
+| **AG-03 WEBHOOK** | `app/webhook.py` · `app/trang_thai_hang.py` · `app/thu/thu_webhook_jt.py` (mới) · `docs/G14_*.md` (mới) · `docs/JT_*.md` | `adapter_jt.py`, `csdl.py`, `migrate.py`, `server.py`, **`gateway/`** (đã nghiệm thu — báo AG-00 nếu thấy lỗi thật) |
+| **AG-04 INFRA** | `trien_khai/` · `app/thu/thu_postgres.py` · `docs/G15_*.md` (mới) · `docs/G12_*.md` | `csdl.py`, `migrate.py`, `server.py`, `adapter_jt.py`, `webhook.py` |
+| **AG-00** | `csdl.py` · `migrate.py` · `server.py` · `cau_hinh.py` · `billing.py` · `quyen.py` · `ai_gateway.py` · `adapter.py` · `SHARED_CONTRACTS.md` · `.gitignore` · **mọi file của agent SAU KHI bàn giao** | — |
+
+Không agent nào được mở `CHO_PHEP_LIVE`. Không agent nào được ghi `csdl.py`/`migrate.py`/`server.py`.
+
+## 32. Trạng thái J&T — điều ĐÃ XÁC MINH được, và điều CÒN THIẾU
+
+**Đã có trong mã (đọc lại trên `de740dc`, không phải nghe báo cáo):**
+`adapter_jt.py` đã dựng theo tài liệu công khai: chữ ký `base64(md5-bytes(bizContent + privateKey))`,
+header `apiAccount` · `digest` · `timestamp` (ms, UTC+7), body `application/x-www-form-urlencoded`
+một trường `bizContent`. **COD đã nằm đúng `codMoney`** (số nguyên đồng, §16) — lỗi dùng
+`itemsValue` đã được vá trước đợt này. Chốt chặn **D-9** cho `area` là **chặn cứng** (16 ca canh).
+`CAPABILITIES` có `webhook: True` theo trang `logistics/statusFeedback`.
+
+**Điều CÒN THIẾU — đã đo, không suy đoán:**
+
+| Thiếu gì | Bằng chứng đo được |
+|---|---|
+| **Credentials J&T** | **Không có tệp `.env` nào** trong cây làm việc. `.env.example` **không khai một khoá J&T nào** — bề mặt cấu hình cho credentials J&T **chưa tồn tại**, không chỉ thiếu giá trị |
+| **Nghĩa mã trạng thái `110`** | `V-13906-04` CHƯA CẤP ⇒ mọi mã chưa xác minh phải ra `NEEDS_REVIEW`, cấm `DELIVERED`, cấm kích hoạt đối soát COD |
+| **Cách ánh xạ `area`** | Quyết định **D-9 KHOÁ**. Ví dụ của chính hãng đặt QUẬN vào `city` và PHƯỜNG vào `area` — ngược ánh xạ đang dùng. Giữ nguyên chốt chặn |
+| **Phạm vi sandbox** | `V-G09-01` CHƯA CẤP ⇒ **không gọi API hãng thật**, kể cả sandbox. G13 **không được** báo "LIVE VERIFIED" đợt này |
+
+## 33. HAI lỗi hạ tầng AG-00 đo được trước khi giao việc
+
+**33.1 — Biến môi trường `GIT_CONFIG_*` làm MỌI lệnh git hỏng (exit 128).**
+Harness đặt `GIT_CONFIG_COUNT=2` cùng `GIT_CONFIG_VALUE_0/_1` nhưng **thiếu** `GIT_CONFIG_KEY_0/_1`,
+nên git chết với `fatal: unable to parse command-line config` / `missing config key GIT_CONFIG_KEY_0`.
+Hệ quả đo được: `thu_bao_mat.py::test_f3_khoa_khong_nam_trong_csdl_va_khong_vao_git` **HỎNG**
+(57 ca, 1 hỏng) vì nó gọi `git check-ignore`. **Đây là lỗi MÔI TRƯỜNG, không phải lỗi mã.**
+Bỏ ba biến đó đi thì bộ thử **57/57 ĐẠT, mã thoát 0**.
+
+> **AG-01 đính chính bán kính ảnh hưởng: **HAI** bộ thử, không phải một.** AG-00 chỉ kể
+> `thu_bao_mat.py`. Bộ thứ hai là `thu_tich_hop.py::test_04_khoa_ma_hoa_khong_duoc_vao_git`
+> (git hỏng: thoát 1, 1 ca hỏng · git lành: thoát 0, OK). AG-01 tìm ra bằng cách chạy **cả 29 bộ**
+> với git hỏng: đúng hai bộ đó gọi git, không bộ nào khác.
+>
+> **Vì sao AG-00 bỏ sót — và đây là chỗ đáng nhớ nhất:** `thu_tich_hop.py` xếp **SAU**
+> `thu_bao_mat.py` theo thứ tự chữ cái, nên **Finding B (§33.2) giết bộ chạy trước khi nó tới
+> lượt**. Một bộ chạy chết lặng không chỉ giấu lỗi — **nó giấu luôn phát hiện của chính người
+> đang đi tìm lỗi.** Đây là lý do §33.2 phải vá trước mọi việc khác.
+>
+> **Hai bộ này KHÔNG được "sửa".** Chúng canh một bất biến thật (khoá mã hoá không lọt vào git);
+> git hỏng thì git thật sự không trả lời được câu hỏi đó. Sửa ở đây là làm hỏng chốt chặn. Cách chạy đúng từ nay:
+```bash
+unset GIT_CONFIG_COUNT GIT_CONFIG_VALUE_0 GIT_CONFIG_VALUE_1
+```
+Hệ quả thứ hai: **mọi lượt ghi git đều bị sandbox chặn** (`git branch` → *cannot lock ref:
+Operation not permitted*), nên không tách được worktree cho từng làn.
+
+**33.2 — `app/thu/chay_tat_ca.sh` chết LẶNG khi có bộ thử hỏng.**
+Script có `set -e` (dòng 8) rồi tới `OUT=$(python3 "$t" 2>&1); MA=$?` (dòng 22). Dưới `set -e`,
+**một bộ thử thoát khác 0 làm CHẾT CẢ SCRIPT ngay lập tức** — trước khi in bảng tổng kết. Đo được:
+lượt chạy đầu chỉ in **3 dòng** (2 bộ đầu) rồi thoát 1, **không một dòng báo hỏng nào**. Đây đúng
+**cùng một khuôn** với ba cái bẫy ở `docs/BAN_GIAO.md` §7.1: thứ dùng để kiểm chứng tự nó nói sai.
+Nguy hiểm thật: một hồi quy thật có thể bị đọc thành *"chạy có 2 bộ, chắc ổn"*. **Phải vá** để mọi
+bộ đều được chạy và đều được báo.
+
+**BẢN VÁ ĐÚNG** (AG-01 đo và kiểm chứng; AG-00 chốt sau khi bản đầu của chính AG-00 bị AG-01 bác):
+```sh
+    MA=0
+    OUT=$(python3 "$t" 2>&1) || MA=$?
+```
+
+> **§33.2 bản đầu đã SAI — ghi lại để không ai lặp.** AG-00 viết
+> `if ! OUT=$(python3 "$t" 2>&1); then MA=$?; fi`. Toán tử `!` **đảo mã thoát**, nên `$?` trong
+> nhánh `then` **luôn bằng 0**. Hệ quả: lý do hỏng bị nói SAI (`thoát 0` cho một bộ thoát 1), và
+> tiêu chí **mã thoát bị xoá sạch** — phán quyết quay về đúng cái khuôn *phán bằng chữ trong
+> output* đã gây **hai lần báo hỏng giả** mà `BAN_GIAO.md` §7.1 dựng ra để từ bỏ. Một bản vá
+> *trông như* đang vá đúng chỗ nguy hiểm nhất.
+>
+> **AG-01 phát hiện (`N-01`, mức HIGH).** Đây là lý do tồn tại của một làn kiểm thử độc lập:
+> AG-00 vừa đóng băng một bản vá sai vào chính tài liệu hợp đồng. Bài học giữ nguyên: **hợp đồng
+> đóng băng không miễn nhiễm với lỗi, và người viết không tự soát được mình.**
+
+## 34. Luật riêng của đợt G13–G15
+
+- **Không gọi API hãng thật**, kể cả sandbox — `V-G09-01` chưa cấp. Mọi làn chạy ở **MOCK**.
+- **Không mở cổng ra Internet**, không tunnel, không deploy VPS/staging — `V-G11-01` chưa cấp.
+- **Không cài gì ở mức toàn cục.** Docker/colima **KHÔNG CÓ** trên máy này; cài là đổi máy của
+  anh ⇒ **Docker = BLOCKED**, và **CẤM báo "Docker build PASS"**.
+- **CẤM đụng cụm PostgreSQL `:5432`** — nó đang giữ `vip_customs`, `vip_customs_g16`,
+  `vip_customs_test` của **dự án khác**. Thử PostgreSQL phải là **cụm riêng**, cổng riêng,
+  socket ở đường ngắn (`mktemp -d /tmp/vhpg.XXXX`, giới hạn 103 byte).
+- **KHÔNG chuyển CSDL nghiệp vụ sang PostgreSQL.** Kho nghiệp vụ vẫn là **SQLite** (D-8).
+- **Không tự tuyên bố production-ready.**
+- Mỗi làn dùng `VIP_HUB_DATA` **riêng** (`/tmp/veh_data_ag0x`) khi chạy thử, vì bốn làn dùng
+  chung một cây làm việc.
+
+## 35. Mốc bảo vệ — ghi lại trước khi sửa, để cuối lượt đối chiếu
+
+| Đối tượng | Dấu vân tay lúc bắt đầu |
+|---|---|
+| CSDL THẬT `~/Projects/vip-express-hub/app/du-lieu/hub.db` | `200.704` byte · sha256 `aaf71362f86f7391f9394f77a5c8a3b24c81e7e1b6ca49da116143eb556d0c54` |
+| Cây làm việc Orca | sạch, 0 tệp dở, 0 stash |
+| HEAD | `de740dc` — `41ed553` là **tổ tiên** (12 commit), KHÔNG reset về nó |
+| Bản sao lưu mã nguồn | `/tmp/veh_backup_de740dc/workspace_src.tgz` (1,0 MB) |

@@ -22,8 +22,11 @@
 import base64
 import hashlib
 import hmac
+import inspect
 import json
 import os
+import re
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -1420,6 +1423,620 @@ class K_G16_HopDongVaChotAnToan(Nen):
         self.assertEqual(thieu, {}, f"thiếu ca canh cho: {thieu}")
         # ĐỐI CHỨNG DƯƠNG: bảng phủ phải THẬT SỰ đọc được danh sách ca, không phải rỗng.
         self.assertGreater(len(co), 50, "không đọc được danh sách ca — bảng phủ vô nghĩa")
+
+
+# ============================================================================
+# G17 (AG-04) — REPLAY CÓ UY QUYỀN · CHỐNG TRÙNG Ở TẦNG CSDL · HARNESS CỤC BỘ
+# ============================================================================
+GOC_G17 = os.path.join(GOC_DU_AN, "trien_khai", "g17")
+HARNESS_G17 = os.path.join(GOC_G17, "harness_webhook.py")
+CHOT_G17 = os.path.join(GOC_G17, "chot_an_toan.py")
+
+
+def _xa_hang_doi():
+    """Xả hàng đợi TOÀN CỤC. Các ca G17 gọi thẳng cửa replay (không có worker nền chạy), nên
+    mỗi lượt `nap()` để lại một việc chưa ai lấy. Không xả thì `wh.cho_rong()` của bộ thử khác
+    — hoặc của một lượt chạy sau trong CÙNG tiến trình — chờ mãi một việc không ai làm."""
+    while True:
+        try:
+            wh._hang_doi.get_nowait()
+        except Exception:                                            # noqa: BLE001
+            return
+        wh._hang_doi.task_done()
+
+
+def _nap_module_theo_duong(ten, duong):
+    """Nạp một tệp `.py` theo ĐƯỜNG DẪN dưới một tên mô-đun RIÊNG.
+
+    Không dùng `import chot_an_toan`: `trien_khai/g16/` cũng có tệp cùng tên, và
+    `sys.modules` khoá theo TÊN chứ không theo đường dẫn — nạp sai tệp là bộ thử G17 chạy bằng
+    chốt an toàn của G16 mà không ai thấy (§12.2: hỏng im lặng).
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(ten, duong)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _nap_harness_g17():
+    """Nạp `harness_webhook.py` của G17, kèm `chot_an_toan` ĐÚNG của G17 trong lúc nạp."""
+    import importlib.util
+    truoc = sys.modules.get("chot_an_toan")
+    spec_c = importlib.util.spec_from_file_location("chot_an_toan", CHOT_G17)
+    mod_c = importlib.util.module_from_spec(spec_c)
+    sys.modules["chot_an_toan"] = mod_c
+    spec_c.loader.exec_module(mod_c)
+    try:
+        spec = importlib.util.spec_from_file_location("harness_g17", HARNESS_G17)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+    finally:
+        if truoc is not None:
+            sys.modules["chot_an_toan"] = truoc
+        else:
+            sys.modules.pop("chot_an_toan", None)
+    return m
+
+
+class L_G17_ReplayUyQuyen(Nen):
+    """W07 (G17) — bốn nhánh replay: ĐANG XỬ LÝ · ĐÃ XONG · DLQ · và AI ĐƯỢC REPLAY."""
+
+    def tearDown(self):
+        _xa_hang_doi()
+
+    # ---- tiện ích riêng ----
+    def _su_kien_da_xong(self, mvd, evt_id, event="dang_giao", **thua):
+        d = _don(self.ta, self.uid, self.tk_a, mvd, "cho_lay", 1)
+        sk_id, _, _ = self.gui(self.tk_a, body_hub(event, mvd, evt_id, **thua))
+        return d, sk_id
+
+    def _day_toi_ket_cuc(self, sk_id, toi_da=12):
+        for _ in range(toi_da):
+            if self.sk(sk_id)["trang_thai"] in ("dlq", "xong", "khong_khop"):
+                break
+            wh._chay_mot(sk_id)
+        return self.sk(sk_id)
+
+    def _thu_khe_ho_doc_roi_ghi(self, ham, sk_id, tenant_id, uid):
+        """Đẩy ĐÚNG khe hở giữa ĐỌC và GHI: worker NHẬN VIỆC ngay trước câu ghi của cửa replay.
+
+        Chen vào `csdl.ghi` — đúng chỗ `_nhan_viec()` và `yeu_cau_replay()` dùng chung một khoá
+        ghi — rồi giả lập câu "nhận việc" thật. Trả `(duoc, ly_do, trang_thai_ngay_sau)`.
+        """
+        that_ghi = csdl.ghi
+        da_chen = []
+
+        def ghi_chen(sql, tham_so=()):
+            if not da_chen and "SET trang_thai='moi'" in sql:
+                da_chen.append(True)
+                that_ghi("UPDATE wh_su_kien SET trang_thai='dang_xu_ly' WHERE id=?"
+                         " AND trang_thai IN ('moi','cho_thu_lai')", (sk_id,))
+            return that_ghi(sql, tham_so)
+
+        csdl.ghi = ghi_chen
+        try:
+            duoc, ly_do = ham(sk_id, tenant_id, uid)
+        finally:
+            csdl.ghi = that_ghi
+        return duoc, ly_do, self.sk(sk_id)["trang_thai"]
+
+    def _ham_replay_dot_bien(self):
+        """`yeu_cau_replay` ĐỘT BIẾN về đúng bản cũ: bỏ điều kiện khỏi CÂU GHI (ĐỌC-rồi-GHI).
+
+        Đột biến sinh từ CHÍNH mã nguồn đang chạy (`inspect.getsource`), không phải một bản
+        chép tay — bản chép tay thì phép đối chứng chỉ đang đo bản chép.
+        """
+        nguon = inspect.getsource(wh.yeu_cau_replay)
+        nguon_hong = nguon.replace(" WHERE id=? AND trang_thai<>'dang_xu_ly'", " WHERE id=?")
+        self.assertNotEqual(nguon_hong, nguon,
+                            "không tạo được đột biến — phép tự kiểm này vô nghĩa")
+        ns = {"csdl": csdl, "su_kien_cua_tenant": wh.su_kien_cua_tenant,
+              "uy_quyen_replay": wh.uy_quyen_replay, "co_the_replay": wh.co_the_replay,
+              "nap": wh.nap, "QUYEN_REPLAY": wh.QUYEN_REPLAY}
+        exec(compile(nguon_hong, "<dot-bien-yeu-cau-replay>", "exec"), ns)   # noqa: S102
+        return ns["yeu_cau_replay"]
+
+    # ---- bốn nhánh ----
+    def test_l01_replay_khi_DANG_XU_LY_bi_tu_choi_khong_mat_im_lang(self):
+        d, sk_id = self._su_kien_da_xong("MVD-L01", "E-L01")
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='dang_xu_ly' WHERE id=?", (sk_id,))
+        truoc_tc = self.audit_co("webhook_replay_tu_choi", f"su_kien:{sk_id}")
+        duoc, ly_do = wh.yeu_cau_replay(sk_id, self.ta, self.uid)
+        self.assertFalse(duoc, "replay một sự kiện ĐANG xử lý là một lượt replay mất im lặng")
+        self.assertIn("đang được xử lý", ly_do)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "dang_xu_ly")
+        self.assertEqual(self.audit_co("webhook_replay", f"su_kien:{sk_id}"), 0,
+                         "ghi audit THÀNH CÔNG cho một lượt bị từ chối")
+        self.assertEqual(self.audit_co("webhook_replay_tu_choi", f"su_kien:{sk_id}"), truoc_tc + 1)
+        self.assertEqual(self.tt_don(d)[0], "dang_giao")
+
+    def test_l02_khe_ho_DOC_roi_GHI_bi_bat_va_DOI_CHUNG_BO_DO(self):
+        """Chốt 'đang xử lý' phải nằm TRONG câu ghi, không phải ở một lượt đọc trước đó.
+
+        Khe hở phải đặt ĐÚNG chỗ nó có thật: sự kiện đang ở `cho_thu_lai` (có một worker có thể
+        nhận nó bất cứ lúc nào). Bản cũ ghi vô điều kiện, nên nếu worker nhận việc giữa ĐỌC và
+        GHI thì câu ghi GIẬT sự kiện khỏi tay worker: hàng đợi có thêm một việc mà `_nhan_viec`
+        sẽ nhận — hai worker cùng xử lý MỘT sự kiện. (Lượt chạy đầu của ca này dựng sự kiện ở
+        `xong`; ở trạng thái đó worker KHÔNG nhận được việc, nên phép chèn không tái hiện gì và
+        ca thử "đạt" mà không đo — đúng loại hỏng mà nó dựng ra để chặn.)
+
+        ĐỐI CHỨNG BỎ ĐO: cùng phép dò ấy chạy trên hàm đã bị đột biến (bỏ điều kiện khỏi câu ghi)
+        PHẢI thấy lượt replay lọt qua và worker thứ hai nhận được việc.
+        """
+        d, sk_id = self._su_kien_da_xong("MVD-L02", "E-L02")
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='cho_thu_lai' WHERE id=?", (sk_id,))
+        duoc, ly_do, tt = self._thu_khe_ho_doc_roi_ghi(wh.yeu_cau_replay, sk_id, self.ta, self.uid)
+        self.assertFalse(duoc, "worker nhận việc giữa ĐỌC và GHI mà replay vẫn lọt")
+        self.assertIn("đang được xử lý", ly_do)
+        self.assertEqual(tt, "dang_xu_ly", "câu ghi đã kéo sự kiện khỏi tay worker")
+        self.assertIsNone(wh._nhan_viec(sk_id), "worker thứ hai nhận được sự kiện đang xử lý")
+        self.assertEqual(self.audit_co("webhook_replay", f"su_kien:{sk_id}"), 0)
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='xong' WHERE id=?", (sk_id,))
+
+        # ĐỐI CHỨNG: hàm đột biến — cùng phép dò PHẢI thấy lỗi
+        d2, sk2 = self._su_kien_da_xong("MVD-L02B", "E-L02B")
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='cho_thu_lai' WHERE id=?", (sk2,))
+        ham_hong = self._ham_replay_dot_bien()
+        duoc2, _, tt2 = self._thu_khe_ho_doc_roi_ghi(ham_hong, sk2, self.ta, self.uid)
+        self.assertTrue(duoc2, "đột biến không tái hiện được lỗi ⇒ phép dò không đo gì")
+        self.assertEqual(tt2, "moi", "đột biến không tái hiện được việc câu ghi đè trạng thái")
+        self.assertIsNotNone(wh._nhan_viec(sk2),
+                             "bản cũ không làm worker thứ hai nhận được sự kiện đang xử lý")
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='xong' WHERE id=?", (sk2,))
+
+    def test_l03_AI_duoc_replay_uy_quyen_goi_ten_ra_duoc(self):
+        d, sk_id = self._su_kien_da_xong("MVD-L03", "E-L03")
+        for vai in ("TENANT_OWNER", "TENANT_ADMIN"):
+            self.assertTrue(wh.vai_tro_duoc_replay(vai), vai)
+        for vai in ("TENANT_VIEWER", "TENANT_STAFF", "", None, "KHONG_CO_VAI_NAY"):
+            self.assertFalse(wh.vai_tro_duoc_replay(vai), repr(vai))
+        self.assertEqual(wh.QUYEN_REPLAY, "tenant.webhook.replay")
+
+        # Thiếu quyền ⇒ TỪ CHỐI (fail-closed) + audit, và KHÔNG đụng trạng thái
+        truoc_tc = self.audit_co("webhook_replay_tu_choi", f"su_kien:{sk_id}")
+        duoc, ly_do = wh.yeu_cau_replay(sk_id, self.ta, self.uid, vai_tro="TENANT_VIEWER")
+        self.assertFalse(duoc)
+        self.assertIn(wh.QUYEN_REPLAY, ly_do)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "xong")
+        self.assertEqual(self.audit_co("webhook_replay_tu_choi", f"su_kien:{sk_id}"), truoc_tc + 1)
+        self.assertFalse(wh.replay_co_uy_quyen(sk_id, self.ta, "TENANT_VIEWER", self.uid)[0])
+        self.assertFalse(wh.trang_thai_replay(sk_id, self.ta, vai_tro="TENANT_STAFF")[0])
+
+        # Cửa có uỷ quyền: vai trò hợp lệ thì chạy, và audit ghi RÕ hệ uỷ quyền
+        self.assertTrue(wh.trang_thai_replay(sk_id, self.ta, vai_tro="TENANT_OWNER")[0])
+        duoc, ly_do = wh.replay_co_uy_quyen(sk_id, self.ta, "TENANT_OWNER", self.uid)
+        self.assertTrue(duoc, ly_do)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "moi")
+        r = csdl.mot("SELECT chi_tiet FROM audit WHERE hanh_dong='webhook_replay' AND"
+                     " resource_id=? ORDER BY id DESC", (str(sk_id),))
+        self.assertIn("TENANT_OWNER", r["chi_tiet"], "audit không nói lượt replay được uỷ quyền bởi ai")
+
+        # Chéo tenant: IM LẶNG, không ghi audit — không mở lại kênh dò ID (TEST-011)
+        truoc_tc = self.audit_co("webhook_replay_tu_choi")
+        duoc, ly_do = wh.replay_co_uy_quyen(sk_id, self.tb, "TENANT_OWNER", self.uid)
+        self.assertFalse(duoc)
+        self.assertEqual(ly_do, "không có sự kiện này")
+        self.assertEqual(self.audit_co("webhook_replay_tu_choi"), truoc_tc,
+                         "ghi audit cho lượt chéo tenant là mở kênh dò ID")
+
+    def test_l04_moi_duong_goi_replay_trong_MA_SAN_PHAM_deu_qua_uy_quyen(self):
+        """Chốt CẤU TRÚC: không route/mô-đun nào được gọi thẳng cửa ghi mà bỏ uỷ quyền.
+
+        `webhook.yeu_cau_replay` là hàm GHI. Nó vẫn nhận `vai_tro=None` để tương thích với route
+        HTTP đã `_can` — nên phải có một phép kiểm canh đúng chỗ: route gọi nó SAU `_can`, và
+        không tệp mã sản phẩm nào khác gọi nó mà không truyền `vai_tro=`.
+        """
+        with open(os.path.join(GOC_APP, "server.py"), encoding="utf-8") as f:
+            nguon = f.read()
+        self.assertEqual(nguon.count("yeu_cau_replay("), 1,
+                         "có nhiều hơn một chỗ gọi cửa replay ở tầng HTTP")
+        i_can = nguon.find('_can(nc, "tenant.webhook.replay")')
+        i_goi = nguon.find("webhook.yeu_cau_replay(")
+        self.assertGreater(i_can, 0, "route replay không kiểm quyền")
+        self.assertGreater(i_goi, i_can, "route replay gọi TRƯỚC khi kiểm quyền")
+        self.assertIn('"tenant.webhook.replay"', nguon)
+        for ten in sorted(os.listdir(GOC_APP)):
+            if not ten.endswith(".py") or ten in ("webhook.py", "server.py"):
+                continue
+            with open(os.path.join(GOC_APP, ten), encoding="utf-8") as f:
+                n = f.read()
+            self.assertNotIn("yeu_cau_replay(", n,
+                             f"{ten} gọi thẳng cửa replay mà không qua uỷ quyền — dùng"
+                             " `replay_co_uy_quyen` hoặc truyền `vai_tro=`")
+
+    def test_l05_replay_khi_da_XONG_chay_lai_that_va_khong_doi_don(self):
+        d, sk_id = self._su_kien_da_xong("MVD-L05", "E-L05")
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "xong")
+        truoc = self.tt_don(d)
+        duoc, ly_do = wh.replay_co_uy_quyen(sk_id, self.ta, "TENANT_OWNER", self.uid)
+        self.assertTrue(duoc, ly_do)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "moi")
+        wh._chay_mot(sk_id)                      # worker chạy lượt replay
+        r = self.sk(sk_id)
+        self.assertEqual(r["trang_thai"], "xong")
+        self.assertEqual(self.tt_don(d), truoc, "lượt áp lại đổi được trạng thái đơn")
+        self.assertEqual(wh.so_lan_replay(sk_id), 1)
+        self.assertGreaterEqual(
+            self.dem("audit", "hanh_dong='webhook_cap_nhat_don' AND resource_id=?"
+                              " AND chi_tiet LIKE ?", (str(d), "%ap_dung=0%")), 1,
+            "lượt áp lại bị chặn mà không để lại dấu vết nào")
+
+    def test_l06_replay_tu_DLQ_loi_TAM_sau_khi_sua_nguyen_nhan(self):
+        d = _don(self.ta, self.uid, self.tk_a, "MVD-L06", "cho_lay", 1)
+        sk_id, _, _ = self.gui(self.tk_a, body_hub("dang_giao", "MVD-L06", "E-L06",
+                                                   demo_force_fail=True))
+        r = self._day_toi_ket_cuc(sk_id)
+        self.assertEqual(r["trang_thai"], "dlq")
+        self.assertGreaterEqual(r["so_lan_thu"], cau_hinh.WEBHOOK_SO_LAN_THU - 1)
+        # Sửa NGUYÊN NHÂN rồi mới replay — đúng việc người vận hành làm, và cũng là cách duy
+        # nhất để lượt replay có kết quả khác lượt trước.
+        csdl.ghi("UPDATE wh_su_kien SET payload_tho=? WHERE id=?",
+                 (body_hub("dang_giao", "MVD-L06", "E-L06"), sk_id))
+        duoc, ly_do = wh.replay_co_uy_quyen(sk_id, self.ta, "TENANT_OWNER", self.uid)
+        self.assertTrue(duoc, ly_do)
+        self.assertEqual(self.sk(sk_id)["so_lan_thu"], 0, "replay không trả lại ngân sách thử")
+        self.assertEqual(self.sk(sk_id)["loi_cuoi"], None)
+        wh._chay_mot(sk_id)
+        r = self.sk(sk_id)
+        self.assertEqual(r["trang_thai"], "xong")
+        self.assertEqual(self.tt_don(d)[0], "dang_giao")
+
+    def test_l07_replay_tu_DLQ_loi_VINH_VIEN_khong_dot_luot_thu(self):
+        sk_id = csdl.ghi("INSERT INTO wh_su_kien (carrier_account_id,event_id,payload_tho,"
+                         "headers_json,nhan_luc) VALUES (?,?,?,?,?)",
+                         (self.tk_a, f"rac-l07-{self.dem('wh_su_kien')}", b"khong-phai-json",
+                          "{}", csdl.bay_gio())).lastrowid
+        wh._chay_mot(sk_id)
+        r = self.sk(sk_id)
+        self.assertEqual(r["trang_thai"], "dlq")
+        self.assertEqual(r["so_lan_thu"], 0)
+        duoc, ly_do = wh.replay_co_uy_quyen(sk_id, self.ta, "TENANT_OWNER", self.uid)
+        self.assertTrue(duoc, ly_do)
+        wh._chay_mot(sk_id)
+        r = self.sk(sk_id)
+        self.assertEqual(r["trang_thai"], "dlq", "lỗi vĩnh viễn mà replay lại xếp hàng thử lại")
+        self.assertEqual(r["so_lan_thu"], 0, "DLQ lỗi vĩnh viễn bị đốt lượt thử sau replay")
+        self.assertGreaterEqual(self.audit_co("webhook_dlq", f"su_kien:{sk_id}"), 2,
+                                "lượt vào DLQ lần hai không có dấu vết")
+
+    def test_l08_gui_lai_khi_DLQ_KHONG_tu_chay_lai_REPLAY_moi_la_cua(self):
+        """Gửi lại y nguyên một sự kiện đang ở DLQ KHÔNG làm nó chạy lại: CSDL chặn trùng.
+
+        Đây là chỗ dễ hiểu sai nhất của cả lượt: "gửi lại" và "replay" trông giống nhau từ ngoài
+        nhưng chỉ một trong hai đi qua cửa có uỷ quyền. Ca này đo CẢ HAI chiều.
+        """
+        d = _don(self.ta, self.uid, self.tk_a, "MVD-L08", "cho_lay", 1)
+        body = body_hub("dang_giao", "MVD-L08", "E-L08", demo_force_fail=True)
+        sk_id, _, _ = self.gui(self.tk_a, body)
+        self._day_toi_ket_cuc(sk_id)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "dlq")
+        truoc_dlq = self.audit_co("webhook_dlq", f"su_kien:{sk_id}")
+        truoc_thu = self.sk(sk_id)["so_lan_thu"]
+        # (a) gửi lại y nguyên qua đường HTTP
+        sk_lai, trung, ma_http = self.gui(self.tk_a, body)
+        self.assertTrue(trung)
+        self.assertEqual(sk_lai, sk_id, "gửi lại tạo ra sự kiện MỚI")
+        self.assertEqual(ma_http, 200)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "dlq")
+        self.assertEqual(self.sk(sk_id)["so_lan_thu"], truoc_thu)
+        self.assertEqual(self.audit_co("webhook_dlq", f"su_kien:{sk_id}"), truoc_dlq,
+                         "gửi lại làm sự kiện chạy lại — trong khi nó phải bị CSDL chặn")
+        # (b) ĐỐI CHỨNG DƯƠNG: cửa replay CÓ uỷ quyền thì chạy lại thật
+        csdl.ghi("UPDATE wh_su_kien SET payload_tho=? WHERE id=?",
+                 (body_hub("dang_giao", "MVD-L08", "E-L08"), sk_id))
+        duoc, ly_do = wh.replay_co_uy_quyen(sk_id, self.ta, "TENANT_OWNER", self.uid)
+        self.assertTrue(duoc, ly_do)
+        wh._chay_mot(sk_id)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "xong")
+        self.assertEqual(self.tt_don(d)[0], "dang_giao")
+
+    def test_l09_cua_DOC_va_cua_GHI_noi_CUNG_mot_ly_do_va_DOC_thi_khong_ghi(self):
+        d, sk_id = self._su_kien_da_xong("MVD-L09", "E-L09")
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='dang_xu_ly' WHERE id=?", (sk_id,))
+        truoc = self.dem("audit")
+        duoc_doc, ly_do_doc = wh.trang_thai_replay(sk_id, self.ta)
+        self.assertFalse(duoc_doc)
+        self.assertEqual(self.dem("audit"), truoc, "cửa ĐỌC ghi audit — nó phải chỉ đọc")
+        duoc_ghi, ly_do_ghi = wh.yeu_cau_replay(sk_id, self.ta, self.uid)
+        self.assertFalse(duoc_ghi)
+        self.assertEqual(ly_do_doc, ly_do_ghi, "cửa ĐỌC và cửa GHI nói hai lý do khác nhau")
+        # Cửa đọc cũng im lặng với tenant khác, y như cửa ghi
+        self.assertEqual(wh.trang_thai_replay(sk_id, self.tb),
+                         (False, "không có sự kiện này"))
+        # Và nó trả lời được câu "còn mấy lượt" — trần là thông tin của người vận hành
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='xong' WHERE id=?", (sk_id,))
+        for _ in range(wh.REPLAY_TOI_DA):
+            wh.yeu_cau_replay(sk_id, self.ta, self.uid)
+        duoc, ly_do = wh.trang_thai_replay(sk_id, self.ta)
+        self.assertFalse(duoc)
+        self.assertIn("trần", ly_do)
+
+    def test_l10_ly_do_tu_choi_va_bo_dem_replay_khong_bi_dung_lan(self):
+        d, sk_id = self._su_kien_da_xong("MVD-L10", "E-L10")
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='dang_xu_ly' WHERE id=?", (sk_id,))
+        for _ in range(3):
+            wh.yeu_cau_replay(sk_id, self.ta, self.uid)          # 3 lượt bị từ chối
+        self.assertEqual(wh.so_lan_replay(sk_id), 0,
+                         "lượt bị TỪ CHỐI lại được tính vào bộ đếm trần")
+        self.assertEqual(self.audit_co("webhook_replay_tu_choi", f"su_kien:{sk_id}"), 3)
+        csdl.ghi("UPDATE wh_su_kien SET trang_thai='xong' WHERE id=?", (sk_id,))
+        duoc, ly_do = wh.yeu_cau_replay(sk_id, self.ta, self.uid)
+        self.assertTrue(duoc, ly_do)
+        self.assertEqual(wh.so_lan_replay(sk_id), 1)
+
+
+# ============================================================================
+class M_G17_ChongTrungTangCSDL(Nen):
+    """W04 (G17) — chống trùng CƯỠNG CHẾ ở tầng CSDL, đo bằng SQL NHỒI THẲNG."""
+
+    def tearDown(self):
+        _xa_hang_doi()
+
+    def _insert_thang(self, kn, bang, tk_id, event_id, payload=b"{}"):
+        kn.execute("INSERT INTO %s (carrier_account_id, event_id, payload_tho, headers_json,"
+                   " nhan_luc) VALUES (?,?,?,?,?)" % bang,
+                   (tk_id, event_id, payload, "{}", csdl.bay_gio()))
+
+    def test_m01_nhoi_thang_SQL_trung_khoa_bi_CSDL_chan(self):
+        """Câu INSERT đi THẲNG vào CSDL, không qua `nhan_su_kien` — để đo đúng tầng CSDL."""
+        evt = f"m01-{self.dem('wh_su_kien')}"
+        kn = csdl.ket_noi()
+        try:
+            self._insert_thang(kn, "wh_su_kien", self.tk_a, evt)
+            kn.commit()
+            loi = None
+            try:
+                self._insert_thang(kn, "wh_su_kien", self.tk_a, evt)
+                kn.commit()
+            except Exception as e:                                   # noqa: BLE001
+                loi = e
+        finally:
+            kn.close()
+        self.assertIsInstance(loi, csdl.LoiToanVen,
+                              f"CSDL KHÔNG chặn được bản ghi trùng: {loi!r}")
+        self.assertIn("UNIQUE", str(loi))
+        self.assertEqual(self.dem("wh_su_kien", "carrier_account_id=? AND event_id=?",
+                                  (self.tk_a, evt)), 1)
+        # Chốt nằm trong SCHEMA, không phải trong một `if` của mã nghiệp vụ
+        ddl = csdl.mot("SELECT sql FROM sqlite_master WHERE type='table' AND name='wh_su_kien'")["sql"]
+        self.assertIn("UNIQUE (carrier_account_id, event_id)", ddl)
+
+    def test_m02_gui_lai_5_lan_dung_MOT_dong_va_CUNG_sk_id(self):
+        d = _don(self.ta, self.uid, self.tk_a, "MVD-M02", "cho_lay", 1)
+        body = body_hub("lay_hang", "MVD-M02", "E-M02")
+        ds = [self.gui(self.tk_a, body) for _ in range(5)]
+        self.assertEqual(len({x[0] for x in ds}), 1, "gửi lại sinh ra nhiều sự kiện")
+        self.assertEqual([x[1] for x in ds], [False, True, True, True, True])
+        self.assertEqual([x[2] for x in ds], [202, 200, 200, 200, 200])
+        self.assertEqual(self.dem("wh_su_kien", "carrier_account_id=? AND event_id=?",
+                                  (self.tk_a, "E-M02")), 1)
+        self.assertEqual(self.dem("audit", "hanh_dong='webhook_cap_nhat_don' AND chi_tiet LIKE ?",
+                                  (f"%su_kien:{ds[0][0]} %",)), 1,
+                         "sự kiện được xử lý nhiều hơn một lần")
+
+    def test_m03_DOI_CHUNG_DUONG_bo_UNIQUE_thi_ban_ghi_trung_LOT(self):
+        """Cùng câu INSERT, chỉ khác ĐÚNG dòng UNIQUE trong DDL ⇒ trùng LỌT.
+
+        Không có ca này thì "CSDL chặn" chỉ là suy đoán: một `if` nào đó trong mã cũng có thể là
+        thứ đang chặn, và nó sẽ ngừng chặn khi có thêm một đường ghi thứ hai.
+        """
+        kn = csdl.ket_noi()
+        try:
+            ddl = kn.execute("SELECT sql FROM sqlite_master WHERE type='table'"
+                             " AND name='wh_su_kien'").fetchone()[0]
+            ddl_hong, so_lan = re.subn(r",\s*UNIQUE \(carrier_account_id, event_id\)", "", ddl)
+            self.assertEqual(so_lan, 1, "DDL đổi hình dạng — phép đối chứng phải được soi lại")
+            ddl_hong = re.sub(r"\bwh_su_kien\b", "wh_su_kien_doi_chung", ddl_hong)
+            self.assertNotIn("UNIQUE (carrier_account_id, event_id)", ddl_hong)
+            kn.execute("DROP TABLE IF EXISTS wh_su_kien_doi_chung")
+            kn.execute(ddl_hong)
+            evt = f"m03-{self.dem('wh_su_kien')}"
+            for _ in range(2):
+                self._insert_thang(kn, "wh_su_kien_doi_chung", self.tk_a, evt)
+            kn.commit()
+            c = kn.execute("SELECT COUNT(*) FROM wh_su_kien_doi_chung").fetchone()[0]
+        finally:
+            kn.close()
+        self.assertEqual(c, 2, "bỏ UNIQUE mà vẫn chỉ 1 dòng ⇒ phép đối chứng không đo gì")
+
+    def test_m04_cung_event_id_KHAC_account_la_HAI_su_kien(self):
+        evt = f"m04-{self.dem('wh_su_kien')}"
+        kn = csdl.ket_noi()
+        try:
+            self._insert_thang(kn, "wh_su_kien", self.tk_a, evt)
+            self._insert_thang(kn, "wh_su_kien", self.tk_b, evt)
+            kn.commit()
+        finally:
+            kn.close()
+        self.assertEqual(self.dem("wh_su_kien", "event_id=?", (evt,)), 2,
+                         "khoá chống trùng bị làm phẳng theo hãng thay vì theo ACCOUNT")
+
+    def test_m05_nhan_SONG_SONG_nhieu_luong_van_MOT_dong(self):
+        d = _don(self.ta, self.uid, self.tk_a, "MVD-M05", "cho_lay", 1)
+        body = body_hub("lay_hang", "MVD-M05", "E-M05")
+        tk_row = self.row(self.tk_a)
+        hd = ky_hub(SECRET_A, body)
+        kq, loi = [], []
+
+        def chay():
+            try:
+                kq.append(wh.nhan_su_kien(tk_row, body, hd))
+            except Exception as e:                                   # noqa: BLE001
+                loi.append(e)
+
+        ds = [threading.Thread(target=chay) for _ in range(8)]
+        for t in ds:
+            t.start()
+        for t in ds:
+            t.join()
+        self.assertEqual(loi, [], "nhận song song làm nổ")
+        self.assertEqual({x[0] for x in kq}, {kq[0][0]}, "cùng sự kiện ra nhiều sk_id")
+        self.assertEqual(sum(1 for x in kq if not x[1]), 1, "nhiều luồng cùng coi là MỚI")
+        self.assertEqual(self.dem("wh_su_kien", "carrier_account_id=? AND event_id=?",
+                                  (self.tk_a, "E-M05")), 1)
+
+
+# ============================================================================
+class N_G17_HarnessVaChotAnToan(Nen):
+    """Chốt của harness G17: từ chối khi mất chốt, tự kiểm bộ đếm, tắt theo ĐÚNG PID."""
+
+    def test_n01_harness_G17_tu_choi_chay_khi_co_chot_bi_mat(self):
+        import subprocess
+        nen = os.path.join(os.environ["VIP_HUB_DATA"], "g17-tu-choi-co")
+        os.makedirs(nen, exist_ok=True)
+        env = dict(os.environ, VIP_HUB_DATA=nen, VIP_G17_CHO_PHEP_GOI_HANG="1")
+        p = subprocess.run([sys.executable, HARNESS_G17], capture_output=True, text=True,
+                           env=env, timeout=300, cwd=GOC_DU_AN)
+        self.assertEqual(p.returncode, 4,
+                         f"harness KHÔNG từ chối khi chốt 'cho phép gọi hãng' bị mở.\n"
+                         f"stdout:\n{p.stdout[-800:]}\nstderr:\n{p.stderr[-400:]}")
+        self.assertIn("TỪ CHỐI CHẠY", p.stdout)
+        self.assertIn("V-G09-01", p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(nen, "hub.db")),
+                         "harness đã dựng CSDL dù phải từ chối trước khi chạm gì")
+
+    def test_n02_harness_tu_choi_khi_ai_do_KHAI_la_da_cap_giay_phep(self):
+        """Giấy phép gọi hãng không phải thứ một biến môi trường tự cấp được."""
+        import subprocess
+        nen = os.path.join(os.environ["VIP_HUB_DATA"], "g17-tu-choi-giay-phep")
+        os.makedirs(nen, exist_ok=True)
+        env = dict(os.environ, VIP_HUB_DATA=nen, VIP_G17_GIAY_PHEP="V-G09-01,V-13906-05")
+        p = subprocess.run([sys.executable, HARNESS_G17], capture_output=True, text=True,
+                           env=env, timeout=300, cwd=GOC_DU_AN)
+        self.assertEqual(p.returncode, 4, p.stdout[-800:])
+        self.assertIn("TỪ CHỐI CHẠY", p.stdout)
+        self.assertIn("V-13906-05", p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(nen, "hub.db")))
+
+    def test_n03_tu_kiem_bo_do_chot_an_toan_G17_bat_DUNG_chot(self):
+        import subprocess
+        p = subprocess.run([sys.executable, CHOT_G17, "--tu-kiem"], capture_output=True,
+                           text=True, timeout=300, cwd=GOC_DU_AN)
+        self.assertEqual(p.returncode, 0, f"bộ dò chốt an toàn TỰ KIỂM HỎNG:\n{p.stdout[-1500:]}")
+        self.assertIn("12/12 ca đạt", p.stdout)
+        self.assertIn("0 hỏng", p.stdout)
+        self.assertIn("[A] cấu hình ĐỦ CHỐT", p.stdout)
+        self.assertIn("bắt đúng chốt", p.stdout)
+        # Hài ca MỚI của G17 phải có mặt và bị bắt bởi ĐÚNG chốt số 7
+        self.assertIn("KHAI là đã cấp giấy phép", p.stdout)
+        self.assertIn("KHÔNG khai mã giấy phép", p.stdout)
+        # Và bộ dò phải từ chối khi nền là dữ liệu THẬT — kiểm NGAY trong tiến trình này
+        chot = _nap_module_theo_duong("chot_g17_n03", CHOT_G17)
+        ly_do = chot.ly_do_tu_choi(os.path.join(GOC_APP, "du-lieu"), goc_url="http://127.0.0.1:9",
+                                   so_dang_ky={}, env={}, buoc_can_giay_phep={"X": ("V-G09-01",)},
+                                   giay_phep=set())
+        self.assertTrue(any("dữ liệu THẬT" in x for x in ly_do),
+                        f"bộ dò không nhận ra dữ liệu thật: {ly_do}")
+
+    def test_n04_bo_dem_phan_quyet_KHONG_tinh_BLOCKED_la_dat_va_bat_duoc_bien_di(self):
+        m = _nap_harness_g17()
+        self.assertTrue(m.la_dat(m.DAT))
+        self.assertTrue(m.la_dat(m.DAT_MOCK))
+        self.assertFalse(m.la_dat(m.BLOCKED), "BLOCKED bị tính là đạt")
+        self.assertFalse(m.la_dat(m.HONG))
+        self.assertFalse(m.la_dat(m.BO_QUA))
+        dem = m.dem_phuong_an([{"trang_thai": m.BLOCKED}, {"trang_thai": m.DAT}])
+        self.assertEqual(dem[m.BLOCKED], 1)
+        self.assertEqual(dem[m.DAT], 1)
+        tong, hong, _ = m.tu_kiem_dem()
+        self.assertEqual(hong, 0, "bộ tự kiểm của harness tự hỏng")
+        self.assertGreaterEqual(tong, 5)
+        # ĐỐI CHỨNG BỎ ĐO: bẻ bộ đếm thành "BLOCKED cũng là đạt" ⇒ bộ tự kiểm PHẢI thấy
+        that = m.la_dat
+        m.la_dat = lambda tt: tt in (m.DAT, m.DAT_MOCK, m.BLOCKED)     # noqa: E731
+        try:
+            _, hong2, _ = m.tu_kiem_dem()
+        finally:
+            m.la_dat = that
+        self.assertGreater(hong2, 0,
+                           "bộ tự kiểm không phát hiện được bộ đếm coi BLOCKED là đạt")
+
+    def test_n05_chang_SANDBOX_la_BLOCKED_kem_dung_giay_phep_con_thieu(self):
+        m = _nap_harness_g17()
+        self.assertEqual(m.buoc_can_giay_phep(), {"G17-SANDBOX": ("V-G09-01", "V-13906-05")})
+        pq = m.phan_quyet_sandbox(False, False, False)
+        self.assertEqual(pq["trang_thai"], m.BLOCKED)
+        self.assertFalse(m.la_dat(pq["trang_thai"]))
+        for ma in ("V-G09-01", "V-13906-05"):
+            self.assertIn(ma, pq["bang_chung"], f"phần 'còn thiếu' không nêu {ma}")
+        self.assertIn("câu 24", pq["bang_chung"])
+        self.assertIn("câu 6–7", pq["bang_chung"])
+        # Kể cả khi TIÊM cổng mở, phán quyết vẫn BLOCKED: chặng này không có đường thành "đạt"
+        # bằng tham số.
+        self.assertEqual(m.phan_quyet_sandbox(True, True, True)["trang_thai"], m.BLOCKED)
+
+    def _tim_lenh_cam(self, van_ban):
+        return [x for x in ("pkill", "killall") if x in van_ban]
+
+    def test_n06_khong_don_theo_TEN_TIEN_TRINH_va_tat_theo_DUNG_PID(self):
+        import io
+        import tokenize
+
+        def ma_khong_chu_thich(duong):
+            with open(duong, "rb") as f:
+                return " ".join(t.string for t in tokenize.tokenize(f.readline)
+                                if t.type != tokenize.COMMENT)
+
+        for ten in ("harness_webhook.py", "chot_an_toan.py"):
+            self.assertEqual(self._tim_lenh_cam(ma_khong_chu_thich(os.path.join(GOC_G17, ten))),
+                             [], f"{ten} có lệnh dọn theo tên tiến trình")
+        with open(os.path.join(GOC_G17, "chay_harness.sh"), encoding="utf-8") as f:
+            sh = f.read()
+        ma_sh = "\n".join(x for x in sh.splitlines() if not x.strip().startswith("#"))
+        self.assertEqual(self._tim_lenh_cam(ma_sh), [],
+                         "chay_harness.sh có lệnh dọn theo tên tiến trình")
+        self.assertIn('kill -TERM "$P"', ma_sh, "bộ chạy không tắt máy chủ theo PID")
+        self.assertIn("hub.pid", ma_sh)
+        with open(HARNESS_G17, encoding="utf-8") as f:
+            h = f.read()
+        self.assertIn("sv.terminate()", h)
+        self.assertIn("hub.pid", h)
+        self.assertIn("sv.kill()", h)
+        # ĐỐI CHỨNG DƯƠNG/ÂM của chính bộ dò: nó phải BẮT được lệnh cấm khi lệnh ấy có mặt.
+        self.assertEqual(self._tim_lenh_cam("kill -TERM $P"), [])
+        self.assertEqual(self._tim_lenh_cam("pkill -f server.py"), ["pkill"])
+        self.assertEqual(self._tim_lenh_cam("killall python3"), ["killall"])
+
+    def test_n07_bang_phu_nhanh_G17_moi_nhanh_deu_co_ca_THAT(self):
+        mod = sys.modules[__name__]
+
+        def _gom(s):
+            for x in s:
+                if isinstance(x, unittest.TestSuite):
+                    for y in _gom(x):
+                        yield y
+                else:
+                    yield x
+
+        co = {t.id().rsplit(".", 1)[-1]
+              for t in _gom(unittest.TestLoader().loadTestsFromModule(mod))}
+        can = {
+            "replay khi ĐANG xử lý": "test_l01_replay_khi_DANG_XU_LY_bi_tu_choi_khong_mat_im_lang",
+            "khe hở ĐỌC-rồi-GHI + đột biến": "test_l02_khe_ho_DOC_roi_GHI_bi_bat_va_DOI_CHUNG_BO_DO",
+            "AI được replay (uỷ quyền)": "test_l03_AI_duoc_replay_uy_quyen_goi_ten_ra_duoc",
+            "mọi đường gọi replay đều qua uỷ quyền": "test_l04_moi_duong_goi_replay_trong_MA_SAN_PHAM_deu_qua_uy_quyen",
+            "replay khi ĐÃ XONG": "test_l05_replay_khi_da_XONG_chay_lai_that_va_khong_doi_don",
+            "replay từ DLQ (lỗi tạm)": "test_l06_replay_tu_DLQ_loi_TAM_sau_khi_sua_nguyen_nhan",
+            "replay từ DLQ (lỗi vĩnh viễn)": "test_l07_replay_tu_DLQ_loi_VINH_VIEN_khong_dot_luot_thu",
+            "gửi lại khi DLQ KHÔNG tự chạy lại": "test_l08_gui_lai_khi_DLQ_KHONG_tu_chay_lai_REPLAY_moi_la_cua",
+            "cửa ĐỌC nói cùng lý do với cửa GHI": "test_l09_cua_DOC_va_cua_GHI_noi_CUNG_mot_ly_do_va_DOC_thi_khong_ghi",
+            "trần replay không đếm lượt bị từ chối": "test_l10_ly_do_tu_choi_va_bo_dem_replay_khong_bi_dung_lan",
+            "nhồi thẳng SQL trùng khoá": "test_m01_nhoi_thang_SQL_trung_khoa_bi_CSDL_chan",
+            "gửi lại 5 lần ⇒ 1 dòng, cùng sk_id": "test_m02_gui_lai_5_lan_dung_MOT_dong_va_CUNG_sk_id",
+            "đối chứng bỏ UNIQUE": "test_m03_DOI_CHUNG_DUONG_bo_UNIQUE_thi_ban_ghi_trung_LOT",
+            "cùng event_id khác account": "test_m04_cung_event_id_KHAC_account_la_HAI_su_kien",
+            "nhận song song nhiều luồng": "test_m05_nhan_SONG_SONG_nhieu_luong_van_MOT_dong",
+            "harness từ chối khi mất chốt": "test_n01_harness_G17_tu_choi_chay_khi_co_chot_bi_mat",
+            "harness từ chối khi ai đó khai đã cấp giấy phép": "test_n02_harness_tu_choi_khi_ai_do_KHAI_la_da_cap_giay_phep",
+            "tự kiểm bộ dò chốt an toàn": "test_n03_tu_kiem_bo_do_chot_an_toan_G17_bat_DUNG_chot",
+            "bộ đếm không tính BLOCKED là đạt": "test_n04_bo_dem_phan_quyet_KHONG_tinh_BLOCKED_la_dat_va_bat_duoc_bien_di",
+            "chặng SANDBOX là BLOCKED": "test_n05_chang_SANDBOX_la_BLOCKED_kem_dung_giay_phep_con_thieu",
+            "không dọn theo tên tiến trình": "test_n06_khong_don_theo_TEN_TIEN_TRINH_va_tat_theo_DUNG_PID",
+        }
+        thieu = {nhan: ten for nhan, ten in can.items() if ten not in co}
+        self.assertEqual(thieu, {}, f"thiếu ca canh cho: {thieu}")
+        self.assertGreater(len(co), 90, "không đọc được danh sách ca — bảng phủ vô nghĩa")
 
 
 if __name__ == "__main__":

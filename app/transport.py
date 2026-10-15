@@ -16,7 +16,22 @@ import time
 
 
 class LoiTamThoi(Exception):
-    """Lỗi có thể khỏi khi thử lại: mạng chập, 5xx, hết giờ."""
+    """Lỗi có thể khỏi khi thử lại: mạng chập, 5xx, hết giờ.
+
+    `cho_giay`: lớp DƯỚI gợi ý phải CHỜ bao nhiêu giây trước khi thử lại. Có mặt vì HTTP 429
+    (và 408) là tín hiệu *"thử lại sau"* của máy chủ, thường kèm header `Retry-After`. Nếu lớp
+    trên cứ thử lại theo backoff 0,2 giây thì lượt thử lại vừa vô ích vừa làm hạn mức tệ thêm —
+    tức là "thử lại được" trên giấy mà hỏng trong thực tế. `None` = dùng backoff của chính sách.
+    """
+
+    def __init__(self, *a, cho_giay=None):
+        super().__init__(*a)
+        self.cho_giay = cho_giay
+
+
+# TRẦN thời gian chờ do lớp dưới gợi ý. Không có trần thì một `Retry-After: 86400` biến
+# "thử lại được" thành "treo tiến trình một ngày" — hãng không được phép quyết định điều đó.
+CHO_TOI_DA = 60.0
 
 
 class LoiVinhVien(Exception):
@@ -73,5 +88,14 @@ def goi(ham, thao_tac="?", chinh_sach=None, co_khoa_chong_trung=False, ngu=time.
                 nhat_ky.append("thao tác KHÔNG được thử lại (nguy cơ trùng) — dừng")
                 raise
             if lan < cs.so_lan:
-                ngu(cs.backoff_goc * (cs.he_so ** (lan - 1)))
+                cho = cs.backoff_goc * (cs.he_so ** (lan - 1))
+                # Lớp dưới có thể biết rõ hơn phải chờ bao lâu (HTTP `Retry-After`). Lấy giá trị
+                # LỚN HƠN, nhưng LUÔN bị chặn trần: hãng không được quyết định treo tiến trình.
+                goi_y = getattr(e, "cho_giay", None)
+                if goi_y:
+                    try:
+                        cho = max(cho, min(float(goi_y), CHO_TOI_DA))
+                    except (TypeError, ValueError):
+                        pass
+                ngu(cho)
     raise loi_cuoi

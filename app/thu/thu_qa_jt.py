@@ -128,21 +128,56 @@ class A_ChuKyVaTransport(unittest.TestCase):
             self.assertTrue(v.get("nguon"), f"{ten}: không khai nguồn tài liệu")
             if v["muc"] == "chua-xac-nhan":
                 self.assertIsNone(v["duong"], f"{ten}: chưa xác nhận mà vẫn có URL — đó là đoán")
-        self.assertIs(aj.TRANSPORT_THAT_DA_VIET, False,
-                      "cờ 'đã viết transport thật' phải còn False — chưa ai được gọi hãng")
+        self.assertIsInstance(aj.TRANSPORT_THAT_DA_VIET, bool)
+        # G16-A (AG-00 chốt 15/10/2026): `TRANSPORT_THAT_DA_VIET` là TRẠNG THÁI TIẾN ĐỘ, KHÔNG
+        # phải một bất biến an toàn. AG-02 đã giao `app/http_jt.py`, nên cờ nay ĐÚNG là `True`.
+        # Ca cũ ghim `is False` ⇒ đỏ dù mã đúng. Canh "một tệp đã tồn tại chưa" là canh nhầm chỗ:
+        # thứ phải canh là BA Ổ KHOÁ THẬT, và chúng được đo bằng SỐ LẦN ĐỊNH NỐI SOCKET ở `a6`.
 
-    def test_a6_transport_that_chua_duoc_viet(self):
-        """Chưa có lớp transport thật: mọi đường ra ngoài `mock` phải BỊ CHẶN.
+    def test_a6_khong_mot_luot_goi_nao_ra_ngoai_o_moi_moi_truong(self):
+        """BA Ổ KHOÁ THẬT — canh bằng SỐ LẦN ĐỊNH NỐI SOCKET, không bằng sự tồn tại của tệp.
 
-        Chặn có thể xảy ra ở LÚC DỰNG adapter (khoá `CHO_PHEP_LIVE`) hoặc ở LÚC GỌI
-        (`TRANSPORT_THAT_DA_VIET` + đường dẫn chưa xác minh) — cả hai đều là chặn hợp lệ,
-        nên ca này chấp nhận cả hai chỗ, miễn là KHÔNG có lượt gọi nào đi qua.
+        G16-A thay ca cũ (`TRANSPORT_THAT_DA_VIET is False`): cờ đó lật khi AG-02 giao tệp, và
+        một ca canh tiến độ thì đỏ dù mã vẫn an toàn. Ở đây ta chặn tầng `http.client` bằng bộ
+        đếm: mọi môi trường (kể cả `sandbox`) phải nổ TRƯỚC khi có ai ĐỊNH mở socket, và bộ đếm
+        phải là 0. Đối chứng dương: `mock` đi qua được.
         """
-        with self.assertRaises(Exception) as ctx:
-            ad = adapter.tao_adapter("jt", dict(CRED), "sandbox")
-            ad.createOrder(dict(DON_MAU))
-        self.assertNotIsInstance(ctx.exception, AttributeError,
-                                 "gọi sai tên hàm — ca thử không đo được điều nó định đo")
+        import http.client as hc
+        dem = {"n": 0}
+        goc_h, goc_s = hc.HTTPConnection.connect, hc.HTTPSConnection.connect
+
+        def _boc(goc):
+            def _connect(self):
+                dem["n"] += 1
+                raise AssertionError(f"ĐỊNH nối {self.host}:{self.port} — không được phép")
+            return _connect
+
+        hc.HTTPConnection.connect = _boc(goc_h)
+        hc.HTTPSConnection.connect = _boc(goc_s)
+        try:
+            import cau_hinh
+            self.assertIs(cau_hinh.JT_CHO_PHEP_SANDBOX, False, "cổng sandbox phải ĐÓNG")
+            self.assertIs(cau_hinh.JT_CHO_PHEP_PRODUCTION, False, "cổng production phải ĐÓNG")
+            self.assertEqual(cau_hinh.JT_MOI_TRUONG, "mock", "mặc định phải là mock (§37)")
+            self.assertTrue(adapter._DANG_KY, "sổ đăng ký lớp RỖNG — ca này không đo gì")
+            for ma, lop in adapter._DANG_KY.items():
+                self.assertIs(getattr(lop, "CHO_PHEP_LIVE", None), False,
+                              f"hãng {ma}: CHO_PHEP_LIVE phải là False")
+
+            with self.assertRaises(Exception) as ctx:
+                ad = adapter.tao_adapter("jt", dict(CRED), "sandbox")
+                ad.createOrder(dict(DON_MAU))
+            self.assertNotIsInstance(ctx.exception, AttributeError,
+                                     "gọi sai tên hàm — ca thử không đo được điều nó định đo")
+            self.assertGreater(len(str(ctx.exception)), 20, "chặn phải kèm lý do ĐỌC ĐƯỢC")
+
+            # ĐỐI CHỨNG DƯƠNG: `mock` phải đi qua được — nếu không thì ca âm ở trên xanh vô nghĩa.
+            kq = adapter.tao_adapter("jt", dict(CRED), "mock").createOrder(dict(DON_MAU))
+            self.assertTrue(kq.ok, f"mock phải tạo được đơn: {kq.loi and kq.loi.ma_chuan}")
+        finally:
+            hc.HTTPConnection.connect = goc_h
+            hc.HTTPSConnection.connect = goc_s
+        self.assertEqual(dem["n"], 0, "có lượt ĐỊNH nối socket ⇒ CRITICAL")
 
 
 # =======================================================================================
@@ -176,18 +211,29 @@ class B_MocThoiGian(unittest.TestCase):
         self.assertLess(max(ra) - min(ra), 5000,
                         f"mốc mặc định đổi theo múi giờ MÁY: {ra}")
 
-    def test_b4_ky_tu_thoi_gian_naive_la_diem_MO_can_va(self):
-        """GHI LẠI ĐIỀU ĐO ĐƯỢC, không phán đúng/sai: hàm nhận một `datetime` KHÔNG mang múi
-        giờ thì Python hiểu nó theo múi giờ MÁY. Docstring hứa 'không mượn múi giờ của máy';
-        lời hứa đó ĐÚNG cho đường mặc định (b3) nhưng KHÔNG được ép cho đường truyền vào.
-        Mọi lời gọi trong mã hiện tại đều truyền mốc CÓ múi giờ (đã soát), nên đây là mối lo
-        TIỀM ẨN, không phải lỗi đang sống. Ca này canh cho tới khi có người ép lại."""
-        naive = dt.datetime(2026, 10, 15, 10, 0, 0)
-        khac = aj.dau_thoi_gian_ms(naive) != aj.dau_thoi_gian_ms(naive.replace(tzinfo=TZ7))
-        if os.environ.get("TZ", "") in ("UTC", "Etc/UTC"):
-            self.assertTrue(khac, "máy UTC: mốc naive phải lệch 7 tiếng so với cách hiểu UTC+7")
-        # Trên máy đặt UTC+7 thì hai cách hiểu TRÙNG nhau — đó cũng là điều đáng ghi lại:
-        # lỗi này không lộ ra trên máy của người viết, chỉ lộ trên máy chủ đặt UTC.
+    def test_b4_moc_naive_duoc_gan_UTC7_tuong_minh(self):
+        """G16-A: mốc KHÔNG mang múi giờ nay được gắn UTC+7 TƯỜNG MINH — canh bất biến MỚI.
+
+        Ca cũ (`..._la_diem_MO_can_va`) ghim hành vi CŨ: mốc naive bị Python hiểu theo múi giờ
+        MÁY. AG-03 đã vá (xem `dau_thoi_gian_ms` docstring), nên ca cũ trở thành **HỎNG GIẢ** trên
+        máy đặt `TZ=UTC` — nó sẽ chỉ người sau đi "sửa" đúng chỗ mã đang đúng (§7.1/§7.2 BAN_GIAO).
+        Bất biến ĐÚNG, đo được ở MỌI máy: naive ⇒ hiểu là UTC+7, không mượn múi giờ máy.
+        """
+        moc = dt.datetime(2026, 10, 15, 10, 0, 0)
+        self.assertEqual(aj.dau_thoi_gian_ms(moc),
+                         aj.dau_thoi_gian_ms(moc.replace(tzinfo=TZ7)),
+                         "mốc naive phải được hiểu là UTC+7, KHÔNG theo múi giờ máy")
+        # Đo lại trong tiến trình con với TZ khác hẳn — bất biến phải giữ ở MỌI máy.
+        ma = ("import sys, datetime as dt; sys.path.insert(0, %r); import adapter_jt as a;"
+              " n = dt.datetime(2026, 10, 15, 10, 0, 0);"
+              " print(a.dau_thoi_gian_ms(n), a.dau_thoi_gian_ms(n.replace("
+              "tzinfo=dt.timezone(dt.timedelta(hours=7)))))" % GOC_APP)
+        for tz in ("UTC", "Etc/UTC", "America/New_York", "Asia/Ho_Chi_Minh"):
+            r = subprocess.run([sys.executable, "-c", ma], capture_output=True, text=True,
+                               env=dict(os.environ, TZ=tz), timeout=60)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            a, b = (int(x) for x in r.stdout.split())
+            self.assertEqual(a, b, f"TZ={tz}: mốc naive bị hiểu theo múi giờ MÁY")
 
 
 # =======================================================================================
@@ -339,8 +385,9 @@ class E_TuKiemBoDo(unittest.TestCase):
 if __name__ == "__main__":
     print("=" * 78)
     print("AG-01 QA — nghiệm thu J&T contract · PHẠM VI: chữ ký · mốc thời gian · AST không")
-    print("chạm mạng · COD codMoney · ba ổ khoá LIVE · tự kiểm bộ dò. KHÔNG phủ: transport")
-    print("thật (chưa viết), API hãng thật (V-G09-01 chưa cấp), HTTP end-to-end.")
+    print("chạm mạng · COD codMoney · ba ổ khoá LIVE (đo bằng bộ đếm socket) · tự kiểm bộ dò.")
+    print("KHÔNG phủ: API hãng thật (V-G09-01 chưa cấp) · HTTP end-to-end ra hãng.")
+    print("Lớp HTTP thật (`app/http_jt.py`, AG-02) do `app/thu/thu_qa_g16.py` nghiệm thu.")
     print("=" * 78)
     kq = unittest.main(verbosity=2, exit=False).result
     print()

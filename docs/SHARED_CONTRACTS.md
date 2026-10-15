@@ -605,3 +605,38 @@ lần thứ hai thì **đổi CẤU TRÚC**, và luật này là cấu trúc tha
 
 **Bổ sung quyền sở hữu (AG-01 `G16-04`):** `app/thu/thu_tich_hop.py` **thuộc AG-00** (bộ thử hợp
 đồng/tích hợp). §39 ghi thiếu tên tệp này; nay xác nhận rõ.
+
+## 42. `408` VÀ `429` — QUYẾT ĐỊNH ĐÃ CHỐT (AG-00, 15/10/2026)
+
+**Cả `408` và `429` là lỗi TẠM THỜI**, không phải "4xx = vĩnh viễn". Lý do: cả hai là tín hiệu
+*"thử lại sau"* của máy chủ, không phải *"yêu cầu của bạn sai"*. Trước quyết định này **hai lớp
+nói ngược nhau** cho cùng một lượt gửi — `loi_hang.tu_http` nói thử lại được, `http_jt` nói vĩnh
+viễn — đúng khuôn lệch im lặng. Ca canh chống lệch: `thu_http_jt.b10`,
+`thu_adapter_jt.test_h5b`.
+
+**`Retry-After` được tôn trọng, và LUÔN bị chặn trần** `transport.CHO_TOI_DA = 60.0`. Hãng không
+được quyết định treo tiến trình: một `Retry-After: 86400` bị kẹp về 60 giây. Trần chỉ khai **một
+chỗ** — khai hai chỗ là hai chỗ trôi khỏi nhau.
+
+**`gui_form` CẤM ngủ.** Nếu lớp HTTP tự ngủ để tôn trọng `Retry-After`, `transport.goi()` sẽ gọi
+lại nó tới `so_lan` lượt ⇒ tổng chờ = `so_lan × trần` (trần 30s ⇒ 90 giây treo trong một yêu cầu).
+Việc chờ thuộc **`transport.goi()`** — nơi duy nhất sở hữu việc thử lại (§36 luật 1). Canh bằng
+**AST** (`thu_http_jt.test_b11`, `thu_qa_g16.t24`) **và** bằng hành vi (`thu_adapter_jt.h5b` đo
+thời gian < 5 giây).
+
+### 42.1 `408` phát ra `timeout=True` — CỐ Ý, và đây là lý do
+
+Mã `408` nghĩa là máy chủ không nhận kịp yêu cầu ⇒ *trên lý thuyết* biết là **chưa xử lý gì**. Vậy
+mà `loi_hang.tu_http` xếp nó `HET_GIO`, nên adapter phát **`timeout=True`** = "KHÔNG BIẾT kết quả".
+
+**AG-00 chốt: GIỮ NGUYÊN.** Hai lý do:
+1. **Trong thực tế `408` KHÔNG rõ nghĩa.** Nhiều proxy phát `408` khi **thượng nguồn** quá hạn —
+   lúc đó yêu cầu **có thể đã được xử lý**. Tin chắc "chưa xử lý gì" là tin vào một điều mình
+   không kiểm được.
+2. **Chi phí hai chiều LỆCH NHAU.** Đoán sai theo chiều thận trọng chỉ tốn **một lượt đối soát**;
+   đoán sai theo chiều kia tốn **một vận đơn thật** (gửi lại và hãng tạo đơn trùng). Hợp đồng §10
+   đã chốt nguyên tắc này: *"hãng timeout ⇒ giữ `dang_gui` + `can_doi_soat_ket_qua=1`, tuyệt đối
+   không coi là thành công"*.
+
+Muốn đổi thì đổi ở **`loi_hang.tu_http`** (tệp của AG-00), **không** đổi ở adapter. Ca thử ghim
+bảng mong đợi để không ai phải đoán lại.

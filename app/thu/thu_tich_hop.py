@@ -207,6 +207,52 @@ class G16_CauHinhVaPhanTang(unittest.TestCase):
             kq = subprocess.run(["git", "check-ignore", "-q", duong], cwd=GOC_DA)
             self.assertEqual(kq.returncode, 0, f"{duong} KHÔNG bị gitignore")
 
+    def test_12_goi_y_thoi_gian_cho_khi_thu_lai_co_TRAN(self):
+        """HTTP 429/408 nói *"thử lại sau"*, thường kèm `Retry-After`.
+
+        Nếu lớp trên cứ thử lại theo backoff 0,2 giây thì lượt thử lại vừa vô ích vừa làm hạn
+        mức tệ thêm — "thử lại được" trên giấy mà hỏng trong thực tế. Nên lớp dưới được gợi ý
+        thời gian chờ; nhưng **phải có TRẦN**, nếu không một `Retry-After: 86400` biến "thử lại
+        được" thành "treo tiến trình một ngày" — hãng không được quyết định điều đó.
+        """
+        import transport as T
+        self.assertEqual(T.LoiTamThoi("x").cho_giay, None, "chữ ký cũ phải còn chạy")
+
+        def _cho(cho_giay):
+            waits, lan = [], [0]
+
+            def hong():
+                lan[0] += 1
+                raise T.LoiTamThoi("429", cho_giay=cho_giay)
+            try:
+                T.goi(hong, thao_tac="trackOrder", ngu=waits.append)
+            except T.LoiTamThoi:
+                pass
+            return lan[0], waits
+
+        # không gợi ý -> backoff của chính sách
+        n, w = _cho(None)
+        self.assertEqual(n, 3, "thao tác ĐỌC phải được thử lại 3 lần")
+        self.assertEqual([round(x, 3) for x in w], [0.2, 0.4])
+        # gợi ý LỚN HƠN backoff -> theo gợi ý
+        self.assertEqual(_cho(5)[1], [5.0, 5.0])
+        # gợi ý nhỏ hơn backoff -> giữ backoff (lấy max, không rút ngắn)
+        self.assertEqual([round(x, 3) for x in _cho(0.001)[1]], [0.2, 0.4])
+        # TRẦN: hãng không được bắt hệ chờ vô hạn
+        for x in _cho(86400)[1]:
+            self.assertLessEqual(x, T.CHO_TOI_DA, "gợi ý vượt trần — phải bị kẹp")
+        self.assertEqual(_cho(86400)[1], [T.CHO_TOI_DA, T.CHO_TOI_DA])
+        # và thao tác GHI vẫn KHÔNG được thử lại, dù có gợi ý thời gian chờ
+        lan = [0]
+
+        def hong_ghi():
+            lan[0] += 1
+            raise T.LoiTamThoi("429", cho_giay=5)
+        with self.assertRaises(T.LoiTamThoi):
+            T.goi(hong_ghi, thao_tac="createOrder", co_khoa_chong_trung=False,
+                  ngu=lambda s: None)
+        self.assertEqual(lan[0], 1, "createOrder bị gửi lại — nguy cơ tạo đơn trùng!")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

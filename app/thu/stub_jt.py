@@ -12,6 +12,7 @@
 #
 # Stub KHÔNG BAO GIỜ gọi ra ngoài: nó chỉ trả lời trên socket do chính nó mở ở loopback.
 import json
+import os
 import socket
 import threading
 import time
@@ -21,6 +22,18 @@ from urllib.parse import parse_qs
 
 # Đường dẫn mặc định = ĐÚNG đường tạo đơn đã đọc được trong tài liệu (`adapter_jt.DUONG_TAO_DON`).
 DUONG_TAO_DON = "/webopenplatformapi/api/order/addOrder"
+
+# ---- ĐƯỜNG ĐIỀU KHIỂN (G18/AG-02) — KHÔNG phải đường của J&T --------------------------------
+#
+# Vì sao cần: đo ĐA TIẾN TRÌNH thì stub phải sống trong MỘT TIẾN TRÌNH RIÊNG, còn số đo của nó
+# (`so_ket_noi`, `so_yeu_cau`, `cao_nhat_dang_xu_ly`) phải đọc được TỪ NGOÀI tiến trình đó. Không
+# có đường này thì bộ đo chỉ còn cách suy từ phía client — mà "client tự khai" không phải bằng
+# chứng về cái stub đã nhận (§12.1 luật 3).
+#
+# Đường này chỉ tồn tại trên loopback (stub chỉ bind `127.0.0.1`), trả về SỐ ĐO chứ không trả dữ
+# liệu người dùng, và KHÔNG được tính vào `yeu_cau`/`da_tra_loi`: nếu tính thì chính lượt đọc số
+# đo lại làm bẩn con số đang đọc (`so_ket_noi` thì vẫn tăng — bộ đo trừ hai mốc, xem `thong_ke`).
+DUONG_THONG_KE = "/__stub/thong-ke"
 
 # ---- Các chế độ trả lời. Mỗi chế độ là một kết cục KHÁC NHAU, không gộp --------------------------
 THANH_CONG = "thanh_cong"          # 200 + {"code":"1",…}            → hãng xác nhận
@@ -170,6 +183,9 @@ class StubJT:
         self.so_ket_noi = 0
         self.dang_xu_ly = 0
         self.cao_nhat_dang_xu_ly = 0
+        # Số lượt ĐỌC SỐ ĐO qua `DUONG_THONG_KE`. Trừ khỏi `so_ket_noi` khi báo cáo: lượt đọc số
+        # đo cũng là một kết nối TCP, mà nó không phải lượt gọi của lớp HTTP đang được đo.
+        self.so_dieu_khien = 0
         self._khoa_dem = threading.Lock()
         # Header GẮN THÊM vào MỌI phản hồi (ví dụ `Retry-After`) — để đo đường 408/429 mà không
         # phải đẻ thêm một chế độ cho từng giá trị header.
@@ -262,6 +278,21 @@ class StubJT:
     @property
     def than_tra_loi_cuoi(self):
         return self.da_tra_loi[-1]["than"] if self.da_tra_loi else None
+
+    def thong_ke(self) -> dict:
+        """SỐ ĐO của stub, đọc được TỪ TIẾN TRÌNH KHÁC qua `DUONG_THONG_KE`.
+
+        `so_ket_noi` là số kết nối TCP của KHÁCH đã CHẤP NHẬN (đã trừ các lượt đọc số đo — chính
+        chúng cũng là kết nối TCP, xem `so_dieu_khien`); `so_yeu_cau` là số yêu cầu J&T đã nhận.
+        Hai con số khác nhau là câu trả lời cho "lớp HTTP có dùng lại kết nối không" — và khi bộ
+        đo chạy NHIỀU TIẾN TRÌNH thì đây là bằng chứng DUY NHẤT không do client tự khai.
+        """
+        with self._khoa_dem:
+            return {"pid": os.getpid(), "cong": self.cong, "che_do": self.che_do,
+                    "so_ket_noi": self.so_ket_noi - self.so_dieu_khien,
+                    "so_ket_noi_tho": self.so_ket_noi, "so_dieu_khien": self.so_dieu_khien,
+                    "so_yeu_cau": len(self.yeu_cau),
+                    "cao_nhat_dang_xu_ly": self.cao_nhat_dang_xu_ly}
 
     # ---- Dựng thân trả lời ----
     def _than_theo_che_do(self, yeu_cau, che_do):
@@ -356,7 +387,27 @@ class _BoXuLy(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        # ĐIỀU KHIỂN đứng TRƯỚC `_nhan`: lượt đọc số đo không được cộng vào `yeu_cau` (nếu cộng
+        # thì mỗi lần đọc số đo lại đổi chính con số vừa đọc) và không trả 405 như một GET lạ.
+        if self.path.split("?", 1)[0] == DUONG_THONG_KE:
+            self._tra_thong_ke()
+            return
         self._nhan("GET")
+
+    def _tra_thong_ke(self):
+        """Trả số đo của stub dưới dạng JSON. Chỉ loopback (stub chỉ bind `127.0.0.1`)."""
+        # Đếm TRƯỚC khi dựng số đo: chính lượt đọc này là một kết nối TCP vừa được chấp nhận,
+        # nên nó phải bị trừ ra — không thì mỗi lần đọc số đo lại làm con số vừa đọc nhảy thêm 1
+        # và bộ đo phải bù bằng số học đoán mò.
+        with self.server.stub._khoa_dem:
+            self.server.stub.so_dieu_khien += 1
+        than = json.dumps(self.server.stub.thong_ke(), ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(than)))
+        self.end_headers()
+        self.wfile.write(than)
+        self.wfile.flush()
 
     def do_POST(self):
         self._nhan("POST")
@@ -550,3 +601,59 @@ class HoDenKetNoi:
             self._s.close()
         except OSError:
             pass
+
+
+# ===============================================================================================
+# CHẠY STUB NHƯ MỘT TIẾN TRÌNH RIÊNG (G18/AG-02) — `python3 app/thu/stub_jt.py --ghi-cong <tệp>`
+# ===============================================================================================
+#
+# Vì sao phải có: đo ĐA TIẾN TRÌNH bằng stub nằm TRONG tiến trình bộ thử là vô nghĩa — mọi
+# "tiến trình khác" sẽ nói chuyện với stub của chính tiến trình bộ thử, và số đo `so_ket_noi`
+# chỉ là số đo trong MỘT tiến trình. Stub phải sống ở tiến trình riêng thì mới là phép đo
+# liên tiến trình thật.
+#
+# CỔNG 0 vẫn là mặc định và là LUẬT của bộ thử (không cổng cố định): tiến trình con bind
+# `127.0.0.1:0`, hệ cấp cổng, rồi GHI cổng thật ra tệp `--ghi-cong` để tiến trình cha đọc.
+# Không có đường nào để stub này mở ra ngoài Internet: `host` mặc định `127.0.0.1` và bị chặn
+# nếu khác (xem dưới).
+def chay_nhu_tien_trinh(argv=None) -> int:
+    import argparse
+    import signal
+    import sys
+
+    ap = argparse.ArgumentParser(description="Stub J&T cục bộ chạy như một tiến trình riêng")
+    ap.add_argument("--che-do", default=THANH_CONG, choices=list(CHE_DO))
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--do-tre", type=float, default=0.0)
+    ap.add_argument("--ghi-cong", required=True,
+                    help="tệp JSON nhận {'cong': <cổng thật>, 'pid': <pid>} sau khi bind xong")
+    a = ap.parse_args(argv)
+    if a.host not in ("127.0.0.1", "localhost"):
+        # Chốt cứng: stub này KHÔNG được bind ra địa chỉ khác. Bind 0.0.0.0 là mở một máy chủ
+        # giả ra mạng — bất kể ai gọi nó, nó cũng là một cửa không ai canh.
+        sys.stderr.write("TỪ CHỐI: stub chỉ được bind loopback, không bind %r\n" % a.host)
+        return 2
+    stub = StubJT(a.che_do, host=a.host, do_tre=a.do_tre)
+    with open(a.ghi_cong, "w") as f:
+        json.dump({"cong": stub.cong, "pid": os.getpid()}, f)
+        f.flush()
+        os.fsync(f.fileno())
+
+    def _dung(_signum, _khung):
+        # Chỉ RA HIỆU thoát; việc tắt máy chủ nằm ở `finally` — gọi `dung()` hai lần (một lần
+        # trong hàm bắt tín hiệu, một lần ở `finally`) là tự tạo một đường tắt máy chủ hai lượt
+        # mà không ai cần.
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _dung)
+    signal.signal(signal.SIGINT, _dung)
+    try:
+        while True:
+            time.sleep(0.2)
+    finally:
+        stub.dung()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(chay_nhu_tien_trinh())

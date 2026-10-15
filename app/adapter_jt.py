@@ -240,6 +240,78 @@ DUONG_API = {
     "getOrder": {"duong": None, "muc": MUC_CHUA_XAC_NHAN, "nguon": NGUON_GET_ORDER},
 }
 
+# ── CHỐT CỨNG: BỐN THAO TÁC CHƯA XÁC MINH ĐƯỜNG DẪN (AG-03, 15/10/2026) ───────────────────────
+# Bốn thao tác dưới đây KHÔNG có đường dẫn đầy đủ đã đọc được — xem `nguon` của từng dòng trong
+# `DUONG_API`. Chúng phải giữ `duong=None` và `muc=MUC_CHUA_XAC_NHAN` cho tới khi có TÀI LIỆU,
+# không phải cho tới khi có người thấy sốt ruột.
+#
+# Vì sao cần một danh sách TÊN riêng thay vì chỉ đọc `duong is None`: `duong is None` là một
+# TRẠNG THÁI, còn đây là một LỜI KHAI — "bốn thao tác này chưa xác minh". Hai thứ khác nhau, và
+# chỉ lời khai mới phát hiện được ca ai đó GÁN BỪA một URL (lúc đó `duong` không còn None nữa,
+# nhưng lời khai "chưa xác minh" thì vẫn đúng và mâu thuẫn lộ ra). Bộ dò ở
+# `vi_pham_chot_duong_dan()` đọc đúng danh sách này, và ca canh
+# `thu_hop_dong_jt.K_ChotCungBonDuongChuaXacMinh` ĐỎ ngay khi bảng tự mâu thuẫn.
+#
+# Tên trong ngoặc là tên trang tài liệu của hãng, để người đọc nối được việc còn thiếu với câu
+# hỏi đã gửi J&T (`docs/JT_CAU_HOI_CHINH_THUC.md`).
+THAO_TAC_CHUA_XAC_MINH = ("cancelOrder", "getShippingFee", "getShippingLabel", "getOrder")
+TEN_TAI_LIEU_CUA_THAO_TAC = {
+    "createOrder": "addOrder",
+    "trackOrder": "logistics/trace",
+    "cancelOrder": "cancelOrder",
+    "getShippingFee": "calculatingFees",
+    "getShippingLabel": "printOrder",
+    "getOrder": "(chưa có trang tài liệu nào)",
+}
+
+
+def duong_da_xac_minh(thao_tac):
+    """Đường dẫn của `thao_tac`, CHỈ khi bảng khai nó ĐÃ xác minh **và** đường dẫn dùng được.
+
+    Hai điều kiện CÙNG LÚC, không phải một. Lý do phải đòi cả hai: `duong` một mình là dữ liệu
+    có thể bị điền mà quên đổi `muc` — và lúc đó bảng vừa nói "chưa xác minh" vừa có URL, tức
+    tự mâu thuẫn. Gặp mâu thuẫn thì phải ĐÓNG, không phải chọn vế có lợi cho việc đi tiếp.
+
+    Đây là lớp chặn thứ hai; lớp thứ nhất là chính lời khai `muc` (và ca canh ở bộ thử). Giữ cả
+    hai vì chúng hỏng theo hai kiểu khác nhau: sửa nhầm một dòng `duong` thì lớp này đỡ; còn
+    sửa nhầm cả hai dòng thì ca canh bắt.
+    """
+    d = DUONG_API.get(thao_tac) or {}
+    if d.get("muc") != MUC_DA_DOC:
+        return None
+    duong = d.get("duong")
+    if not isinstance(duong, str) or not duong.startswith("/"):
+        return None
+    return duong
+
+
+def vi_pham_chot_duong_dan(bang=None):
+    """Danh sách VI PHẠM chốt đường dẫn của một bảng hình dạng `DUONG_API`. Rỗng = bảng sạch.
+
+    Đây là BỘ DÒ của ca canh: nó trả về LỜI KHAI SAI (thao tác chưa xác minh mà có `duong`, hoặc
+    bị khai thành đã xác minh, hoặc biến mất khỏi bảng). Bộ dò trả rỗng vì bảng sạch và bộ dò
+    hỏng là hai chuyện khác nhau — nên `thu_hop_dong_jt` có ca TỰ KIỂM bơm một URL bừa vào bảng
+    GIẢ và đòi bộ dò phải kêu.
+
+    Nhận `bang` để đo được cả bảng giả; mặc định là bảng THẬT của module.
+    """
+    bang = DUONG_API if bang is None else bang
+    ra = []
+    for op in THAO_TAC_CHUA_XAC_MINH:
+        d = bang.get(op)
+        if d is None:
+            ra.append(f"{op}: BIẾN MẤT khỏi bảng đường dẫn — thao tác chưa xác minh phải còn "
+                      "trong bảng thì mới còn chỗ mà chặn")
+            continue
+        if d.get("muc") != MUC_CHUA_XAC_NHAN:
+            ra.append(f"{op}: khai muc={d.get('muc')!r} — chưa đọc được tài liệu thì phải là "
+                      f"{MUC_CHUA_XAC_NHAN!r}")
+        if d.get("duong") is not None:
+            ra.append(f"{op}: bị gán duong={d.get('duong')!r} — URL CHƯA xác minh, KHÔNG được "
+                      "đoán (đoán sai thì hãng từ chối và mình chẩn đoán nhầm hướng)")
+    return ra
+
+
 # URL đầy đủ, giữ nguyên tên cũ (G04) để không phá người gọi đang có.
 URL_TAO_DON = {mt: HOST_API[mt] + DUONG_TAO_DON for mt in HOST_API}
 URL_TRA_HANH_TRINH = {mt: HOST_API[mt] + DUONG_TRA_HANH_TRINH for mt in HOST_API}
@@ -358,33 +430,44 @@ class ChuaXacNhanTaiLieu(Exception):
 
 
 def url_cua(thao_tac, moi_truong):
-    """URL ĐÃ XÁC MINH của một thao tác, hoặc None. `mock` luôn None — không có đường ra ngoài."""
+    """URL ĐÃ XÁC MINH của một thao tác, hoặc None. `mock` luôn None — không có đường ra ngoài.
+
+    Mọi nhánh đều đi qua `duong_da_xac_minh()` (AG-03): một thao tác bị GÁN BỪA `duong` trong khi
+    `muc` vẫn là "chưa xác nhận" thì vẫn KHÔNG có URL. Trước AG-03 nhánh ghi-đè-điểm-cuối đọc
+    thẳng `DUONG_API[..]["duong"]`, nên một dòng `duong` điền nhầm là đủ để thao tác chưa xác
+    minh có URL thật trong lúc chạy bộ thử — tức lớp chặn duy nhất còn lại là một ca kiểm.
+    """
     if moi_truong == "mock":
         return None
     if DIEM_CUOI_GHI_DE is not None:
         # Điểm cuối THAY THẾ (chỉ bộ thử đặt được, xem `DungDiemCuoiTam`). Thao tác chưa xác
         # minh đường dẫn vẫn phải trả None: ghi đè điểm cuối KHÔNG được biến một đường dẫn chưa
         # biết thành một đường dẫn có thật.
-        duong = (DUONG_API.get(thao_tac) or {}).get("duong")
+        duong = duong_da_xac_minh(thao_tac)
         return None if duong is None else DIEM_CUOI_GHI_DE.rstrip("/") + duong
     if thao_tac == "createOrder":
-        return URL_TAO_DON.get(moi_truong)
+        return URL_TAO_DON.get(moi_truong) if duong_da_xac_minh(thao_tac) else None
     if thao_tac == "trackOrder":
-        return URL_TRA_HANH_TRINH.get(moi_truong)
+        return URL_TRA_HANH_TRINH.get(moi_truong) if duong_da_xac_minh(thao_tac) else None
     return None
 
 
 def chan_duong_chua_xac_nhan(thao_tac, moi_truong):
-    """Chặn khi đường dẫn API của thao tác chưa được xác minh (mọi môi trường khác `mock`)."""
+    """Chặn khi đường dẫn API của thao tác chưa được xác minh (mọi môi trường khác `mock`).
+
+    AG-03: khi bảng tự MÂU THUẪN (khai chưa xác nhận mà vẫn có `duong`) thì lý do chặn NÓI RA
+    mâu thuẫn đó, thay vì chỉ nói "chưa xác minh". Người trực ca cần biết mình đang gặp một bảng
+    bị sửa nhầm, không phải một việc còn đang chờ tài liệu — hai việc sửa khác nhau.
+    """
     if moi_truong == "mock":
         return
     if url_cua(thao_tac, moi_truong) is None:
         d = DUONG_API.get(thao_tac) or {}
-        raise ChuaXacNhanTaiLieu(
-            thao_tac,
-            ["đường dẫn API đầy đủ CHƯA được xác minh — nguồn đã đọc: "
-             + str(d.get("nguon") or "không rõ")],
-            moi_truong)
+        thieu = ["đường dẫn API đầy đủ CHƯA được xác minh — nguồn đã đọc: "
+                 + str(d.get("nguon") or "không rõ")]
+        thieu += [f"BẢNG TỰ MÂU THUẪN: {v}" for v in vi_pham_chot_duong_dan()
+                  if v.startswith(thao_tac + ":")]
+        raise ChuaXacNhanTaiLieu(thao_tac, thieu, moi_truong)
 
 
 # =================================================================================================
@@ -527,6 +610,25 @@ def tien_nguyen_vnd(gia_tri, ten_truong):
         n = int(gia_tri)
     else:
         chuoi = str(gia_tri).strip()
+        # ── VÁ BIÊN (AG-03, 15/10/2026): `str.isdigit()` KHÔNG đủ, và thiếu nó thì HỢP ĐỒNG MÃ
+        # LỖI §5 bị phá ở đúng chỗ tiền. Đo được bằng lệnh thật:
+        #   · `"²".isdigit()` là **True** nhưng `int("²")` ném **ValueError TRẦN** ⇒
+        #     `tien_nguyen_vnd("²", "cod")` ném ValueError, KHÔNG phải `NormalizedCarrierError`.
+        #     Nơi gọi bắt `NormalizedCarrierError` (đúng hợp đồng) sẽ để lọt ValueError ra ngoài,
+        #     và một đơn COD viết sai định dạng làm nổ ở tầng không ai ngờ.
+        #   · `"١٢٣"` (chữ số Ả Rập) và `"１５００"` (chữ số toàn phần) cũng `isdigit()` và `int()`
+        #     ĐỌC ĐƯỢC ⇒ chúng bị **ĐỔI IM LẶNG** thành "123"/"1500" rồi gửi lên hãng. Tiền đã bị
+        #     viết lại mà không có lỗi nào báo — đúng khuôn "sửa im lặng" mà `tien_nguyen_vnd`
+        #     sinh ra để chặn.
+        # Chốt: tiền là chữ số **ASCII**. Không-ASCII ⇒ TỪ CHỐI, và từ chối bằng mã chuẩn.
+        if not chuoi.isascii():
+            raise loi_hang.NormalizedCarrierError(
+                loi_hang.THAM_SO_SAI,
+                thong_diep=(f"{ten_truong}={chuoi!r} chứa ký tự KHÔNG phải ASCII — tiền phải là"
+                            " chữ số ASCII (0-9). TỪ CHỐI, không tự đổi sang số: chuỗi chữ số"
+                            " không-ASCII đọc được bằng `int()` sẽ bị viết lại im lặng trước khi"
+                            " gửi hãng."),
+                hang="jt")
         if not chuoi.isdigit():
             # Thử đọc như số thập phân để nói ĐÚNG lý do: "15000.5" là THẬP PHÂN (lỗi đơn vị),
             # còn "mười nghìn" mới là chuỗi lạ (lỗi dữ liệu vào). Chẩn đoán sai ở đây làm người
@@ -620,6 +722,22 @@ def ket_qua_het_gio(thao_tac, thong_diep, mock=False) -> KetQuaHang:
     """Kết cục thứ ba: KHÔNG BIẾT kết quả. Tuyệt đối không được coi là thành công."""
     return ket_qua_tu_loi(loi_hang.NormalizedCarrierError(
         loi_hang.HET_GIO, thong_diep=thong_diep, hang="jt", thao_tac=thao_tac), mock=mock)
+
+
+def ket_qua_ma_la(thao_tac, mock=False) -> KetQuaHang:
+    """Kết cục MÃ LẠ: hãng trả một mã KHÔNG có trong bảng đã đọc ⇒ `KHONG_RO`, KHÔNG đoán.
+
+    Đi qua ĐÚNG `loi_hang.doc_tra_loi_jt` như một lượt gọi thật — không có nhánh tắt nào cho bộ
+    thử. Nhờ vậy ca kiểm đo chính đường mà một mã lạ thật sẽ đi, chứ không đo một bản giả của nó
+    (§12.1: đừng dùng bản giả của thứ cần đo).
+
+    `KHONG_RO` mặc định KHÔNG được thử lại (`loi_hang.DUOC_THU_LAI` chỉ có `HET_GIO` và
+    `QUA_HAN_MUC`) — thử lại một mã mình chưa hiểu là gửi thêm lượt mà không học được gì.
+    """
+    return ket_qua_tu_loi(loi_hang.doc_tra_loi_jt(
+        {"code": MA_LA_DU_LIEU_THU,
+         "msg": "mã của DỮ LIỆU THỬ — cố ý không có trong bảng mã đã đọc của J&T"},
+        thao_tac=thao_tac), mock=mock)
 
 
 def lay_ma_van_don(data):
@@ -780,9 +898,16 @@ def chot_chan_anh_xa_area(moi_truong, da_xac_nhan=None, nguon=None, cap=None):
 MA_MOCK_HONG = "MOCK-HONG"          # tiền tố mã vận đơn → ép hãng TỪ CHỐI
 MA_MOCK_HET_GIO = "MOCK-HETGIO"     # tiền tố → ép HẾT GIỜ (không biết kết quả)
 MA_MOCK_KHONG_THAY = "MOCK-KHONGCO"  # tiền tố → mã 999002000 (未找到数据 → KHONG_TIM_THAY)
+MA_MOCK_MA_LA = "MOCK-MALA"         # tiền tố → mã lỗi KHÔNG có trong bảng đã đọc (KHONG_RO)
 GHI_CHU_EP_HONG = "demo_force_fail"
 GHI_CHU_EP_HET_GIO = "demo_force_timeout"
 GHI_CHU_EP_TRUNG = "demo_force_trung"
+GHI_CHU_EP_MA_LA = "demo_force_ma_la"
+
+# Mã lỗi dùng cho kịch bản MÃ LẠ. Đây là **dữ liệu thử**, KHÔNG phải lời khai về mã của J&T:
+# cả điểm của ca này là mã đó KHÔNG nằm trong `loi_hang.JT_MA_LOI`. Chọn một số vô nghĩa thay vì
+# một số "gần đúng" của hãng để không ai đọc nhầm nó thành mã thật rồi đem đi tra cứu.
+MA_LA_DU_LIEU_THU = "999999999"
 
 
 def kich_ban_mock(*chuoi):
@@ -797,6 +922,8 @@ def kich_ban_mock(*chuoi):
             return "het_gio"
         if s == GHI_CHU_EP_TRUNG:
             return "trung"
+        if s == GHI_CHU_EP_MA_LA or s.startswith(MA_MOCK_MA_LA):
+            return "ma_la"
         if s.startswith(MA_MOCK_KHONG_THAY):
             return "khong_thay"
     return None
@@ -1196,6 +1323,8 @@ class AdapterJT(CarrierAdapter):
             return ket_qua_het_gio("createOrder", "hết giờ — không biết kết quả", mock=True)
         if kb == "trung":
             return self._ket_qua_don_trung(None)
+        if kb == "ma_la":
+            return ket_qua_ma_la("createOrder", mock=True)
         ma_van_don = "JTVN%010d" % random.randint(0, 10**10 - 1)
         if self.mo_phong_chong_trung:
             da_co, ma_cu = SO_DON_MOCK.dat(self._khoa_mock(don.get("ma_don")), ma_van_don)
@@ -1237,6 +1366,8 @@ class AdapterJT(CarrierAdapter):
         if kb == "khong_thay":
             return ket_qua_tu_loi(loi_hang.doc_tra_loi_jt(
                 {"code": "999002000", "msg": "未找到数据"}, thao_tac="cancelOrder"), mock=True)
+        if kb == "ma_la":
+            return ket_qua_ma_la("cancelOrder", mock=True)
         return KetQuaHang(True, ma_van_don=str(ma_van_don),
                           tho={"mock": True, "hang": "jt", "thao_tac": "cancelOrder",
                                "da_ky": True, "url_mock": yc["url"],
@@ -1258,6 +1389,8 @@ class AdapterJT(CarrierAdapter):
         if kb == "khong_thay":
             return ket_qua_tu_loi(loi_hang.doc_tra_loi_jt({"code": "999002000", "msg": "未找到数据"},
                                                          thao_tac="trackOrder"), mock=True)
+        if kb == "ma_la":
+            return ket_qua_ma_la("trackOrder", mock=True)
         # `trang_thai` là MÃ CỦA HÃNG (scanTypeCode), không phải trạng thái chuẩn: `polling.py`
         # đưa thẳng giá trị này vào `trang_thai_hang.quyet_dinh(hang, ma)`. Trả về tên chuẩn
         # ("dang_giao") ở đây là đưa một mã LẠ vào bảng ánh xạ ⇒ mọi vòng polling thành "mã lạ".
@@ -1295,6 +1428,8 @@ class AdapterJT(CarrierAdapter):
                                                          thao_tac="getShippingFee"), mock=True)
         if kb == "het_gio":
             return ket_qua_het_gio("getShippingFee", "hết giờ — chưa có giá", mock=True)
+        if kb == "ma_la":
+            return ket_qua_ma_la("getShippingFee", mock=True)
         kl = max(1, tien_nguyen_vnd(don.get("khoi_luong_gram"), "khoi_luong_gram"))
         return KetQuaHang(True, phi=15000 + (kl // 500) * 5200,
                           tho={"mock": True, "hang": "jt", "thao_tac": "getShippingFee",
@@ -1320,6 +1455,8 @@ class AdapterJT(CarrierAdapter):
         if kb == "khong_thay":
             return ket_qua_tu_loi(loi_hang.doc_tra_loi_jt({"code": "999002000", "msg": "未找到数据"},
                                                          thao_tac="getShippingLabel"), mock=True)
+        if kb == "ma_la":
+            return ket_qua_ma_la("getShippingLabel", mock=True)
         return KetQuaHang(True, ma_van_don=str(ma_van_don),
                           tho={"mock": True, "hang": "jt", "thao_tac": "getShippingLabel",
                                "label": "MOCK-PDF", "la_nhan_hang": False,

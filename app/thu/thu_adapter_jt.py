@@ -559,6 +559,251 @@ class G_KhoaAnToanChanLive(unittest.TestCase):
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════════════
+# AG-03 — NHÁNH TỪ CHỐI VÀ BIÊN, MỖI CA CÓ ĐỐI CHỨNG DƯƠNG
+# ════════════════════════════════════════════════════════════════════════════════════════════════
+# Vì sao thêm nhóm J và K dù nhóm A/C/D/E đã có ca cho từng kết cục: các nhóm cũ đo TỪNG ca một,
+# rải rác, và vế "đi qua được" nằm ở ca KHÁC (A4 là đối chứng của A2/A3; E4 của E3). Một ca phủ
+# định không có đối chứng nằm CẠNH nó chỉ chứng minh "có ném" — nó xanh kể cả khi nhánh đó chặn
+# nhầm mọi thứ. Nhóm J gói mỗi phủ định với đối chứng dương của CHÍNH nó, cùng một chỗ gọi, chỉ
+# khác đúng một que kích hoạt; nhóm K đo việc adapter KHÔNG đoán (mã lạ, mã 110).
+class J_PhuDinhVaDoiChungDuong(unittest.TestCase):
+    """Năm thao tác × các nhánh xấu, mỗi nhánh kèm ĐỐI CHỨNG DƯƠNG ngay cạnh.
+
+    Bốn que kích hoạt đã có sẵn trong adapter: `demo_force_fail` / `MOCK-HONG…` (hãng TỪ CHỐI),
+    `demo_force_timeout` / `MOCK-HETGIO…` (HẾT GIỜ = không biết kết quả), `demo_force_trung` và
+    sổ chống trùng (ĐƠN TRÙNG), `demo_force_ma_la` / `MOCK-MALA…` (MÃ LẠ). Que thứ tư do AG-03
+    thêm, vì trước đó "mã lạ" chỉ đo được bằng cách gọi thẳng `doc_goi_tra_loi` — tức không đo
+    được nhánh mà một mã lạ THẬT sẽ đi qua.
+    """
+
+    def setUp(self):
+        aj.xoa_so_mock()
+
+    def tearDown(self):
+        aj.xoa_so_mock()
+
+    def _cap(self, ten, goi_xau, goi_tot, ma_chuan, *, timeout, ma_goc=None):
+        """Một CẶP: ca phủ định + đối chứng dương. Trả (kết quả xấu, kết quả tốt)."""
+        xau = goi_xau()
+        self.assertFalse(xau.ok, f"{ten}: nhánh xấu lại báo thành công")
+        chuan = xau.tho.get("loi_chuan") or {}
+        self.assertEqual(chuan.get("ma_chuan"), ma_chuan, f"{ten}: sai mã chuẩn")
+        self.assertIs(xau.timeout, timeout, f"{ten}: cờ 'không biết kết quả' sai")
+        self.assertIs(chuan.get("co_the_thu_lai"), ma_chuan in lh.DUOC_THU_LAI,
+                      f"{ten}: cờ thử lại phải suy từ loi_hang.DUOC_THU_LAI")
+        self.assertIs(xau.tho.get("mock"), True, f"{ten}: kết quả mock phải TỰ NHẬN là mock")
+        self.assertIsNone(xau.ma_van_don, f"{ten}: thất bại mà vẫn có mã vận đơn")
+        if ma_goc is not None:
+            self.assertEqual(chuan.get("ma_goc_hang"), ma_goc, f"{ten}: sai mã gốc của hãng")
+        self.assertEqual(quet_bi_mat(xau.tho), [], f"{ten}: lộ bí mật trong kết quả")
+        # ĐỐI CHỨNG DƯƠNG — cùng chỗ gọi, chỉ khác que kích hoạt.
+        tot = goi_tot()
+        self.assertTrue(tot.ok, f"{ten}: ĐỐI CHỨNG DƯƠNG không đi qua được — ca phủ định rỗng")
+        self.assertFalse(tot.timeout)
+        return xau, tot
+
+    def test_j1_createOrder_bon_nhanh_xau_va_bon_doi_chung(self):
+        ad = ad_mock()
+        tot = lambda: ad.createOrder(dict(DON_MAU, ma_don="AG03-J1"))     # noqa: E731
+        self._cap("createOrder/hãng từ chối",
+                  lambda: ad.createOrder(dict(DON_MAU, ghi_chu="demo_force_fail")), tot,
+                  lh.THAM_SO_SAI, timeout=False, ma_goc="145003050")
+        self._cap("createOrder/hết giờ",
+                  lambda: ad.createOrder(dict(DON_MAU, ghi_chu="demo_force_timeout")), tot,
+                  lh.HET_GIO, timeout=True)
+        self._cap("createOrder/đơn trùng",
+                  lambda: ad.createOrder(dict(DON_MAU, ghi_chu="demo_force_trung")), tot,
+                  lh.DON_TRUNG, timeout=False, ma_goc="145003204")
+        self._cap("createOrder/mã lạ",
+                  lambda: ad.createOrder(dict(DON_MAU, ghi_chu="demo_force_ma_la")), tot,
+                  lh.KHONG_RO, timeout=False, ma_goc=aj.MA_LA_DU_LIEU_THU)
+
+    def test_j2_cancelOrder_bon_nhanh_xau_va_bon_doi_chung(self):
+        ad = ad_mock()
+        tot = lambda: ad.cancelOrder("JTVN-AG03", "khách huỷ")     # noqa: E731
+        self._cap("cancelOrder/hãng từ chối", lambda: ad.cancelOrder("MOCK-HONG-1", "khách huỷ"),
+                  tot, lh.HANG_TU_CHOI, timeout=False, ma_goc="999010010")
+        self._cap("cancelOrder/hết giờ", lambda: ad.cancelOrder("MOCK-HETGIO-1", "khách huỷ"),
+                  tot, lh.HET_GIO, timeout=True)
+        self._cap("cancelOrder/không tìm thấy",
+                  lambda: ad.cancelOrder("MOCK-KHONGCO-1", "khách huỷ"),
+                  tot, lh.KHONG_TIM_THAY, timeout=False, ma_goc="999002000")
+        self._cap("cancelOrder/mã lạ", lambda: ad.cancelOrder("MOCK-MALA-1", "khách huỷ"),
+                  tot, lh.KHONG_RO, timeout=False, ma_goc=aj.MA_LA_DU_LIEU_THU)
+        # ĐỐI CHỨNG DƯƠNG phải mang ĐÚNG mã vận đơn đã yêu cầu, không phải một mã bịa.
+        self.assertEqual(tot().ma_van_don, "JTVN-AG03")
+
+    def test_j3_trackOrder_bon_nhanh_xau_va_bon_doi_chung(self):
+        ad = ad_mock()
+        tot = lambda: ad.trackOrder("JTVN-AG03")     # noqa: E731
+        self._cap("trackOrder/hãng từ chối", lambda: ad.trackOrder("MOCK-HONG-1"), tot,
+                  lh.THAM_SO_SAI, timeout=False, ma_goc="145003100")
+        self._cap("trackOrder/hết giờ", lambda: ad.trackOrder("MOCK-HETGIO-1"), tot,
+                  lh.HET_GIO, timeout=True)
+        self._cap("trackOrder/không tìm thấy", lambda: ad.trackOrder("MOCK-KHONGCO-1"), tot,
+                  lh.KHONG_TIM_THAY, timeout=False, ma_goc="999002000")
+        self._cap("trackOrder/mã lạ", lambda: ad.trackOrder("MOCK-MALA-1"), tot,
+                  lh.KHONG_RO, timeout=False, ma_goc=aj.MA_LA_DU_LIEU_THU)
+        self.assertTrue(don_hang._la_khong_tim_thay(ad.trackOrder("MOCK-KHONGCO-2")),
+                        "mã 'không tìm thấy' phải qua được bộ nhận dạng của Order Service")
+        self.assertFalse(don_hang._la_don_trung(ad.trackOrder("MOCK-MALA-2")),
+                         "mã LẠ bị coi là đơn trùng ⇒ một lượt gửi lại bị chặn oan")
+
+    def test_j4_getShippingFee_ba_nhanh_xau_va_doi_chung(self):
+        ad = ad_mock()
+        tot = lambda: ad.getShippingFee(dict(DON_MAU))     # noqa: E731
+        self._cap("getShippingFee/hãng từ chối",
+                  lambda: ad.getShippingFee(dict(DON_MAU, ghi_chu="demo_force_fail")), tot,
+                  lh.HANG_TU_CHOI, timeout=False, ma_goc="145005004")
+        self._cap("getShippingFee/hết giờ",
+                  lambda: ad.getShippingFee(dict(DON_MAU, ghi_chu="demo_force_timeout")), tot,
+                  lh.HET_GIO, timeout=True)
+        self._cap("getShippingFee/mã lạ",
+                  lambda: ad.getShippingFee(dict(DON_MAU, ghi_chu="demo_force_ma_la")), tot,
+                  lh.KHONG_RO, timeout=False, ma_goc=aj.MA_LA_DU_LIEU_THU)
+        self.assertIsNone(ad.getShippingFee(dict(DON_MAU, ghi_chu="demo_force_fail")).phi,
+                          "hãng từ chối mà vẫn có con số phí ⇒ một con số bịa đã ra tới nơi gọi")
+
+    def test_j5_getShippingLabel_ba_nhanh_xau_va_doi_chung(self):
+        ad = ad_mock()
+        tot = lambda: ad.getShippingLabel("JTVN-AG03")     # noqa: E731
+        self._cap("getShippingLabel/hãng từ chối", lambda: ad.getShippingLabel("MOCK-HONG-1"),
+                  tot, lh.HANG_TU_CHOI, timeout=False, ma_goc="145005005")
+        self._cap("getShippingLabel/hết giờ", lambda: ad.getShippingLabel("MOCK-HETGIO-1"),
+                  tot, lh.HET_GIO, timeout=True)
+        self._cap("getShippingLabel/không tìm thấy",
+                  lambda: ad.getShippingLabel("MOCK-KHONGCO-1"),
+                  tot, lh.KHONG_TIM_THAY, timeout=False, ma_goc="999002000")
+        self._cap("getShippingLabel/mã lạ", lambda: ad.getShippingLabel("MOCK-MALA-1"),
+                  tot, lh.KHONG_RO, timeout=False, ma_goc=aj.MA_LA_DU_LIEU_THU)
+
+    def test_j6_don_trung_qua_so_mo_phong_co_doi_chung_tat_so(self):
+        """Nhánh ĐƠN TRÙNG của đường THẬT (sổ mô phỏng), kèm đối chứng tắt sổ."""
+        bat = ad_mock(mo_phong_chong_trung=True)
+        dau = bat.createOrder(dict(DON_MAU, ma_don="AG03-J6"))
+        self.assertTrue(dau.ok)
+        xau = bat.createOrder(dict(DON_MAU, ma_don="AG03-J6"))
+        self.assertFalse(xau.ok)
+        self.assertEqual(xau.tho["loi_chuan"]["ma_chuan"], lh.DON_TRUNG)
+        self.assertIs(xau.timeout, False, "đơn trùng là biết chắc, KHÔNG phải 'không biết'")
+        self.assertIs(xau.tho.get("don_da_ton_tai_tai_hang"), True)
+        self.assertEqual(xau.tho.get("ma_van_don_luot_truoc"), dau.ma_van_don)
+        self.assertIs(don_hang._la_don_trung(xau), True)
+        # ĐỐI CHỨNG DƯƠNG: CÙNG mã đơn, CÙNG adapter, chỉ TẮT sổ ⇒ hai lượt đều tạo được.
+        tat = ad_mock()
+        self.assertTrue(tat.createOrder(dict(DON_MAU, ma_don="AG03-J6")).ok)
+        self.assertTrue(tat.createOrder(dict(DON_MAU, ma_don="AG03-J6")).ok)
+
+    def test_j7_TU_KIEM_moi_que_kich_hoat_thuc_su_doi_ket_cuc(self):
+        """Nếu bốn que cùng rơi vào một nhánh thì mọi ca trên xanh mà không đo được gì.
+
+        Đo trên `createOrder`: năm kịch bản phải cho năm DẤU VẾT khác nhau (ok · mã chuẩn ·
+        timeout · đơn-trùng-đã-vào-hãng). Đây là phép kiểm trên chính bảng kịch bản, không phải
+        trên một ca cụ thể — nó bắt được việc thêm một que mới mà quên nối vào nhánh.
+        """
+        ad = ad_mock()
+        dau_vet = []
+        for ghi_chu in (None, "demo_force_fail", "demo_force_timeout", "demo_force_trung",
+                        "demo_force_ma_la"):
+            don = dict(DON_MAU, ma_don="AG03-J7")
+            if ghi_chu:
+                don["ghi_chu"] = ghi_chu
+            kq = ad.createOrder(don)
+            dau_vet.append((kq.ok, kq.timeout,
+                            (kq.tho.get("loi_chuan") or {}).get("ma_chuan"),
+                            bool(kq.tho.get("don_da_ton_tai_tai_hang"))))
+        self.assertEqual(len(set(dau_vet)), 5, f"có que kích hoạt trùng kết cục: {dau_vet}")
+        # Và bảng kịch bản phải đọc được ĐÚNG que, không nhầm que này sang que kia.
+        self.assertEqual(aj.kich_ban_mock("demo_force_ma_la"), "ma_la")
+        self.assertEqual(aj.kich_ban_mock("MOCK-MALA-9"), "ma_la")
+        self.assertEqual(aj.kich_ban_mock("demo_force_trung"), "trung")
+        self.assertIsNone(aj.kich_ban_mock("JTVN1"))
+        self.assertNotEqual(aj.MA_LA_DU_LIEU_THU, "1")
+
+
+class K_MaLaVaKhongDoanTrangThai(unittest.TestCase):
+    """Mã lạ ⇒ `KHONG_RO` (không đoán, không thử lại); mã `110` ⇒ KHÔNG được đoán nghĩa (D-4)."""
+
+    def test_k1_ma_la_khong_bao_gio_bi_doan_thanh_ma_da_biet(self):
+        for kq in (aj.ket_qua_ma_la("createOrder"), aj.ket_qua_ma_la("trackOrder", mock=True)):
+            chuan = kq.tho["loi_chuan"]
+            self.assertEqual(chuan["ma_chuan"], lh.KHONG_RO)
+            self.assertEqual(chuan["ma_goc_hang"], aj.MA_LA_DU_LIEU_THU)
+            self.assertFalse(chuan["co_the_thu_lai"], "mã chưa hiểu mà thử lại là gửi thêm vô ích")
+            self.assertNotIn(chuan["ma_chuan"],
+                             (lh.DON_TRUNG, lh.KHONG_TIM_THAY, lh.HANG_TU_CHOI, lh.XAC_THUC_HONG,
+                              lh.THAM_SO_SAI),
+                             "mã lạ bị gán cho một nghĩa cụ thể ⇒ đoán")
+            self.assertIn(aj.MA_LA_DU_LIEU_THU, chuan["thong_diep"])
+        self.assertIsNone(aj.ket_qua_ma_la("createOrder").ma_van_don)
+
+    def test_k2_DOI_CHUNG_DUONG_ma_da_biet_ra_dung_ma_chuan(self):
+        """Vế còn lại của K1: mã ĐÃ ĐỌC ĐƯỢC thì phải ra đúng nghĩa, không gộp vào KHONG_RO."""
+        for ma, mong in (("145003030", lh.XAC_THUC_HONG), ("145003204", lh.DON_TRUNG),
+                         ("999002000", lh.KHONG_TIM_THAY), ("145005004", lh.HANG_TU_CHOI),
+                         ("145003050", lh.THAM_SO_SAI), ("999010010", lh.HANG_TU_CHOI)):
+            kq = aj.doc_goi_tra_loi({"code": ma, "msg": "thử"}, "createOrder")
+            self.assertEqual(kq.tho["loi_chuan"]["ma_chuan"], mong, f"mã {ma} bị phân loại sai")
+            self.assertNotIn(kq.tho["loi_chuan"]["ma_chuan"], (lh.KHONG_RO,),
+                             f"mã {ma} ĐÃ đọc được mà vẫn rơi vào KHONG_RO")
+        self.assertTrue(aj.doc_goi_tra_loi({"code": "1", "data": {"billCode": "X"}},
+                                           "createOrder").ok,
+                        "code '1' là THÀNH CÔNG theo tài liệu — không được thành lỗi")
+
+    def test_k3_TU_KIEM_ma_la_that_su_la_ma_la(self):
+        """Chứng minh K1 không rỗng: mã dùng cho kịch bản phải THẬT SỰ không có trong bảng."""
+        self.assertNotIn(aj.MA_LA_DU_LIEU_THU, lh.JT_MA_LOI,
+                         "mã 'lạ' lại nằm trong bảng đã đọc ⇒ ca K1 không đo gì")
+        self.assertIn("999002000", lh.JT_MA_LOI, "đối chứng: bảng có thật và tra được")
+
+    def test_k4_mock_khong_bao_gio_tra_ma_110(self):
+        """D-4: mã `110` nhập nhằng ⇒ adapter KHÔNG được phát nó như một mã đã hiểu.
+
+        Ở đây đo hai chiều: (1) adapter không tự phát `110`; (2) nếu hãng có đẩy `110` vào thì
+        tầng ánh xạ THẬT (`trang_thai_hang.quyet_dinh`) từ chối áp trạng thái — tức adapter không
+        được "đỡ" bằng cách tự dịch nó thành một tên chuẩn.
+        """
+        qd110 = tth.quyet_dinh("jt", 110)
+        self.assertTrue(qd110.nhap_nhang, "110 phải là mã NHẬP NHẰNG theo sổ của hệ")
+        self.assertIsNone(qd110.trang_thai_ap, "110 bị áp một trạng thái ⇒ đoán nghĩa (D-4)")
+        self.assertNotIn(qd110.trang_thai_ap, tth.TRANG_THAI_HOAN_TAT)
+        self.assertTrue(qd110.can_soat)
+        # ĐỐI CHỨNG DƯƠNG: mã 112 ĐÃ đọc được thì ánh xạ ra tên chuẩn, có kiểm soát = False.
+        qd112 = tth.quyet_dinh("jt", 112)
+        self.assertTrue(qd112.biet_ma and not qd112.nhap_nhang)
+        self.assertEqual(qd112.trang_thai_ap, "dang_giao")
+        self.assertFalse(qd112.can_soat)
+
+    def test_k5_ket_qua_mock_chi_phat_ma_da_biet(self):
+        """Mọi mã trạng thái adapter phát ra phải nằm trong bảng đã đọc, và KHÔNG nhập nhằng."""
+        ad = ad_mock()
+        phat_ra = []
+        for ma in ("JTVN1", "MOCK-HONG-1", "MOCK-HETGIO-1", "MOCK-KHONGCO-1", "MOCK-MALA-1"):
+            kq = ad.trackOrder(ma)
+            if kq.tho.get("trang_thai") is not None:
+                phat_ra.append(kq.tho["trang_thai"])
+        self.assertEqual(phat_ra, [112], f"adapter phát mã trạng thái lạ: {phat_ra}")
+        for ma in phat_ra:
+            qd = tth.quyet_dinh("jt", ma)
+            self.assertTrue(qd.biet_ma, f"adapter phát mã {ma} không có trong bảng đã đọc")
+            self.assertFalse(qd.nhap_nhang, f"adapter phát mã nhập nhằng {ma}")
+            self.assertNotEqual(ma, 110, "adapter phát mã 110 — chưa ai chốt nghĩa (D-4)")
+
+    def test_k6_adapter_khong_tu_dich_ma_hang_thanh_ten_trang_thai(self):
+        """Adapter giữ mã THÔ của hãng; dịch là việc của `trang_thai_hang`.
+
+        `polling.py` đọc thẳng `kq.tho['trang_thai']` rồi đưa vào `quyet_dinh`. Nếu adapter tự
+        đổi sang tên chuẩn ("dang_giao") thì mọi vòng polling thành "mã lạ" — lỗi đã từng có.
+        """
+        kq = ad_mock().trackOrder("JTVN-CHUOI-THANG")
+        self.assertEqual(kq.tho["trang_thai"], 112, "phải là MÃ SỐ của hãng, không phải tên chuẩn")
+        self.assertIsInstance(kq.tho["trang_thai"], int)
+        self.assertFalse(tth.quyet_dinh("jt", kq.tho["trang_thai"]).can_soat)
+        # ĐỐI CHỨNG: chuỗi tên chuẩn đúng là mã LẠ với bảng của J&T (nên không được phát ra).
+        self.assertFalse(tth.quyet_dinh("jt", kq.tho["trang_thai_chuan"]).biet_ma)
+
+
+# ════════════════════════════════════════════════════════════════════════════════════════════════
 # G16-A — NỐI ADAPTER VÀO LỚP HTTP THẬT
 # ════════════════════════════════════════════════════════════════════════════════════════════════
 # Hai nhóm, và lý do có CẢ HAI:

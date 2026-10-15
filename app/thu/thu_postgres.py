@@ -40,6 +40,8 @@ Máy này có cụm PostgreSQL hệ thống ở **:5432** đang giữ CSDL của
 (`vip_customs`, `vip_customs_g16`, `vip_customs_test`). `_kiem_cong_an_toan` TỪ CHỐI chạy
 nếu cổng là 5432, kể cả khi người chạy cố tình đặt như vậy.
 """
+import glob
+import json
 import os
 import re
 import shutil
@@ -53,6 +55,7 @@ GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # …
 DU_AN = os.path.dirname(GOC)
 sys.path.insert(0, GOC)
 sys.path.insert(0, os.path.join(DU_AN, "trien_khai", "postgres"))
+import van_tay_cum                                                        # noqa: E402
 
 CONG_CAM = "5432"
 LENH_CAN = ("initdb", "pg_ctl", "psql")
@@ -150,13 +153,20 @@ class Cum(object):
 CUM = None
 DDL_PG = None
 CSDL_THU = "vh_g12_thu"
+# Vân tay cụm hệ thống :5432 — chụp TRƯỚC khi dựng bất cứ thứ gì, và SAU khi dọn xong.
+# Yêu cầu G17/AG-05: mọi báo cáo phải chứng minh được lượt đo KHÔNG đụng cụm đang giữ
+# CSDL của dự án khác. Xem `trien_khai/postgres/van_tay_cum.py`.
+VT_TRUOC = None
+VT_SAU = None
 
 
 def setUpModule():
-    global CUM, DDL_PG
+    global CUM, DDL_PG, VT_TRUOC
     ly_do = _thieu_gi()
     if ly_do:
         raise unittest.SkipTest("BỎ QUA bộ thử PostgreSQL — " + ly_do)
+    # Chụp vân tay TRƯỚC khi `initdb` — để lượt chụp không thể bị chính cụm thử làm nhiễu.
+    VT_TRUOC = van_tay_cum.chup(CONG_CAM)
     import sinh_ddl_pg
     DDL_PG = sinh_ddl_pg.sinh()[0]
     CUM = Cum()
@@ -173,9 +183,17 @@ def setUpModule():
 
 
 def tearDownModule():
+    global VT_SAU
     if CUM is not None:
         CUM.psql("DROP DATABASE IF EXISTS %s" % CSDL_THU)
         CUM.dong()
+    if VT_TRUOC is None:
+        return
+    VT_SAU = van_tay_cum.chup(CONG_CAM)
+    van_tay_cum.in_van_tay(VT_SAU, "VÂN TAY CỤM :%s — SAU KHI CHẠY HẾT BỘ THỬ" % CONG_CAM)
+    giong, lech = van_tay_cum.so_sanh(VT_TRUOC, VT_SAU)
+    print("        TRƯỚC = SAU: %s%s"
+          % ("ĐÚNG" if giong else "SAI — %s" % lech, ""))
 
 
 def q(sql, db=CSDL_THU, dung_lai_khi_loi=True):
@@ -690,6 +708,688 @@ class E_BonKetCuc(unittest.TestCase):
         self.assertIn("25P02", ma_all,
                       "câu SAU trigger phải bị chối bằng 25P02 — PostgreSQL huỷ CẢ giao dịch, "
                       "khác `RAISE(ABORT)` của SQLite chỉ huỷ CÂU: %s" % err_all[-300:])
+
+
+# =====================================================================================
+# G17 / AG-05 — NĂM LỚP THÊM (F…K)
+#
+# Bốn thứ được yêu cầu ở G17 mà A…E CHƯA trả lời được:
+#   F. chốt chặn cổng 5432 phải TỪ CHỐI THẬT (D chỉ kiểm hàm ở tầng đơn vị)
+#   G. vân tay cụm hệ thống :5432 TRƯỚC = SAU (chưa có ở đâu)
+#   H. khoá tư vấn cho migration, TẤT ĐỊNH và có ĐỐI CHỨNG ÂM
+#   I. DDL nguyên tử — đối chiếu số BẢNG/CỘT TRƯỚC–SAU (A chỉ nói "nạp được")
+#   J. đo KHỐI mất-cập-nhật, kèm ĐỐI CHỨNG DƯƠNG cho chính đồng hồ đo
+#   K. sao lưu/khôi phục: số dòng từng bảng + tổng TIỀN + payload NHỊ PHÂN
+# =====================================================================================
+KHOA_MIGRATION = 991204          # số khoá tư vấn; chỉ có nghĩa trong cụm thử
+
+
+def _tao_csdl(ten):
+    """Tạo một CSDL mới tinh trong CỤM THỬ. Không bao giờ chạm cụm :5432."""
+    CUM.psql("DROP DATABASE IF EXISTS %s" % ten, db="postgres")
+    rc, _, err = CUM.psql("CREATE DATABASE %s" % ten, db="postgres")
+    if rc:
+        raise AssertionError("không tạo được CSDL %s: %s" % (ten, err[-300:]))
+
+
+def _xoa_csdl(ten):
+    CUM.psql("DROP DATABASE IF EXISTS %s" % ten, db="postgres")
+
+
+def _psql_verbose(sql, db):
+    """psql có `VERBOSITY=verbose` để stderr mang SQLSTATE. Cần SQLSTATE vì phán bằng CHỮ
+    trong thông báo là phán bằng thứ đổi theo phiên bản/locale."""
+    p = subprocess.run(["psql", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                        "-d", db, "-qtAX", "-v", "VERBOSITY=verbose"],
+                       input=sql, capture_output=True, text=True)
+    return p.returncode, p.stdout, p.stderr, re.findall(r"ERROR:\s+([0-9A-Z]{5}):", p.stderr)
+
+
+def _dem_bang_cot(db):
+    """Đếm BẢNG và CỘT của một CSDL PostgreSQL. Trả (số bảng, số cột)."""
+    _, b, _ = CUM.psql("SELECT count(*) FROM pg_tables WHERE schemaname='public'", db=db)
+    _, c, _ = CUM.psql("SELECT count(*) FROM information_schema.columns"
+                       " WHERE table_schema='public'", db=db)
+    return int(b.strip() or -1), int(c.strip() or -1)
+
+
+def _schema_sqlite():
+    """Dựng schema THẬT trong SQLite `:memory:` TỪ CHÍNH mã đang chạy.
+
+    Không chép tay bản thứ hai, nên nó KHÔNG THỂ cũ hơn mã. Trả `{tên bảng: {tên cột}}`.
+    """
+    import sqlite3
+    import csdl
+    import ai_job
+    import goi_dich_vu
+    import harness_hang
+    import quan_sat
+    import tai_chinh
+    kn = sqlite3.connect(":memory:")
+    for s in (csdl.SCHEMA, tai_chinh.DDL_G07, goi_dich_vu.DDL_G08,
+              harness_hang.DDL_G09, ai_job.DDL_G10, quan_sat.DDL_G11):
+        kn.executescript(s)
+    ra = {}
+    for (ten,) in kn.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+        if ten == "sqlite_sequence":     # bảng của chính SQLite, không phải của dự án
+            continue
+        ra[ten] = {r[1] for r in kn.execute("PRAGMA table_info(%s)" % ten)}
+    kn.close()
+    return ra
+
+
+# ------------------------------------------------- F. chốt chặn cổng 5432, chạy THẬT
+class F_ChotChanCong5432ThatSu(unittest.TestCase):
+    """Chốt chặn cổng 5432 phải TỪ CHỐI THẬT — không chỉ tồn tại trong mã.
+
+    `D.test_d1` kiểm hàm `_kiem_cong_an_toan` ở tầng ĐƠN VỊ. Nó không trả lời được câu hỏi
+    quan trọng nhất: khi ai đó THẬT SỰ trỏ cả bộ thử vào cổng 5432 thì chuyện gì xảy ra.
+    Ở đây chạy ĐÚNG lệnh đó trong một tiến trình RIÊNG, rồi đối chiếu vân tay cụm :5432.
+
+    Cặp ca f1/f2 là một cặp ĐỐI CHỨNG: cùng một lệnh, chỉ khác CỔNG. Thiếu f2 thì f1 chỉ
+    nói được "lệnh đó thoát khác 0" — mà một lỗi cú pháp cũng thoát khác 0.
+    """
+
+    def _chay_bo_thu(self, cong, ten_lop):
+        """Chạy bộ thử này trong tiến trình riêng, TMPDIR riêng để bắt được cả tệp tạm.
+
+        `ten_lop` là BẮT BUỘC, và đó là một chốt chặn chứ không phải tiện lợi: nếu tiến
+        trình con chạy CẢ bộ thử thì nó chạy lại chính lớp F, lớp F lại sinh một tiến trình
+        con nữa — đệ quy. Đo được ngày 15/10/2026: khi chốt chặn cổng bị gỡ (đột biến), lượt
+        chạy đệ quy và ca thử `f1` **XANH vì lý do SAI** (nó bắt được chữ `TỪ CHỐI` từ tầng
+        đệ quy sâu hơn, trong thông báo lỗi của chính nó). Chạy đúng một lớp thì phép đo chỉ
+        còn một biến số: CỔNG.
+        """
+        tmp = tempfile.mkdtemp(prefix="vhpg-f-")
+        moi = dict(os.environ, VHPG_CONG=str(cong), TMPDIR=tmp, LANG="C", LC_ALL="C")
+        moi.pop("VHPG_SOCKET", None)          # ép nó phải tự quyết định theo cổng
+        p = subprocess.run([sys.executable, os.path.abspath(__file__), ten_lop],
+                           capture_output=True, text=True, env=moi, cwd=DU_AN, timeout=600)
+        return p, tmp
+
+    @staticmethod
+    def _sock_tmp():
+        return set(glob.glob("/tmp/vhpg.*"))
+
+    def test_f1_tro_vao_cong_5432_thi_tu_choi_va_khong_dung_gi(self):
+        truoc = van_tay_cum.chup(CONG_CAM)
+        if not truoc["truy_cap_duoc"]:
+            self.skipTest("cụm :%s không chạy — không đo được vân tay" % CONG_CAM)
+        sock_truoc = self._sock_tmp()
+        # Chạy ĐÚNG lớp D (4 ca, không sinh tiến trình con) — xem `_chay_bo_thu`.
+        p, tmp = self._chay_bo_thu(CONG_CAM, "D_ChotChanCuaBoThu")
+        try:
+            ra = p.stdout + p.stderr
+            self.assertNotEqual(p.returncode, 0,
+                                "bộ thử CHẠY trên cổng 5432 mà vẫn thoát 0 — chốt chặn đã mất")
+            self.assertIn("TỪ CHỐI", ra, "không thấy lời từ chối: %s" % ra[-300:])
+            self.assertIn("vip_customs", ra,
+                          "lời từ chối phải NÓI RÕ cụm đó đang giữ CSDL của ai")
+            self.assertIn("Ran 0 tests", ra,
+                          "lẽ ra phải từ chối TRƯỚC khi chạy ca nào — thấy: %s"
+                          % re.findall(r"Ran \d+ tests", ra))
+            _, _, err, _ = _psql_verbose("SELECT 1", "postgres")   # cụm thử còn sống không
+            self.assertEqual(err, "", "cụm thử có vấn đề: %s" % err[-200:])
+            self.assertEqual(os.listdir(tmp), [],
+                             "đã từ chối mà vẫn dựng thư mục dữ liệu trong TMPDIR riêng")
+            self.assertEqual(self._sock_tmp() - sock_truoc, set(),
+                             "đã từ chối mà vẫn tạo thư mục socket mới trong /tmp")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        giong, lech = van_tay_cum.so_sanh(truoc, van_tay_cum.chup(CONG_CAM))
+        self.assertTrue(giong, "vân tay :%s ĐỔI sau lượt từ chối: %s" % (CONG_CAM, lech))
+
+    def test_f2_doi_chung_duong_cong_khac_thi_khong_tu_choi(self):
+        """ĐỐI CHỨNG DƯƠNG: CÙNG lệnh đó, chỉ đổi cổng sang 55433 → KHÔNG từ chối, chạy
+        bình thường. Đây là vế làm cho f1 có nghĩa: nó chỉ ra nguyên nhân là CỔNG."""
+        p, tmp = self._chay_bo_thu(55433, "D_ChotChanCuaBoThu")
+        try:
+            ra = p.stdout + p.stderr
+            self.assertNotIn("TỪ CHỐI chạy trên cổng", ra, "cổng hợp lệ mà vẫn bị từ chối")
+            self.assertEqual(p.returncode, 0, ra[-500:])
+            self.assertIn("Ran 4 tests", ra, "đối chứng dương phải CHẠY ĐƯỢC ca: %s" % ra[-300:])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+# --------------------------------------------- G. vân tay cụm hệ thống :5432 TRƯỚC = SAU
+class G_VanTayCumHeThong(unittest.TestCase):
+    """Yêu cầu G17: *"mọi báo cáo phải ghi rõ … vân tay cụm :5432 TRƯỚC = SAU
+    (PID postmaster, danh sách CSDL)"*. Một lời khai không phải một phép đo — lớp này đo.
+
+    Lượt chụp TRƯỚC lấy ở `setUpModule`, TRƯỚC cả `initdb` của cụm thử. Gọi lại ở đây và
+    đối chiếu. `tearDownModule` chụp thêm một lượt SAU khi đã dọn, in ra để báo cáo có số.
+    """
+
+    def test_g1_van_tay_khong_doi(self):
+        if VT_TRUOC is None or not VT_TRUOC.get("truy_cap_duoc"):
+            self.skipTest("cụm :%s không chạy trên máy này — không đo được vân tay. %s"
+                          % (CONG_CAM, (VT_TRUOC or {}).get("ghi_chu", "")))
+        sau = van_tay_cum.chup(CONG_CAM)
+        giong, lech = van_tay_cum.so_sanh(VT_TRUOC, sau)
+        self.assertTrue(giong, "VÂN TAY CỤM :%s ĐÃ ĐỔI giữa lượt chạy: %s" % (CONG_CAM, lech))
+
+    def test_g2_van_tay_phai_doc_duoc_that(self):
+        """TỰ CHẶN CA XANH GIẢ. Cụm không đọc được thì `chup()` trả `truy_cap_duoc=False`
+        cho CẢ HAI lượt, và "TRƯỚC = SAU" đúng một cách vô nghĩa. Ca này đòi vân tay phải
+        có NỘI DUNG THẬT — PID, `data_directory`, và danh sách CSDL phải chứa CSDL của
+        dự án kia (tức là đang nhìn ĐÚNG cụm, không phải một cụm rỗng nào khác)."""
+        if VT_TRUOC is None or not VT_TRUOC.get("truy_cap_duoc"):
+            self.skipTest("cụm :%s không chạy — bỏ qua, có nêu lý do" % CONG_CAM)
+        self.assertTrue(VT_TRUOC.get("pid"), "vân tay thiếu PID postmaster")
+        self.assertTrue(VT_TRUOC.get("data_directory"), "vân tay thiếu data_directory")
+        self.assertGreaterEqual(VT_TRUOC.get("so_csdl", 0), 1,
+                                "danh sách CSDL rỗng — vân tay vô nghĩa")
+        self.assertTrue(any(d.startswith("vip_customs") for d in VT_TRUOC["danh_sach_csdl"]),
+                        "danh sách CSDL KHÔNG có `vip_customs*` — đang nhìn nhầm cụm: %s"
+                        % VT_TRUOC["danh_sach_csdl"])
+
+    def test_g3_phep_so_phat_hien_duoc_khac_biet(self):
+        """TỰ KIỂM BỎ ĐỒ: phép so phải LÀM ĐỎ ĐƯỢC. Tiêm một khác biệt vào bản sao vân tay
+        rồi đòi `so_sanh` báo lệch. Không có ca này thì một `so_sanh` luôn trả `True` cũng
+        "đạt" ở g1 — và cả báo cáo "TRƯỚC = SAU" trở thành đồ trang trí."""
+        if VT_TRUOC is None or not VT_TRUOC.get("truy_cap_duoc"):
+            self.skipTest("cụm :%s không chạy" % CONG_CAM)
+        for truong, gia_tri in (("pid", "999999"),
+                                ("danh_sach_csdl",
+                                 sorted(VT_TRUOC["danh_sach_csdl"] + ["csdl_them_vao"])),
+                                ("postmaster_bat_dau", "2000-01-01 00:00:00+07"),
+                                ("phien_ban_may_chu", "0.0-gia")):
+            ban_sao = json.loads(json.dumps(VT_TRUOC))
+            ban_sao[truong] = gia_tri
+            if truong == "danh_sach_csdl":
+                ban_sao["so_csdl"] = len(gia_tri)
+            giong, lech = van_tay_cum.so_sanh(VT_TRUOC, ban_sao)
+            self.assertFalse(giong, "so_sanh KHÔNG phát hiện `%s` đổi — phép so là đồ giả"
+                             % truong)
+            self.assertIn(truong, [x[0] for x in lech],
+                          "lệch báo sai trường: %s" % lech)
+        # Vế còn lại: một lượt chụp KHÔNG đọc được cụm thì KHÔNG được phán "giống".
+        chet = dict(VT_TRUOC, truy_cap_duoc=False, so_csdl=0, danh_sach_csdl=[])
+        self.assertFalse(van_tay_cum.so_sanh(VT_TRUOC, chet)[0],
+                         "so_sanh phán 'giống' khi một bên không đọc được cụm")
+
+
+# ------------------------------------------ H. khoá tư vấn: đúng MỘT tiến trình migration
+class H_MigrationKhoaTuVan(unittest.TestCase):
+    """Khoá tư vấn (advisory lock) để CHỈ MỘT tiến trình migration nâng cấp.
+
+    Vì sao cần: `migrate.chay()` đọc phiên bản rồi mới nâng. Hai tiến trình cùng làm việc
+    đó thì cả hai cùng thấy 7 và cùng nâng lên 8. Trên SQLite chuyện đó bị chặn bằng khoá
+    ghi của tệp; trên PostgreSQL không có gì chặn — phải XIN khoá tường minh.
+
+    PHÉP ĐO NÀY TẤT ĐỊNH, không dựa vào may rủi lịch trình: hai tiến trình BẮT TAY qua một
+    bảng hàng rào (`hang_rao`) trước khi vào giao dịch nâng cấp, nên chắc chắn cả hai đã
+    sẵn sàng. Có khoá thì cái thứ hai NHƯỜNG; không khoá (ĐỐI CHỨNG ÂM) thì cái thứ hai ĐỤNG.
+    """
+
+    @staticmethod
+    def _dat_lai():
+        q("DROP TABLE IF EXISTS pb_migration CASCADE;"
+          " DROP TABLE IF EXISTS bang_v8 CASCADE;"
+          " DROP TABLE IF EXISTS hang_rao CASCADE;"
+          " CREATE TABLE pb_migration (phien_ban int PRIMARY KEY);"
+          " INSERT INTO pb_migration VALUES (7);"
+          " CREATE TABLE hang_rao (ten text PRIMARY KEY);")
+
+    @staticmethod
+    def _kich_ban(ten, dung_khoa):
+        than = "INSERT INTO hang_rao (ten) VALUES ('%s');\n" % ten
+        than += ("DO $$ DECLARE n int; BEGIN\n"
+                 "  LOOP SELECT count(*) INTO n FROM hang_rao;"
+                 " EXIT WHEN n >= 2; PERFORM pg_sleep(0.05); END LOOP;\n"
+                 "END $$;\n")
+        than += "BEGIN;\n"
+        if dung_khoa:
+            than += "SELECT pg_advisory_xact_lock(%d);\n" % KHOA_MIGRATION
+        than += ("DO $$ DECLARE v int; BEGIN\n"
+                 # `max(...)` chứ KHÔNG `SELECT phien_ban INTO v`: bảng phiên bản TÍCH LUỸ
+                 # dòng, nên `SELECT phien_ban INTO v` lấy một dòng BẤT KỲ. Bản đầu của ca
+                 # này viết thiếu `max()` và nó đọc trúng dòng CŨ (7) sau khi tiến trình kia
+                 # đã nâng lên 8 — làm phép đo báo "khoá tư vấn không tác dụng" trong khi
+                 # khoá vẫn tốt. Đo lại bằng `max()` mới thấy đúng: xem docs/G17_POSTGRES.md.
+                 "  SELECT max(phien_ban) INTO v FROM pb_migration;\n"
+                 # `pg_sleep` giữ cửa sổ ĐỌC–RỒI–GHI mở đủ rộng. Không có nó thì lượt
+                 # KHÔNG khoá (đối chứng âm) có thể chạy nối đuôi nhau và cho ra kết quả
+                 # GIỐNG lượt có khoá — đối chứng mất tác dụng. Bản đầu thiếu dòng này và
+                 # h2 đã hỏng đúng vì lý do đó (đo 15/10/2026).
+                 "  PERFORM pg_sleep(0.4);\n"
+                 "  IF v < 8 THEN\n"
+                 "    CREATE TABLE IF NOT EXISTS bang_v8 (id int primary key, ghi_chu text);\n"
+                 "    INSERT INTO pb_migration VALUES (8);\n"
+                 "    RAISE NOTICE 'DA_NANG_CAP';\n"
+                 "  ELSE RAISE NOTICE 'NHUONG'; END IF;\n"
+                 "END $$;\nCOMMIT;\n")
+        return than
+
+    def _chay_hai(self, dung_khoa):
+        """Hai tiến trình `psql` THẬT, chạy chồng nhau (không nối đuôi)."""
+        self._dat_lai()
+        ps = []
+        for ten in ("a", "b"):
+            p = subprocess.Popen(
+                ["psql", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                 "-d", CSDL_THU, "-qtAX", "-v", "VERBOSITY=verbose", "-v", "ON_ERROR_STOP=1"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            p.stdin.write(self._kich_ban(ten, dung_khoa))
+            p.stdin.flush()
+            ps.append(p)
+        ra = []
+        for p in ps:
+            p.stdin.close()
+            ma = p.wait(timeout=240)
+            out, err = p.stdout.read(), p.stderr.read()
+            p.stdout.close()
+            p.stderr.close()
+            ra.append({"rc": ma, "ra": out + err,
+                       "loi": re.findall(r"ERROR:\s+([0-9A-Z]{5}):", err)})
+        _, pb, _ = q("SELECT count(*)||'|'||max(phien_ban) FROM pb_migration")
+        _, v8, _ = q("SELECT count(*) FROM pg_tables"
+                     " WHERE schemaname='public' AND tablename='bang_v8'")
+        return ra, pb.strip(), v8.strip()
+
+    def test_h1_co_khoa_thi_dung_mot_tien_trinh_nang_cap(self):
+        ra, pb, v8 = self._chay_hai(dung_khoa=True)
+        nang = sum(1 for k in ra if "DA_NANG_CAP" in k["ra"])
+        nhuong = sum(1 for k in ra if "NHUONG" in k["ra"])
+        loi = [x for k in ra for x in k["loi"]]
+        print("        CÓ khoá   : nâng=%d · nhường=%d · lỗi=%s · pb=%s · bảng v8=%s"
+              % (nang, nhuong, sorted(set(loi)) or "không", pb, v8))
+        self.assertEqual(nang, 1, "lẽ ra đúng MỘT tiến trình nâng cấp, nhận %d" % nang)
+        self.assertEqual(nhuong, 1, "tiến trình kia phải NHƯỜNG, nhận %d" % nhuong)
+        self.assertEqual(loi, [], "có tiến trình báo lỗi dù đã có khoá: %s" % loi)
+        self.assertEqual(pb, "2|8", "phải đúng 2 dòng phiên bản và max=8, nhận %s" % pb)
+        self.assertEqual(v8, "1", "bảng `bang_v8` phải có đúng một lần")
+
+    def test_h2_doi_chung_am_bo_khoa_thi_dung_nhau(self):
+        """ĐỐI CHỨNG ÂM — vế làm cho h1 có nghĩa. CÙNG kịch bản, CÙNG cách bắt tay, chỉ bỏ
+        đúng một dòng `pg_advisory_xact_lock`. Kết quả PHẢI KHÁC h1; nếu vẫn giống thì phép
+        đo ở h1 không hề chạm tới khoá, và "đúng một tiến trình nâng cấp" là do may."""
+        ra, pb, v8 = self._chay_hai(dung_khoa=False)
+        nang = sum(1 for k in ra if "DA_NANG_CAP" in k["ra"])
+        nhuong = sum(1 for k in ra if "NHUONG" in k["ra"])
+        loi = [x for k in ra for x in k["loi"]]
+        print("        KHÔNG khoá: nâng=%d · nhường=%d · lỗi=%s · pb=%s · bảng v8=%s"
+              % (nang, nhuong, sorted(set(loi)) or "không", pb, v8))
+        self.assertTrue(loi, "bỏ khoá mà KHÔNG tiến trình nào đụng nhau — phép đo ở h1 "
+                             "không chạm tới khoá, ĐỪNG tin kết quả h1")
+        self.assertIn("23505", loi, "đụng độ phải là 23505 unique_violation, nhận %s" % loi)
+
+
+# --------------------------------------------------- I. DDL nguyên tử: TRƯỚC–SAU số bảng/cột
+class I_DDLNguyenTuTruocSau(unittest.TestCase):
+    """Schema THẬT nạp trong MỘT giao dịch — và đối chiếu số BẢNG/CỘT TRƯỚC–SAU.
+
+    `A.test_a1` đã khẳng định "nạp được". Lớp này thêm đúng thứ mà "nạp được" KHÔNG nói lên:
+    TRƯỚC là bao nhiêu, SAU là bao nhiêu, con số SAU có khớp schema SQLite đang chạy không,
+    và khi hỏng giữa khối thì có lùi về đúng con số TRƯỚC hay không.
+    """
+
+    CSDL_DUONG = "vh_g17_duong"
+    CSDL_AM = "vh_g17_am"
+
+    def test_i1_truoc_sau_va_khop_sqlite(self):
+        _tao_csdl(self.CSDL_DUONG)
+        try:
+            b_truoc, c_truoc = _dem_bang_cot(self.CSDL_DUONG)
+            self.assertEqual((b_truoc, c_truoc), (0, 0),
+                             "CSDL mới tinh mà đã có bảng/cột — phép đo nhìn nhầm chỗ")
+            rc, _, err = CUM.psql("BEGIN;\n" + DDL_PG + "\nCOMMIT;", db=self.CSDL_DUONG)
+            self.assertEqual(rc, 0, "DDL không nạp trọn trong một giao dịch:\n" + err[-900:])
+            b_sau, c_sau = _dem_bang_cot(self.CSDL_DUONG)
+            sl = _schema_sqlite()
+            so_cot_sl = sum(len(v) for v in sl.values())
+            print("        TRƯỚC: %d bảng / %d cột  →  SAU: %d bảng / %d cột"
+                  "   (SQLite đang chạy: %d bảng / %d cột)"
+                  % (b_truoc, c_truoc, b_sau, c_sau, len(sl), so_cot_sl))
+            self.assertGreaterEqual(b_sau, 40,
+                                    "chỉ %d bảng — chặn ca 'DDL rỗng cũng nạp đạt'" % b_sau)
+            self.assertEqual(b_sau, len(sl), "số BẢNG lệch với SQLite đang chạy")
+            self.assertEqual(c_sau, so_cot_sl, "số CỘT lệch với SQLite đang chạy")
+        finally:
+            _xoa_csdl(self.CSDL_DUONG)
+
+    def test_i2_doi_chung_am_hong_giua_khoi_thi_lui_ve_dung_truoc(self):
+        """ĐỐI CHỨNG ÂM: cùng khối DDL đó, chèn một câu SAI vào CUỐI. Mọi bảng đứng TRƯỚC
+        câu sai — kể cả `tenants` — phải BIẾN MẤT. Không có ca này thì "47 bảng" ở i1 có
+        thể đạt được ngay cả khi giao dịch không hề nguyên tử."""
+        _tao_csdl(self.CSDL_AM)
+        try:
+            rc, out, err, ma = _psql_verbose(
+                "BEGIN;\n" + DDL_PG + "\nCREATE TABLE cau_sai_co_y (id int, );\nCOMMIT;\n",
+                self.CSDL_AM)
+            print("        đối chứng âm: mã thoát psql=%d · SQLSTATE=%s" % (rc, ma or "(không)"))
+            self.assertIn("42601", ma, "câu sai lẽ ra phải bị từ chối bằng 42601 syntax_error")
+            b_am, c_am = _dem_bang_cot(self.CSDL_AM)
+            self.assertEqual((b_am, c_am), (0, 0),
+                             "rollback KHÔNG sạch: còn %d bảng / %d cột" % (b_am, c_am))
+            _, con, _ = CUM.psql(
+                "SELECT count(*) FROM information_schema.tables"
+                " WHERE table_schema='public' AND table_name='tenants'", db=self.CSDL_AM)
+            self.assertEqual(con.strip(), "0",
+                             "bảng `tenants` đứng TRƯỚC câu sai mà vẫn còn — giao dịch "
+                             "KHÔNG nguyên tử")
+        finally:
+            _xoa_csdl(self.CSDL_AM)
+
+    def test_i3_hai_bang_do_migration_nam_ngoai_bo_ddl(self):
+        """GHIM PHẠM VI, bằng số đo. Bộ DDL 47 bảng là schema NỀN. Hai bảng `don_mat_hang`
+        và `han_muc_nhap_thang` do `migrate.py` tạo ở đường ALTER (`nang_len_v7/v8`), nên
+        CHƯA có trong phép diễn tập này.
+
+        Ca này ghim con số đó lại: ai thêm một bảng mới mà quên đưa nó vào MỘT trong hai
+        đường thì ca này KÊU — thay vì để phạm vi lặng lẽ trôi."""
+        sl = _schema_sqlite()
+        tat_ca = set()
+        for f in glob.glob(os.path.join(DU_AN, "app", "*.py")):
+            with open(f, encoding="utf-8") as fh:
+                tat_ca |= set(re.findall(r"CREATE TABLE (?:IF NOT EXISTS )?([a-z_0-9]+)",
+                                         fh.read()))
+        ngoai = sorted(tat_ca - set(sl))
+        print("        %d bảng trong bộ DDL · %d bảng toàn bộ app/ · NGOÀI bộ DDL: %s"
+              % (len(sl), len(tat_ca), ", ".join(ngoai)))
+        self.assertEqual(ngoai, ["don_mat_hang", "han_muc_nhap_thang"],
+                         "tập bảng NGOÀI bộ DDL 47 đã đổi: %s — cập nhật mục PHẠM VI của "
+                         "docs/G17_POSTGRES.md trước khi sửa ca này" % ngoai)
+
+
+# --------------------------------------- J. đo KHỐI mất-cập-nhật, có đối chứng cho đồng hồ
+class J_DoiChieuMatCapNhat(unittest.TestCase):
+    """PHÁT HIỆN LỚN, đo có ĐỐI CHỨNG: CÙNG khuôn đọc-rồi-ghi, nhiều TIẾN TRÌNH thật.
+
+      · PostgreSQL 16.15 → **IM LẶNG MẤT**, không lượt nào báo lỗi
+      · SQLite 3.51.0    → **TỪ CHỐI ỒN ÀO**, mất cập nhật = 0
+
+    `E.test_e2/e3` là bản TẤT ĐỊNH (ép thứ tự, đúng một lượt mất). Lớp này là bản ĐO KHỐI:
+    đếm số lượt CHỐT so với số THẬT trong CSDL, để câu "mất bao nhiêu phần trăm" có chỗ dựa.
+
+    Và nó có HAI ĐỐI CHỨNG DƯƠNG cho chính cái đồng hồ đo — đúng hai khuôn ĐÚNG mà chỉ thị
+    G17 nêu tên: cộng ở TẦNG CÂU (`gia_tri = gia_tri + 1`) và `SELECT … FOR UPDATE`. Cả hai
+    PHẢI cho mất cập nhật = 0. Thiếu hai vế đó thì một đồng hồ luôn báo "mất" cũng "đạt".
+
+    THAM SỐ ĐO (ghi ra vì con số chỉ có nghĩa kèm tham số): 4 TIẾN TRÌNH THẬT × 30 phép =
+    120 lượt, trên MỘT hàng `g17_dem(id=1)`, qua socket Unix nội máy. Đo bằng tiến trình
+    chứ không bằng thread: khoá ghi của Python chỉ phủ MỘT tiến trình, nên đo bằng thread là
+    đo chính cái khoá đó rồi kết luận "an toàn" cho cả nó không phủ.
+    """
+
+    SO_TT = 4
+    SO_PHEP = 30
+
+    def _dat_lai(self):
+        q("DROP TABLE IF EXISTS g17_dem;"
+          " CREATE TABLE g17_dem (id int PRIMARY KEY, gia_tri int NOT NULL);"
+          " INSERT INTO g17_dem VALUES (1,0);")
+
+    def _tho_pg(self, kieu):
+        mot = ("SELECT gia_tri AS v FROM g17_dem WHERE id=1 \\gset\n"
+               "BEGIN;\nUPDATE g17_dem SET gia_tri = :v + 1 WHERE id=1;\nCOMMIT;\n"
+               "\\echo COT_CHOT\n")
+        if kieu == "nguyen_tu":
+            mot = ("UPDATE g17_dem SET gia_tri = gia_tri + 1 WHERE id=1;\n\\echo COT_CHOT\n")
+        elif kieu == "khoa_hang":
+            # Khuôn ĐÚNG thứ hai: giữ khoá HÀNG bằng `FOR UPDATE` TRƯỚC khi đọc, nên lượt
+            # đọc của tiến trình sau chỉ chạy khi tiến trình trước đã chốt.
+            mot = ("BEGIN;\n"
+                   "SELECT gia_tri AS v FROM g17_dem WHERE id=1 FOR UPDATE \\gset\n"
+                   "UPDATE g17_dem SET gia_tri = :v + 1 WHERE id=1;\nCOMMIT;\n"
+                   "\\echo COT_CHOT\n")
+        return mot * self.SO_PHEP
+
+    def _chay_pg(self, kieu):
+        """Mỗi tiến trình = MỘT `psql`. Đếm số lượt CHỐT bằng dấu `\\echo COT_CHOT` in ra
+        SAU `COMMIT` — không suy từ mã thoát, vì mã thoát không đếm được lượt."""
+        self._dat_lai()
+        ps = []
+        for _ in range(self.SO_TT):
+            p = subprocess.Popen(
+                ["psql", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                 "-d", CSDL_THU, "-qtAX", "-v", "ON_ERROR_STOP=1"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            p.stdin.write(self._tho_pg(kieu))
+            p.stdin.flush()
+            ps.append(p)
+        chot, loi = 0, []
+        for p in ps:
+            p.stdin.close()
+            ma = p.wait(timeout=300)
+            out, err = p.stdout.read(), p.stderr.read()
+            p.stdout.close()
+            p.stderr.close()
+            chot += out.count("COT_CHOT")
+            if ma:
+                loi.append("psql thoát %d: %s" % (ma, err.strip()[-120:]))
+        _, out, _ = q("SELECT gia_tri FROM g17_dem WHERE id=1")
+        return chot, int(out.strip()), loi
+
+    def test_j1_doi_chung_duong_cong_o_tang_cau(self):
+        """ĐỒNG HỒ ĐO phải trả về 0 được — khuôn ĐÚNG thứ nhất: cộng ở TẦNG CÂU.
+        `%d tiến trình × %d phép`, hàng `g17_dem(id=1)` → TIN == THẬT."""
+        chot, that, loi = self._chay_pg("nguyen_tu")
+        print("        cộng tầng câu : chốt=%d · thật=%d · mất=%d · lỗi=%d"
+              % (chot, that, chot - that, len(loi)))
+        self.assertEqual(loi, [], "có tiến trình lỗi: %s" % loi)
+        self.assertEqual(chot, self.SO_TT * self.SO_PHEP, "không chốt đủ số lượt")
+        self.assertEqual(that, chot, "cộng ở tầng câu mà vẫn mất cập nhật")
+
+    def test_j2_postgres_mat_cap_nhat_im_lang(self):
+        """VẾ CHÍNH: khuôn đọc-rồi-ghi ngây thơ trên PostgreSQL → CHỐT nhiều hơn THẬT, và
+        KHÔNG một lượt nào báo lỗi. Mất cập nhật là kết cục IM LẶNG.
+
+        THAM SỐ (`SO_TT` tiến trình THẬT × `SO_PHEP` phép = 120 lượt), trên MỘT hàng
+        `g17_dem(id=1)`, socket Unix nội máy, cụm riêng. Tỉ lệ mất KHÔNG tất định — đo được
+        43–71% giữa các lượt. Điều tất định, và là điều ca này khẳng định, là `mất > 0`
+        cùng với `lỗi == 0`."""
+        chot, that, loi = self._chay_pg("ngay_tho")
+        mat = chot - that
+        print("        đọc-rồi-ghi   : %d tiến trình × %d phép · chốt=%d · thật=%d · "
+              "MẤT=%d (%.1f%%) · lỗi=%d"
+              % (self.SO_TT, self.SO_PHEP, chot, that, mat,
+                 100.0 * mat / chot if chot else 0, len(loi)))
+        self.assertEqual(loi, [], "có lượt báo lỗi — lượt này KHÔNG còn là 'im lặng': %s" % loi)
+        self.assertGreater(mat, 0,
+                           "PostgreSQL KHÔNG mất cập nhật — hành vi đã đổi, đọc "
+                           "docs/G17_POSTGRES.md trước khi sửa ca này")
+
+    def test_j4_doi_chung_duong_khoa_hang_for_update(self):
+        """ĐỒNG HỒ ĐO phải trả về 0 được — khuôn ĐÚNG thứ hai: `SELECT … FOR UPDATE`.
+
+        Đây là vế mà chỉ thị G17 nêu đích danh. Nó quan trọng hơn `j1` ở một điểm: `j1` sửa
+        được vì phép cộng nằm gọn trong MỘT câu; còn `FOR UPDATE` sửa được cả những chỗ
+        LUẬT NGHIỆP VỤ nằm giữa lượt đọc và lượt ghi (đối soát, tính phí, trừ hạn mức) —
+        những chỗ mà `x = x + 1` không thay thế được. Cùng tham số như j2."""
+        chot, that, loi = self._chay_pg("khoa_hang")
+        print("        FOR UPDATE    : chốt=%d · thật=%d · mất=%d · lỗi=%d"
+              % (chot, that, chot - that, len(loi)))
+        self.assertEqual(loi, [], "có tiến trình lỗi: %s" % loi)
+        self.assertEqual(chot, self.SO_TT * self.SO_PHEP, "không chốt đủ số lượt")
+        self.assertEqual(that, chot,
+                         "giữ khoá HÀNG bằng FOR UPDATE mà vẫn mất cập nhật")
+
+    def test_j3_sqlite_cung_khuon_thi_tu_choi(self):
+        """VẾ ĐỐI CHỨNG: SQLite với CÙNG khuôn, CÙNG số tiến trình. Điều phải đúng ở đây
+        là **số THẬT == số lượt CHỐT THÀNH CÔNG** — tức nó KHÔNG âm thầm mất. Lượt nào
+        không chốt được thì nó BÁO LỖI (`database is locked`), không nuốt."""
+        import sqlite3
+        thu_muc = tempfile.mkdtemp(prefix="vhg17-j3-")
+        duong = os.path.join(thu_muc, "j3.db")
+        try:
+            kn = sqlite3.connect(duong, isolation_level=None)
+            kn.execute("PRAGMA journal_mode=WAL")
+            kn.execute("CREATE TABLE g17_dem (id INTEGER PRIMARY KEY, gia_tri INTEGER NOT NULL)")
+            kn.execute("INSERT INTO g17_dem VALUES (1,0)")
+            kn.close()
+            tho = (
+                "import sqlite3, sys\n"
+                "kn = sqlite3.connect(sys.argv[1], timeout=5.0, isolation_level=None)\n"
+                "kn.execute('PRAGMA busy_timeout=2000')\n"
+                "ok = 0; loi = 0\n"
+                "for _ in range(int(sys.argv[2])):\n"
+                "    try:\n"
+                "        kn.execute('BEGIN')\n"
+                "        cu = kn.execute('SELECT gia_tri FROM g17_dem WHERE id=1').fetchone()[0]\n"
+                "        kn.execute('UPDATE g17_dem SET gia_tri=? WHERE id=1', (cu + 1,))\n"
+                "        kn.execute('COMMIT'); ok += 1\n"
+                "    except sqlite3.Error:\n"
+                "        loi += 1\n"
+                "        try: kn.execute('ROLLBACK')\n"
+                "        except sqlite3.Error: pass\n"
+                "print('KQ', ok, loi)\n")
+            ps = [subprocess.Popen([sys.executable, "-c", tho, duong, str(self.SO_PHEP)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                  for _ in range(self.SO_TT)]
+            ra = [p.communicate(timeout=300) for p in ps]
+            self.assertEqual([p.returncode for p in ps], [0] * self.SO_TT,
+                             "tiến trình SQLite thoát khác 0: %s" % str(ra)[:300])
+            ok = loi = 0
+            for out, _ in ra:
+                for d in out.splitlines():
+                    if d.startswith("KQ "):
+                        _, a, b = d.split()
+                        ok += int(a)
+                        loi += int(b)
+            kn = sqlite3.connect(duong)
+            that = kn.execute("SELECT gia_tri FROM g17_dem WHERE id=1").fetchone()[0]
+            kn.close()
+            print("        SQLite        : chốt=%d · thật=%d · MẤT=%d · từ chối ồn ào=%d"
+                  % (ok, that, ok - that, loi))
+            self.assertEqual(that, ok,
+                             "SQLite ÂM THẦM mất %d cập nhật — TRÁI số đo 15/10/2026; phải "
+                             "đo lại trước khi tin" % (ok - that))
+        finally:
+            shutil.rmtree(thu_muc, ignore_errors=True)
+
+
+# ----------------------------------------------------------- K. sao lưu / khôi phục
+SEED_K = """
+INSERT INTO goi_dich_vu VALUES ('co_ban','Cơ bản',100000,100,10,3,2) ON CONFLICT (id) DO NOTHING;
+INSERT INTO tenants (id,code,ten,goi_id,tao_luc) VALUES (1,'t1','T1','co_ban','x')
+  ON CONFLICT (id) DO NOTHING;
+INSERT INTO carrier_providers (ma,ten,capabilities_json,live_mo,cap_nhat_luc)
+  VALUES ('jt','J&T','{}',0,'x') ON CONFLICT (ma) DO NOTHING;
+INSERT INTO carrier_accounts (id,tenant_id,hang,ten,moi_truong,credentials_ma_hoa,
+  credentials_duoi,webhook_ma,webhook_secret_ma_hoa,tao_luc)
+  VALUES (1,1,'jt','Acc','mock','v3$k$n$c','abcd','wh1','v3$k$n$c','x')
+  ON CONFLICT (id) DO NOTHING;
+INSERT INTO tc_but_toan (tenant_id,loai,so_tien_dong,chieu,nguon,can_cu,tao_luc)
+  VALUES (1,'cod',777000,'ghi_no','hang','thu COD','x');
+INSERT INTO wh_su_kien (carrier_account_id,event_id,payload_tho,headers_json,nhan_luc)
+  VALUES (1,'ev1', decode('00ff10ab5c7e','hex'), '{}','x');
+"""
+
+
+def _chup_kho(db):
+    """Chụp TRẠNG THÁI ĐO ĐƯỢC của một CSDL: số dòng TỪNG BẢNG, số CỘT, một TỔNG TIỀN,
+    và md5 của một payload NHỊ PHÂN. Đếm bảng là chưa đủ — một bản khôi phục RỖNG cũng khớp
+    số bảng."""
+    _, dong, _ = CUM.psql(
+        "SELECT string_agg(t||'='||n, ',' ORDER BY t) FROM ("
+        " SELECT tablename t, (xpath('/row/c/text()', query_to_xml("
+        "   format('SELECT count(*) c FROM %I', tablename), false, true, '')))[1]::text n"
+        " FROM pg_tables WHERE schemaname='public') s;", db=db)
+    _, cot, _ = CUM.psql("SELECT count(*) FROM information_schema.columns"
+                         " WHERE table_schema='public'", db=db)
+    _, tien, _ = CUM.psql("SELECT count(*)||'|'||coalesce(sum(so_tien_dong),0)"
+                          " FROM tc_but_toan", db=db)
+    _, bam, _ = CUM.psql("SELECT coalesce(md5(payload_tho),'(khong)') FROM wh_su_kien"
+                         " WHERE event_id='ev1'", db=db)
+    return {"so_dong_tung_bang": dong.strip(), "so_cot": cot.strip(),
+            "but_toan": tien.strip(), "md5_payload": bam.strip()}
+
+
+class K_SaoLuuKhoiPhuc(unittest.TestCase):
+    """`pg_dump -Fc` → `pg_restore`: giữ SỐ DÒNG từng bảng, TỔNG TIỀN, payload NHỊ PHÂN.
+
+    `§5` của `trien_khai/postgres/dien_tap_chuyen.py` đã làm việc này ở dạng script. Lớp
+    này đưa nó vào bộ hồi quy — nơi nó được chạy MỖI LƯỢT — và thêm hai thứ mà bản script
+    không có: `k2` chứng minh phép so LÀM ĐỎ ĐƯỢC, và `k3` chỉ ra vì sao không thể "khôi
+    phục rồi sửa tiền cho khớp".
+    """
+
+    CSDL_GOC = "vh_g17_k_goc"
+    CSDL_KP = "vh_g17_k_kp"
+    _cap = None
+    _goi = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls._goi = None
+        _tao_csdl(cls.CSDL_GOC)
+        rc, _, err = CUM.psql("BEGIN;\n" + DDL_PG + "\nCOMMIT;", db=cls.CSDL_GOC)
+        if rc:
+            raise AssertionError("nạp DDL vào %s hỏng: %s" % (cls.CSDL_GOC, err[-400:]))
+        rc, _, err = CUM.psql(SEED_K, db=cls.CSDL_GOC)
+        if rc:
+            raise AssertionError("gieo dữ liệu vào %s hỏng: %s" % (cls.CSDL_GOC, err[-400:]))
+        cls._goi = os.path.join(tempfile.mkdtemp(prefix="vhg17-k-"), "sao_luu.dump")
+        p = subprocess.run(["pg_dump", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                            "-d", cls.CSDL_GOC, "-Fc", "-f", cls._goi],
+                           capture_output=True, text=True)
+        if p.returncode:
+            raise AssertionError("pg_dump hỏng: %s" % p.stderr[-400:])
+        _tao_csdl(cls.CSDL_KP)
+        p = subprocess.run(["pg_restore", "-h", CUM.sock, "-p", str(CUM.cong), "-U", CUM.nguoi,
+                            "-d", cls.CSDL_KP, "--no-owner", cls._goi],
+                           capture_output=True, text=True)
+        if p.returncode:
+            raise AssertionError("pg_restore hỏng: %s" % p.stderr[-600:])
+        cls._cap = (_chup_kho(cls.CSDL_GOC), _chup_kho(cls.CSDL_KP))
+
+    @classmethod
+    def tearDownClass(cls):
+        _xoa_csdl(cls.CSDL_KP)
+        _xoa_csdl(cls.CSDL_GOC)
+        if cls._goi:
+            shutil.rmtree(os.path.dirname(cls._goi), ignore_errors=True)
+
+    def test_k1_khoi_phuc_giu_so_dong_va_tong_tien(self):
+        goc, kp = self._cap
+        so_bang = len(goc["so_dong_tung_bang"].split(","))
+        print("        gốc      : %d bảng · cột=%s · bút toán=%s · md5=%s"
+              % (so_bang, goc["so_cot"], goc["but_toan"], goc["md5_payload"][:12]))
+        print("        khôi phục: %d bảng · cột=%s · bút toán=%s · md5=%s"
+              % (len(kp["so_dong_tung_bang"].split(",")), kp["so_cot"], kp["but_toan"],
+                 kp["md5_payload"][:12]))
+        # CHỐT CHỐNG PHÉP ĐO RỖNG: hai chuỗi rỗng thì "bằng nhau" chẳng nói lên gì.
+        self.assertGreaterEqual(so_bang, 40,
+                                "phép đếm dòng rỗng/cụt — không chứng minh được gì")
+        self.assertEqual(goc["but_toan"], "1|777000",
+                         "dữ liệu gieo không đúng — phép đo TIỀN sẽ vô nghĩa")
+        self.assertNotIn(goc["md5_payload"], ("", "(khong)"),
+                         "không có payload NHỊ PHÂN để so")
+        self.assertGreater(int(goc["so_cot"]), 400, "số cột quá ít — nhìn nhầm CSDL")
+        self.assertEqual(goc, kp, "khôi phục LỆCH so với bản gốc")
+
+    def test_k2_phep_so_lam_do_duoc(self):
+        """TỰ KIỂM BỎ ĐỒ: sửa bản KHÔI PHỤC rồi đòi phép so PHẢI thấy khác. Không có ca
+        này thì một `_chup_kho` luôn trả hằng số cũng "đạt" ở k1."""
+        goc, kp = self._cap
+        rc, _, err = CUM.psql("CREATE TABLE bang_them_vao (id int)", db=self.CSDL_KP)
+        self.assertEqual(rc, 0, err[-200:])
+        try:
+            sau = _chup_kho(self.CSDL_KP)
+            self.assertNotEqual(goc, sau,
+                                "thêm một BẢNG vào bản khôi phục mà phép so KHÔNG thấy")
+            self.assertNotEqual(goc["so_cot"], sau["so_cot"], "số CỘT không đổi dù thêm bảng")
+        finally:
+            CUM.psql("DROP TABLE bang_them_vao", db=self.CSDL_KP)
+        # Và phép so TIỀN cũng phải nhạy: lệch đúng 1 đồng là phải thấy.
+        gia = dict(kp, but_toan="1|777001")
+        self.assertNotEqual(kp, gia, "phép so không nhìn tới trường TIỀN")
+        # Và payload nhị phân: lệch một bit là phải thấy.
+        gia2 = dict(kp, md5_payload="0" * 32)
+        self.assertNotEqual(kp, gia2, "phép so không nhìn tới md5 payload")
+
+    def test_k3_khong_the_khoi_phuc_roi_sua_tien_cho_khop(self):
+        """Bút toán là BẤT BIẾN (§17) và bất biến đó đi qua được `pg_dump`/`pg_restore`.
+        Nghĩa là nếu bản khôi phục lệch tiền thì KHÔNG có đường sửa lén — phải khôi phục lại.
+        Đây là vế làm cho phép so TIỀN ở k1 có nghĩa."""
+        rc, _, err = CUM.psql("UPDATE tc_but_toan SET so_tien_dong=1", db=self.CSDL_KP)
+        self.assertNotEqual(rc, 0, "sửa được bút toán trên bản khôi phục — bất biến đã mất")
+        rc, _, err = CUM.psql("DELETE FROM tc_but_toan", db=self.CSDL_KP)
+        self.assertNotEqual(rc, 0, "xoá được bút toán trên bản khôi phục — bất biến đã mất")
+        _, out, _ = q("SELECT 1")     # cụm thử còn sống
+        self.assertEqual(out.strip(), "1")
 
 
 if __name__ == "__main__":

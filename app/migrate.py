@@ -337,6 +337,49 @@ def nang_len_v7(kn):
     return buoc
 
 
+def nang_len_v8(kn):
+    """v8: gộp năm hằng DDL của đợt 3 — G07 tài chính · G08 gói dịch vụ · G09 harness hãng
+    · G10 công việc AI · G11 quan sát.
+
+    **Không viết lại DDL ở đây.** Năm hằng nằm trong module của chính nó
+    (`tai_chinh.DDL_G07`, `goi_dich_vu.DDL_G08`, `harness_hang.DDL_G09`, `ai_job.DDL_G10`,
+    `quan_sat.DDL_G11`) và migration CHẠY ĐÚNG CHUỖI ĐÓ. Chép sang đây là tạo bản thứ hai,
+    và hai bản nội dung là hai bản sẽ lệch nhau — lúc đó bộ thử của agent chạy một chuỗi còn
+    CSDL thật mang một chuỗi khác, không ai thấy cho tới khi có cột thiếu.
+
+    AG-00 đã đo trên cả năm chuỗi (bỏ lời bình trước khi quét): **27 bảng · 21 index ·
+    4 trigger · 0 DROP · 0 ALTER · 0 DELETE ngoài trigger · 0 cột REAL/FLOAT · 0 trùng tên**
+    — cả giữa các agent với nhau và với 23 bảng đang có. Toàn bộ là `IF NOT EXISTS` nên chạy
+    lại vô hại.
+
+    Bốn trigger của G07 là **chốt chặn SỬA/XOÁ bút toán** (`BEFORE UPDATE/DELETE ... RAISE
+    (ABORT)`) — tức là ngược với xoá. Đừng bắt nhầm chữ `DELETE` trong đó: §17 đòi bút toán
+    bất biến, và trigger là cách cưỡng chế bằng CSDL thay vì bằng lời dặn.
+    """
+    buoc = []
+    # Nạp muộn, trong hàm: năm module này không cần có mặt lúc `migrate` được import, và
+    # một module hỏng không được làm chết cả đường migration.
+    import ai_job
+    import goi_dich_vu
+    import harness_hang
+    import quan_sat
+    import tai_chinh
+
+    for ten, ddl in (("G07 tài chính + đối soát", tai_chinh.DDL_G07),
+                     ("G08 gói dịch vụ + mức dùng", goi_dich_vu.DDL_G08),
+                     ("G09 harness hãng", harness_hang.DDL_G09),
+                     ("G10 công việc AI", ai_job.DDL_G10),
+                     ("G11 quan sát", quan_sat.DDL_G11)):
+        truoc = {r[0] for r in kn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table','index','trigger')")}
+        kn.executescript(ddl)
+        sau = {r[0] for r in kn.execute(
+            "SELECT name FROM sqlite_master WHERE type IN ('table','index','trigger')")}
+        them = sorted(sau - truoc)
+        buoc.append(f"{ten}: +{len(them)} đối tượng" + (f" ({', '.join(them[:4])}…)" if them else ""))
+    return buoc
+
+
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -374,6 +417,8 @@ def chay(im_lang=False):
                 buoc += nang_len_v6(kn)
             if pb < 7:
                 buoc += nang_len_v7(kn)
+            if pb < 8:
+                buoc += nang_len_v8(kn)
             kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                        " VALUES (?,?,?)",
                        (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

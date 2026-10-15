@@ -12,24 +12,55 @@ cd "$GOC"
 TOI_THIEU=${VIP_TOI_THIEU_BO:-12}
 
 echo "══════════ BỘ THỬ PYTHON (unittest) ══════════"
-TONG=0; SO_BO=0; HONG=""
+TONG=0; SO_BO=0; HONG=""; BO_QUA=""; SO_BO_QUA=0
 # `thu_e2e.py` CỐ Ý loại khỏi phép dò: nó cần một máy chủ đang chạy + CSDL cô lập do
 # `chay_e2e.sh` dựng, nên chạy một mình là vô nghĩa. Nó vẫn ĐƯỢC CHẠY — ở mục E2E bên dưới,
 # qua đúng bộ chạy của nó. Loại ở đây là để không đếm nó hai lần và không báo hỏng giả;
 # KHÔNG phải để bỏ qua nó.
 for t in $(find app/thu gateway/thu -name 'thu_*.py' -type f ! -name 'thu_e2e.py' | sort); do
     SO_BO=$((SO_BO + 1))
-    OUT=$(python3 "$t" 2>&1) || true
-    N=$(printf '%s' "$OUT" | grep -oE 'Ran [0-9]+' | tail -1 | grep -oE '[0-9]+' || echo 0)
+    OUT=$(python3 "$t" 2>&1); MA=$?
+    # Đếm ca: `Ran N` của unittest, hoặc `N ca — ĐẠT` của bộ thử viết tay.
+    N=$(printf '%s' "$OUT" | grep -oE 'Ran [0-9]+' | tail -1 | grep -oE '[0-9]+' || true)
+    if [ -z "$N" ]; then
+        N=$(printf '%s' "$OUT" | grep -oE '[0-9]+ ca — ĐẠT' | tail -1 | grep -oE '^[0-9]+' || true)
+    fi
     N=${N:-0}
     TONG=$((TONG + N))
-    # Tìm dòng OK trên TOÀN BỘ output, không phải trên `tail -3`: một số bộ thử in thêm
-    # dòng chẩn đoán SAU dòng OK (thu_http.py in hai dòng [ca09]), nên tail -3 bỏ sót OK và
-    # báo HỎNG GIẢ. Bộ thử báo hỏng giả là kiểu sai tệ nhất với một cổng chặn hồi quy.
-    if printf '%s' "$OUT" | grep -qE '^OK( |$)'; then
+    # PHÁN BẰNG MÃ THOÁT, không bằng chữ trong output.
+    #
+    # Trước đây phán bằng `grep '^OK'` — nếp của unittest. Cách đó đã báo HỎNG GIẢ HAI LẦN,
+    # cùng một kiểu: lần đầu với thu_http.py (in dòng chẩn đoán sau `OK` nên `tail -3` bỏ sót),
+    # lần hai ngày 15/10/2026 với thu_bien_driver.py (không dùng unittest nên không in `OK`
+    # bao giờ, dù thoát 0 và 4 ca đều đạt). CLAUDE.md §12.2: một cấu trúc hỏng LẦN THỨ HAI
+    # theo cùng một kiểu thì ĐỔI CẤU TRÚC, đừng sửa cho đúng thêm một lần nữa.
+    #
+    # Và hướng sai NGUY HIỂM hơn nằm ở mặt còn lại: một bộ thử in `OK` ở đâu đó rồi thoát
+    # khác 0 sẽ được phán ĐẠT. Hiện chưa bộ nào như vậy (đo 15/10/2026: 27/27 bộ thoát 0,
+    # 26 bộ có `OK`, 1 bộ không) — nhưng "hiện chưa" không phải là chốt chặn.
+    #
+    # Mã thoát một mình vẫn lừa được: một bộ thử bắt hết lỗi rồi thoát 0 mà KHÔNG chạy ca nào
+    # cũng đạt. Nên đòi thêm DẤU VẾT ĐÃ CHẠY: đếm được số ca, hoặc có dòng OK/ĐẠT.
+    if printf '%s' "$OUT" | grep -qE '^OK( |$)|ca — ĐẠT'; then CO_DAU_VET=1; else CO_DAU_VET=0; fi
+    if [ "$MA" -eq 0 ] && [ "$CO_DAU_VET" = 1 ] && [ "$N" -gt 0 ]; then
         printf '  ✓ %-24s %4s ca\n' "$(basename "$t")" "$N"
+    elif [ "$MA" -eq 0 ] && [ "$N" -eq 0 ] && printf '%s' "$OUT" | grep -q 'skipped'; then
+        # BỎ QUA là phán quyết THỨ BA, không gộp vào ĐẠT.
+        # Trước 15/10/2026 chỉ có hai phán quyết, nên thu_postgres.py — bộ tự bỏ qua trừ khi
+        # bật VIP_THU_POSTGRES=1 — hiện dấu ✓ trong MỌI báo cáo dù chạy KHÔNG MỘT CA NÀO.
+        # Người đọc "27 bộ ĐẠT" tin là PostgreSQL đã được phủ; thật ra chưa đo gì.
+        # §12.1 luật 3: kết luận chỉ được nói trong đúng phạm vi đã đo.
+        LY=$(printf '%s' "$OUT" | grep -oE 'Bật bằng: [A-Z_]+=[0-9]+' | head -1 || true)
+        printf '  ⊘ %-24s    BỎ QUA  %s\n' "$(basename "$t")" "${LY:-không nêu cách bật}"
+        SO_BO_QUA=$((SO_BO_QUA + 1)); BO_QUA="$BO_QUA $(basename "$t")"
     else
-        printf '  ✗ %-24s %4s ca  HỎNG\n' "$(basename "$t")" "$N"
+        LY_DO="mã thoát $MA"
+        if [ "$MA" -eq 0 ] && [ "$CO_DAU_VET" = 0 ]; then
+            LY_DO="thoát 0 nhưng KHÔNG có dấu vết đã chạy ca nào"
+        elif [ "$MA" -eq 0 ] && [ "$N" -eq 0 ]; then
+            LY_DO="thoát 0 nhưng đếm được 0 ca"
+        fi
+        printf '  ✗ %-24s %4s ca  HỎNG (%s)\n' "$(basename "$t")" "$N" "$LY_DO"
         HONG="$HONG $(basename "$t")"
         printf '%s' "$OUT" | grep -E '^(FAIL|ERROR):' | head -8 | sed 's/^/        /'
     fi
@@ -65,8 +96,16 @@ if [ -f thu_frontend/thu_http.py ]; then
         printf '  tầng 2: HỎNG\n'; HONG="$HONG thu_http.py"
     fi
 fi
-echo "  tầng 3 (DOM/CSS trong trình duyệt thật): CHƯA TỰ ĐỘNG HOÁ"
-echo "     → repo cấm thư viện ngoài nên không có Playwright/Puppeteer (V-13906-01, chờ anh Thành)"
+# Tầng 3 KHÔNG chạy trong bộ này: nó cần Chromium + máy chủ sống, mất ~34 giây, và phải
+# chạy bằng đúng bộ chạy của nó (thu_giao_dien/chay.sh đặt PLAYWRIGHT_BROWSERS_PATH=0 để
+# dùng trình duyệt trong node_modules, KHÔNG dùng cache hệ thống của dự án khác).
+if [ -d thu_giao_dien ] && [ -d node_modules/@playwright ]; then
+    echo "  tầng 3 (DOM/CSS trong Chromium thật): CÓ, nhưng KHÔNG chạy ở đây"
+    echo "     → chạy riêng: sh thu_giao_dien/chay.sh   (đo 15/10/2026: 26 đạt · 1 bỏ qua)"
+else
+    echo "  tầng 3 (DOM/CSS trong trình duyệt thật): KHÔNG CHẠY ĐƯỢC — thiếu node_modules/@playwright"
+    echo "     → cài: npm ci   (anh Thành đã duyệt Playwright ngày 14/10/2026, quyết định D-1)"
+fi
 
 echo
 echo "══════════ E2E QUA HTTP THẬT ══════════"
@@ -84,7 +123,10 @@ fi
 
 echo
 echo "══════════════════════════════════════════════════════════"
-echo "  python:   $TONG ca · $SO_BO bộ"
+echo "  python:   $TONG ca · $((SO_BO - SO_BO_QUA)) bộ chạy thật"
+if [ "$SO_BO_QUA" -gt 0 ]; then
+    echo "            + $SO_BO_QUA bộ BỎ QUA (0 ca):$BO_QUA"
+fi
 echo "  frontend: $FE_L + $FE_H ca (hai tầng tự động)"
 echo "  E2E:      $E2E"
 echo "  bộ hỏng: ${HONG:- KHÔNG}"

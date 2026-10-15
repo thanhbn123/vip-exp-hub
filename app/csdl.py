@@ -220,6 +220,34 @@ CREATE INDEX IF NOT EXISTS ix_audit_tenant ON audit(tenant_id, id);
 """
 
 
+# ====== BIÊN DRIVER — chỉ tệp NÀY được `import sqlite3` ======
+# Trước đây 7 tệp cùng nạp driver, nhưng 5 trong số đó KHÔNG mở kết nối nào: chúng nạp
+# cả driver chỉ để gọi tên ba kiểu của nó (`Row`, `IntegrityError`, `Error`). Đó là nợ
+# kiến trúc đo được: mã nghiệp vụ nói tên một driver cụ thể ở 10 chỗ rời nhau, nên đổi
+# driver là đi sửa 10 chỗ — và chỗ nào quên thì KHÔNG báo lỗi lúc nạp, chỉ hỏng lúc
+# đúng nhánh `except` đó chạy (CLAUDE.md §12.2: hỏng im lặng).
+# Ba tên dưới đây là tên NGHIỆP VỤ của ba tình huống, không phải tên driver:
+Row = sqlite3.Row                     # một hàng truy cập được theo tên cột
+LoiCSDL = sqlite3.Error               # gốc của mọi lỗi tầng CSDL
+LoiToanVen = sqlite3.IntegrityError   # vi phạm UNIQUE / FOREIGN KEY / CHECK / NOT NULL
+LoiVanHanh = sqlite3.OperationalError # CSDL bị khóa, hết giờ chờ, bảng không có
+# Lưu ý khi sang PostgreSQL: `LoiToanVen` ánh xạ được sang `psycopg.errors.IntegrityError`,
+# nhưng `LoiVanHanh` thì KHÔNG một-một — ca "database is locked" của SQLite tương ứng
+# `SerializationFailure`/`LockNotAvailable` bên kia. Chỗ đó phải đo lại, không suy ra.
+
+
+def ket_noi(duong_dan=None, timeout=10, theo_ten_cot=False):
+    """Kết nối THÔ, KHÔNG dùng bộ nhớ đệm theo thread — dành cho migrate, sao lưu, công cụ.
+
+    Khác `mo()` ở hai điểm cố ý: người gọi phải tự `close()`, và không đặt
+    `foreign_keys=ON` (migrate cần tắt khóa ngoại để đổi bảng).
+    """
+    kn = sqlite3.connect(duong_dan or cau_hinh.DUONG_DAN_CSDL, timeout=timeout)
+    if theo_ten_cot:
+        kn.row_factory = Row
+    return kn
+
+
 def _khoi_tao_schema():
     """Tạo schema + seed MỘT lần (dùng một kết nối tạm). An toàn khi nhiều thread cùng gọi."""
     with _khoa_khoi_tao:

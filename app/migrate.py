@@ -7,7 +7,6 @@
 import json
 import os
 import shutil
-import sqlite3
 import sys
 from datetime import datetime
 
@@ -66,8 +65,8 @@ def sao_luu():
         if n > 1000:
             raise RuntimeError(f"quá 1000 bản sao lưu cùng giây tại {goc} — có gì đó sai")
     # Dùng API backup của SQLite để lấy bản nhất quán kể cả khi có WAL.
-    nguon = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL)
-    ban = sqlite3.connect(dich)
+    nguon = csdl.ket_noi()
+    ban = csdl.ket_noi(dich)
     with ban:
         nguon.backup(ban)
     ban.close()
@@ -178,7 +177,7 @@ def nang_len_v3(kn):
     Giải bằng đường cũ rồi mã lại bằng đường mới — KHÔNG đụng nội dung secret."""
     import bao_mat
     buoc = []
-    kn.row_factory = sqlite3.Row
+    kn.row_factory = csdl.Row
     doi_cred = doi_wh = 0
     hong = []
     for r in kn.execute("SELECT id, tenant_id, hang, webhook_ma, credentials_ma_hoa,"
@@ -410,7 +409,7 @@ def chay(im_lang=False):
             print(*a)
 
     csdl.mo()  # tạo bảng mới (IF NOT EXISTS) nếu thiếu
-    kn_kiem = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL)
+    kn_kiem = csdl.ket_noi()
     pb = kn_kiem.execute("SELECT COALESCE(MAX(phien_ban),0) FROM schema_version").fetchone()[0]
     truoc = dem_dong(kn_kiem)
     kn_kiem.close()
@@ -424,7 +423,7 @@ def chay(im_lang=False):
     noi(f"[migrate] Đã backup: {ban_sao}")
     noi(f"[migrate] Số dòng trước: {truoc}")
 
-    kn = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL)
+    kn = csdl.ket_noi()
     kn.execute("PRAGMA foreign_keys=OFF")
     try:
         with kn:

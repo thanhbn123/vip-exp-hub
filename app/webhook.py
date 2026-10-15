@@ -19,7 +19,6 @@ import hmac
 import json
 import queue
 import re
-import sqlite3
 import threading
 import urllib.parse
 
@@ -403,7 +402,7 @@ def nhan_su_kien(tk_row, body: bytes, headers: dict):
                 "INSERT INTO wh_su_kien (carrier_account_id, event_id, payload_tho, headers_json, nhan_luc)"
                 " VALUES (?,?,?,?,?)",
                 (tk_row["id"], event_id, body, json.dumps(headers, ensure_ascii=False), csdl.bay_gio()))
-        except sqlite3.IntegrityError:
+        except csdl.LoiToanVen:
             cu = csdl.mot("SELECT id FROM wh_su_kien WHERE carrier_account_id=? AND event_id=?",
                           (tk_row["id"], event_id))
             return cu["id"], True

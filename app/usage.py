@@ -17,7 +17,6 @@
 #    Hai bộ đếm cho một việc là hai bộ sẽ lệch nhau, và không ai biết tin bên nào.
 import calendar
 import json
-import sqlite3
 
 import billing
 import csdl
@@ -223,7 +222,7 @@ def ghi_su_kien(tenant_id, loai, so_luong=1, idem_key=None, nguon="he_thong",
         try:
             cur = kn.execute(f"INSERT INTO su_kien_dung ({cot_sk}) VALUES (?,?,?,?,?,?,?,?)",
                              gia_tri_sk)
-        except sqlite3.IntegrityError:
+        except csdl.LoiToanVen:
             kn.rollback()
             cu = csdl.mot("SELECT * FROM su_kien_dung WHERE tenant_id=? AND idem_key=?",
                           (tenant_id, idem_key))
@@ -481,7 +480,7 @@ def lap_du_thao(tenant_id, ky=None, boi=None) -> dict:
                  json.dumps(p, ensure_ascii=False), boi, csdl.bay_gio()))
             dt_id = cur.lastrowid
             kn.commit()
-        except sqlite3.IntegrityError:
+        except csdl.LoiToanVen:
             kn.rollback()
             cu = csdl.mot("SELECT * FROM du_thao_hoa_don WHERE tenant_id=? AND ky=?",
                           (tenant_id, ky))

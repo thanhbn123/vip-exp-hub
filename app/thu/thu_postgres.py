@@ -51,9 +51,13 @@ LENH_CAN = ("initdb", "pg_ctl", "psql")
 # --------------------------------------------------------------------------- tiện ích
 def _thieu_gi():
     """Trả chuỗi nói THIẾU CÁI GÌ, hoặc None nếu đủ điều kiện chạy."""
-    if os.environ.get("VIP_THU_POSTGRES", "") != "1":
-        return ("chưa bật — bộ thử này dựng một cụm PostgreSQL riêng (~1,5–3 giây) nên "
-                "không chạy mặc định. Bật bằng: VIP_THU_POSTGRES=1")
+    # Trước 15/10/2026 bộ này TẮT mặc định (phải đặt VIP_THU_POSTGRES=1), lý do ghi là
+    # "~1,5–3 giây". Hậu quả đo được: nó hiện dấu ✓ trong mọi lượt hồi quy mà chạy ĐÚNG 0 CA,
+    # nên người đọc "27 bộ đạt" tưởng PostgreSQL đã được phủ — suốt thời gian đó chưa phủ gì.
+    # Đo lại ngày 15/10/2026 trên Mac mini: cả 21 ca chạy hết trong 1,405 giây. Cái giá đó
+    # không đáng để giấu 21 phép kiểm. Nay BẬT mặc định; ai cần nhanh thì VIP_THU_POSTGRES=0.
+    if os.environ.get("VIP_THU_POSTGRES", "") == "0":
+        return "tắt bằng tay (VIP_THU_POSTGRES=0)"
     co_san = os.environ.get("VHPG_SOCKET", "")
     can = ("psql",) if co_san else LENH_CAN
     thieu = [l for l in can if not shutil.which(l)]

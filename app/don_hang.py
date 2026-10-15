@@ -24,14 +24,13 @@
 #
 # ===== IDEMPOTENCY =====
 # Do CSDL cưỡng chế bằng UNIQUE(tenant_id, idem_key) — KHÔNG bằng `if`. Mã dưới đây vẫn đọc
-# trước cho nhanh, nhưng đường bắt sqlite3.IntegrityError mới là đường bảo đảm.
+# trước cho nhanh, nhưng đường bắt csdl.LoiToanVen mới là đường bảo đảm.
 #
 # ===== CHỊU ĐƯỢC CSDL CHƯA MIGRATE =====
 # Cột/bảng của đợt O01 (external_reference, approved_by, địa chỉ có cấu trúc, don_mat_hang) đều
 # được DÒ bằng PRAGMA table_info trước khi dùng (nếp của nhap_file._ghi_trang_thai). Mục đích:
 # AG-00 gộp mã này vào trước khi chạy migration thì hệ vẫn chạy, chỉ thiếu tính năng mới.
 import re
-import sqlite3
 import threading
 
 import adapter
@@ -208,7 +207,7 @@ def _cot_cua(bang):
         if bang not in _cache_cot:
             try:
                 _cache_cot[bang] = {r["name"] for r in csdl.nhieu(f"PRAGMA table_info({bang})")}
-            except sqlite3.Error:
+            except csdl.LoiCSDL:
                 _cache_cot[bang] = set()
         return _cache_cot[bang]
 
@@ -428,7 +427,7 @@ def tao_don(tenant_id, user_id, d, idem_key=None, kiem_quyen=True):
             try:
                 con = csdl.ghi(sql, gt)
                 break
-            except sqlite3.IntegrityError as e:
+            except csdl.LoiToanVen as e:
                 # Phân biệt HAI ràng buộc khác nhau, không gộp làm một:
                 #  - UNIQUE(tenant_id, idem_key) → lượt song song vừa tạo đúng đơn này ⇒ trả đơn đó
                 #  - UNIQUE(tenant_id, ma_don)   → COUNT(*) đụng nhau giữa hai TIẾN TRÌNH ⇒ sinh lại

@@ -6,7 +6,6 @@ import hmac
 import json
 import os
 import secrets
-import sqlite3
 from datetime import datetime, timedelta
 
 import cau_hinh
@@ -427,7 +426,7 @@ def _cap_doc_ghi(kn):
     """Trả (đọc, ghi) chạy được cả trên kết nối dùng chung của csdl lẫn kết nối migrate truyền vào."""
     if kn is None:
         return (lambda sql, p=(): csdl.nhieu(sql, p)), (lambda sql, p=(): csdl.ghi(sql, p))
-    kn.row_factory = sqlite3.Row
+    kn.row_factory = csdl.Row
     return (lambda sql, p=(): kn.execute(sql, p).fetchall()), (lambda sql, p=(): kn.execute(sql, p))
 
 

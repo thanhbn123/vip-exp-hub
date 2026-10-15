@@ -8,7 +8,6 @@ import json
 import mimetypes
 import os
 import re
-import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -40,7 +39,7 @@ GOC_TINH = cau_hinh.THU_MUC_GOC
 def _ma_hoa_la(o):
     """Đổi kiểu không tuần tự hoá được sang kiểu tuần tự hoá được.
 
-    `sqlite3.Row` là kiểu gặp nhiều nhất: trước đây mỗi route phải tự `dict(x)` quanh từng
+    `csdl.Row` là kiểu gặp nhiều nhất: trước đây mỗi route phải tự `dict(x)` quanh từng
     truy vấn, nên route nào quên là ra `"<sqlite3.Row object at 0x...>"` trong phản hồi —
     hỏng im lặng, vì nó vẫn là JSON hợp lệ và vẫn HTTP 200. Xử ở ĐÚNG MỘT CHỖ thì không còn
     chỗ để quên.
@@ -48,7 +47,7 @@ def _ma_hoa_la(o):
     `default=str` làm phần còn lại (ngày tháng, Decimal...). Tiền trong hệ này là `INTEGER`
     nên không có `float` nào phải lo (§16).
     """
-    if isinstance(o, sqlite3.Row):
+    if isinstance(o, csdl.Row):
         return dict(o)
     if isinstance(o, (set, frozenset)):
         return sorted(o)

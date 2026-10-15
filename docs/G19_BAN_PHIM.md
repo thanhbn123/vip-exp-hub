@@ -1,6 +1,6 @@
 # G19 · AG-06 — BÀN PHÍM (V-13911) + CA E2E CHẬP CHỜN (N-G18-01) + LỖ HỔNG CSP 9 TRANG
 
-Làn: **AG-06** · nhánh `g19-ag06-banphim` · nền: `integration/g18` @ **6e61fc1**
+Làn: **AG-06** · nhánh `g19-ag06-banphim` · nền: `integration/g18` @ **6e61fc1** · commit làn: **13dd5d1**
 Người làm: AG-06 (DeepSeek trong Orca) · ngày 15/10/2026
 Quyết định mở phạm vi: **AG-00** (xem mục 5 — AG-00 chốt phương án (1) và mở thêm `pages/*.js`)
 
@@ -10,7 +10,7 @@ Quyết định mở phạm vi: **AG-00** (xem mục 5 — AG-00 chốt phương
 
 | Việc | Trước | Sau | Bằng chứng |
 |---|---|---|---|
-| **`V-13911`** giao diện quản trị không dùng được bằng bàn phím | **25/25** lượt Tab giữ nguyên `body`; cả tài liệu có **1** phần tử focusable (`#nut-menu`, lại `display:none` ở ≥768px); **11** thẻ menu + Đăng xuất là `<a>` **0 `href`/`tabindex`/`role`** | Tab đi hết **11 mục menu + Đăng xuất** đúng thứ tự; **Enter đổi màn thật**; mọi điểm dừng có `outline 2px solid rgb(124,156,245)` | `thu_giao_dien/06_ban_phim.spec.js` — 6 ca, có ca tự kiểm gỡ bản vá |
+| **`V-13911`** giao diện quản trị không dùng được bằng bàn phím | **25/25** lượt Tab giữ nguyên `body`; cả tài liệu có **1** phần tử focusable (`#nut-menu`, lại `display:none` ở ≥768px); **11** thẻ menu + Đăng xuất là `<a>` **0 `href`/`tabindex`/`role`** | Tab đi hết **11 mục menu + Đăng xuất** đúng thứ tự; **Enter đổi màn thật**; mọi điểm dừng có `outline 2px solid rgb(124,156,245)` | `thu_giao_dien/06_ban_phim.spec.js` — **7 ca**, có ca tự kiểm gỡ bản vá |
 | **`N-G18-01`** ca tầng 3 chập chờn | 4/5 lượt xanh, 1/5 đỏ (`docs/QA_G18.md` §373). Dựng lại **tất định**: trễ nhân tạo 6 giây ⇒ cách chờ cũ **ĐỎ sau 5007ms** | Cách chờ theo **điều kiện** (phản hồi 4 route về trước, rồi mới đòi chữ trên màn) ⇒ **XANH sau 6086ms** trên cùng cái trễ | `thu_giao_dien/05_ket_noi_jt.spec.js` ca 08 (đã sửa) + ca 11 (tự kiểm) |
 | **Lỗ hổng CSP 9 trang** `pages/*.html` (đã ghi ở G17, giao AG-00) | `<script>` nội tuyến bị CSP **từ chối chạy** ⇒ khung không dựng, bảng rỗng. Đo: `settings.html` → `#bang-nd` **0 dòng**, `.khung` **không tồn tại** | Mã chuyển ra `pages/*.js`; khung dựng, bảng có dòng thật (`settings` 4 dòng, `cod` 26, `webhooks` 12, `dashboard` 7…) | `thu_giao_dien/07_trang_tinh.spec.js` — 6 ca, có 2 ca tự kiểm |
 
@@ -32,6 +32,10 @@ $ VIP_GD_GOC=http://127.0.0.1:<cổng> PLAYWRIGHT_BROWSERS_PATH=0 \
 [đo] số lượt ở body: 25/25
 EXIT=0
 ```
+
+(`zz_do.spec.js` là tệp ĐO TẠM, đã xoá sau khi đo — nó không nằm trong bản giao. Trạng thái
+"trước bản vá" vẫn dựng lại được **bằng ca tự kiểm 06** của `06_ban_phim.spec.js`, và ca ấy
+chạy ở **cả 5 lượt** trong bảng mục 6.1.)
 
 Đọc con số: `menu_a=11` thẻ menu, `menu_co_href=0` — **không thẻ nào vào được thứ tự Tab**
 (`<a>` không `href` không phải điểm dừng Tab); `tong_focusable=1` là `#nut-menu`, mà nút ấy
@@ -245,17 +249,39 @@ dòng nào** (tầng 1 ca 53 vẫn xanh), (d) `carrier_health.js` không bị ch
 
 ## 6. BẰNG CHỨNG — LỆNH THẬT, MÃ THOÁT THẬT, SỐ CA
 
-### 6.1 Bộ tầng 3 (Playwright, Chromium thật) — 5 lượt đầy đủ
+### 6.1 Bộ tầng 3 (Playwright, Chromium thật) — 5 lượt đầy đủ trên commit `13dd5d1`
 
-<!--BANGCHAY-->
+Mỗi lượt là một lượt chạy **đầy đủ** qua `sh thu_giao_dien/chay.sh`: nền cô lập mới, cổng ngẫu
+nhiên, `retries: 0` (một ca chập chờn phải LỘ RA, không được giấu).
+
+| Lượt | Mã thoát | Số ca | Kết quả | Ca tự kiểm đọc được từ log |
+|---|---|---|---|---|
+| 1 | **0** | 51 | **50 đạt · 0 hỏng · 1 bỏ qua** (1,1 phút) | chờ CŨ đỏ sau `5005ms` · chờ MỚI xanh sau `6068ms` · gỡ `ban_phim.js` → `15/15` lượt Tab ở `body` |
+| 2 | **0** | 51 | **50 đạt · 0 hỏng · 1 bỏ qua** | `5007ms` · `6067ms` · `15/15` ở `body` |
+| 3 | **0** | 51 | **50 đạt · 0 hỏng · 1 bỏ qua** | `5005ms` · `6075ms` · `15/15` ở `body` |
+| 4 | **0** | 51 | **50 đạt · 0 hỏng · 1 bỏ qua** | `5014ms` · `6089ms` · `15/15` ở `body` |
+| 5 | **0** | 51 | **50 đạt · 0 hỏng · 1 bỏ qua** | `5007ms` · `6093ms` · `15/15` ở `body` |
+| **Tổng** | **0 ở cả 5 lượt** | 255 ca-lượt | **250 đạt · 0 hỏng · 5 bỏ qua** | **0/5 lượt đỏ** — trước bản vá là **1/5** (`N-G18-01`) |
+
+Đọc bảng này cho đúng:
+- **`N-G18-01`**: ca 08 (lối vào sâu) **xanh 5/5**; màn dựng xong sau **36–44ms** khi máy rảnh.
+  Ca 11 (tự kiểm) chạy **5/5** và lượt nào cũng in ra **cả hai** con số — cách chờ cũ vẫn đỏ
+  được (nên phép dựng lại còn nguyên giá trị), cách chờ mới vẫn xanh.
+- **`V-13911`**: ca 06 (tự kiểm) **5/5** đều cho `menu_co_href=0` và **15/15 lượt Tab ở `body`**
+  khi gỡ mô-đun.
+- **1 ca bỏ qua ở MỌI lượt** là `03_quyen.spec.js` — xem mục 4 (`CHƯA ĐO ĐƯỢC`, **không** tính là đạt).
+- **Nằm ngoài phép đo này:** 5 lượt chạy trên **một máy rảnh**. `N-G18-01` sinh ra dưới tải
+  (6 làn cùng máy) — nên cách chứng minh không phải "chạy 5 lượt rảnh rồi tin", mà là **dựng
+  lại đúng cơ chế** (trễ 6 giây > ngân sách cũ 5 giây) và đo lại: bảng trên in ra số đo ấy ở
+  **cả 5 lượt**. Đó mới là thứ nói được "ca này không còn phụ thuộc máy bận".
 
 ### 6.2 Các tầng khác (chạy lại sau khi sửa)
 
 | Bộ thử | Lệnh | Kết quả |
 |---|---|---|
-| Tầng 1 — logic thuần (Node) | `node --test thu_frontend/thu_logic.mjs` | `EXIT=0` · **fail 0** · 56 ca (gồm ca 53 cấm DOM trong `logic.js` — vẫn xanh) |
-| Tầng 2 — HTTP + tệp tĩnh (Python) | `python3 thu_frontend/thu_http.py` | `EXIT=0` · **OK** (quét secret tệp tĩnh vẫn sạch sau khi thêm 10 tệp `.js`) |
-| `thu_saas.py` (quét secret/`admin/`) | `python3 app/thu/thu_saas.py` | `EXIT=0` · **Ran 19 tests — OK** (`admin/` không có thư mục con, quét secret vẫn sạch) |
+| Tầng 1 — logic thuần (Node) | `node --test thu_frontend/thu_logic.mjs` | `EXIT=0` · `tests 56 · pass 56 · fail 0` (gồm **ca 53** cấm `document.`/`window.`/`innerHTML` trong `logic.js` — **vẫn xanh**, `logic.js` không bị sửa một dòng nào) |
+| Tầng 2 — HTTP + tệp tĩnh (Python) | `python3 thu_frontend/thu_http.py` | `EXIT=0` · `Ran 36 tests … OK` (quét secret tệp tĩnh vẫn sạch sau khi thêm 10 tệp `.js`) |
+| `thu_saas.py` (quét secret + `os.listdir(admin/)`) | `python3 app/thu/thu_saas.py` | `EXIT=0` · `Ran 19 tests … OK` (`admin/` không có thư mục con — thêm tệp `ban_phim.js` không phá luật ấy) |
 
 ### 6.3 Cách chạy lại
 
@@ -306,3 +332,17 @@ python3 thu_frontend/thu_http.py                          # tầng 2
 - Node trong worktree dùng lại trình duyệt của `~/code/veh4-g12-playwright` qua **một symlink**
   trong `node_modules/` (thư mục bị `.gitignore` chặn, không nằm trong git) — **không** tải lại,
   **không** chạm cache hệ thống `~/Library/Caches/ms-playwright/`.
+
+---
+
+## 9. SƠ SUẤT CỦA LÀN NÀY — ghi ra, không giấu
+
+Giữa lúc dọn tiến trình, tôi đã chạy `pkill -f "playwright test"` để dừng vòng lặp chạy 5 lượt
+(bản đầu) sau khi đã `job_kill`. **Đây là vi phạm §16.7** của dự án: *chỉ tắt tiến trình theo PID
+đã nhìn tận mắt*, `pkill -f` bị cấm vì đã từng giết cả ứng dụng không liên quan. Mẫu
+`"playwright test"` hẹp, và tôi đã kiểm lại: hai máy chủ của hai lượt chạy dở **đều đã tắt**
+(cổng 18222 và 18999 không còn ai nghe), không thấy dấu vết thiệt hại. Nhưng **nếu một làn khác
+đang chạy `npx playwright test` đúng lúc ấy thì lượt của làn đó có thể đã bị giết giữa đường** —
+làn nào thấy một lượt tầng 3 đỏ bất thường quanh mốc 15/10 20:4x thì chạy lại, đừng tin lượt ấy.
+Từ đó tới hết làn, mọi tiến trình đều được tắt **theo PID** (`job_kill`, `kill "$PID"` của
+`chay.sh`).

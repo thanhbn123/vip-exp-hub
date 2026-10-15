@@ -47,9 +47,12 @@
 # `docs/G17_TRANSPORT.md` §8.3 ghi "CHƯA ĐO nhiều tiến trình". Nay đã đo, bằng **tiến trình thật**
 # (`subprocess`, không phải luồng): `app/thu/thu_g18_multiprocess.py` P3–P4 + `docs/G18_MULTIPROCESS.md`.
 #
-#   · Lớp này KHÔNG có trạng thái dùng chung nào — quét AST: 20 tên mức mô-đun, 2 trong đó là dict
-#     HẰNG số cấu hình (`CHO_PHEP_MOI_TRUONG`, `LY_DO_CHAN_MOI_TRUONG`), **0 dấu hiệu GHI** (không
-#     `global`, không ghi chỉ số, không `open(…, "w")`, không `tempfile`, không `shutil`).
+#   · Lớp này KHÔNG có trạng thái dùng chung nào — quét AST trên cây của làn AG-02: 20 tên mức
+#     mô-đun, 2 trong đó là dict HẰNG số cấu hình (`CHO_PHEP_MOI_TRUONG`, `LY_DO_CHAN_MOI_TRUONG`),
+#     **0 dấu hiệu GHI** (không `global`, không ghi chỉ số, không `open(…, "w")`, không `tempfile`,
+#     không `shutil`). *Con số 20 là của CÂY LÚC ĐÓ, không phải của cây đã gộp: AG-03 thêm hằng số
+#     mức mô-đun vào chính tệp này ở G18, nên cây gộp có nhiều hơn (AG-01 đo 25). Điều được khẳng
+#     định là **TÍNH CHẤT** — không có trạng thái GHI dùng chung — chứ không phải con số.*
 #   · Đo hành vi với 4 tiến trình thật: không tiến trình nào nhận thân trả lời của tiến trình khác;
 #     4 lượt gọi ⇒ stub nhận ĐÚNG 4 kết nối TCP (một kết nối cho một lượt, tự mở tự đóng — KHÔNG
 #     pool, nên không có kết nối nào để dùng chung).

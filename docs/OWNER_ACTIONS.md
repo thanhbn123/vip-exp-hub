@@ -59,8 +59,12 @@ SHA của chính commit chứa nó (`BAN_GIAO.md` §7.3).
 5. **Bí mật trong ĐƯỜNG DẪN URL**. *(G18 đang đóng.)*
 6. **Tắt tiến trình GIỮA giao dịch** — `V-13914(a)`. *(G18 đang đóng.)*
 7. **Máy chủ HTTP thật dưới tải** — `V-13914(b)`; bàn đo cũ gọi **thẳng hàm**, không qua `ThreadingHTTPServer`. *(G18 đang đóng.)*
-8. **V5/V6/V7 toàn cục** — G17 đã đo **lần đầu** (AG-01 và AG-06 đo **độc lập**, hai bộ đồ khác nhau).
-   **Còn hở:** V5 của AG-01 phủ **41 cửa ⊂ 104 route** của AG-06 ⇒ **không phải bằng chứng cho 63 route còn lại**.
+8. **V5/V6/V7 toàn cục** — G17 đo **lần đầu** (AG-01 và AG-06 đo **độc lập**, hai bộ đồ khác nhau);
+   **G18 đối chiếu chéo xong**: hai dụng cụ **ĐỒNG Ý ở 73 route** và chỉ **lệch PHẠM VI 31 route**
+   (AG-06 phủ 104, AG-01 phủ 73). ⇒ **V5 phủ 73/104 route, không phải 41/104.**
+   *Đính chính (AG-01 bắt ở lượt nghiệm thu G18):* con số **41** ghi ở bản trước **tái hiện được
+   nhưng chỉ khi đếm SAI** — không mở nhóm route. Số đúng là **73/104**.
+   **Còn hở thật:** **31 route** AG-01 chưa phủ ⇒ chưa phải bằng chứng cho phần đó.
 9. **Tầng 3 Chromium** — có chạy (`26 passed · 1 skipped` ở G16) nhưng **không đo DOM/CSS sâu**.
 10. **Rate limit nhiều tiến trình** — `B-G11-10`: hai tiến trình ⇒ trần thực **gấp đôi** khai báo. Đã đo, **chưa sửa**.
 

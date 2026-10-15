@@ -317,10 +317,11 @@ bằng bộ G18 này. Không bộ nào khác đổi số ca.
 > xanh trở lại — 53 ca ĐẠT. Người chạy nghiệm thu nên biết điều này trước khi đọc một lượt HỎNG của
 > `thu_qa_g17` trong lúc có làn khác đang mở.
 >
-> **Sau mốc `a9f076b` chỉ có TÀI LIỆU NÀY đổi** (commit `22c85f6`, **không một dòng mã nào**), nên
-> bảng hồi quy ở trên vẫn đúng cho mã. Riêng cổng "cây sạch" đã được chạy **LẠI** ở mốc mới:
-> `python3 app/thu/thu_qa_g17.py` ⇒ **exit 0**, 53 ca, sổ đối chứng `cay-sach = {âm 0, dương 1}`,
-> `HEAD=22c85f6`. Bộ đo G18 cũng chạy lại ở mốc mới: **26 ca · 0 hỏng · 0 bỏ qua · exit 0**.
+> **Sau mốc `a9f076b` chỉ có TÀI LIỆU NÀY đổi** — mọi commit tiếp theo trên nhánh chỉ sửa đúng tệp
+> `docs/G18_MULTIPROCESS.md`, **không một dòng mã nào** — nên bảng hồi quy ở trên vẫn đúng cho mã.
+> Riêng hai cổng đã được chạy **LẠI** ở các mốc mới (lần cuối: `d5d9bba`):
+> `python3 app/thu/thu_qa_g17.py` ⇒ **exit 0**, 53 ca (`cay-sach = {âm 0, dương 1}`) và bộ đo G18
+> ⇒ **26 ca · 0 hỏng · 0 bỏ qua · exit 0**. Kiểm lại bằng `git log --oneline` + `git status -uall`.
 
 ---
 

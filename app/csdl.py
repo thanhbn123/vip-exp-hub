@@ -4,12 +4,14 @@ import contextlib
 import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone, timedelta
 
 import cau_hinh
 
 PHIEN_BAN_SCHEMA = 8
 
+HAN_DOI_WAL = 40          # 40 lượt, giãn dần 50ms→2s: tổng ~41 giây
 MUI_GIO_VN = timezone(timedelta(hours=7))
 khoa_ghi = threading.RLock()   # serialize mọi lượt GHI (WAL: một writer tại một thời điểm)
 # Mỗi THREAD một kết nối SQLite riêng. Dùng chung một connection giữa các thread
@@ -237,51 +239,117 @@ LoiVanHanh = sqlite3.OperationalError # CSDL bị khóa, hết giờ chờ, bả
 # `SerializationFailure`/`LockNotAvailable` bên kia. Chỗ đó phải đo lại, không suy ra.
 
 
-def ket_noi(duong_dan=None, timeout=10, theo_ten_cot=False):
+# `sqlite3.complete_statement`: một câu SQL đã TRỌN chưa. Phơi ra đây vì biên driver —
+# migrate cần nó để tách DDL mà không được tự nạp sqlite3.
+cau_sql_du = sqlite3.complete_statement
+
+
+def ket_noi(duong_dan=None, timeout=10, theo_ten_cot=False, tuong_minh=False):
     """Kết nối THÔ, KHÔNG dùng bộ nhớ đệm theo thread — dành cho migrate, sao lưu, công cụ.
 
     Khác `mo()` ở hai điểm cố ý: người gọi phải tự `close()`, và không đặt
     `foreign_keys=ON` (migrate cần tắt khóa ngoại để đổi bảng).
+
+    `tuong_minh=True` tắt phần TỰ QUẢN GIAO DỊCH của mô-đun sqlite3 (isolation_level=None):
+    từ đó `BEGIN`/`COMMIT`/`ROLLBACK` do người gọi viết là thứ DUY NHẤT điều khiển giao dịch.
+    Cần thiết, không phải cho đẹp — đo được ngày 15/10/2026: ở chế độ mặc định, ba tiến trình
+    cùng chạy `BEGIN IMMEDIATE` thì CẢ BA đều lấy được khoá (0,000 · 0,038 · 0,051 giây) dù
+    COMMIT đầu tiên mãi 0,074 giây mới xảy ra — tức khoá KHÔNG loại trừ được ai. Lý do: mô-đun
+    tự mở/chốt giao dịch theo sổ sách riêng của nó, và sổ đó lệch với `BEGIN` tường minh (ca A
+    đã đo: sau một `SAVEPOINT`, `in_transaction` vẫn báo False). Hai bộ điều khiển cùng tranh
+    một giao dịch thì không bộ nào đúng.
     """
-    kn = sqlite3.connect(duong_dan or cau_hinh.DUONG_DAN_CSDL, timeout=timeout)
+    kn = sqlite3.connect(duong_dan or cau_hinh.DUONG_DAN_CSDL, timeout=timeout,
+                         isolation_level=None if tuong_minh else "")
     if theo_ten_cot:
         kn.row_factory = Row
     return kn
 
 
-def _khoi_tao_schema():
-    """Tạo schema + seed MỘT lần (dùng một kết nối tạm). An toàn khi nhiều thread cùng gọi."""
-    with _khoa_khoi_tao:
-        if _da_khoi_tao.is_set():
+def _dat_wal(kn):
+    """Bật WAL — nhưng ĐỌC TRƯỚC, chỉ ĐẶT khi chưa phải WAL.
+
+    `PRAGMA journal_mode=WAL` cần khoá ĐỘC QUYỀN để đổi chế độ sổ ghi; `PRAGMA journal_mode`
+    (không gán) chỉ là lượt đọc, không cần khoá nào. Gần như mọi lượt mở kết nối thì CSDL đã
+    ở WAL, nên lượt đặt ấy chẳng đổi gì mà vẫn phải tranh khoá độc quyền. Đo 15/10/2026:
+    8 tiến trình cùng mở một CSDL MỚI thì 3 chết ngay tại dòng đặt WAL với "database is
+    locked", trước khi migration kịp bắt đầu.
+    """
+    # `busy_timeout` KHÔNG phủ lệnh đổi chế độ sổ ghi: SQLite trả SQLITE_BUSY NGAY khi có
+    # kết nối khác đang mở, không chờ. Nên phải tự chờ. Đo 15/10/2026: 8 tiến trình cùng mở
+    # một CSDL MỚI thì 1 tiến trình nhận "database is locked" ở đúng chỗ này (chập chờn,
+    # 1/8 lượt) kể cả sau khi đã thêm busy_timeout 30 giây.
+    #
+    # Và chỉ cần MỘT tiến trình đặt được WAL là cả CSDL thành WAL — nên thua cuộc đua này
+    # không phải lỗi, miễn là đọc lại thấy đã thành WAL.
+    for lan in range(HAN_DOI_WAL):
+        if (kn.execute("PRAGMA journal_mode").fetchone()[0] or "").lower() == "wal":
             return
-        os.makedirs(cau_hinh.THU_MUC_DU_LIEU, exist_ok=True)
-        kn = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL)
         try:
             kn.execute("PRAGMA journal_mode=WAL")
-            kn.executescript(SCHEMA)
-            for g in cau_hinh.GOI_MAC_DINH:
-                kn.execute(
-                    "INSERT OR IGNORE INTO goi_dich_vu (id,ten,gia_thang,han_muc_don_thang,han_muc_ai_thang,so_nhan_vien,so_tai_khoan_hang) "
-                    "VALUES (:id,:ten,:gia_thang,:han_muc_don_thang,:han_muc_ai_thang,:so_nhan_vien,:so_tai_khoan_hang)", g)
-            kn.commit()
-        finally:
-            kn.close()
+            return
+        except sqlite3.OperationalError:
+            time.sleep(0.05 * (lan + 1))
+    che_do = (kn.execute("PRAGMA journal_mode").fetchone()[0] or "?").lower()
+    if che_do != "wal":
+        # KHÔNG đi tiếp im lặng: chế độ `delete` vẫn chạy nhưng cho MỘT người ghi tại một
+        # thời điểm và chặn cả người đọc — hệ sẽ chậm bất thường mà không ai biết vì sao.
+        raise LoiVanHanh(
+            "không chuyển được CSDL sang WAL sau %d lượt thử (đang ở %r). Có tiến trình khác "
+            "giữ CSDL rất lâu, hoặc CSDL nằm trên ổ mạng — SQLite không khoá đáng tin ở đó."
+            % (HAN_DOI_WAL, che_do))
+
+
+def _khoi_tao_schema(kn):
+    """Tạo schema + seed MỘT lần, TRÊN KẾT NỐI TRUYỀN VÀO — không tự mở kết nối thứ hai.
+
+    Trước 15/10/2026 hàm này tự `sqlite3.connect()` một kết nối tạm, và `mo()` gọi nó TRƯỚC
+    khi xét kết nối của thread. Cộng với việc `dong()` xoá cờ `_da_khoi_tao` — biến TOÀN CỤC,
+    không theo thread — nó sinh ra ca TỰ KHOÁ CHÍNH MÌNH: thread B đang mở giao dịch trên kết
+    nối B1; thread A gọi `dong()` xoá cờ; lượt ghi tiếp của B vào `mo()` → thấy cờ trống →
+    chạy hàm này → mở kết nối B2 → B2 ghi và chờ khoá mà chính B1 đang giữ. Một thread, hai
+    kết nối, khoá nhau. Không khoá nào của Python cứu được: `khoa_ghi` là RLock nên B đi
+    xuyên qua nó, vì B đã giữ nó rồi.
+
+    Đo trong `test_d5` (10 thread): thời gian mỗi thread LƯỢNG TỬ HOÁ theo đúng busy_timeout
+    — 0,005 · 30,35 · 30,35 · 60,70 · 60,70 · 91,04 · 91,05 · 121,42 · 121,43 · 121,43 giây,
+    4 thread nhận `database is locked`. Không phải "chậm" mà là CHỜ HẾT GIỜ theo từng đợt.
+    Chỉ lộ ra khi giao dịch trải cả khối, nên `giao_dich()` không gây ra lỗi này — lỗi nằm sẵn.
+
+    Dùng chính kết nối của thread thì không còn kết nối thứ hai để khoá nhau. `mo()` chỉ gọi
+    hàm này khi thread CHƯA có kết nối, nên lúc đó không thể đang giữa một giao dịch —
+    `executescript` tự COMMIT, mà ở đây không có gì để commit sớm.
+    """
+    with khoa_ghi, _khoa_khoi_tao:
+        if _da_khoi_tao.is_set():
+            return
+        kn.executescript(SCHEMA)
+        for g in cau_hinh.GOI_MAC_DINH:
+            kn.execute(
+                "INSERT OR IGNORE INTO goi_dich_vu (id,ten,gia_thang,han_muc_don_thang,han_muc_ai_thang,so_nhan_vien,so_tai_khoan_hang) "
+                "VALUES (:id,:ten,:gia_thang,:han_muc_don_thang,:han_muc_ai_thang,:so_nhan_vien,:so_tai_khoan_hang)", g)
+        kn.commit()
         _da_khoi_tao.set()
 
 
 def mo():
-    """Trả kết nối RIÊNG của thread hiện tại (tạo nếu chưa có)."""
-    if not _da_khoi_tao.is_set():
-        _khoi_tao_schema()
+    """Trả kết nối RIÊNG của thread hiện tại (tạo nếu chưa có).
+
+    THỨ TỰ CỐ Ý: có kết nối thì trả NGAY, không xét cờ khởi tạo. Thiếu lối ra sớm này thì một
+    lượt ghi giữa giao dịch rơi được vào `_khoi_tao_schema` — xem chú thích ở đó.
+    """
     kn = getattr(_local, "kn", None)
     if kn is not None:
         return kn
-    kn = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL, timeout=10)
-    kn.row_factory = sqlite3.Row
-    kn.execute("PRAGMA journal_mode=WAL")
+    os.makedirs(cau_hinh.THU_MUC_DU_LIEU, exist_ok=True)
+    kn = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL, timeout=30)
+    kn.row_factory = Row
+    _dat_wal(kn)
     kn.execute("PRAGMA foreign_keys=ON")
-    kn.execute("PRAGMA busy_timeout=10000")
+    kn.execute("PRAGMA busy_timeout=30000")
     _local.kn = kn
+    if not _da_khoi_tao.is_set():
+        _khoi_tao_schema(kn)
     return kn
 
 

@@ -360,6 +360,34 @@ def nang_len_v7(kn):
     return buoc
 
 
+def chay_ddl_trong_giao_dich(kn, ddl):
+    """Chạy một khối DDL mà KHÔNG chốt giao dịch đang mở. Dùng thay `executescript`.
+
+    `kn.executescript()` tự COMMIT giao dịch đang mở trước khi chạy — lặng lẽ, không báo gì.
+    Đo được ngày 15/10/2026 (py 3.9.6): sau `BEGIN IMMEDIATE` thì `in_transaction` là True,
+    sau một `executescript` thành True→False, và `COMMIT` sau đó nổ "cannot commit - no
+    transaction is active". Hậu quả nặng hơn một lỗi cú pháp: lượt nâng cấp nạp 5 khối DDL
+    của G07–G11 qua `executescript`, nên migration CHƯA BAO GIỜ nguyên tử — hỏng sau khối
+    đầu là để lại CSDL nâng cấp nửa vời, trong khi thông báo lỗi vẫn hứa "rollback". Đúng
+    dạng §12.2: hệ thống nói sai về chính nó.
+
+    Tách câu bằng `sqlite3.complete_statement`, KHÔNG bằng `ddl.split(";")`: khối
+    `CREATE TRIGGER ... BEGIN SELECT RAISE(ABORT,'...'); END;` có dấu `;` BÊN TRONG, nên cắt
+    theo dấu `;` là sinh ra những câu cụt vẫn "chạy được" một phần — hỏng im lặng.
+    """
+    cau, dem = "", 0
+    for dong in ddl.splitlines(True):
+        cau += dong
+        if csdl.cau_sql_du(cau) and cau.strip():
+            kn.execute(cau)
+            dem += 1
+            cau = ""
+    con = cau.strip()
+    if con and not con.lstrip().startswith("--"):
+        raise ValueError(f"DDL còn câu chưa trọn sau khi tách: {con[:120]!r}")
+    return dem
+
+
 def nang_len_v8(kn):
     """v8: gộp năm hằng DDL của đợt 3 — G07 tài chính · G08 gói dịch vụ · G09 harness hãng
     · G10 công việc AI · G11 quan sát.
@@ -395,7 +423,7 @@ def nang_len_v8(kn):
                      ("G11 quan sát", quan_sat.DDL_G11)):
         truoc = {r[0] for r in kn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','index','trigger')")}
-        kn.executescript(ddl)
+        chay_ddl_trong_giao_dich(kn, ddl)
         sau = {r[0] for r in kn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','index','trigger')")}
         them = sorted(sau - truoc)
@@ -403,6 +431,25 @@ def nang_len_v8(kn):
     return buoc
 
 
+# Chờ tối đa bao lâu để lấy khoá nâng cấp. 60 giây: đủ cho một lượt nâng cấp thật
+# (lượt v1→v8 trên CSDL rỗng đo được dưới 1 giây; CSDL có dữ liệu thì lâu hơn), và ngắn hơn
+# mọi ngưỡng chờ của người. Hết giờ thì NÉM, không chạy chồng — §13 của chỉ thị G12:
+# thử lại vô hạn không phải là phương án xử lý.
+KHOA_CHO_GIAY = 60
+
+
+# `BEGIN IMMEDIATE` trong `chay()` làm BA việc cùng lúc, nên không tách ra được:
+#   1. KHOÁ XUYÊN TIẾN TRÌNH. `csdl.khoa_ghi` là RLock của Python — nó chỉ phủ MỘT tiến
+#      trình, nên hai lượt `python3 -m migrate` song song đi xuyên qua nó như không có gì.
+#      SQLite khoá ở tầng tệp nên chặn được thật (đo ca L: tiến trình hai nhận
+#      "database is locked", và vào được ngay khi bên kia nhả).
+#   2. RANH GIỚI LÙI CHO CẢ DDL. `with kn:` của python KHÔNG mở giao dịch cho
+#      `CREATE`/`ALTER` — chỉ cho DML (đo ca J: ép hỏng giữa chừng thì INSERT lùi, còn
+#      bảng vừa CREATE Ở LẠI). Nên câu cũ "CSDL giữ nguyên trạng thái trước (transaction
+#      rollback)" ĐÚNG VỚI DML và SAI VỚI DDL — một lời nói sai về chính hệ thống, đúng
+#      dạng §12.2. `BEGIN` tường minh thì lùi sạch cả DDL (đo ca K).
+#   3. CHỐT ĐỌC-RỒI-LÀM. Phiên bản đọc ở đầu hàm nằm ngoài mọi khoá; đọc lại bên trong
+#      khoá thì tiến trình đến sau thấy việc đã xong và nhường, thay vì nâng cấp lần hai.
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -423,32 +470,57 @@ def chay(im_lang=False):
     noi(f"[migrate] Đã backup: {ban_sao}")
     noi(f"[migrate] Số dòng trước: {truoc}")
 
-    kn = csdl.ket_noi()
+    kn = csdl.ket_noi(timeout=KHOA_CHO_GIAY, tuong_minh=True)
+    # THỨ TỰ BẮT BUỘC: `PRAGMA foreign_keys` phải đặt TRƯỚC `BEGIN`. Đo được (ca M):
+    # trong giao dịch, SQLite BỎ QUA lệnh này không báo lỗi gì — đổi thứ tự là chạy cả
+    # migration với khoá ngoại BẬT mà không ai thấy.
     kn.execute("PRAGMA foreign_keys=OFF")
+    kn.execute("PRAGMA busy_timeout=%d" % (KHOA_CHO_GIAY * 1000))
+    # `BEGIN IMMEDIATE` làm BA việc cùng lúc — xem khối chú thích ở KHOA_CHO_GIAY.
     try:
-        with kn:
-            buoc = []
-            if pb < 2:
-                buoc += nang_len_v2(kn)
-            if pb < 3:
-                buoc += nang_len_v3(kn)
-            if pb < 4:
-                buoc += nang_len_v4(kn)
-            if pb < 5:
-                buoc += nang_len_v5(kn)
-            if pb < 6:
-                buoc += nang_len_v6(kn)
-            if pb < 7:
-                buoc += nang_len_v7(kn)
-            if pb < 8:
-                buoc += nang_len_v8(kn)
-            kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
-                       " VALUES (?,?,?)",
-                       (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))
+        kn.execute("BEGIN IMMEDIATE")
+    except csdl.LoiVanHanh as e:
+        kn.close()
+        noi(f"[migrate] KHÔNG lấy được khoá sau {KHOA_CHO_GIAY}s: {e}")
+        noi("[migrate] Có tiến trình khác đang nâng cấp CSDL này. KHÔNG chạy chồng.")
+        raise
+    # ĐỌC LẠI phiên bản BÊN TRONG khoá. Lượt đọc ở đầu hàm nằm ngoài mọi khoá, nên giữa nó
+    # và chỗ này một tiến trình khác có thể đã nâng xong. Đây là đua đọc-rồi-làm kinh điển.
+    pb_trong = kn.execute("SELECT COALESCE(MAX(phien_ban),0) FROM schema_version").fetchone()[0]
+    if pb_trong >= csdl.PHIEN_BAN_SCHEMA:
+        kn.execute("ROLLBACK")
+        kn.close()
+        noi(f"[migrate] Tiến trình khác đã nâng lên {pb_trong} trong lúc chờ khoá — không làm lại.")
+        return {"phien_ban": pb_trong, "da_nang": False, "nhuong": True}
+    pb = pb_trong
+    try:
+        buoc = []
+        if pb < 2:
+            buoc += nang_len_v2(kn)
+        if pb < 3:
+            buoc += nang_len_v3(kn)
+        if pb < 4:
+            buoc += nang_len_v4(kn)
+        if pb < 5:
+            buoc += nang_len_v5(kn)
+        if pb < 6:
+            buoc += nang_len_v6(kn)
+        if pb < 7:
+            buoc += nang_len_v7(kn)
+        if pb < 8:
+            buoc += nang_len_v8(kn)
+        kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
+                   " VALUES (?,?,?)",
+                   (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))
+        kn.execute("COMMIT")
     except Exception as e:
+        try:
+            kn.execute("ROLLBACK")
+        except csdl.LoiCSDL:
+            pass        # đã tự lùi rồi; không che lỗi gốc bằng lỗi lùi
         kn.close()
         noi(f"[migrate] HỎNG: {type(e).__name__}: {e}")
-        noi(f"[migrate] CSDL giữ nguyên trạng thái trước (transaction rollback). Backup: {ban_sao}")
+        noi(f"[migrate] Đã ROLLBACK — kể cả CREATE/ALTER (BEGIN tường minh, đo ca K). Backup: {ban_sao}")
         raise
     sau = dem_dong(kn)
     kn.close()

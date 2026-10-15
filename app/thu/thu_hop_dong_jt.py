@@ -17,6 +17,7 @@
 # Chạy: python3 app/thu/thu_hop_dong_jt.py
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -152,6 +153,84 @@ class A_ChuKyVaHeaders(unittest.TestCase):
         self.assertIsNone(yc["url"])
         self.assertIsNone(aj.url_cua("createOrder", "mock"))
         self.assertIsNone(aj.url_cua("trackOrder", "mock"))
+
+    def test_a9_kiem_chu_ky_doc_lap_tinh_tu_chuoi_NAM_TRONG_GOI(self):
+        """G16-D: phép kiểm chữ ký phải ĐỘC LẬP — tính lại bằng tay, không mượn hàm của adapter."""
+        import base64
+        import hashlib
+        yc = ad_mock().yeu_cau_tao_don(dict(DON_MAU))
+        r = aj.kiem_chu_ky(yc, CRED_THU)
+        self.assertTrue(r["khop"])
+        self.assertTrue(r["co_bizcontent"])
+        tay = base64.b64encode(hashlib.md5(
+            (yc["bizContent"] + CRED_THU["privateKey"]).encode("utf-8")).digest()).decode()
+        self.assertEqual(r["digest_tinh_lai"], tay)
+        self.assertEqual(yc["headers"]["digest"], tay)
+
+    def test_a10_ky_mot_chuoi_gui_chuoi_khac_thi_kiem_chu_ky_PHAT_HIEN(self):
+        """Ca mà hàm ký tự-kiểm-chính-mình KHÔNG BAO GIỜ thấy: sửa thân gửi sau khi đã ký."""
+        yc = ad_mock().yeu_cau_tao_don(dict(DON_MAU))
+        self.assertTrue(aj.kiem_chu_ky(yc, CRED_THU)["khop"])
+        cu = yc["bizContent"]
+        yc["bizContent"] = cu.replace('"codMoney": "15000"', '"codMoney": "15001"')
+        self.assertNotEqual(yc["bizContent"], cu, "phép sửa chuỗi không tác dụng ⇒ ca thử vô nghĩa")
+        self.assertNotEqual(yc["headers"]["digest"],
+                            aj.ky_digest(yc["bizContent"], CRED_THU["privateKey"]))
+        self.assertFalse(aj.kiem_chu_ky(yc, CRED_THU)["khop"],
+                         "đổi chuỗi đem gửi mà chữ ký vẫn 'khớp' ⇒ phép kiểm vô nghĩa")
+
+    def test_a11_TU_KIEM_kiem_chu_ky_khong_luon_dung(self):
+        """Bộ dò phải chứng minh nó BẮT ĐƯỢC chữ ký sai — nếu không, ca A9 xanh vô nghĩa."""
+        yc = ad_mock().yeu_cau_tao_don(dict(DON_MAU))
+        yc_digest_sai = json.loads(json.dumps(yc))
+        yc_digest_sai["headers"]["digest"] = "AAAA"
+        self.assertFalse(aj.kiem_chu_ky(yc_digest_sai, CRED_THU)["khop"])
+        self.assertFalse(aj.kiem_chu_ky(yc, dict(CRED_THU, privateKey="KHOA-KHAC"))["khop"])
+        self.assertFalse(aj.kiem_chu_ky({"headers": {}}, CRED_THU)["khop"],
+                         "gói không có bizContent mà vẫn 'khớp' là sai")
+
+    def test_a12_kiem_chu_ky_kiem_ca_moc_thoi_gian(self):
+        import datetime as dt
+        tz7 = dt.timezone(dt.timedelta(hours=7))
+        moc = dt.datetime(2026, 10, 15, 12, 0, 0, tzinfo=tz7)
+        ms = int(moc.timestamp() * 1000)
+        yc = ad_mock().yeu_cau_tao_don(dict(DON_MAU), bay_gio=moc)
+        r = aj.kiem_chu_ky(yc, CRED_THU, luc_goi_ms=ms, sai_so_ms=1000)
+        self.assertTrue(r["thoi_gian_hop_le"])
+        self.assertEqual(r["thoi_gian_ms"], ms)
+        # ĐỐI CHỨNG ÂM cho chính phép kiểm này: lệch quá sai số ⇒ KHÔNG hợp lệ.
+        self.assertFalse(aj.kiem_chu_ky(yc, CRED_THU, luc_goi_ms=ms + 10_000,
+                                        sai_so_ms=1000)["thoi_gian_hop_le"])
+        yc_giay = json.loads(json.dumps(yc))
+        yc_giay["headers"]["timestamp"] = str(ms // 1000)
+        self.assertFalse(aj.kiem_chu_ky(yc_giay, CRED_THU)["thoi_gian_hop_le"],
+                         "mốc GIÂY bị nhận là mili giây ⇒ hãng từ chối ở lớp chống phát-lại")
+
+    def test_a13_L2N2_moc_NAIVE_di_theo_UTC7_khong_theo_mui_gio_MAY(self):
+        """VÁ `L2-N2` (docs/QA_G13_G15.md §L2.2) — đo bằng TIẾN TRÌNH CON, đúng cách đã phát hiện.
+
+        Trước bản vá: `TZ=UTC` cho ra con số lệch ĐÚNG 7 tiếng so với `TZ=Asia/Ho_Chi_Minh`,
+        trong khi docstring hứa "không mượn múi giờ của máy".
+        """
+        ma = ("import sys; sys.path.insert(0, %r); import datetime as d; import adapter_jt as a;"
+              " print(a.dau_thoi_gian_ms(d.datetime(2026, 10, 15, 10, 0, 0)))" % GOC_APP)
+        ra = []
+        for tz in ("Asia/Ho_Chi_Minh", "UTC", "America/New_York"):
+            r = subprocess.run([sys.executable, "-c", ma], capture_output=True, text=True,
+                               env=dict(os.environ, TZ=tz))
+            self.assertEqual(r.returncode, 0, f"TZ={tz}: {r.stderr[-300:]}")
+            ra.append(int(r.stdout.strip()))
+        self.assertEqual(len(set(ra)), 1,
+                         f"mốc NAIVE vẫn đổi theo múi giờ MÁY: {ra} — L2-N2 tái phát")
+        self.assertEqual(ra[0], 1792033200000,
+                         "10:00 ngày 15/10/2026 theo UTC+7 phải là 1792033200000")
+        # Mốc CÓ múi giờ vẫn phải giữ nguyên hành vi cũ (không được vá quá tay).
+        import datetime as dt
+        tz7 = dt.timezone(dt.timedelta(hours=7))
+        moc = dt.datetime(2026, 10, 15, 10, 0, 0, tzinfo=tz7)
+        self.assertEqual(aj.dau_thoi_gian_ms(moc), 1792033200000)
+        self.assertEqual(aj.dau_thoi_gian_ms(moc.replace(tzinfo=None)), 1792033200000,
+                         "mốc naive phải cho CÙNG kết quả với mốc UTC+7 tường minh")
 
 
 class B_DuongDanDaXacMinh(unittest.TestCase):
@@ -322,47 +401,77 @@ class D_AnhXaArea_D9(unittest.TestCase):
 class E_ChotChanDuongDanChuaXacMinh(unittest.TestCase):
     """Thao tác chưa xác minh đường dẫn: chặn ở MỌI môi trường khác mock, và nói rõ còn thiếu gì."""
 
-    def test_e1_bon_thao_tac_chua_xac_minh_bi_dung_ngoai_mock(self):
-        with ChoPhepLiveTam():
-            ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
-            for ten, goi in (("cancelOrder", lambda: ad.cancelOrder("MVD1", "khách huỷ")),
-                             ("getShippingFee", lambda: ad.getShippingFee(dict(DON_MAU))),
-                             ("getShippingLabel", lambda: ad.getShippingLabel("MVD1"))):
-                with self.assertRaises(aj.ChuaXacNhanTaiLieu) as e:
-                    goi()
-                self.assertEqual(e.exception.thao_tac, ten)
-                self.assertTrue(any("chưa xác minh" in t for t in e.exception.thieu),
-                                f"{ten}: phải nói rõ đường dẫn chưa xác minh")
-                self.assertEqual(e.exception.moi_truong, "sandbox")
-
-    def test_e2_trackOrder_qua_duoc_cua_duong_dan_nhung_dung_o_cua_transport(self):
-        """Đường dẫn tra hành trình ĐÃ xác minh ⇒ chốt còn lại là lớp transport chưa viết."""
+    def test_e1_chan_chua_chay_duoc_neu_DU_ly_do_khong_chi_ly_do_dau(self):
+        """`_chan_chua_chay_duoc` phải gom ĐỦ ba lý do — nêu một lý do rồi dừng là cách người
+        đọc sửa xong chỗ thứ nhất, chạy lại, rồi mới thấy chỗ thứ hai."""
         with ChoPhepLiveTam():
             ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
             with self.assertRaises(aj.ChuaXacNhanTaiLieu) as e:
-                ad.trackOrder("MVD1")
-            self.assertTrue(any("transport" in t for t in e.exception.thieu),
-                            f"thiếu lý do transport: {e.exception.thieu}")
+                ad._chan_chua_chay_duoc("cancelOrder")
+        self.assertEqual(e.exception.thao_tac, "cancelOrder")
+        self.assertEqual(e.exception.moi_truong, "sandbox")
+        gop = " | ".join(e.exception.thieu).lower()
+        self.assertIn("cấp quyền", gop, "thiếu lý do MÔI TRƯỜNG")
+        self.assertIn("chưa xác minh", gop, "thiếu lý do ĐƯỜNG DẪN")
+        if aj.http_jt_dang_dung() is None:
+            self.assertIn("http", gop, "thiếu lý do LỚP HTTP")
+        else:
+            # Lớp HTTP ĐÃ có trên đĩa (AG-02 giao `app/http_jt.py`) ⇒ lý do đó KHÔNG còn đúng,
+            # và hàm phải thôi nêu nó. Nêu một lý do đã hết hiệu lực cũng là nói sai.
+            self.assertNotIn("chưa có trên đĩa", gop)
 
-    def test_e3_khong_co_lop_transport_that(self):
-        self.assertIs(aj.TRANSPORT_THAT_DA_VIET, False)
-        self.assertIs(aj.AdapterJT.TRANSPORT_THAT_DA_VIET, False)
+    def test_e2_moi_truong_duoc_kiem_TRUOC_khi_gui(self):
+        """Cửa môi trường là cửa ĐẦU TIÊN của đường gửi — kể cả thao tác ĐÃ có đường dẫn."""
+        with ChoPhepLiveTam():
+            ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
+            with self.assertRaises(PermissionError) as e:
+                ad.trackOrder("MVD1")      # trackOrder CÓ đường dẫn đã xác minh
+            self.assertIn("V-G09-01", str(e.exception))
 
-    def test_e4_huy_don_mock_van_dung_duoc_va_ghi_ro_truong_con_thieu(self):
+    def test_e3_bon_thao_tac_chua_xac_minh_bi_cua_DUONG_DAN_dung(self):
+        """Cửa đường dẫn, đo TRỰC TIẾP: mỗi thao tác phải nêu đúng tên nó và nguồn đã đọc."""
+        for op in ("cancelOrder", "getShippingFee", "getShippingLabel", "getOrder"):
+            for mt in ("sandbox", "production"):
+                with self.assertRaises(aj.ChuaXacNhanTaiLieu) as e:
+                    aj.chan_duong_chua_xac_nhan(op, mt)
+                self.assertEqual(e.exception.thao_tac, op)
+                self.assertEqual(e.exception.moi_truong, mt)
+                gop = " | ".join(e.exception.thieu).lower()
+                self.assertIn("chưa", gop, f"{op}: lý do phải nói rõ là CHƯA")
+                self.assertIn("xác minh", gop, f"{op}: lý do phải nói rõ ĐƯỜNG DẪN chưa xác minh")
+        # ĐỐI CHỨNG DƯƠNG: hai thao tác ĐÃ xác minh thì cửa này KHÔNG ném.
+        for op in ("createOrder", "trackOrder"):
+            for mt in ("sandbox", "production"):
+                self.assertIsNone(aj.chan_duong_chua_xac_nhan(op, mt))
+
+    def test_e4_duong_dan_da_xac_minh_nhung_thieu_lop_HTTP_thi_dung(self):
+        """Đường dẫn ĐÃ xác minh mà chưa có lớp HTTP ⇒ `ChuaXacNhanTaiLieu`, KHÔNG gửi rỗng."""
+        with ChoPhepLiveTam():
+            ad = aj.AdapterJT(dict(CRED_THU), "sandbox")
+            if aj.http_jt_dang_dung() is None:
+                with self.assertRaises(aj.ChuaXacNhanTaiLieu) as e:
+                    ad._chan_chua_chay_duoc("trackOrder")
+                self.assertTrue(any("HTTP" in t for t in e.exception.thieu),
+                                f"thiếu lý do lớp HTTP: {e.exception.thieu}")
+        # ĐỐI CHỨNG DƯƠNG: ở mock thì CÙNG thao tác chạy được — nếu không, một bản "chặn tất
+        # cả" cũng làm ca trên xanh một cách vô nghĩa.
+        self.assertTrue(ad_mock().trackOrder("JTVN1").ok)
+
+    def test_e5_huy_don_mock_van_dung_duoc_va_ghi_ro_truong_con_thieu(self):
         yc = ad_mock().yeu_cau_huy_don("MVD1", "khách huỷ")
         self.assertEqual(json.loads(yc["bizContent"])["txlogisticId"], "MVD1")
         self.assertIsNone(yc["url"])
         self.assertTrue(yc["thieu_truong"], "phải ghi rõ còn thiếu gì ngay ở mock")
         self.assertIsNone(aj.url_cua("cancelOrder", "sandbox"))
 
-    def test_e5_ten_truong_ly_do_huy_dang_rong_va_khong_doan(self):
+    def test_e6_ten_truong_ly_do_huy_dang_rong_va_khong_doan(self):
         self.assertEqual(aj.TRUONG_LY_DO_HUY, "",
                          "chưa đọc được tên trường lý do huỷ ⇒ để RỖNG, không đoán")
         biz = json.loads(ad_mock().yeu_cau_huy_don("MVD1", "khách huỷ")["bizContent"])
         for ten_doan in ("reason", "cancelReason", "remark", "cancelRemark"):
             self.assertNotIn(ten_doan, biz, f"KHÔNG được đoán tên trường {ten_doan!r}")
 
-    def test_e6_tra_hanh_trinh_ton_trong_tran_30_ma(self):
+    def test_e7_tra_hanh_trinh_ton_trong_tran_30_ma(self):
         yc = ad_mock().yeu_cau_tra_hanh_trinh([f"MVD{i}" for i in range(30)])
         self.assertEqual(json.loads(yc["bizContent"])["billcodes"].count(","), 29)
         with self.assertRaises(lh.NormalizedCarrierError) as e:
@@ -370,23 +479,36 @@ class E_ChotChanDuongDanChuaXacMinh(unittest.TestCase):
         self.assertEqual(e.exception.ma_goc_hang, "145003502")
         self.assertEqual(e.exception.ma_chuan, lh.THAM_SO_SAI)
 
-    def test_e7_tra_hanh_trinh_danh_sach_rong_thi_dung(self):
+    def test_e8_tra_hanh_trinh_danh_sach_rong_thi_dung(self):
         for xau in ([], "", None):
             with self.assertRaises(lh.NormalizedCarrierError):
                 ad_mock().yeu_cau_tra_hanh_trinh(xau)
 
-    def test_e8_yeu_cau_tra_hanh_trinh_co_chu_ky_cua_chinh_no(self):
+    def test_e9_yeu_cau_tra_hanh_trinh_co_chu_ky_cua_chinh_no(self):
         yc = ad_mock().yeu_cau_tra_hanh_trinh(["A1", "B2"])
         self.assertEqual(yc["headers"]["digest"],
                          aj.ky_digest(yc["bizContent"], CRED_THU["privateKey"]))
         self.assertEqual(yc["body"]["bizContent"], yc["bizContent"])
 
-    def test_e9_url_chi_co_o_hai_moi_truong_da_xac_minh(self):
+    def test_e10_url_chi_co_o_hai_moi_truong_da_xac_minh(self):
         for mt in ("sandbox", "production"):
             self.assertTrue(aj.url_cua("createOrder", mt).startswith("https://"))
             self.assertTrue(aj.url_cua("trackOrder", mt).startswith("https://"))
             for op in ("cancelOrder", "getShippingFee", "getShippingLabel", "getOrder"):
                 self.assertIsNone(aj.url_cua(op, mt), f"{op}/{mt} không được có URL")
+
+    def test_e11_khong_them_duong_dan_nao_moi(self):
+        """G16-A KHÔNG được nới bảng đường dẫn: bốn thao tác vẫn phải `duong=None`.
+
+        Ca này là chốt chặn cho cám dỗ "đoán một URL cho đủ sáu thao tác" — đoán sai thì hãng
+        từ chối và mình chẩn đoán nhầm hướng.
+        """
+        self.assertEqual(sorted(aj.DUONG_API), sorted(
+            ["createOrder", "trackOrder", "cancelOrder", "getShippingFee", "getShippingLabel",
+             "getOrder"]))
+        for op in ("cancelOrder", "getShippingFee", "getShippingLabel", "getOrder"):
+            self.assertIsNone(aj.DUONG_API[op]["duong"], f"{op} bị gán URL chưa xác minh")
+            self.assertEqual(aj.DUONG_API[op]["muc"], aj.MUC_CHUA_XAC_NHAN)
 
 
 class F_KhongCoMaGoiMang(unittest.TestCase):
@@ -404,6 +526,128 @@ class F_KhongCoMaGoiMang(unittest.TestCase):
         self.assertTrue(quet_goi_mang("import requests\n"))
         self.assertTrue(quet_goi_mang("x = urllib.request.urlopen(u)\n"))
         self.assertEqual(quet_goi_mang("import json\nimport hashlib\n"), [])
+
+    def test_f3_http_jt_duoc_nap_LUOI_khong_o_dau_tep(self):
+        """`http_jt` phải được nạp TRONG hàm. Nạp ở cấp module thì lúc AG-02 chưa viết xong,
+        cả adapter chết vì một tệp của làn khác — và đó là hỏng THẬT, không phải hỏng giả."""
+        import ast
+        with open(os.path.join(GOC_APP, "adapter_jt.py"), encoding="utf-8") as f:
+            cay = ast.parse(f.read())
+        for n in cay.body:      # chỉ soi CẤP MODULE: import lồng trong hàm là đúng ý đồ
+            if isinstance(n, ast.Import):
+                for a in n.names:
+                    self.assertNotEqual(a.name.split(".")[0], "http_jt",
+                                        "http_jt bị nạp ở CẤP MODULE")
+            elif isinstance(n, ast.ImportFrom):
+                self.assertNotEqual((n.module or "").split(".")[0], "http_jt",
+                                    "http_jt bị nạp ở CẤP MODULE")
+        # TỰ KIỂM bộ dò: nó phải bắt được đúng khuôn sai đó.
+        gia = ast.parse("import http_jt\n")
+        self.assertTrue(any(isinstance(n, ast.Import)
+                            and n.names[0].name.split(".")[0] == "http_jt" for n in gia.body),
+                        "bộ dò không bắt được `import http_jt` ở cấp module ⇒ ca F3 vô nghĩa")
+
+
+class H_MoiTruong_HaiCuaDocLap(unittest.TestCase):
+    """§37 — `mock` là MẶC ĐỊNH; `sandbox`/`production` TỪ CHỐI kèm lý do; hai cửa ĐỘC LẬP.
+
+    Vì sao tách nhóm riêng: trước G16 chỉ có MỘT cửa (`CHO_PHEP_LIVE`). Nay có BA, và bất biến
+    quan trọng nhất là **mở một cửa KHÔNG mở hai cửa kia**. Không có nhóm này thì lần sau ai gộp
+    ba cửa làm một cũng không ai biết.
+    """
+
+    def test_h1_mock_la_mac_dinh_va_khong_can_credential(self):
+        ad = aj.AdapterJT({}, "mock")
+        self.assertEqual(ad.moi_truong, "mock")
+        self.assertTrue(aj.moi_truong_duoc_chay("mock"))
+        self.assertTrue(ad.createOrder(dict(DON_MAU, ma_don="G16-H1")).ok)
+
+    def test_h2_sandbox_va_production_mac_dinh_la_CHAN_kem_ly_do_doc_duoc(self):
+        for mt in ("sandbox", "production"):
+            self.assertFalse(aj.moi_truong_duoc_chay(mt), f"{mt} phải đang CHẶN")
+            with self.assertRaises(PermissionError) as e:
+                aj.chan_moi_truong_chua_duoc_cap(mt)
+            self.assertIn(mt, str(e.exception))
+            self.assertIn("§37", aj.ly_do_moi_truong(mt))
+        self.assertIn("V-G09-01", aj.ly_do_moi_truong("sandbox"))
+        self.assertIn("duyệt riêng", aj.ly_do_moi_truong("production"))
+
+    def test_h3_moi_truong_LA_thi_TU_CHOI_khong_doan(self):
+        for mt in ("staging", "", None, "prod", "sanbox"):
+            self.assertFalse(aj.moi_truong_duoc_chay(mt), f"{mt!r} bị coi là được phép")
+            with self.assertRaises(PermissionError):
+                aj.chan_moi_truong_chua_duoc_cap(mt)
+
+    def test_h4_duong_chay_that_tu_choi_ngay_luc_dung_adapter(self):
+        """Cửa 1: `CHO_PHEP_LIVE=False` ⇒ dựng adapter ngoài mock đã nổ, chưa cần cửa nào khác."""
+        self.assertIs(aj.AdapterJT.CHO_PHEP_LIVE, False)
+        for mt in ("sandbox", "production"):
+            with self.assertRaises(PermissionError):
+                adapter.tao_adapter("jt", dict(CRED_THU), mt)
+
+    def test_h5_mo_CHO_PHEP_LIVE_KHONG_mo_duoc_moi_truong(self):
+        """Cửa 1 (lớp nền) và cửa 2 (môi trường) ĐỘC LẬP — mở cửa này KHÔNG mở cửa kia.
+
+        AG-00 chốt 15/10/2026 và yêu cầu ca này khẳng định đúng bất biến hai-cửa, theo hướng
+        CHẶT HƠN: mở `CHO_PHEP_LIVE` rồi thì thao tác vẫn phải bị TỪ CHỐI, và lý do phải nêu
+        đúng §37.
+        """
+        with ChoPhepLiveTam():
+            self.assertTrue(aj.AdapterJT.CHO_PHEP_LIVE, "cửa 1 phải đang mở trong khối này")
+            ad = aj.AdapterJT(dict(CRED_THU), "production")
+            with self.assertRaises(PermissionError) as e:
+                ad.trackOrder("MVD1")     # đường dẫn ĐÃ xác minh ⇒ cửa chặn chắc chắn là môi trường
+            self.assertIn("duyệt riêng", str(e.exception))
+            for ten, goi in (("getShippingFee", lambda: ad.getShippingFee(dict(DON_MAU))),
+                             ("getShippingLabel", lambda: ad.getShippingLabel("MVD1"))):
+                with self.assertRaises(PermissionError, msg=f"{ten} lọt qua cửa môi trường"):
+                    goi()
+            # `cancelOrder` dựng gói yêu cầu TRƯỚC khi hỏi cửa môi trường, và gói đó cần đường
+            # dẫn chưa xác minh ⇒ nó dừng ở cửa ĐƯỜNG DẪN. Vẫn là DỪNG, khác chỗ dừng.
+            with self.assertRaises(aj.ChuaXacNhanTaiLieu):
+                ad.cancelOrder("MVD1")
+        self.assertIs(aj.AdapterJT.CHO_PHEP_LIVE, False, "cửa 1 phải được trả lại sau khối")
+
+    def test_h6_mo_CHO_PHEP_LIVE_van_de_D9_chan_createOrder(self):
+        """Cửa 2 và cửa 4 (D-9) cũng ĐỘC LẬP: mở cửa 1 không gỡ được chốt D-9."""
+        with ChoPhepLiveTam():
+            for mt in ("sandbox", "production"):
+                ad = aj.AdapterJT(dict(CRED_THU), mt)
+                with self.assertRaises(lh.NormalizedCarrierError) as e:
+                    ad.createOrder(dict(DON_MAU))
+                self.assertIn("D-9", e.exception.thong_diep)
+
+    def test_h7_ba_cua_nguon_deu_DONG_va_moi_cua_mot_cho(self):
+        """Ghim BA nguồn quyền, mỗi nguồn một chỗ — gộp chúng lại là mất chốt chặn."""
+        import cau_hinh
+        self.assertIs(aj.AdapterJT.CHO_PHEP_LIVE, False, "cửa 1 (adapter.py)")
+        self.assertIs(cau_hinh.JT_CHO_PHEP_SANDBOX, False, "cửa 2 sandbox (cau_hinh.py)")
+        self.assertIs(cau_hinh.JT_CHO_PHEP_PRODUCTION, False, "cửa 2 production (cau_hinh.py)")
+        self.assertEqual(cau_hinh.JT_MOI_TRUONG, "mock", "mặc định của hệ phải là mock")
+        self.assertIs(aj.TRANSPORT_THAT_DA_VIET, aj._co_http_jt(),
+                      "cờ transport phải là ẢNH CHỤP của phép dò, không phải hằng viết tay")
+        self.assertIsNone(aj.DIEM_CUOI_GHI_DE, "điểm cuối thay thế phải TRỐNG ở cây bàn giao")
+        # Bảng quyền KHÔNG được nhân bản trong tệp adapter: chỉ `cau_hinh` được phán.
+        self.assertFalse(hasattr(aj, "UY_QUYEN_MOI_TRUONG"),
+                         "adapter_jt tự dựng bảng quyền song song với cau_hinh ⇒ hai bảng sẽ lệch")
+
+    def test_h8_seam_diem_cuoi_TU_CHOI_dia_chi_ngoai_vong_lap(self):
+        """TỰ KIỂM: seam của bộ thử không được là một đường gọi ra Internet."""
+        for xau in ("https://demoopenapi.jtexpress.vn", "http://10.0.0.1:80",
+                    "https://ylopenapi.jtexpress.vn", "ftp://127.0.0.1"):
+            with self.assertRaises(ValueError, msg=f"nhận nhầm {xau}"):
+                aj.DungDiemCuoiTam(xau)
+        for tot in ("http://127.0.0.1:8123", "http://localhost:9", "http://[::1]:9"):
+            with aj.DungDiemCuoiTam(tot):
+                self.assertTrue(aj.url_cua("createOrder", "sandbox").startswith(tot))
+            self.assertIsNone(aj.DIEM_CUOI_GHI_DE, "hết khối `with` phải trả lại giá trị cũ")
+
+    def test_h9_ghi_de_diem_cuoi_KHONG_bia_duong_dan_chua_xac_minh(self):
+        """Ghi đè điểm cuối chỉ đổi HOST: thao tác chưa biết đường dẫn vẫn phải `None`."""
+        with aj.DungDiemCuoiTam("http://127.0.0.1:8123"):
+            for op in ("cancelOrder", "getShippingFee", "getShippingLabel", "getOrder"):
+                self.assertIsNone(aj.url_cua(op, "sandbox"),
+                                  f"{op}: ghi đè điểm cuối biến đường dẫn CHƯA BIẾT thành có thật")
 
 
 class G_DuongNoiCredentials(unittest.TestCase):

@@ -26,6 +26,7 @@ app/du-lieu/
 # Cùng họ với ghi chú P-3 về `.env` ở trên: thứ nặng hoặc thứ bí mật phải chặn TRƯỚC lượt
 # `add` đầu tiên, không phải sau.
 node_modules/
+node_modules
 
 # Đầu ra mỗi lượt chạy tầng 3: báo cáo HTML, ảnh chụp khi ca hỏng, trace.zip.
 # Sinh lại được bằng `sh thu_giao_dien/chay.sh` nên không vào git.

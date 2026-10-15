@@ -1,0 +1,12 @@
+{
+  "name": "veh-thu-giao-dien",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tầng 3 kiểm thử giao diện (trình duyệt thật) — VIP Express Hub. CHỈ dùng cho bộ thử; sản phẩm không nạp gì từ đây.",
+  "scripts": {
+    "thu": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

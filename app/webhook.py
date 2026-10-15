@@ -29,6 +29,16 @@
 #         `PHAN_HOI_XAC_MINH` (mức THẬT), `bao_cao_hop_dong_callback()` và
 #         `kiem_hop_dong_khong_tu_nang_muc()` (canh bất biến trung thực).
 #         KHÔNG đổi thuật toán ký và KHÔNG nâng mức nào: mức cao nhất vẫn là DOCUMENTED.
+#
+# Bổ sung đợt G17 (AG-04):
+#   W07 — REPLAY có UỶ QUYỀN gọi tên được (`QUYEN_REPLAY`, `vai_tro_duoc_replay`,
+#         `uy_quyen_replay`, `replay_co_uy_quyen`) và có phép đọc trước (`trang_thai_replay`).
+#         `yeu_cau_replay` nhận thêm `vai_tro`: truyền vào thì TỰ kiểm quyền (fail-closed),
+#         không truyền thì ghi rõ hệ uỷ quyền của tầng gọi vào audit.
+#         Chốt "đang xử lý" từ ĐỌC-rồi-GHI đổi thành ĐIỀU KIỆN NẰM TRONG CÂU GHI: bản cũ còn
+#         một khe hở thật — worker nhận sự kiện đúng giữa hai câu thì câu ghi giật sự kiện khỏi
+#         tay nó, dẫn tới HAI worker cùng xử lý một sự kiện hoặc một lượt replay mất im lặng.
+#         Đo được ở `thu_webhook_jt.test_l02`, có đối chứng bỏ đo bằng đột biến.
 import base64
 import hashlib
 import hmac
@@ -42,6 +52,7 @@ import bao_mat
 import cau_hinh
 import csdl
 import don_hang
+import quyen
 import trang_thai_hang as tth
 
 _hang_doi = queue.Queue()
@@ -1062,23 +1073,116 @@ def co_the_replay(sk_id):
     return True, ""
 
 
-def yeu_cau_replay(sk_id, tenant_id, user_id=None):
+# ---------------------------------------------------------------------------
+# G17 (AG-04) — AI ĐƯỢC REPLAY: uỷ quyền gọi TÊN RA ĐƯỢC
+# ---------------------------------------------------------------------------
+# Quyền cần có để replay. Đây là KHOÁ TRA vào bảng `role_permissions` của CSDL, không phải một
+# bản sao của bảng phân quyền: chép bảng quyền vào mã là tạo bản sao thứ hai, và bản trong mã
+# là bản sẽ lệch mà không ai thấy.
+QUYEN_REPLAY = "tenant.webhook.replay"
+
+
+def vai_tro_duoc_replay(vai_tro):
+    """Vai trò này có quyền replay không — hỏi CSDL (`quyen.co_quyen`), không hỏi bảng cứng."""
+    return bool(vai_tro) and quyen.co_quyen(vai_tro, QUYEN_REPLAY)
+
+
+def uy_quyen_replay(sk_id, tenant_id, vai_tro, user_id=None):
+    """CHỐT UỶ QUYỀN của cửa replay: `(duoc, ly_do)`, và ghi audit MỌI lượt từ chối.
+
+    Vì sao cần chốt thứ hai dù tầng HTTP đã `_can(...)`: `yeu_cau_replay` là hàm GHI — nó đặt
+    `trang_thai='moi'`, xếp lại hàng, reset bộ đếm thử. Ai gọi thẳng nó từ một chỗ khác (script
+    vận hành, job nền, route mới) thì đi VÒNG QUA tầng HTTP, và lượt replay ấy không còn ai
+    kiểm. Chốt này để câu "ai được replay" có TÊN ngay trong mô-đun, và để lượt từ chối có dấu
+    vết đọc được thay vì một `return False` im lặng.
+
+    Ghi audit kèm số sự kiện là chủ ý: người gọi chỉ tới được đây SAU phép kiểm tenant (xem
+    `replay_co_uy_quyen` và `yeu_cau_replay`), nên dòng audit này chỉ rò cho chính tenant đã
+    chứng minh được sự kiện là của mình — không mở lại kênh dò ID mà TEST-011 đã đóng.
+    """
+    if vai_tro_duoc_replay(vai_tro):
+        return True, ""
+    ly_do = (f"thiếu quyền {QUYEN_REPLAY} (vai trò {vai_tro!r}) — replay là cửa GHI: nó đặt lại"
+             " sự kiện và xếp hàng xử lý")
+    csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
+               tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
+    return False, ly_do
+
+
+def su_kien_cua_tenant(sk_id, tenant_id):
+    """Dòng sự kiện NẾU nó thuộc tenant này, `None` nếu không. Một chỗ duy nhất trả lời câu
+    "sự kiện này có phải của bạn không" — để cửa ĐỌC (`trang_thai_replay`) và cửa GHI
+    (`replay_co_uy_quyen`) không trả lời lệch nhau."""
+    return csdl.mot("SELECT s.*, c.tenant_id t FROM wh_su_kien s JOIN carrier_accounts c"
+                    " ON c.id=s.carrier_account_id WHERE s.id=? AND c.tenant_id=?",
+                    (sk_id, tenant_id))
+
+
+def trang_thai_replay(sk_id, tenant_id, vai_tro=None):
+    """CHỈ ĐỌC: lượt replay bây giờ có chạy được không, và vì sao. Không đổi gì, không ghi audit.
+
+    Để tầng HTTP trả lời được cho người vận hành TRƯỚC khi họ bấm, và để phép thử đọc được
+    đúng lý do mà cửa ghi sẽ dùng — hai chỗ nói khác nhau là lỗi, không phải chi tiết.
+    """
+    sk = su_kien_cua_tenant(sk_id, tenant_id)
+    if not sk:
+        return False, "không có sự kiện này"
+    if vai_tro is not None and not vai_tro_duoc_replay(vai_tro):
+        return False, f"thiếu quyền {QUYEN_REPLAY} (vai trò {vai_tro!r})"
+    if sk["trang_thai"] == "dang_xu_ly":
+        return False, "sự kiện đang được xử lý — đợi xong rồi replay"
+    return co_the_replay(sk_id)
+
+
+def replay_co_uy_quyen(sk_id, tenant_id, vai_tro, user_id=None):
+    """ĐƯỜNG REPLAY HỢP LỆ cho người gọi mới: uỷ quyền TRƯỚC, rồi mới tới `yeu_cau_replay`.
+
+    Route hiện có của `server.py` đi cửa tương đương: `self._can(nc, QUYEN_REPLAY)` — CÙNG một
+    quyền, tra CÙNG một bảng — ngay trước lời gọi. Phép thử `test_l03` canh đúng thứ tự đó
+    bằng mã nguồn, nên một route thứ hai gọi thẳng `yeu_cau_replay` mà bỏ `_can` sẽ bị bắt.
+
+    Phép kiểm tenant chạy TRƯỚC phép kiểm quyền, và lượt trượt tenant KHÔNG ghi audit — giữ
+    nguyên tính chất chống dò ID: "không có sự kiện này" phải giống nhau với mọi người hỏi.
+    """
+    if not su_kien_cua_tenant(sk_id, tenant_id):
+        return False, "không có sự kiện này"
+    return yeu_cau_replay(sk_id, tenant_id, user_id, vai_tro=vai_tro)
+
+
+def yeu_cau_replay(sk_id, tenant_id, user_id=None, vai_tro=None):
     """Replay có kiểm soát: đúng tenant · có TRẦN · ghi audit · rồi mới xếp lại hàng.
 
-    Quyền (`tenant.webhook.replay`) do tầng HTTP kiểm — hàm này KHÔNG tự cấp quyền. Nó thêm ba
-    thứ mà tầng HTTP hiện chưa có: chặn chéo tenant một lần nữa, trần số lần replay, và chặn
-    replay khi sự kiện ĐANG được xử lý.
-    Trả (ok, ly_do).
+    `vai_tro` (G17): truyền vào thì hàm TỰ kiểm quyền và TỪ CHỐI nếu thiếu — fail-closed. Không
+    truyền (`None`) thì hàm coi như tầng gọi đã uỷ quyền (route `server.py` gọi
+    `_can(nc, QUYEN_REPLAY)` ngay trước) và GHI RÕ hệ uỷ quyền đó vào audit — để lượt replay
+    nào đi cửa nào cũng đọc lại được, thay vì phải tin vào lời khai trong docstring.
+
+    Ba thứ hàm này có mà một UPDATE trần không có: chặn chéo tenant, trần số lần replay, và
+    chặn replay khi sự kiện ĐANG được xử lý. Trả `(ok, ly_do)`.
     """
-    sk = csdl.mot("SELECT s.*, c.tenant_id t FROM wh_su_kien s JOIN carrier_accounts c"
-                  " ON c.id=s.carrier_account_id WHERE s.id=?", (sk_id,))
-    if not sk or sk["t"] != tenant_id:
+    sk = su_kien_cua_tenant(sk_id, tenant_id)
+    if not sk:
         return False, "không có sự kiện này"
+    if vai_tro is not None:
+        duoc_uq, ly_do_uq = uy_quyen_replay(sk_id, tenant_id, vai_tro, user_id)
+        if not duoc_uq:
+            return False, ly_do_uq
     # VÁ G14: replay một sự kiện ĐANG xử lý là một lượt replay MẤT IM LẶNG.
     # `yeu_cau_replay` đặt `trang_thai='moi'` rồi xếp hàng; worker đang giữ sự kiện đó chạy xong
     # và đặt lại `trang_thai='xong'`; lượt trong hàng đợi tới `_nhan_viec` thì thấy 'xong' nên
     # bỏ qua. Người bấm thấy HTTP 202 "đã nạp lại" nhưng không có gì chạy lại — đúng kiểu hỏng
     # không báo lỗi mà §12.2 cấm. Từ chối thẳng thì người vận hành biết phải đợi.
+    #
+    # VÁ G17: phép đọc ngay trên đây KHÔNG đủ. Giữa nó và câu ghi, worker có thể nhận sự kiện
+    # (`_nhan_viec` đặt 'dang_xu_ly'), rồi câu ghi cũ — `UPDATE ... WHERE id=?` không điều kiện —
+    # GIẬT sự kiện khỏi tay worker và đặt lại 'moi'. Đo được hai kết cục, tùy thứ tự:
+    #   (a) việc trong hàng đợi được `_nhan_viec` nhận ⇒ HAI worker cùng xử lý MỘT sự kiện, đúng
+    #       thứ mà `_nhan_viec` dựng ra để chặn;
+    #   (b) worker thứ nhất xong trước, đặt 'xong'/'cho_thu_lai', rồi việc trong hàng đợi thấy
+    #       trạng thái cuối nên bỏ qua ⇒ MỘT lượt replay mất im lặng.
+    # Điều kiện phải NẰM TRONG câu ghi, và đọc `rowcount` để biết câu ghi có thật sự đổi được gì.
+    # Ca `thu_webhook_jt.test_l02` dựng đúng khe hở này và có ĐỐI CHỨNG BỎ ĐO: cùng phép dò trên
+    # bản đã bị đột biến (bỏ điều kiện) phải thấy worker thứ hai nhận được việc.
     if sk["trang_thai"] == "dang_xu_ly":
         ly_do = "sự kiện đang được xử lý — đợi xong rồi replay"
         csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
@@ -1089,8 +1193,21 @@ def yeu_cau_replay(sk_id, tenant_id, user_id=None):
         csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
                    tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
         return False, ly_do
-    csdl.ghi("UPDATE wh_su_kien SET trang_thai='moi', so_lan_thu=0, loi_cuoi=NULL WHERE id=?", (sk_id,))
-    csdl.audit("webhook_replay", f"su_kien:{sk_id}", f"trạng thái trước: {sk['trang_thai']}",
+    # Cùng `csdl.khoa_ghi` với `_nhan_viec`: câu "nhận việc" và câu "đặt lại" không chen được
+    # vào nhau, nên trạng thái đọc lúc quyết định và trạng thái ghi là MỘT trạng thái.
+    with csdl.khoa_ghi:
+        con = csdl.ghi("UPDATE wh_su_kien SET trang_thai='moi', so_lan_thu=0, loi_cuoi=NULL"
+                       " WHERE id=? AND trang_thai<>'dang_xu_ly'", (sk_id,))
+        dat = con.rowcount == 1
+    if not dat:
+        ly_do = "sự kiện đang được xử lý — đợi xong rồi replay (bắt ở chính câu ghi)"
+        csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
+                   tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
+        return False, ly_do
+    uy_quyen = (f"vai trò {vai_tro} có {QUYEN_REPLAY}" if vai_tro is not None
+                else "tầng gọi đã uỷ quyền (route HTTP: _can)")
+    csdl.audit("webhook_replay", f"su_kien:{sk_id}",
+               f"trạng thái trước: {sk['trang_thai']} · uỷ quyền: {uy_quyen}",
                tenant_id=tenant_id, user_id=user_id)
     nap(sk_id)
     return True, ""

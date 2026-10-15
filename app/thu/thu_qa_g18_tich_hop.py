@@ -581,7 +581,19 @@ class C_TranTanSuat(unittest.TestCase):
         print("  [C2] gọi thẳng hàm (tiến trình sạch)      : %d lượt qua rồi chặn" % so)
 
     def test_c3_http_mot_tien_trinh_bang_goi_thang_ham(self):
-        """AG-04 §5, đo lại trên TUYẾN KHÁC và bằng harness khác."""
+        """AG-04 §5, đo lại trên TUYẾN KHÁC và bằng harness khác.
+
+        VÁ G19 (AG-00): bản trước ĐỎ với `HTTP 8 ≠ gọi thẳng hàm 12`. ĐÃ CHỨNG MINH không phải
+        bug: luật của `auth.dang_nhap` là `so_lan=20` (theo IP) và `so_lan=12` (theo định danh),
+        cùng cửa sổ 300s. C2 chạy trước và tiêu **12** lượt của bucket **theo IP** — bucket ấy
+        nay DÙNG CHUNG và SỐNG LÂU (G19/AG-02 chuyển kho đếm vào CSDL), nên C3 còn đúng
+        **20 − 12 = 8**. Khớp chính xác.
+
+        Trước G19 bộ đếm nằm trong bộ nhớ TỪNG tiến trình nên hai phép đo RỜI NHAU; nay thì
+        không. Bất biến "HTTP == gọi thẳng hàm" VẪN ĐÚNG — cái sai là giả định hai phép đo độc
+        lập. Nên ca này phải ĐẶT LẠI TRẠNG THÁI trước khi đo, đúng như C2 đã làm.
+        """
+        gioi_han.xoa_het()          # trần về đầy — nếu không, ta đo phần trần C2 đã tiêu
         with NhomMay(1) as n:
             qua = 0
             for _ in range(60):
@@ -596,8 +608,21 @@ class C_TranTanSuat(unittest.TestCase):
         print("  [C3] HTTP 1 tiến trình máy chủ THẬT   : %d lượt qua rồi 429  ⇒ BẰNG đường hàm"
               % qua)
 
-    def test_c4_hai_tien_trinh_thi_tran_NHAN_hai(self):
-        """AG-02 §2 + AG-04 §6.1: trần thực = khai báo × số bản. Bộ đếm nằm trong BỘ NHỚ tiến trình."""
+    def test_c4_HAI_tien_trinh_thi_tran_KHONG_NHAN(self):
+        """G19/AG-02: trần DÙNG CHUNG qua tiến trình — hai bản KHÔNG nhân đôi trần.
+
+        BẢN TRƯỚC của ca này tên là `..._tran_NHAN_hai` và khẳng định `2 × mot == tong`, với
+        docstring "Bộ đếm nằm trong BỘ NHỚ tiến trình". **Đó là khẳng định CHÍNH CÁI LỖ HỔNG**
+        B-G11-10 — đo được ở G18: khai 20 ⇒ 20/40/80/160 với N=1/2/4/8.
+
+        G19/AG-02 đã sửa: kho đếm chuyển vào CSDL, trần nằm trong chính câu ghi, cả lượt kiểm
+        trong MỘT giao dịch `BEGIN IMMEDIATE`. Nên khẳng định đúng nay là: HAI tiến trình vẫn
+        chỉ cho **MỘT** trần, không nhân.
+
+        GIỮ NGUYÊN ĐỘ RĂNG: nếu ai quay lại kho bộ nhớ một tiến trình thì `tong` sẽ thành `2 × mot`
+        và ca này ĐỎ lại — đúng chiều ngược với bản cũ, nhưng vẫn canh cùng một bất biến.
+        """
+        gioi_han.xoa_het()          # trần về đầy trước khi đo
         with NhomMay(2) as n:
             tong = 0
             for _ in range(80):
@@ -609,8 +634,11 @@ class C_TranTanSuat(unittest.TestCase):
         self.ket_qua["http2"] = tong
         mot = self.ket_qua.get("http1")
         self.assertIsNotNone(mot, "ca C3 phải chạy trước")
-        self.assertEqual(2 * mot, tong,
-                         "2 tiến trình cho %d lượt qua, kỳ vọng %d (2 × %d)" % (tong, 2 * mot, mot))
+        self.assertEqual(mot, tong,
+                         "2 tiến trình cho %d lượt qua, một tiến trình cho %d — trần DÙNG CHUNG thì"
+                         " hai bản phải cho CÙNG một trần, KHÔNG nhân đôi (B-G11-10). Nếu %d gấp"
+                         " đôi %d thì kho đếm đã quay lại BỘ NHỚ MỘT TIẾN TRÌNH."
+                         % (tong, mot, tong, mot))
         print("  [C4] HTTP 2 tiến trình (xen kẽ)       : %d lượt qua  ⇒ TỈ LỆ %.1f× (khai báo %d)"
               % (tong, tong / float(mot), self.tran_khai_bao))
 

@@ -37,7 +37,7 @@ tính năng mới** — nó **trả lời những câu G16 cố ý để mở**,
 | **AG-03** | **Hợp đồng nghiệp vụ**: ca **phủ định** ở mock; **giữ KHOÁ** mọi endpoint chưa xác minh | `g17-ag03-business-api` | `G16_ACCEPTANCE.md` §8 mục 2 |
 | **AG-04** | **Webhook**: replay · idempotency · harness cục bộ | `g17-ag04-webhook` | `G16_ACCEPTANCE.md` §8 mục 5 |
 | **AG-05** | **PostgreSQL**: giao dịch · migration · diễn tập trên cụm RIÊNG | `g17-ag05-postgres` | `G12_POSTGRES.md` · `SHARED_CONTRACTS.md` §29 |
-| **AG-06** | **Bảo mật & cách ly** *(đề xuất mới — xem §6)*: ba cổng CHƯA đo của AG-01 | `g17-ag06-security` | `QA_G13_G15.md` §L2.8 |
+| **AG-06** | **Frontend quản lý kết nối J&T + E2E local** (Owner/Codex chốt). Trước đó làn này làm **bảo mật & cách ly**; **không huỷ**, hoàn thành rồi nhận Dispatch mới | `g17-ag06-security` | Owner/Codex chốt 15/10 |
 
 **Quyền sở hữu — KHÔNG TRÙNG** (mỗi làn một worktree riêng, nên tranh chấp tệp là **bất khả** về mặt
 vật lý; bảng này để chốt *ý định*, không phải để chống ghi đè):
@@ -49,7 +49,8 @@ vật lý; bảng này để chốt *ý định*, không phải để chống gh
 | AG-03 | `app/adapter_jt.py` · `app/thu/thu_adapter_jt.py` · `app/thu/thu_hop_dong_jt.py` · `docs/G17_BUSINESS_API.md` |
 | AG-04 | `app/webhook.py` · `app/thu/thu_webhook_jt.py` · `trien_khai/g17/` · `docs/G17_WEBHOOK.md` |
 | AG-05 | `trien_khai/postgres/` · `app/thu/thu_postgres.py` · `docs/G17_POSTGRES.md` |
-| AG-06 | `app/thu/thu_g17_baomat.py` (mới) · `docs/G17_SECURITY_ISOLATION.md` (mới) |
+| AG-06 (việc 1) | `app/thu/thu_g17_baomat.py` (mới) · `docs/G17_SECURITY_ISOLATION.md` (mới) |
+| AG-06 (việc 2, sau settlement) | `admin/admin.js` · `admin/carrier_health.js` · `admin/logic.js` · `pages/carriers.html` · `thu_giao_dien/*.spec.js` · `docs/G17_FRONTEND_E2E.md` (mới) |
 | **AG-00** | `app/csdl.py` · `app/migrate.py` · `app/server.py` · `app/cau_hinh.py` · `app/transport.py` · `app/quan_sat.py` · `docs/SHARED_CONTRACTS.md` · `.gitignore` · tệp của làn **SAU KHI** làn đó bàn giao |
 
 ---
@@ -95,12 +96,27 @@ vật lý; bảng này để chốt *ý định*, không phải để chống gh
 
 ## 6. HAI ĐIỀU PHẢI NÓI THẲNG
 
-**6.1 Chỉ thị gửi tôi bị CẮT giữa chừng.** Bản giao việc dừng ở đúng chữ
-`"AG-05 PostgreSQL transaction/migration/"` — **phần đuôi của AG-05 và TOÀN BỘ AG-06 bị thiếu**.
-Tôi **không bịa**. `AG-05` tôi làm theo đúng phần đọc được + nguồn trong repo
-(`G12_POSTGRES.md`, `SHARED_CONTRACTS.md` §29). `AG-06` tôi **đề xuất** (bảng §1 ghi rõ
-*"đề xuất mới"*) vì đó là khoảng trống **có thật**: ba cổng `V5`/`V6`/`V7` toàn cục mà AG-01 đã tự
-ghi là **CHƯA đo độc lập** từ `QA_G13_G15.md` §L2.8. **Anh Thành/Codex chốt lại thì tôi đổi.**
+**6.1 Phân công nay ĐÃ ĐẦY ĐỦ — bản trước bị TUI tách theo dòng, không phải Owner thiếu yêu cầu.**
+Codex đã xác nhận (`msg_56f72b42a31c`). Bản đầy đủ:
+- **AG-05**: PostgreSQL **transaction / migration / concurrency CHỈ trên DB test riêng**;
+  **CẤM migration DB nghiệp vụ** (D-8). Cấm đụng cụm `:5432`.
+- **AG-06**: **frontend quản lý kết nối J&T + E2E local** — và làn này **đang chạy bảo mật**;
+  **không huỷ, không tạo worker trùng**; sau settlement giao việc frontend cho **cùng agent** bằng
+  **Dispatch mới**, cập nhật ownership.
+- **AG-01 QA**: baseline · **V5/V6/V7 tenant/RBAC/AES** · **harness** · **Chromium**.
+- **G17–G25** là **đề xuất mới dựa trên backlog**; Owner **đã uy quyền** đề xuất và tiếp tục local.
+- Giữ `main` và **giữ nguyên worktree G12 cũ**.
+
+**6.1b `dsh` — ID do RUNTIME chứng minh, ghi ở ĐÂY, không sửa cấu hình Orca toàn máy.**
+```
+worker-start --agent dsh       -> ok:true · provider.id = "dsh" · terminal chạy `dsh-tui .`
+worker-start --agent deepseek  -> ok:false · error.code = "agent_unconfigured"
+```
+Tài liệu Orca liệt kê `claude, codex, cursor, antigravity, muse, zcode, opencode, opencode2` —
+**KHÔNG có `dsh`**. Đây là chỗ tài liệu Orca **thiếu**, không phải chỗ dự án sai.
+Ghi vào tài liệu **dự án** để phiên sau không phải đo lại. **Không sửa cấu hình Orca toàn máy.**
+Giới hạn quản trị đã đo: `worker-stop` trên worker `dsh` trả `stop_unknown` / `processAction: none` /
+*"The worker terminal is user_owned"* ⇒ dừng phải theo đúng hợp đồng vòng đời, **không dùng đường tắt**.
 
 **6.2 `G17`–`G25` là ĐỀ XUẤT, không phải yêu cầu cũ.** Không có tệp nào trong repo định nghĩa chúng.
 Nếu sau này có người đọc tài liệu này rồi tưởng đó là chỉ thị cũ, thì **hiểu sai** — đó là lý do

@@ -5,12 +5,14 @@
 
 | | |
 |---|---|
-| Mốc đo (HEAD lúc chạy) | `7b741c88b3b280d65f80b5e11301f17ebd767b26` |
+| Mốc đo (HEAD lúc chạy) | `7b741c88b3b280d65f80b5e11301f17ebd767b26` (nền `integration/g17`) |
+| Commit của làn này | `8d5811713fa5dbc38ae171aa28689c0293c12df4` (mã + bộ thử) · `7488236d3c5bf735a192d69a4ecc25141e6fefc9` (tệp này) — nhánh `g18-ag04-httpserver`, **chưa push** |
 | Máy | Darwin arm64 · Python **3.9.6** · SQLite 3.51.0 · `os.cpu_count()=10` |
 | Tệp **mới** của lượt này | `app/thu/thu_g18_maysrv.py` · `trien_khai/g18/{chot_an_toan,harness_tai,tiem_loi}.py` · `trien_khai/g18/chay_harness.sh` · `trien_khai/g18/README.md` · tệp này |
 | Tệp **KHÔNG** sửa | `app/webhook.py` (đã chốt ở G17) · `app/server.py` · `app/gioi_han.py` · `app/cau_hinh.py` · mọi tệp khác |
 | Mã thoát của lượt chạy đầy đủ | `sh trien_khai/g18/chay_harness.sh` → **0** (5/5 lượt) |
 | Số ca | harness: **18/20 đạt · 0 hỏng · 0 BLOCKED · 2 bỏ qua** (5/5 lượt y hệt) · bộ hồi quy mới: **17 ca đạt** |
+| Hồi quy đầy đủ | `sh app/thu/chay_tat_ca.sh` → **0** · **1477 ca · 39 bộ chạy thật · bộ hỏng: KHÔNG** |
 | Số ca **bỏ qua** | **2**, và cả hai nói thẳng ra một chỗ **không đo được** (xem §7) |
 
 ---
@@ -260,18 +262,35 @@ chép là kiểm một bộ đo khác với bộ đo đã in ra các con số �
 
 ### 8.1 Hồi quy đầy đủ
 
-`sh app/thu/chay_tat_ca.sh` — **1477 ca Python · 39 bộ chạy thật** (trước lượt này: 1460 ca / 38
-bộ ⇒ **+17 ca, +1 bộ**, đúng bằng bộ thử mới) · frontend 56 + 36 ca · E2E `41/41`.
+`sh app/thu/chay_tat_ca.sh` — **1477 ca Python · 39 bộ chạy thật · bộ hỏng: KHÔNG** (trước lượt
+này: 1460 ca / 38 bộ ⇒ **+17 ca, +1 bộ**, đúng bằng bộ thử mới) · frontend 56 + 36 ca · E2E
+`41/41` · thoát **0**.
 
-Trong lượt chạy đầu, **3 bộ báo hỏng**: `thu_bao_mat.py`, `thu_qa_g17.py`, `thu_tich_hop.py`.
-**Cả ba là nguyên nhân MÔI TRƯỜNG, không phải mã của lượt này** — và điều đó được chứng minh
-riêng, không suy đoán:
+Ba lượt chạy, và ba lượt ấy nói lên nhiều hơn một dòng "đạt":
 
-| Bộ | Ca hỏng | Nguyên nhân ĐO ĐƯỢC |
-|---|---|---|
-| `thu_bao_mat.py` | `test_f3_khoa_khong_nam_trong_csdl_va_khong_vao_git` | `git check-ignore …` trả **128**. Biến môi trường `GIT_CONFIG_COUNT=2` đi kèm `GIT_CONFIG_VALUE_0/1` nhưng **THIẾU `GIT_CONFIG_KEY_0/1`** ⇒ mọi lệnh `git` chết với `error: missing config key GIT_CONFIG_KEY_0`. Bỏ ba biến ấy đi thì `git check-ignore` trả **0** và in đúng đường bị chặn |
-| `thu_tich_hop.py` | `test_04_…`, `test_11_…` | **cùng một nguyên nhân**: `returncode 128 != 0` |
-| `thu_qa_g17.py` | `test_a1_cay_sach_va_head` | **cổng "cây sạch"** làm đúng việc của nó: 6 tệp **mới** của lượt này còn ở trạng thái `??` (chưa commit) ⇒ `CÂY BẨN tại mốc đo`. Hết bẩn là hết hỏng |
+| Lượt | Điều kiện | Kết quả | Nghĩa |
+|---|---|---|---|
+| 1 | cây **bẩn** (6 tệp mới chưa commit) + env `git` **hỏng** | **3 bộ hỏng**: `thu_bao_mat`, `thu_tich_hop`, `thu_qa_g17` | — |
+| 2 | đã commit, env `git` **vẫn hỏng** | chỉ còn `thu_qa_g17` | Hai bộ kia hỏng vì **env**, không vì mã |
+| 3 | cây **sạch**, env `git` đã sửa | **0 bộ hỏng** | — |
+
+**Nguyên nhân của hai bộ đầu — ĐO ĐƯỢC, không suy đoán:** môi trường đặt `GIT_CONFIG_COUNT=2`
+kèm `GIT_CONFIG_VALUE_0/1` nhưng **THIẾU `GIT_CONFIG_KEY_0/1`**, nên **mọi** lệnh `git` chết với
+`error: missing config key GIT_CONFIG_KEY_0` và trả **128**. `thu_bao_mat::test_f3` và
+`thu_tich_hop::test_04/test_11` đều so `returncode == 0` nên đỏ. Bỏ đúng ba biến ấy đi:
+
+```
+$ git check-ignore app/du-lieu/khoa-noi-bo.key          # env hỏng
+exit=128   error: missing config key GIT_CONFIG_KEY_0
+$ env -u GIT_CONFIG_COUNT -u GIT_CONFIG_VALUE_0 -u GIT_CONFIG_VALUE_1 git check-ignore …
+app/du-lieu/khoa-noi-bo.key
+exit=0
+```
+
+**`thu_qa_g17::test_a1_cay_sach_va_head` là cổng "cây sạch" làm ĐÚNG việc của nó.** Lượt 1 nó báo
+6 tệp `??`; lượt 2 nó báo đúng 2 tệp ` M` — vì tôi có sửa hai tệp **sau** khi commit. Đây là một
+cổng biết đỏ, và nó đỏ vì lý do thật. Đây cũng là lý do lượt 3 phải chạy lại trên cây sạch: một
+con số hồi quy đo trên cây bẩn thì không nói được cây nào đã được đo.
 
 ---
 

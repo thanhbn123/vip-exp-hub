@@ -1145,6 +1145,283 @@ class J_ChotChan(Nen):
             return f.read()
 
 
+# ============================================================================
+# G16-A (AG-04) — HỢP ĐỒNG CALLBACK CHỐT LẠI · CHỐT AN TOÀN CỦA HARNESS · TỰ KIỂM BỘ DÒ
+# ============================================================================
+GOC_DU_AN = os.path.dirname(GOC_APP)
+GOC_G16 = os.path.join(GOC_DU_AN, "trien_khai", "g16")
+HARNESS_G16 = os.path.join(GOC_G16, "harness_nghiem_thu.py")
+CHOT_G16 = os.path.join(GOC_G16, "chot_an_toan.py")
+
+SECRET_LA = "secret-tai-khoan-tenant-khong-ton-tai-g16-55"
+
+
+def _account_tenant_khong_ton_tai(wh_ma, tenant_id=999999):
+    """Tài khoản hãng trỏ vào một tenant KHÔNG có trong bảng `tenants`.
+
+    Dựng bằng kết nối THÔ (`csdl.ket_noi()` — cố ý KHÔNG bật `foreign_keys`) vì `csdl.ghi()`
+    sẽ chặn khoá ngoại. Đây là dữ liệu HỎNG có chủ ý: ca thử cần nó để đo đường "tenant không
+    giải được thì sự kiện đi đâu".
+    """
+    ban_ma, duoi = bao_mat.luu_credentials({"apiAccount": "API-LA"},
+                                           bao_mat.aad_credentials(tenant_id, "jt"))
+    kn = csdl.ket_noi()
+    try:
+        cur = kn.execute(
+            "INSERT INTO carrier_accounts (tenant_id,hang,ten,moi_truong,credentials_ma_hoa,"
+            "credentials_duoi,webhook_ma,webhook_secret_ma_hoa,kich_hoat,tao_luc)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (tenant_id, "jt", "jt-tenant-la", "mock", ban_ma, duoi, wh_ma,
+             bao_mat.ma_hoa_wh(SECRET_LA, wh_ma), 1, csdl.bay_gio()))
+        kn.commit()
+        return cur.lastrowid
+    finally:
+        kn.close()
+
+
+class K_G16_HopDongVaChotAnToan(Nen):
+    """G16-A — hợp đồng callback thành dữ liệu máy đọc được, và các chốt của harness."""
+
+    def test_k01_bao_cao_hop_dong_may_doc_duoc_va_khong_tu_nang_muc(self):
+        bc = wh.bao_cao_hop_dong_callback()
+        self.assertEqual(bc["muc"], wh.MUC_DOCUMENTED,
+                         "mức hợp đồng bị đổi — chưa hề có lượt đối chiếu nào với hãng")
+        self.assertIs(bc["xac_minh_voi_hang"], False)
+        self.assertIs(bc["phan_hoi_xac_minh"], False)
+        self.assertEqual(wh.kiem_hop_dong_khong_tu_nang_muc(), [],
+                         "bất biến trung thực của hợp đồng bị vi phạm")
+        # ĐỐI CHỨNG DƯƠNG: báo cáo phải có phần BIẾT ĐƯỢC, không phải một danh sách rỗng
+        # trông như "đã soát hết".
+        self.assertTrue(bc["da_tai_lieu"], "báo cáo không có trường nào đã có tài liệu")
+        self.assertIn("than_yeu_cau", bc["da_tai_lieu"])
+        self.assertIn("header_bat_buoc", bc["da_tai_lieu"])
+        self.assertEqual(bc["so_truong"], len(wh.HOP_DONG_CALLBACK))
+        self.assertIn("KHÔNG PHẢI LÀ HỢP ĐỒNG ĐÃ XÁC MINH", bc["canh_bao"])
+
+    def test_k02_nam_cho_ho_Owner_chi_dich_danh_deu_BLOCKED_kem_dung_cai_thieu(self):
+        """Năm mục directive 15/10/2026 nêu đích danh — mỗi mục phải nói ĐÚNG cái còn thiếu."""
+        can = {
+            "khoa_ky_chieu_callback": ("câu 6", "khoá"),
+            "chuoi_dem_di_ky": ("câu 7", "chuỗi"),
+            "phuong_thuc_http": ("câu 2", "HTTP"),
+            "phan_hoi_xac_nhan": ("câu 9", "phản hồi"),
+            "chinh_sach_thu_lai": ("câu 9", "thử lại"),
+        }
+        theo_ten = {b["ten"]: b for b in wh.bao_cao_hop_dong_callback()["blocked"]}
+        for ten, (cau_hoi, tu_khoa) in can.items():
+            self.assertIn(ten, theo_ten, f"{ten} không nằm trong bảng chặn")
+            self.assertEqual(wh.HOP_DONG_CALLBACK[ten]["muc"], wh.CHUA_TAI_LIEU,
+                             f"{ten} bị nâng mức mà không có căn cứ từ hãng")
+            self.assertIsNone(wh.HOP_DONG_CALLBACK[ten]["gia_tri"],
+                              f"{ten} khai giá trị trong khi tài liệu chưa trả lời")
+            b = theo_ten[ten]
+            for khoa in ("cau_hoi", "thieu", "doan_thi_hong", "dang_chan", "go_khi"):
+                self.assertTrue(str(b[khoa]).strip(), f"{ten} thiếu '{khoa}'")
+            self.assertIn(cau_hoi, b["cau_hoi"], f"{ten} không trỏ đúng câu hỏi gửi hãng")
+            self.assertIn(tu_khoa, b["thieu"] + b["dang_chan"])
+
+    def test_k03_khong_doan_thuat_toan_ky_va_khong_them_so_do_thu_hai(self):
+        """Cấm đoán: thuật toán ký vẫn ĐÚNG công thức tài liệu, không có sơ đồ thứ hai."""
+        import inspect
+        nguon = inspect.getsource(wh.xac_thuc_jt_digest)
+        self.assertIn("hashlib.md5", nguon, "công thức tài liệu là md5, không phải thứ khác")
+        self.assertIn("base64.b64encode", nguon)
+        self.assertNotIn("hmac.new", nguon, "jt_digest KHÔNG phải HMAC — đừng trộn hai sơ đồ")
+        self.assertNotIn("sha256", nguon)
+        self.assertEqual(sorted(wh.BO_XAC_THUC), ["hub_hmac", "jt_digest"],
+                         "một sơ đồ xác thực mới xuất hiện mà không có tài liệu")
+        self.assertIn(wh.HOP_DONG_MUC, (wh.MUC_DOCUMENTED, wh.MUC_BLOCKED),
+                      "mức hợp đồng vượt DOCUMENTED")
+        # ĐỐI CHỨNG DƯƠNG: công thức tài liệu VẪN được chấp nhận (không phải chặn sạch).
+        tk = self.row(self.tk_sb)
+        biz = biz_jt("MVD-K03", 106, "2026-10-15 08:00:00")
+        body = urllib.parse.urlencode({"bizContent": biz}).encode()
+        ok, ly_do = wh.xac_thuc_jt_digest(tk, ky_jt(SECRET_SB, biz, "API-1"), body)
+        self.assertTrue(ok, ly_do)
+
+    def test_k04_chieu_callback_sandbox_van_BLOCKED_kem_dung_cai_thieu(self):
+        b = {x["ten"]: x for x in wh.bao_cao_hop_dong_callback()["blocked"]}
+        self.assertIn("sandbox_co_day_callback", b,
+                      "chưa biết sandbox có đẩy callback không — phải nằm trong bảng chặn")
+        self.assertIn("câu 24", b["sandbox_co_day_callback"]["cau_hoi"])
+        gop = json.dumps(b["sandbox_co_day_callback"], ensure_ascii=False)
+        for ma in ("V-G09-01", "V-13906-05"):
+            self.assertIn(ma, gop, f"thiếu mã việc {ma} trong phần nói cái còn thiếu")
+        # Chốt THẬT của mã sản phẩm: hai môi trường dưới `mock` chưa được cấp quyền.
+        import adapter_jt
+        self.assertFalse(adapter_jt.moi_truong_duoc_chay("sandbox"))
+        self.assertFalse(adapter_jt.moi_truong_duoc_chay("production"))
+
+    def test_k05_harness_tu_choi_chay_khi_co_chot_bi_mat_CHOT_AN_TOAN(self):
+        """Chạy harness THẬT ở tiến trình con với một chốt bị mở ⇒ phải TỪ CHỐI, không dựng gì."""
+        import subprocess
+        nen = os.path.join(os.environ["VIP_HUB_DATA"], "g16-tu-kiem-tu-choi")
+        os.makedirs(nen, exist_ok=True)
+        env = dict(os.environ, VIP_HUB_DATA=nen, VIP_G16_CHO_PHEP_GOI_HANG="1")
+        p = subprocess.run([sys.executable, HARNESS_G16], capture_output=True, text=True,
+                           env=env, timeout=300, cwd=GOC_DU_AN)
+        self.assertEqual(p.returncode, 4,
+                         f"harness KHÔNG từ chối khi chốt 'cho phép gọi hãng' bị mở.\n"
+                         f"stdout:\n{p.stdout[-800:]}\nstderr:\n{p.stderr[-400:]}")
+        self.assertIn("TỪ CHỐI CHẠY", p.stdout)
+        self.assertIn("V-G09-01", p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(nen, "hub.db")),
+                         "harness đã dựng CSDL dù phải từ chối trước khi chạm gì")
+
+    def test_k06_tu_kiem_bo_do_chot_an_toan_bat_DUNG_chot(self):
+        import subprocess
+        p = subprocess.run([sys.executable, CHOT_G16, "--tu-kiem"], capture_output=True,
+                           text=True, timeout=300, cwd=GOC_DU_AN)
+        self.assertEqual(p.returncode, 0, f"bộ dò chốt an toàn TỰ KIỂM HỎNG:\n{p.stdout[-1500:]}")
+        self.assertIn("TỰ KIỂM:", p.stdout)
+        self.assertIn("0 hỏng", p.stdout)
+        # ĐỐI CHỨNG DƯƠNG trong chính bộ tự kiểm: ca A (đủ chốt) phải ĐI QUA, và có ít nhất
+        # một ca hỏng được bắt bởi ĐÚNG chốt — nếu không thì bộ dò chỉ đang từ chối mọi thứ.
+        self.assertIn("[A] cấu hình ĐỦ CHỐT", p.stdout)
+        self.assertIn("bắt đúng chốt", p.stdout)
+        # Và bộ dò phải TỪ CHỐI khi nền là dữ liệu THẬT — kiểm NGAY TRONG tiến trình này,
+        # không spawn harness trên dữ liệu thật (không có lượt nào được phép chạm vào đó).
+        sys.path.insert(0, GOC_G16)
+        import chot_an_toan
+        ly_do = chot_an_toan.ly_do_tu_choi(os.path.join(GOC_APP, "du-lieu"),
+                                           goc_url="http://127.0.0.1:9", so_dang_ky={}, env={})
+        self.assertTrue(any("dữ liệu THẬT" in x for x in ly_do),
+                        f"bộ dò không nhận ra dữ liệu thật: {ly_do}")
+
+    def test_k07_tu_kiem_BO_DO_THU_bat_duoc_ca_CO_Y_HONG(self):
+        """Chạy một ca CỐ Ý HỎNG trong tiến trình con; bộ dò phải THẤY nó hỏng.
+
+        Thiếu ca này thì "bộ thử xanh" không chứng minh gì: một bộ thử bắt hết lỗi rồi thoát 0
+        mà không chạy ca nào cũng "xanh". Kèm ĐỐI CHỨNG DƯƠNG (ca đạt ⇒ thoát 0 + có `OK`).
+        """
+        import subprocess
+        goc = os.environ["VIP_HUB_DATA"]
+        hong = os.path.join(goc, "tu_kiem_hong_g16.py")
+        with open(hong, "w", encoding="utf-8") as f:
+            f.write("import unittest\n"
+                    "class C(unittest.TestCase):\n"
+                    "    def test_co_y_hong(self):\n"
+                    "        self.assertEqual(1, 2, 'ca CO Y HONG de kiem bo do')\n"
+                    "if __name__ == '__main__':\n"
+                    "    unittest.main(verbosity=2)\n")
+        p = subprocess.run([sys.executable, hong], capture_output=True, text=True, timeout=120)
+        # `unittest` in bảng tổng kết ra STDERR, không phải stdout — gộp hai luồng rồi mới phán.
+        # (Bản đầu của ca này chỉ đọc stdout nên nó HỎNG vì lý do của chính nó, không phải của
+        # hệ: đúng bài học "thứ dùng để kiểm chứng phải được kiểm trước khi tin".)
+        o = p.stdout + p.stderr
+        self.assertNotEqual(p.returncode, 0, "bộ dò KHÔNG thấy ca cố ý hỏng")
+        self.assertNotIn("\nOK", o, "bộ dò in OK cho một lượt có ca hỏng")
+        self.assertIn("FAILED", o)
+        # ĐỐI CHỨNG DƯƠNG: cùng khuôn, ca ĐẠT ⇒ thoát 0 và CÓ `OK`.
+        lanh = os.path.join(goc, "tu_kiem_lanh_g16.py")
+        with open(lanh, "w", encoding="utf-8") as f:
+            f.write("import unittest\n"
+                    "class C(unittest.TestCase):\n"
+                    "    def test_dat(self):\n"
+                    "        self.assertEqual(1, 1)\n"
+                    "if __name__ == '__main__':\n"
+                    "    unittest.main(verbosity=2)\n")
+        p2 = subprocess.run([sys.executable, lanh], capture_output=True, text=True, timeout=120)
+        o2 = p2.stdout + p2.stderr
+        self.assertEqual(p2.returncode, 0, o2[-400:])
+        self.assertIn("OK", o2)
+
+    def test_k08_tenant_khong_ton_tai_thi_khong_cham_don_cua_ai(self):
+        """Tài khoản hãng trỏ vào tenant KHÔNG có thật: sự kiện đi vào `khong_khop`, 0 dòng đơn."""
+        d_a = _don(self.ta, self.uid, self.tk_a, "MVD-K08", "cho_lay", 1)
+        tk_la = _account_tenant_khong_ton_tai(f"wh-g16-la-{self.dem('carrier_accounts')}")
+        truoc = self.tt_don(d_a)
+        truoc_don = self.dem("don_hang")
+        sk_id, trung, _ = self.gui(tk_la, body_hub("dang_giao", "MVD-K08", "E-K08"),
+                                   secret=SECRET_LA)
+        self.assertFalse(trung)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "khong_khop",
+                         "sự kiện của tenant không tồn tại lại được ÁP vào đâu đó")
+        self.assertEqual(self.tt_don(d_a), truoc, "đơn của tenant KHÁC bị đổi trạng thái")
+        self.assertEqual(self.dem("don_hang"), truoc_don)
+        self.assertGreaterEqual(self.audit_co("webhook_khong_khop_don"), 1)
+        # ĐỐI CHỨNG DƯƠNG: cùng payload ấy, qua tài khoản ĐÚNG tenant, thì ÁP được — nếu không
+        # thì "khong_khop" ở trên không chứng minh được gì (payload có thể hỏng vì lý do khác).
+        sk2, _, _ = self.gui(self.tk_a, body_hub("dang_giao", "MVD-K08", "E-K08"),
+                             headers=None, secret=SECRET_A)
+        self.assertEqual(self.sk(sk2)["trang_thai"], "xong")
+        self.assertEqual(self.tt_don(d_a)[0], "dang_giao")
+
+    def test_k09_tenant_rong_thi_DLQ_chu_khong_no(self):
+        """Account mất tenant (dữ liệu hỏng): `tenant_tu_account` ném LoiVinhVien ⇒ DLQ, không nổ."""
+        with self.assertRaises(wh.LoiVinhVien):
+            wh.tenant_tu_account(None, 123)
+        with self.assertRaises(wh.LoiVinhVien):
+            wh.tenant_tu_account("", 123)
+        tk_hong = _account(self.ta, "jt", f"wh-g16-hong-{self.dem('carrier_accounts')}", SECRET_A)
+        b = body_hub("dang_giao", "MVD-K09", "E-K09")
+        # Nhận sự kiện nhưng CHƯA xử lý: nếu xử lý trước rồi mới bẻ tenant thì sự kiện đã ở
+        # trạng thái cuối và `_nhan_viec` sẽ bỏ qua — ca thử sẽ "đạt" mà không đo gì.
+        tk_row = self.row(tk_hong)
+        hd = ky_hub(SECRET_A, b)
+        self.assertTrue(wh.kiem_chu_ky(tk_row, hd, b))
+        sk_id, trung = wh.nhan_su_kien(tk_row, b, hd)
+        self.assertFalse(trung)
+        # Bẻ tenant của account thành chuỗi rỗng bằng kết nối THÔ (cột NOT NULL chặn NULL,
+        # nhưng chuỗi rỗng thì lọt — và đó đúng là dữ liệu hỏng cần canh).
+        kn = csdl.ket_noi()
+        try:
+            kn.execute("UPDATE carrier_accounts SET tenant_id='' WHERE id=?", (tk_hong,))
+            kn.commit()
+        finally:
+            kn.close()
+        wh._chay_mot(sk_id)
+        self.assertEqual(self.sk(sk_id)["trang_thai"], "dlq",
+                         "lỗi vĩnh viễn không được đẩy vào DLQ — nó sẽ thử lại mãi")
+        self.assertIn("vinh vien", self.sk(sk_id)["loi_cuoi"] or "")
+        self.assertGreaterEqual(self.audit_co("webhook_dlq"), 1)
+
+    def test_k10_bang_phu_muc_yeu_cau_G16_deu_co_ca_canh(self):
+        """Bảng phủ: MỌI hành vi directive G16 yêu cầu phải có một ca THẬT canh nó.
+
+        Không phải phép kiểm hình thức: nó đọc danh sách ca mà bộ chạy THẬT SỰ nạp, nên xoá
+        hay đổi tên một ca canh là ca này hỏng ngay — thay vì im lặng mất phạm vi.
+        """
+        mod = sys.modules[__name__]
+
+        def _gom(s):
+            for x in s:
+                if isinstance(x, unittest.TestSuite):
+                    for y in _gom(x):
+                        yield y
+                else:
+                    yield x
+
+        co = {t.id().rsplit(".", 1)[-1]
+              for t in _gom(unittest.TestLoader().loadTestsFromModule(mod))}
+        can = {
+            "chữ ký sai": "test_b01_chu_ky_sai_thi_khong_nhan_va_co_audit",
+            "chữ ký sai qua HTTP": "test_i03_chu_ky_sai_tra_401_va_KHONG_luu_su_kien",
+            "callback trùng": "test_c03_gui_lai_y_nguyen_la_idempotent",
+            "chống trùng ở tầng CSDL": "test_c02_CSDL_chan_that_khong_phai_ma_chan",
+            "tài khoản hãng không tồn tại": "test_i02_webhook_ma_khong_ton_tai_tra_404",
+            "tenant không tồn tại": "test_k08_tenant_khong_ton_tai_thi_khong_cham_don_cua_ai",
+            "tenant rỗng ⇒ DLQ": "test_k09_tenant_rong_thi_DLQ_chu_khong_no",
+            "chéo tenant": "test_d04_CHÉO_TENANT_callback_cua_A_khong_duoc_cham_don_cua_B",
+            "sự kiện đến muộn": "test_e02_moc_hang_chan_ban_tin_CU_that_su",
+            "mã lạ ⇒ NEEDS_REVIEW": "test_f04_ma_la_thi_NEEDS_REVIEW_khong_doan_nghia",
+            "mã 110 ⇒ không hoàn tất": "test_f01_110_khong_doi_trang_thai_va_duoc_danh_dau_can_soat",
+            "110/mã lạ không chạm COD": "test_f06_W04_110_va_ma_la_KHONG_duoc_dung_toi_COD",
+            "retry": "test_g01_loi_tam_thoi_thi_thu_lai_roi_vao_DLQ",
+            "DLQ lỗi vĩnh viễn": "test_g02_loi_vinh_vien_vao_DLQ_ngay_khong_dot_luot_thu_nao",
+            "replay có phép + chéo tenant": "test_g04_replay_duoc_phep_theo_tenant_va_co_audit",
+            "replay có trần": "test_g05_replay_co_tran",
+            "quyền replay": "test_g07_quyen_replay_do_tang_HTTP_kiem",
+            "đồng bộ hành trình": "test_h02_khong_khop_va_can_soat_va_DLQ_deu_hien_ra",
+            "đồng bộ hành trình (đơn treo)": "test_h06_don_treo_va_don_khong_su_kien",
+            "hợp đồng callback": "test_k01_bao_cao_hop_dong_may_doc_duoc_va_khong_tu_nang_muc",
+        }
+        thieu = {nhan: ten for nhan, ten in can.items() if ten not in co}
+        self.assertEqual(thieu, {}, f"thiếu ca canh cho: {thieu}")
+        # ĐỐI CHỨNG DƯƠNG: bảng phủ phải THẬT SỰ đọc được danh sách ca, không phải rỗng.
+        self.assertGreater(len(co), 50, "không đọc được danh sách ca — bảng phủ vô nghĩa")
+
+
 if __name__ == "__main__":
     print(f"CSDL thử G14: {os.environ['VIP_HUB_DATA']}")
     unittest.main(verbosity=2)

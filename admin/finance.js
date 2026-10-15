@@ -169,64 +169,30 @@
      Bộ thử đọc đúng bảng này rồi bắn thật vào máy chủ: đường nào đã có mà vẫn còn ở đây thì
      bộ thử HỎNG, buộc phải cập nhật. Như vậy nhãn "CHỜ BACKEND" không nói dối được lâu. */
   const API_CHO_BACKEND_TC = [
-    { ten: "Bảng COD của doanh nghiệp", duong: "/api/v2/tai-chinh/cod", method: "GET",
-      man: "Tài chính → Bảng COD",
-      mong_doi_vao: { trang_thai: "COD_*", hang: "mã hãng", q: "mã đơn/vận đơn", gioi_han: "int" },
-      mong_doi_ra: { cod: "[]", tong_hop: "tai_chinh.tong_hop_cod()" },
-      ghi_chu: "Hàm nghiệp vụ ĐÃ CÓ (tai_chinh.bang_cod / tong_hop_cod) và đã có bộ thử; " +
-               "chỉ thiếu route do AG-00 cắm (SHARED_CONTRACTS §22)." },
-    { ten: "Tổng số tài chính", duong: "/api/v2/tai-chinh/tong-so", method: "GET",
-      man: "Tài chính → thẻ tổng quan",
-      mong_doi_ra: { cod: "{}", phi: "{}", cong_no: "{}", cong_no_khop: "bool", nhat_ky: "{}" },
-      ghi_chu: "Hàm tai_chinh.tong_so_tai_chinh() đã có." },
-    { ten: "Công nợ phải thu / phải trả", duong: "/api/v2/tai-chinh/cong-no", method: "GET",
-      man: "Tài chính → Công nợ",
-      mong_doi_ra: { phai_thu: "{doi_tac: so_du}", phai_tra: "{doi_tac: so_du}" },
-      ghi_chu: "Hai màn phải thu / phải trả đọc CÙNG một đường, tách ở giao diện." },
-    { ten: "Lịch sử điều chỉnh", duong: "/api/v2/tai-chinh/dieu-chinh", method: "GET",
-      man: "Tài chính → Lịch sử điều chỉnh",
-      mong_doi_ra: { dieu_chinh: "[]" } },
-    { ten: "Ghi một điều chỉnh tài chính", duong: "/api/v2/tai-chinh/dieu-chinh",
-      method: "POST", man: "Tài chính → nút Điều chỉnh",
-      mong_doi_vao: { loai: "cod|phi", so_tien_dong: "int (âm = giảm)", ly_do: "bắt buộc",
-                      don_id: "int?" },
-      mong_doi_ra: { dieu_chinh_id: "int", but_toan_id: "int" } },
-    { ten: "Nạp bảng kê của hãng", duong: "/api/v2/doi-soat/nap", method: "POST",
-      man: "Tài chính → Đợt đối soát → Nạp file",
-      mong_doi_vao: { hang: "mã hãng", ten_file: "string", ky_thanh_toan: "string",
-                      carrier_account_id: "int?", tep: "multipart" },
-      mong_doi_ra: { dot_id: "int", so_nap: "int", so_trung: "int", cot_nhan_ra: "[]" } },
-    { ten: "Danh sách đợt đối soát", duong: "/api/v2/doi-soat/dot", method: "GET",
-      man: "Tài chính → Đợt đối soát", mong_doi_ra: { dot: "[]" } },
-    { ten: "Bảng kê một đợt", duong: "/api/v2/doi-soat/dot/<id>/bang-ke", method: "GET",
-      man: "Tài chính → Bảng kê của hãng", mong_doi_ra: { dong: "[]" } },
-    { ten: "Chênh lệch một đợt", duong: "/api/v2/doi-soat/dot/<id>/chenh-lech", method: "GET",
-      man: "Tài chính → Chênh lệch", mong_doi_vao: { loai: "một trong bảy loại" },
-      mong_doi_ra: { chenh_lech: "[]" } },
-    { ten: "Đối chiếu một đợt", duong: "/api/v2/doi-soat/dot/<id>/doi-chieu", method: "POST",
-      man: "Tài chính → Đợt đối soát → Đối chiếu",
-      mong_doi_ra: { so_khop: "int", theo_loai: "{}" } },
-    { ten: "Duyệt đợt đối soát", duong: "/api/v2/doi-soat/dot/<id>/duyet", method: "POST",
-      man: "Tài chính → Đợt đối soát → Duyệt",
-      mong_doi_ra: { da_ap: "int", bo_qua: "int", loi: "[]" },
-      ghi_chu: "Đây là chỗ DUY NHẤT số của hãng vào sổ. Giao diện phải hỏi lại trước khi bấm." },
-    { ten: "Từ chối đợt đối soát", duong: "/api/v2/doi-soat/dot/<id>/tu-choi", method: "POST",
-      man: "Tài chính → Đợt đối soát → Từ chối", mong_doi_vao: { ly_do: "bắt buộc" } },
-    { ten: "Xử một chênh lệch", duong: "/api/v2/doi-soat/chenh-lech/<id>/xu-ly", method: "POST",
-      man: "Tài chính → Chênh lệch → Xử",
-      mong_doi_vao: { xu_ly: "da_xu|bo_qua", ghi_chu: "bắt buộc khi bo_qua" } },
-    { ten: "Đợt thanh toán của hãng", duong: "/api/v2/tai-chinh/dot-thanh-toan",
-      method: "POST", man: "Tài chính → Bảng COD → Ghi nhận hãng trả tiền",
-      mong_doi_vao: { hang: "mã hãng", ma_dot: "mã sao kê của hãng", so_tien_hang_bao: "int" },
-      ghi_chu: "COD_SETTLED CHỈ đến từ đường này — không có đường nào từ trạng thái giao." },
-    { ten: "Xuất CSV chênh lệch", duong: "/api/v2/doi-soat/dot/<id>/xuat-csv", method: "GET",
-      man: "Tài chính → Chênh lệch → Xuất",
-      ghi_chu: "Hàm doi_soat.xuat_csv_chenh_lech() đã có và đã làm sạch công thức CSV." },
   ];
 
-  /* Đường API tài chính ĐÃ được cắm. Rỗng là đúng hiện trạng 15/10/2026 — không có route
-     G07 nào trên máy chủ. Chuyển dòng từ bảng trên sang đây khi AG-00 cắm. */
-  const API_DANG_DUNG_TC = [];
+  /* Đường API tài chính ĐÃ được cắm. AG-00 cắm 18 route ngày 15/10 và đo TỪNG đường qua
+     HTTP thật (20/20 lượt bắn trả mã < 500). Khai ở đây chứ không xoá hẳn khỏi cả hai bảng:
+     một đường biến mất khỏi CẢ HAI bảng là một đường không ai còn canh. */
+  const API_DANG_DUNG_TC = [
+    ["POST", "/api/v2/tai-chinh/dieu-chinh"],
+    ["POST", "/api/v2/tai-chinh/dot-thanh-toan"],
+    ["POST", "/api/v2/doi-soat/chenh-lech/<id>/xu-ly"],
+    ["GET", "/api/v2/doi-soat/dot"],
+    ["GET", "/api/v2/doi-soat/dot/<id>/bang-ke"],
+    ["GET", "/api/v2/doi-soat/dot/<id>/chenh-lech"],
+    ["POST", "/api/v2/doi-soat/dot/<id>/doi-chieu"],
+    ["POST", "/api/v2/doi-soat/dot/<id>/duyet"],
+    ["POST", "/api/v2/doi-soat/dot/<id>/tu-choi"],
+    ["GET", "/api/v2/doi-soat/dot/<id>/xuat-csv"],
+    ["POST", "/api/v2/doi-soat/nap"],
+    ["GET", "/api/v2/tai-chinh/cod"],
+    ["GET", "/api/v2/tai-chinh/cong-no"],
+    ["GET", "/api/v2/tai-chinh/dieu-chinh"],
+    ["POST", "/api/v2/tai-chinh/dieu-chinh"],
+    ["POST", "/api/v2/tai-chinh/dot-thanh-toan"],
+    ["GET", "/api/v2/tai-chinh/tong-so"],
+  ];
 
   const _CHO = {};
   API_CHO_BACKEND_TC.forEach(function (x) { _CHO[x.method + " " + x.duong] = x; });

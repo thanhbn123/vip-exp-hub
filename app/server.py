@@ -8,6 +8,7 @@ import json
 import mimetypes
 import os
 import re
+import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -15,22 +16,49 @@ import adapter
 import adapter_jt   # noqa: F401 — đăng ký adapter
 import adapter_vtp  # noqa: F401
 import ai_gateway
+import ai_job
 import bao_mat
 import billing
 import cau_hinh
 import csdl
+import doi_soat
 import don_hang
 import gioi_han
+import goi_dich_vu
+import harness_hang
 import nhap_file
 import polling
+import quan_sat
 import quyen
+import tai_chinh
+import usage
 import webhook
 
 GOC_TINH = cau_hinh.THU_MUC_GOC
 
 
+def _ma_hoa_la(o):
+    """Đổi kiểu không tuần tự hoá được sang kiểu tuần tự hoá được.
+
+    `sqlite3.Row` là kiểu gặp nhiều nhất: trước đây mỗi route phải tự `dict(x)` quanh từng
+    truy vấn, nên route nào quên là ra `"<sqlite3.Row object at 0x...>"` trong phản hồi —
+    hỏng im lặng, vì nó vẫn là JSON hợp lệ và vẫn HTTP 200. Xử ở ĐÚNG MỘT CHỖ thì không còn
+    chỗ để quên.
+
+    `default=str` làm phần còn lại (ngày tháng, Decimal...). Tiền trong hệ này là `INTEGER`
+    nên không có `float` nào phải lo (§16).
+    """
+    if isinstance(o, sqlite3.Row):
+        return dict(o)
+    if isinstance(o, (set, frozenset)):
+        return sorted(o)
+    if isinstance(o, (bytes, bytearray)):
+        return o.decode("utf-8", "replace")
+    return str(o)
+
+
 def _json(obj):
-    return json.dumps(obj, ensure_ascii=False, default=str).encode()
+    return json.dumps(obj, ensure_ascii=False, default=_ma_hoa_la).encode()
 
 
 class BoXuLy(BaseHTTPRequestHandler):
@@ -281,6 +309,17 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._api(duong, method)
         except don_hang.LoiNghiepVu as e:
             self._tra(e.ma, {"loi": str(e)})
+        except goi_dich_vu.LoiGoi as e:
+            # Tầng gói/đăng ký (G08) mang mã HTTP trong `.ma`. CỐ Ý bắt riêng và CỐ Ý không
+            # kế thừa `billing.VuotHanMuc`: cái đó ra **402 "cần trả tiền"**, còn "gói không
+            # tồn tại" hay "hạ gói khi đang dùng vượt hạn mức" KHÔNG phải chuyện trả tiền.
+            # Gộp lại là bật một thông điệp thu phí mà không ai quyết định.
+            # `HaGoiVuotHanMuc` mang thêm `vuot` — trả ra để giao diện nói được VƯỢT CÁI GÌ,
+            # thay vì chỉ "không hạ được gói" rồi để người dùng tự đoán.
+            ra = {"loi": str(e)}
+            if getattr(e, "vuot", None):
+                ra["vuot"] = e.vuot
+            self._tra(getattr(e, "ma", 400), ra)
         except gioi_han.VuotHanMucNhap as e:
             # Cố ý bắt TRƯỚC billing.VuotHanMuc và KHÔNG kế thừa nó: `e.ma` là 429 hoặc 413
             # (quá tần suất / quá cỡ), còn 402 nghĩa là "phải trả thêm tiền" — hai việc khác nhau.
@@ -374,6 +413,28 @@ class BoXuLy(BaseHTTPRequestHandler):
             d = self._doc_json()
             ok, ly_do = bao_mat.dat_lai_mat_khau(d.get("token", ""), d.get("mat_khau_moi", ""))
             return self._tra(200 if ok else 400, {"ok": ok} if ok else {"loi": ly_do})
+
+        # --- G11 — SỨC KHOẺ / SẴN SÀNG (AG-05): VÔ DANH, không CSRF ---
+        # Phải đứng TRƯỚC middleware ngữ cảnh tenant: bộ cân tải và Docker gọi hai đường này
+        # mà không có phiên. Đặt sau middleware là health luôn trả 401 — dịch vụ sống mà bộ
+        # cân tải tưởng nó chết, rồi khởi động lại vòng vo.
+        if duong == "/api/v2/suc-khoe" and method == "GET":
+            # HEALTH = tiến trình còn sống. CỐ Ý không kiểm CSDL: health điều khiển việc KHỞI
+            # ĐỘNG LẠI, nên để nó phụ thuộc CSDL là biến "CSDL chưa nâng schema" thành vòng
+            # lặp restart — mà vòng lặp đó XOÁ LUÔN log khởi động, tức là xoá đúng thứ cần để
+            # chẩn đoán (AG-05 nêu, AG-00 giữ nguyên chủ ý này).
+            return self._tra(200, quan_sat.suc_khoe())
+        if duong == "/api/v2/san-sang" and method == "GET":
+            # READINESS = sẵn sàng nhận việc (CSDL mở được, schema đúng phiên bản, khoá đọc
+            # được). Trả **503** khi chưa sẵn sàng, vì bộ cân tải đọc MÃ HTTP chứ không đọc
+            # JSON. Chi tiết lỗi có đường dẫn/tên file nên CHỈ trả cho người đã xác thực.
+            kq = quan_sat.san_sang()
+            ok = bool(kq.get("ok")) if isinstance(kq, dict) else bool(kq)
+            da_dang_nhap = bao_mat.ngu_canh(self._token()) is not None
+            if da_dang_nhap:
+                return self._tra(200 if ok else 503, kq)
+            return self._tra(200 if ok else 503,
+                             {"ok": ok, "ghi_chu": "chi tiết chỉ trả cho người đã xác thực"})
 
         # --- TENANT CONTEXT MIDDLEWARE ---
         nc = bao_mat.ngu_canh(self._token())
@@ -531,6 +592,21 @@ class BoXuLy(BaseHTTPRequestHandler):
                 "roles": [dict(x) for x in csdl.nhieu("SELECT * FROM roles ORDER BY pham_vi, ma")],
                 "permissions": [dict(x) for x in csdl.nhieu("SELECT * FROM permissions ORDER BY ma")],
                 "role_permissions": [dict(x) for x in csdl.nhieu("SELECT * FROM role_permissions")]})
+        if duong == "/api/v2/platform/quan-sat/metric" and method == "GET":
+            self._can(nc, "platform.audit.xem")
+            return self._tra(200, quan_sat.metric())
+        if duong == "/api/v2/platform/g09/harness" and method == "POST":
+            self._can(nc, "platform.audit.xem")
+            # ÉP CỨNG chế độ MOCK. KHÔNG nhận `che_do` từ thân — mở cửa HTTP chạy được
+            # SANDBOX/LIVE là đưa bốn ổ khoá chặn LIVE ra ngoài tầm kiểm soát, và một lượt
+            # LIVE sai là một đơn vận chuyển THẬT. Chạy SANDBOX/LIVE chỉ từ dòng lệnh, có
+            # phiếu duyệt riêng cho từng thao tác ghi (AG-03 thiết kế, AG-00 giữ nguyên).
+            kq = harness_hang.chay_tat_ca("MOCK")
+            try:
+                harness_hang.luu_lan_chay(kq, nguoi_chay=f"user:{nc.user_id}")
+            except Exception as e:
+                sys.stderr.write(f"[hub] harness luu_lan_chay bo qua: {type(e).__name__}: {e}\n")
+            return self._tra(200, harness_hang.bao_cao_san_sang(kq))
         if duong == "/api/v2/platform/audit":
             self._can(nc, "platform.audit.xem")
             ds = csdl.nhieu("SELECT * FROM audit ORDER BY id DESC LIMIT 300")
@@ -1024,6 +1100,264 @@ class BoXuLy(BaseHTTPRequestHandler):
             csdl.audit("polling_chay_tay", f"tenant:{tenant_id}", json.dumps(tk, ensure_ascii=False),
                        tenant_id=tenant_id, user_id=nc.user_id)
             return self._tra(200, tk)
+
+        # ======================= G08 — GÓI DỊCH VỤ & MỨC DÙNG (AG-02) =====================
+        if duong == "/api/v2/goi" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, {"goi": goi_dich_vu.danh_sach_goi()})
+        if duong == "/api/v2/dang-ky" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, {
+                "dang_ky": goi_dich_vu.dang_ky_hien_tai(tenant_id),
+                "han_muc": goi_dich_vu.han_muc_hieu_luc(tenant_id),
+                "dang_hoat_dong": goi_dich_vu.dang_hoat_dong(tenant_id),
+                "lich_su": goi_dich_vu.lich_su(tenant_id)})
+        if duong == "/api/v2/dang-ky/doi-goi" and method == "POST":
+            self._can(nc, "tenant.billing.quan_ly" if quyen.co_quyen(nc.role, "tenant.billing.quan_ly")
+                      else "tenant.membership.quan_ly")
+            d = self._doc_json()
+            kq = goi_dich_vu.doi_goi(tenant_id, str(d.get("goi_id") or ""),
+                                     phien_ban=d.get("phien_ban"), boi=nc.user_id,
+                                     ly_do=str(d.get("ly_do") or ""),
+                                     cho_phep_vuot=bool(d.get("cho_phep_vuot")))
+            csdl.audit("doi_goi", f"tenant:{tenant_id}", str(d.get("goi_id")),
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, kq)
+        if duong == "/api/v2/usage" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, {
+                "ky": usage.ky_hien_tai(),
+                "dang_dung": usage.muc_dang_dung(tenant_id),
+                "trang_thai": usage.trang_thai_han_muc(tenant_id),
+                "canh_bao": usage.canh_bao_sap_het(tenant_id)})
+        if duong == "/api/v2/usage/bao-cao" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, usage.bao_cao_dung(tenant_id, ts.get("ky") or None))
+        if duong == "/api/v2/usage/su-kien" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, {"su_kien": usage.su_kien_cua_ky(
+                tenant_id, ts.get("ky") or None, ts.get("loai") or None)})
+        if duong == "/api/v2/usage/doi-soat" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, usage.doi_soat_su_kien(tenant_id, ts.get("ky") or None))
+        if duong == "/api/v2/usage/tinh-phi" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, usage.tinh_phi(tenant_id, ts.get("ky") or None))
+        if duong == "/api/v2/billing/du-thao" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, {"du_thao": usage.danh_sach_du_thao(tenant_id)})
+        # `POST /billing/du-thao` CỐ Ý CHƯA CẮM. AG-02 nêu đúng: đó là lệnh GHI tạo bản nháp
+        # có số tiền, mà quyền duy nhất đang có là `tenant.billing.xem` — một quyền XEM. Dùng
+        # nó cho một lệnh ghi là NỚI QUYỀN IM LẶNG: ai xem được hoá đơn thì lập được hoá đơn.
+        # Cần quyền riêng `tenant.billing.lap_du_thao` — việc V-13909.
+        if duong == "/api/v2/usage/dong-ky" and method == "POST":
+            self._can(nc, "tenant.membership.quan_ly")
+            return self._tra(200, usage.dong_ky(tenant_id, self._doc_json().get("ky"),
+                                                boi=nc.user_id))
+
+        # ======================= G09 — SẴN SÀNG NỐI HÃNG (AG-03) ==========================
+        if duong == "/api/v2/g09/suc-khoe-hang" and method == "GET":
+            self._can(nc, "tenant.hang.xem")
+            return self._tra(200, harness_hang.bao_cao_san_sang())
+        if duong == "/api/v2/g09/can-soat" and method == "GET":
+            self._can(nc, "tenant.hang.xem")
+            return self._tra(200, {"can_soat": harness_hang.danh_sach_can_soat(
+                ts.get("hang") or "jt")})
+
+        # ======================= G10 — CÔNG VIỆC AI (AG-04) ==============================
+        # `tenant_id` LUÔN từ `nc`, không bao giờ từ body (§21).
+        if duong == "/api/v2/ai/job" and method == "POST":
+            self._can(nc, "tenant.ai.dung")
+            if self._gioi_han("ai.goi", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
+            d = self._doc_json(long_khoa=("vao",))
+            kq = ai_job.tao_viec(tenant_id, nc.user_id, str(d.get("loai") or ""),
+                                 d.get("vao") or {}, idem_key=d.get("idem_key"),
+                                 batch_id=d.get("batch_id"), dong_id=d.get("dong_id"))
+            return self._tra(201, kq)
+        if duong == "/api/v2/ai/job" and method == "GET":
+            self._can(nc, "tenant.ai.dung")
+            return self._tra(200, {"job": ai_job.ds_viec(
+                tenant_id, ts.get("trang_thai") or None, ts.get("loai") or None,
+                self._so_nguyen(ts, "gioi_han", 100))})
+        if duong == "/api/v2/ai/su-kien" and method == "GET":
+            self._can(nc, "tenant.ai.dung")
+            return self._tra(200, {"su_kien": ai_job.ds_su_kien(
+                tenant_id, gioi_han=self._so_nguyen(ts, "gioi_han", 200))})
+        if duong == "/api/v2/ai/thong-ke" and method == "GET":
+            self._can(nc, "tenant.ai.dung")
+            return self._tra(200, ai_job.thong_ke_dung(tenant_id))
+        m = re.fullmatch(r"/api/v2/ai/lo/(\d+)", duong)
+        if m and method == "GET":
+            self._can(nc, "tenant.ai.dung")
+            return self._tra(200, ai_job.vao_tu_lo_import(tenant_id, int(m.group(1))))
+        m = re.fullmatch(r"/api/v2/ai/job/(\d+)", duong)
+        if m and method == "GET":
+            self._can(nc, "tenant.ai.dung")
+            v = ai_job.lay_viec(tenant_id, int(m.group(1)))
+            if not v:
+                return self._tra(404, {"loi": "không có công việc này"})
+            return self._tra(200, {"job": v})
+        m = re.fullmatch(r"/api/v2/ai/job/(\d+)/(chay|duyet|tu-choi|de-xuat)", duong)
+        if m and method == "POST":
+            job_id, viec = int(m.group(1)), m.group(2)
+            if viec == "chay":
+                self._can(nc, "tenant.ai.dung")
+                if self._gioi_han("ai.goi", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                    return
+                return self._tra(200, ai_job.chay_viec(tenant_id, job_id))
+            if viec == "de-xuat":
+                self._can(nc, "tenant.ai.dung")
+                return self._tra(200, ai_job.de_xuat_cho_nguoi_duyet(tenant_id, job_id))
+            # duyệt / từ chối là QUYẾT ĐỊNH của người — quyền ghi đơn, không phải quyền dùng AI
+            self._can(nc, "tenant.don.ghi")
+            if viec == "duyet":
+                kq = ai_job.duyet_viec(tenant_id, nc.user_id, job_id)
+            else:
+                ly_do = str(self._doc_json().get("ly_do") or "").strip()
+                if not ly_do:
+                    return self._tra(400, {"loi": "từ chối kết quả AI PHẢI có lý do"})
+                kq = ai_job.tu_choi_viec(tenant_id, nc.user_id, job_id, ly_do)
+            csdl.audit(f"ai_job_{viec}", f"ai_job:{job_id}", "",
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, kq)
+
+        # ======================= G07 — TÀI CHÍNH & ĐỐI SOÁT (AG-01) =======================
+        # Quyền: ĐỌC `tenant.billing.xem` · GHI/DUYỆT `tenant.don.duyet`. Hai quyền này đã có
+        # trong CSDL. AG-01 ghi rõ một giới hạn: chưa có quyền tài chính RIÊNG, nên hiện ai
+        # duyệt đơn thì duyệt được cả đối soát tiền — hai việc nên tách. Việc V-13908.
+        #
+        # Mọi lỗi là `tai_chinh.LoiTaiChinh` (kế thừa `don_hang.LoiNghiepVu`) với `.ma` là mã
+        # HTTP, nên `_chay` bắt sẵn — không cần nhánh bắt lỗi mới.
+        #
+        # ĐƯỜNG CÓ ĐOẠN CHỮ đặt TRƯỚC nhánh có `(\d+)`.
+        if duong == "/api/v2/tai-chinh/cod" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            loc = {k: ts[k] for k in ("trang_thai", "hang", "don_id") if ts.get(k)}
+            ds = tai_chinh.bang_cod(tenant_id, loc or None,
+                                    self._so_nguyen(ts, "gioi_han", 200))
+            return self._tra(200, {"cod": [x for x in ds]})
+        if duong == "/api/v2/tai-chinh/tong-so" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, tai_chinh.tong_so_tai_chinh(tenant_id))
+        if duong == "/api/v2/tai-chinh/cong-no" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, tai_chinh.cong_no(tenant_id))
+        if duong == "/api/v2/tai-chinh/dieu-chinh" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            ds = tai_chinh.lich_su_dieu_chinh(tenant_id, self._so_nguyen(ts, "gioi_han", 200))
+            return self._tra(200, {"dieu_chinh": [x for x in ds]})
+        if duong == "/api/v2/tai-chinh/dieu-chinh" and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            d = self._doc_json()
+            ly_do = str(d.get("ly_do") or "").strip()
+            if not ly_do:
+                return self._tra(400, {"loi": "điều chỉnh tài chính PHẢI có lý do"})
+            kq = tai_chinh.dieu_chinh(tenant_id, nc.user_id, str(d.get("loai") or ""),
+                                      d.get("so_tien_dong"), ly_do, don_id=d.get("don_id"))
+            csdl.audit("tai_chinh_dieu_chinh", f"dieu_chinh:{kq.get('id')}", ly_do[:200],
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(201, kq)
+        if duong == "/api/v2/tai-chinh/kiem-nhat-ky" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            return self._tra(200, tai_chinh.kiem_nhat_ky(tenant_id))
+        if duong == "/api/v2/tai-chinh/tinh-lai-cong-no" and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            return self._tra(200, tai_chinh.tinh_lai_cong_no(tenant_id))
+        if duong == "/api/v2/tai-chinh/dot-thanh-toan" and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            d = self._doc_json()
+            kq = tai_chinh.tao_dot_thanh_toan(
+                tenant_id, nc.user_id, str(d.get("hang") or ""), str(d.get("ma_dot") or ""),
+                so_tien_hang_bao=d.get("so_tien_hang_bao") or 0,
+                carrier_account_id=d.get("carrier_account_id"),
+                ky_tu=d.get("ky_tu"), ky_den=d.get("ky_den"))
+            return self._tra(201, kq)
+        m = re.fullmatch(r"/api/v2/tai-chinh/dot-thanh-toan/(\d+)/(ghi-nhan|chot)", duong)
+        if m and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            dot_id, viec = int(m.group(1)), m.group(2)
+            d = self._doc_json()
+            if viec == "ghi-nhan":
+                kq = tai_chinh.ghi_nhan_thanh_toan(tenant_id, nc.user_id, dot_id,
+                                                   d.get("don_id"), d.get("so_tien_dong"))
+            else:
+                kq = tai_chinh.dong_dot_thanh_toan(tenant_id, nc.user_id, dot_id)
+            csdl.audit(f"tai_chinh_dot_{viec}", f"dot:{dot_id}", "",
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, kq)
+        m = re.fullmatch(r"/api/v2/tai-chinh/cod/(\d+)", duong)
+        if m and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            don_id = int(m.group(1))
+            return self._tra(200, {
+                "cod": tai_chinh.cod_cua_don(tenant_id, don_id),
+                "lich_su": tai_chinh.lich_su_cod(tenant_id, don_id),
+                "phi": tai_chinh.phi_cua_don(tenant_id, don_id),
+                "but_toan": tai_chinh.but_toan_cua_don(tenant_id, don_id)})
+
+        # --- đối soát bảng kê của hãng ---
+        if duong == "/api/v2/doi-soat/nap" and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            if self._gioi_han("import.upload", dinh_danh=nc.user_id, tenant_id=tenant_id):
+                return
+            d = self._doc_json(self.GIOI_HAN_BODY_IMPORT)
+            if not d.get("ten_file") or not d.get("noi_dung_base64"):
+                return self._tra(400, {"loi": "cần ten_file và noi_dung_base64"})
+            try:
+                du_lieu = base64.b64decode(d["noi_dung_base64"])
+            except Exception:
+                return self._tra(400, {"loi": "noi_dung_base64 không hợp lệ"})
+            gioi_han.kiem_file_nhap(tenant_id, len(du_lieu))
+            kq = doi_soat.nap_bang_ke(
+                tenant_id, nc.user_id, str(d.get("hang") or ""), d["ten_file"], du_lieu,
+                ky_thanh_toan=str(d.get("ky_thanh_toan") or ""),
+                carrier_account_id=d.get("carrier_account_id"),
+                phien_ban=d.get("phien_ban"))
+            return self._tra(201, kq)
+        if duong == "/api/v2/doi-soat/dot" and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            ds = doi_soat.danh_sach_dot(tenant_id, self._so_nguyen(ts, "gioi_han", 100))
+            return self._tra(200, {"dot": [x for x in ds]})
+        m = re.fullmatch(r"/api/v2/doi-soat/dot/(\d+)/(doi-chieu|duyet|tu-choi)", duong)
+        if m and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            dot_id, viec = int(m.group(1)), m.group(2)
+            if viec == "doi-chieu":
+                kq = doi_soat.doi_chieu(tenant_id, dot_id)
+            elif viec == "duyet":
+                kq = doi_soat.duyet_dot(tenant_id, nc.user_id, dot_id)
+            else:
+                ly_do = str(self._doc_json().get("ly_do") or "").strip()
+                if not ly_do:
+                    return self._tra(400, {"loi": "từ chối đợt đối soát PHẢI có lý do"})
+                kq = doi_soat.tu_choi_dot(tenant_id, nc.user_id, dot_id, ly_do)
+            csdl.audit(f"doi_soat_{viec}", f"dot:{dot_id}", "",
+                       tenant_id=tenant_id, user_id=nc.user_id)
+            return self._tra(200, kq)
+        m = re.fullmatch(r"/api/v2/doi-soat/dot/(\d+)/(bang-ke|chenh-lech|xuat-csv)", duong)
+        if m and method == "GET":
+            self._can(nc, "tenant.billing.xem")
+            dot_id, viec = int(m.group(1)), m.group(2)
+            if viec == "bang-ke":
+                ds = doi_soat.bang_ke_cua_dot(tenant_id, dot_id,
+                                              self._so_nguyen(ts, "gioi_han", 1000, lon_nhat=5000))
+                return self._tra(200, {"dong": [x for x in ds]})
+            if viec == "chenh-lech":
+                ds = doi_soat.chenh_lech_cua_dot(tenant_id, dot_id, ts.get("loai") or None)
+                return self._tra(200, {"chenh_lech": [x for x in ds]})
+            csv_tho = doi_soat.xuat_csv_chenh_lech(tenant_id, dot_id)
+            body = csv_tho.encode() if isinstance(csv_tho, str) else csv_tho
+            return self._tra_tep(body, "text/csv; charset=utf-8",
+                                 dinh_kem="chenh-lech-dot-%d.csv" % dot_id)
+        m = re.fullmatch(r"/api/v2/doi-soat/chenh-lech/(\d+)/xu-ly", duong)
+        if m and method == "POST":
+            self._can(nc, "tenant.don.duyet")
+            d = self._doc_json()
+            kq = doi_soat.xu_ly_chenh_lech(tenant_id, nc.user_id, int(m.group(1)),
+                                           str(d.get("xu_ly") or ""),
+                                           ghi_chu=str(d.get("ghi_chu") or ""))
+            return self._tra(200, kq)
 
         # --- billing / audit / ai ---
         if duong == "/api/v2/billing":

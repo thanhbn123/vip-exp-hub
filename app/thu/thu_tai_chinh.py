@@ -633,14 +633,28 @@ class J_GiaoDien(unittest.TestCase):
             'console.log("ok");')
         self.assertEqual(ra, "ok")
 
-    def test_j3_moi_man_tu_khai_CHO_BACKEND(self):
+    def test_j3_moi_man_khai_DUNG_tinh_trang_backend(self):
+        """Mỗi màn phải khai ĐÚNG tình trạng backend — không phải khai "CHỜ BACKEND" mãi mãi.
+
+        Bản đầu của ca này đòi **mọi** màn mang nhãn `CHỜ BACKEND`, đúng hiện trạng lúc AG-01
+        viết (chưa có route G07 nào). AG-00 cắm 18 route ngày 15/10, nên chốt kiểu đó biến ca
+        thử thành **cửa khoá chết ngược chiều tiến bộ**: backend làm xong là ca HỎNG. Cùng cái
+        bẫy `thu_frontend` ca 52 đã dính ở đợt 2.
+
+        Ý định thật của ca: nhãn phải KHỚP thực tế, và màn nào còn chờ thì phải khai phạm vi.
+        Nên chốt theo ý định: mỗi màn có `cho_backend=true` thì PHẢI có nhãn và phạm vi; màn
+        nào `false` thì KHÔNG được mang nhãn chờ.
+        """
         ra = self._node(
             'const ms=F.tatCaManHinh();'
             'if(ms.length!==7) throw new Error("phải đúng 7 màn, thấy "+ms.length);'
             'for(const m of ms){'
-            'if(!m.cho_backend) throw new Error(m.ma+" tuyên bố làm được việc mà route chưa có");'
-            'if(m.nhan!=="CHỜ BACKEND") throw new Error(m.ma+" thiếu nhãn CHỜ BACKEND");'
-            'if(!m.ghi_chu_pham_vi) throw new Error(m.ma+" không khai phạm vi");}'
+            'if(m.cho_backend){'
+            '  if(m.nhan!=="CHỜ BACKEND") throw new Error(m.ma+" chờ backend mà thiếu nhãn");'
+            '  if(!m.ghi_chu_pham_vi) throw new Error(m.ma+" chờ backend mà không khai phạm vi");'
+            '} else {'
+            '  if(m.nhan==="CHỜ BACKEND") throw new Error(m.ma+" route đã có mà vẫn dán nhãn chờ");'
+            '}}'
             'console.log("ok");')
         self.assertEqual(ra, "ok")
 
@@ -652,7 +666,16 @@ class J_GiaoDien(unittest.TestCase):
         import json as _json
         ds = _json.loads(self._node(
             'console.log(JSON.stringify(F.API_CHO_BACKEND_TC.map(x=>x.duong)));'))
-        self.assertGreaterEqual(len(ds), 10, "bảng chờ backend trống — không canh được gì")
+        da_dung = _json.loads(self._node(
+            'console.log(JSON.stringify(F.API_DANG_DUNG_TC.map(x=>x[1])));'))
+        # Sàn đếm TỔNG hai bảng, không chỉ bảng chờ. Bản đầu đòi bảng CHỜ >= 10 — nhưng khi
+        # AG-00 cắm hết 18 route thì bảng chờ phải RỖNG, và rỗng bị tính là hỏng. Sàn tồn tại
+        # để chặn ca thử thành vô nghĩa (đọc 0 mục rồi báo đạt, §12.1 luật 5); đếm tổng giữ
+        # đúng tác dụng đó mà không chặn chiều tiến bộ.
+        self.assertGreaterEqual(
+            len(ds) + len(da_dung), 10,
+            f"cả hai bảng chỉ có {len(ds) + len(da_dung)} đường — ca thử đang canh gần như "
+            f"không gì. Một đường biến mất khỏi CẢ HAI bảng là đường không ai còn canh.")
         with open(os.path.join(GOC_APP, "server.py"), encoding="utf-8") as f:
             sv = f.read()
         for duong in set(ds):
@@ -660,6 +683,11 @@ class J_GiaoDien(unittest.TestCase):
             self.assertNotIn(mau, sv,
                              f"{duong} ĐÃ có trong server.py mà finance.js vẫn khai CHỜ BACKEND "
                              f"— chuyển dòng đó sang API_DANG_DUNG_TC")
+        # Chiều ngược lại, cũng phải canh: khai ĐANG DÙNG mà route KHÔNG có là nhãn nói dối
+        # theo hướng tệ hơn — giao diện sẽ gọi thật rồi báo lỗi lạ cho người dùng.
+        thieu = [d for d in set(da_dung) if d.split("<")[0].rstrip("/") not in sv]
+        self.assertEqual(thieu, [],
+                         f"finance.js khai ĐANG DÙNG nhưng server.py KHÔNG có: {thieu}")
 
     def test_j5_kiem_form_doi_dung_ba_dieu_backend_cung_doi(self):
         ra = self._node(

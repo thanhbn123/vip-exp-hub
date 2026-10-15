@@ -452,9 +452,18 @@ def nang_len_v9(kn):
     buoc = []
     import gioi_han
 
+    # `chay_ddl_trong_giao_dich` nhận MỘT CHUỖI có các câu KẾT BẰNG `;` (nó tách theo `;` và
+    # báo lỗi nếu còn câu chưa trọn), và đó là dạng của `DDL_G07..G11`. `DDL_GIOI_HAN` của G19 lại
+    # là một TUPLE từng câu KHÔNG có `;` (module tự `execute()` từng câu). Không sửa helper dùng
+    # chung — helper đang phục vụ v8 và đã được đo; thích ứng Ở ĐÂY, và ghi rõ vì sao hai dạng khác
+    # nhau để người sau không tưởng một trong hai là sai.
+    ddl = gioi_han.DDL_GIOI_HAN
+    if not isinstance(ddl, str):
+        ddl = ";\n".join(c.strip().rstrip(";") for c in ddl) + ";"
+
     truoc = {r[0] for r in kn.execute(
         "SELECT name FROM sqlite_master WHERE type IN ('table','index')")}
-    chay_ddl_trong_giao_dich(kn, gioi_han.DDL_GIOI_HAN)
+    chay_ddl_trong_giao_dich(kn, ddl)
     sau = {r[0] for r in kn.execute(
         "SELECT name FROM sqlite_master WHERE type IN ('table','index')")}
     them = sorted(sau - truoc)

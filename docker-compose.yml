@@ -1,0 +1,77 @@
+# VIP Express Hub — compose cho MÁY LOCAL (G11). AG-05 DEVOPS sở hữu file này.
+#
+# ====== TRẠNG THÁI THẬT ======
+# File này CHƯA ĐƯỢC CHẠY LƯỢT NÀO. Máy dựng (MacBook, đo 15/10/2026) không có Docker:
+# `docker compose version` → `command not found`. Báo cáo G11 ghi dòng "compose local" là
+# **BLOCKED**, không phải PASS.
+#
+# ====== KHÔNG DÙNG CHO VPS ======
+# Đây là compose LOCAL. Triển khai lên VPS là **V-G11-01, CHƯA ĐƯỢC CẤP QUYỀN**
+# (SHARED_CONTRACTS §25). File này cố ý chỉ bind vào 127.0.0.1 của máy chủ host, không `0.0.0.0`
+# — ai copy nó lên VPS và đổi thành `0.0.0.0` là đang mở một dịch vụ chưa có HTTPS ra Internet.
+
+services:
+  hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vip-express-hub:0.3-saas-local
+    container_name: vip-hub-local
+
+    # Bí mật KHÔNG nằm trong file này. `.env` ở cạnh compose, KHÔNG vào Git (xem bản vá P-3).
+    # `env_file` nạp lúc CHẠY, nên không có gì đi vào layer image.
+    env_file:
+      - .env
+
+    environment:
+      # Chỉ cấu hình KHÔNG BÍ MẬT đặt thẳng ở đây, để `.env` thiếu thì vẫn chạy được local.
+      VIP_HUB_DATA: /du-lieu
+      VIP_HUB_PORT: "8897"
+      # PHẢI là 0: bật là lỗ hổng chiếm tài khoản (xem .env.example).
+      VIP_HUB_RESET_TOKEN: "0"
+
+    # 127.0.0.1 ở ĐẦU HOST, không phải 0.0.0.0. Hệ chưa có HTTPS và chưa đo sau proxy thật
+    # (lý do 4 của mục PRODUCTION READINESS trong docs/G04_G06_FINAL_REPORT.md).
+    ports:
+      - "127.0.0.1:8897:8897"
+
+    # CSDL + khóa mã hóa nằm trong volume có TÊN, không nằm trong container.
+    # Vì sao volume có tên chứ không bind-mount thư mục máy dựng: bind-mount đưa khóa của máy
+    # dựng vào container và ngược lại, và một lượt `docker compose down -v` sẽ xoá khóa THẬT.
+    # Volume có tên thì `down` thường không xoá nó — nhưng `down -v` thì CÓ, nên runbook ghi rõ
+    # là cấm dùng `-v` (RUNBOOK mục 9).
+    volumes:
+      - vip_hub_du_lieu:/du-lieu
+
+    restart: unless-stopped
+
+    # Khởi động lại là việc của HEALTH (tiến trình sống), không phải READINESS — xem lý do
+    # trong HEALTHCHECK của Dockerfile. Compose dùng lại HEALTHCHECK của image, không ghi đè.
+
+    # Siết quyền: chỉ thư mục dữ liệu ghi được, không leo quyền, bỏ hết capability.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # Trần tài nguyên. `ThreadingHTTPServer` sinh một thread mỗi kết nối, nên một lượt gọi dồn
+    # có thể ăn hết bộ nhớ — trần ở đây làm container chết thay vì làm cả máy chủ chết.
+    # CHƯA ĐO: con số này chưa đo bằng lượt tải thật, là ước lượng (lý do 6 của PRODUCTION
+    # READINESS: "chưa đo với dữ liệu lớn").
+    mem_limit: 512m
+    pids_limit: 512
+
+    logging:
+      # Log của `quan_sat.ghi()` là JSONL một dòng một bản ghi, ra stderr. Không xoay vòng là
+      # một ngày đầy đĩa — và đầy đĩa là hỏng im lặng: dịch vụ vẫn chạy, log biến mất.
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  vip_hub_du_lieu:
+    name: vip_hub_du_lieu

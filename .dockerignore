@@ -1,0 +1,25 @@
+# Chặn build context mang theo bí mật và dữ liệu của máy dựng.
+# ĐÂY LÀ DANH SÁCH ĐEN CÓ CHỦ Ý và đó là chỗ nó YẾU: quên một mẫu là bí mật vào image.
+# Lớp chặn thật nằm ở Dockerfile — nó COPY đúng 7 đường đã liệt kê, không `COPY . .`. Hai lớp
+# này theo hai tiêu chí khác nhau (cái gì bị loại / cái gì được chép) nên không che nhau.
+# Ca thử canh file này: app/thu/thu_quan_sat.py :: H_CauHinhTrienKhai.test_h5
+.env
+.env.*
+!.env.example
+*.key
+*.vipkb
+*.db
+*.db-shm
+*.db-wal
+du-lieu/
+app/du-lieu/
+gateway/du-lieu/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.DS_Store
+docs/
+thu_frontend/
+app/thu/
+gateway/

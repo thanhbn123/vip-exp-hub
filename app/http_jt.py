@@ -31,6 +31,22 @@
 # KHÔNG BAO GIỜ ghi log ở tệp này, và không có giá trị bí mật nào đi vào ngoại lệ: thông điệp lỗi
 # chỉ nêu TÊN header, không nêu giá trị; thân phản hồi gắn vào NGOẠI LỆ thì đã được CHE; thân trả
 # về cho người gọi thì nguyên văn (hợp đồng §36) — xem `che_bi_mat` và `docs/G16_TRANSPORT.md` §5.
+#
+# ---- NHIỀU TIẾN TRÌNH (G18/AG-02, đo 15/10/2026) ---------------------------------------------
+# `docs/G17_TRANSPORT.md` §8.3 ghi "CHƯA ĐO nhiều tiến trình". Nay đã đo, bằng **tiến trình thật**
+# (`subprocess`, không phải luồng): `app/thu/thu_g18_multiprocess.py` P3–P4 + `docs/G18_MULTIPROCESS.md`.
+#
+#   · Lớp này KHÔNG có trạng thái dùng chung nào — quét AST: 20 tên mức mô-đun, 2 trong đó là dict
+#     HẰNG số cấu hình (`CHO_PHEP_MOI_TRUONG`, `LY_DO_CHAN_MOI_TRUONG`), **0 dấu hiệu GHI** (không
+#     `global`, không ghi chỉ số, không `open(…, "w")`, không `tempfile`, không `shutil`).
+#   · Đo hành vi với 4 tiến trình thật: không tiến trình nào nhận thân trả lời của tiến trình khác;
+#     4 lượt gọi ⇒ stub nhận ĐÚNG 4 kết nối TCP (một kết nối cho một lượt, tự mở tự đóng — KHÔNG
+#     pool, nên không có kết nối nào để dùng chung).
+#   ⇒ Vì vậy lớp này **AN TOÀN qua nhiều tiến trình**, và đó là kết luận ĐO ĐƯỢC, không phải suy ra.
+#     Cái KHÔNG an toàn nằm ở lớp khác: `gioi_han` PHẦN A giữ bộ đếm trong bộ nhớ MỘT tiến trình
+#     (trần thực = khai báo × số bản — B-G11-10), và `csdl.khoa_ghi` là RLock nên không phủ tiến
+#     trình. Trần đồng thời của lớp NÀY, khi chạy N bản, là trần file descriptor của TỪNG tiến
+#     trình — nhân lên, không phải một trần chung bị chia.
 import datetime as _dt
 import http.client
 import json

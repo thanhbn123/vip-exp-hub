@@ -810,8 +810,15 @@ def nhom_doi_soat(kq, ad):
 
     _ca(kq, "H2", "doi_soat", "CHỈ mã KHÔNG TÌM THẤY mới kết luận 'hãng chưa nhận đơn'",
         _kiem_khong_tim_thay(),
-        do_bang_gi="dựng KetQuaHang với loi_chuan KHONG_TIM_THAY và với XAC_THUC_HONG,"
-                   " gọi don_hang._la_khong_tim_thay")
+        do_bang_gi="dựng KetQuaHang bằng NormalizedCarrierError.nhu_dict() (hình dạng hợp đồng"
+                   " §5, khoá `ma_chuan`) cho KHONG_TIM_THAY và cho XAC_THUC_HONG,"
+                   " rồi gọi don_hang._la_khong_tim_thay")
+
+    _ca(kq, "H5", "doi_soat", "tên khoá lỗi chỉ có MỘT: `ma_chuan` — bí danh `ma` đã chết",
+        _kiem_bi_danh_ma_da_chet(),
+        do_bang_gi="dựng loi_chuan CHỈ có khoá `ma` (tên cũ) rồi khẳng định"
+                   " don_hang._la_khong_tim_thay KHÔNG nhận ra; nhận ra được nghĩa là hệ đang có"
+                   " hai tên cho một thứ")
 
     _ca(kq, "H3", "doi_soat", "timeout KHÔNG bao giờ bị coi là 'chưa nhận đơn'",
         don_hang._la_khong_tim_thay(
@@ -825,13 +832,38 @@ def nhom_doi_soat(kq, ad):
                    " VTP: chưa đọc được khẳng định tương đương ⇒ False (mức an toàn)")
 
 
+def _goi_y_loi_chuan(ma, ma_goc=""):
+    """Gói lỗi dựng BẰNG `NormalizedCarrierError.nhu_dict()` — hình dạng THẬT của hợp đồng §5.
+
+    Trước 15/10/2026 chỗ này tự gõ tay `{"ma": …}`: khoá `ma` **không có trong hợp đồng nào**,
+    và vì `don_hang` thời đó cũng đọc `ma` nên ca kiểm **xanh trong khi hai đầu đã lệch tên**
+    (§12.1: thứ dùng để kiểm chứng tự nó nói sai). Dựng qua `nhu_dict()` thì fixture không thể
+    lệch khỏi hợp đồng lần nữa.
+    """
+    return loi_hang.NormalizedCarrierError(ma, ma_goc_hang=ma_goc or None, hang="jt",
+                                           thao_tac="trackOrder").nhu_dict()
+
+
 def _kiem_khong_tim_thay():
     import don_hang
-    co = adapter.KetQuaHang(False, loi="x", tho={"loi_chuan": {"ma": loi_hang.KHONG_TIM_THAY}})
-    khong = adapter.KetQuaHang(False, loi="x",
-                               tho={"loi_chuan": {"ma": loi_hang.XAC_THUC_HONG}})
+    co = adapter.KetQuaHang(False, loi="x", tho={
+        "loi_chuan": _goi_y_loi_chuan(loi_hang.KHONG_TIM_THAY, "999002000")})
+    khong = adapter.KetQuaHang(False, loi="x", tho={
+        "loi_chuan": _goi_y_loi_chuan(loi_hang.XAC_THUC_HONG, "145003030")})
     return (don_hang._la_khong_tim_thay(co) is True
             and don_hang._la_khong_tim_thay(khong) is False)
+
+
+def _kiem_bi_danh_ma_da_chet():
+    """Bí danh `ma` (tên CŨ của `ma_chuan`) phải KHÔNG còn được nhận.
+
+    Không có ca này thì lần sau ai thêm lại một dòng `or chuan.get("ma")` cũng không ai biết —
+    và hệ lại có hai tên cho một thứ, đúng khuôn lệch im lặng đã sinh ra lỗi này (§14.6).
+    Hướng sai ở đây là AN TOÀN: không nhận ra ⇒ `van_chua_ro` ⇒ giữ `dang_gui`, không gửi lại mù.
+    """
+    import don_hang
+    cu = adapter.KetQuaHang(False, loi="x", tho={"loi_chuan": {"ma": loi_hang.KHONG_TIM_THAY}})
+    return don_hang._la_khong_tim_thay(cu) is False
 
 
 def _kiem_khoa_chong_trung(ad):

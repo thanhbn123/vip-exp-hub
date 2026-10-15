@@ -10,10 +10,12 @@
 #    csdl.py/migrate.py. Lớp B (ThuChuaMigrate) chạy TRƯỚC khi áp DDL để chứng minh mã chịu
 #    được CSDL chưa migrate — nếu không có lớp đó thì câu "chịu được CSDL cũ" chỉ là lời nói.
 #
-# 2) Ca "hãng nói không tìm thấy" dùng adapter GIẢ gắn tạm, chứ không dùng mock J&T/VTP:
-#    hai mock đó không có đường trả KHONG_TIM_THAY, nên nếu chỉ dùng chúng thì nhánh
-#    `chua_vao` của doi_soat_don KHÔNG BAO GIỜ được chạy mà bộ thử vẫn báo đạt — đúng dạng
-#    §12.1 (thứ dùng để kiểm chứng tự nó không đủ để kết luận).
+# 2) Ca "hãng nói không tìm thấy" chạy HAI lần, hai đường khác nhau (G13, 15/10/2026):
+#    · d12 dùng adapter GIẢ nhưng phát ĐÚNG hình dạng hợp đồng (`NormalizedCarrierError.nhu_dict()`,
+#      khoá `ma_chuan`) — ca này canh TÊN KHOÁ, vì đọc sai tên khoá ở `don_hang` hỏng im lặng;
+#    · d12b dùng adapter THẬT `adapter_jt` (mock có sẵn nhánh `MOCK-KHONGCO…` ⇒ mã `999002000`)
+#      đi hết đường `doi_soat_don`. Trước G13 hai mock không có nhánh này nên chỉ có adapter giả.
+#    Ghi chú cũ ở đây nói "hai mock thật không có đường trả KHONG_TIM_THAY" — nay J&T CÓ.
 import os
 import sys
 import tempfile
@@ -265,6 +267,13 @@ def _don_da_gui(n, hang="vtp", **them):
     don, _ = don_hang.tao_don(n["tid"], n["u"]["staff"], don_moi(**them))
     don_hang.duyet_don(n["tid"], n["u"]["owner"], don["id"])
     return don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"][hang])
+
+
+def _suat_don(n):
+    """Số suất đơn đã dùng của tenant trong tháng. 0 nếu chưa có dòng `usage_thang`."""
+    r = csdl.mot("SELECT so_don FROM usage_thang WHERE tenant_id=? AND thang=?",
+                 (n["tid"], csdl.thang_nay()))
+    return r["so_don"] if r else 0
 
 
 # =============================================================================
@@ -622,17 +631,25 @@ class D_IdemVaDoiSoat(unittest.TestCase):
         self.assertTrue(transport.chinh_sach_cho("createOrder", True).duoc_thu_lai)
 
     def test_d12_hang_noi_KHONG_TIM_THAY_thi_moi_cho_gui_lai(self):
-        """Dùng adapter GIẢ vì hai mock thật không có đường trả KHONG_TIM_THAY — không có ca này
-        thì nhánh `chua_vao` không bao giờ chạy mà bộ thử vẫn báo đạt (§12.1)."""
+        """Canh TÊN KHOÁ: `don_hang` phải đọc `ma_chuan` (hợp đồng §5), không phải `ma`.
+
+        Bản trước dựng adapter giả với khoá `ma` — đúng cái tên mà `don_hang` thời đó đọc, nên
+        ca thử chỉ chứng minh "bộ dò khớp với chính bộ dò" và che mất chỗ lệch với
+        `NormalizedCarrierError.nhu_dict()`. Nay gói lỗi được dựng BẰNG `nhu_dict()`: nếu ai
+        đổi tên khoá ở một trong hai đầu, ca này đỏ ngay.
+        """
         n = self.n
         don, _ = don_hang.tao_don(n["tid"], n["u"]["staff"],
                                   don_moi(ghi_chu="demo_force_timeout"))
         don_hang.duyet_don(n["tid"], n["u"]["owner"], don["id"])
         don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"]["vtp"])
+        goi_y = loi_hang.NormalizedCarrierError(
+            loi_hang.KHONG_TIM_THAY, ma_goc_hang="999002000", hang="vtp", thao_tac="getOrder")
+        self.assertIn("ma_chuan", goi_y.nhu_dict(), "hợp đồng §5 dùng `ma_chuan`")
         goc = adapter.CarrierAdapter.getOrder
         try:
             adapter.CarrierAdapter.getOrder = lambda self, mvd: adapter.KetQuaHang(
-                False, loi="không có đơn", tho={"loi_chuan": {"ma": loi_hang.KHONG_TIM_THAY}})
+                False, loi="không có đơn", tho={"loi_chuan": goi_y.nhu_dict()})
             import adapter_vtp
             goc_vtp = adapter_vtp.AdapterVTP.getOrder
             adapter_vtp.AdapterVTP.getOrder = adapter.CarrierAdapter.getOrder
@@ -646,6 +663,33 @@ class D_IdemVaDoiSoat(unittest.TestCase):
         # giờ mới được gửi lại
         d = don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"]["vtp"])
         self.assertIn(d["trang_thai"], ("da_gui", "dang_gui"))
+
+    def test_d12b_adapter_that_JT_bao_khong_tim_thay_thi_di_het_duong_doi_soat(self):
+        """ĐỐI CHỨNG của d12: dùng adapter THẬT `adapter_jt`, không giả, không dict tự chế.
+
+        `MOCK-KHONGCO…` là kịch bản có sẵn của mock J&T ⇒ hãng trả `999002000` ⇒ adapter phát
+        `loi_chuan` với `ma_chuan=KHONG_TIM_THAY`. Trạng thái "lượt trước không rõ kết quả" được
+        dựng bằng chính `gui_don` (ép timeout) rồi đặt `ma_van_don` = mã tra có tiền tố kịch bản,
+        vì `ma_don` do hệ sinh nên không điều khiển được tiền tố.
+        """
+        import adapter_jt  # noqa: F401 — bảo đảm adapter J&T đã đăng ký
+        n = self.n
+        don, _ = don_hang.tao_don(n["tid"], n["u"]["staff"],
+                                  don_moi(ghi_chu="demo_force_timeout"))
+        don_hang.duyet_don(n["tid"], n["u"]["owner"], don["id"])
+        don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"]["jt"])
+        csdl.ghi("UPDATE don_hang SET ma_van_don=? WHERE id=? AND tenant_id=?",
+                 ("MOCK-KHONGCO-1", don["id"], n["tid"]))
+        u_truoc = _suat_don(n)
+        kq = don_hang.doi_soat_don(n["tid"], n["u"]["owner"], don["id"])
+        self.assertEqual(kq["thao_tac"], "trackOrder", "J&T: getOrder=False ⇒ phải tra bằng trackOrder")
+        self.assertEqual(kq["ket_luan"], "chua_vao",
+                         "adapter THẬT trả KHONG_TIM_THAY mà Order Service không nhận ra —"
+                         " nhánh `chua_vao` chết im lặng (lệch tên khoá `ma`/`ma_chuan`)")
+        self.assertEqual(kq["don"]["trang_thai"], "da_duyet")
+        self.assertEqual(kq["don"]["can_doi_soat_ket_qua"], 0)
+        self.assertEqual(_suat_don(n), u_truoc - 1,
+                         "đối soát ra 'chưa vào' thì phải HOÀN 1 suất cho lượt gửi timeout trước")
 
     def test_d13_loi_LA_khong_phai_khong_tim_thay_thi_VAN_CHUA_RO(self):
         """Ca an toàn nhất của mục này: lỗi lạ KHÔNG được suy thành 'hãng chưa nhận'.
@@ -662,7 +706,11 @@ class D_IdemVaDoiSoat(unittest.TestCase):
         try:
             adapter_vtp.AdapterVTP.getOrder = lambda self, mvd: adapter.KetQuaHang(
                 False, loi="sai chữ ký",
-                tho={"loi_chuan": {"ma": loi_hang.XAC_THUC_HONG}})
+                # Fixture dựng BẰNG `nhu_dict()` — hình dạng THẬT của hợp đồng §5 (khoá
+                # `ma_chuan`). Tự gõ tay `{"ma": …}` là cách ca kiểm cũ tự làm mù chính nó.
+                tho={"loi_chuan": loi_hang.NormalizedCarrierError(
+                    loi_hang.XAC_THUC_HONG, ma_goc_hang="145003030", hang="vtp",
+                    thao_tac="getOrder").nhu_dict()})
             kq = don_hang.doi_soat_don(n["tid"], n["u"]["owner"], don["id"])
         finally:
             adapter_vtp.AdapterVTP.getOrder = goc
@@ -703,6 +751,55 @@ class D_IdemVaDoiSoat(unittest.TestCase):
         d = don_hang.lay_don(n["tid"], don["id"])
         self.assertEqual(d["trang_thai"], "da_duyet")
         self.assertEqual(d["can_doi_soat_ket_qua"], 0)
+
+    def test_d17_hang_bao_don_DA_TON_TAI_thi_giu_dang_gui_va_KHONG_hoan_suat(self):
+        """F2 (AG-00 chốt 15/10/2026): `DON_TRUNG` KHÔNG phải "hãng từ chối".
+
+        J&T `145003204 — 订单重复` nghĩa là **lượt trước ĐÃ VÀO hãng**: vận đơn ĐANG Ở HÃNG.
+        Trả đơn về `da_duyet` + hoàn suất là nói sai sự thật (nói "không có vận đơn nào"), và
+        mở đường gửi lại cùng `txlogisticId` ⇒ lại DON_TRUNG ⇒ **mắc vòng**.
+        Cùng mức an toàn như timeout (§10): giữ `dang_gui` + cờ đối soát, KHÔNG hoàn suất.
+        """
+        n = self.n
+        don, _ = don_hang.tao_don(n["tid"], n["u"]["staff"],
+                                  don_moi(ghi_chu="demo_force_trung"))
+        don_hang.duyet_don(n["tid"], n["u"]["owner"], don["id"])
+        u_truoc = _suat_don(n)
+        d = don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"]["jt"])  # KHÔNG ném
+        self.assertEqual(d["trang_thai"], "dang_gui",
+                         "đơn trùng KHÔNG được lùi về da_duyet — vận đơn đang ở hãng")
+        self.assertEqual(d["can_doi_soat_ket_qua"], 1)
+        self.assertIsNone(d["ma_van_don"], "chưa đối soát thì chưa biết mã vận đơn")
+        self.assertEqual(_suat_don(n), u_truoc + 1,
+                         "suất ứng với một vận đơn CÓ THẬT ⇒ KHÔNG được hoàn")
+        self.assertIn(don["id"], [x["id"] for x in don_hang.don_can_doi_soat(n["tid"])],
+                      "đơn phải nằm trong danh sách chờ đối soát")
+        ls = csdl.nhieu("SELECT noi_dung FROM don_lich_su WHERE don_id=? ORDER BY id", (don["id"],))
+        vet = " | ".join(r["noi_dung"] for r in ls)
+        self.assertIn("ĐÃ TỒN TẠI", vet, f"vết không nói rõ hãng báo đơn đã tồn tại: {vet}")
+        self.assertIn("KHÔNG gửi lại mù", vet)
+        with self.assertRaises(don_hang.LoiNghiepVu) as e:      # chưa đối soát thì không gửi lại
+            don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"]["jt"])
+        self.assertEqual(e.exception.ma, 409)
+
+    def test_d18_DOI_CHUNG_hang_tu_choi_that_thi_VAN_hoan_suat(self):
+        """ĐỐI CHỨNG của d17: nếu bản vá chỉ đơn giản là "giữ tất cả ở `dang_gui`" thì ca d17
+        vẫn xanh mà hành vi đúng đã mất. Ca này khẳng định hãng TỪ CHỐI THẬT (mã khác DON_TRUNG)
+        vẫn đi đường cũ: lùi `da_duyet`, tắt cờ đối soát, HOÀN 1 suất, và báo lỗi 502.
+        """
+        n = self.n
+        don, _ = don_hang.tao_don(n["tid"], n["u"]["staff"],
+                                  don_moi(ghi_chu="demo_force_fail"))
+        don_hang.duyet_don(n["tid"], n["u"]["owner"], don["id"])
+        u_truoc = _suat_don(n)
+        with self.assertRaises(don_hang.LoiNghiepVu) as e:
+            don_hang.gui_don(n["tid"], n["u"]["owner"], don["id"], n["tk"]["jt"])
+        self.assertEqual(e.exception.ma, 502)
+        d = don_hang.lay_don(n["tid"], don["id"])
+        self.assertEqual(d["trang_thai"], "da_duyet")
+        self.assertEqual(d["can_doi_soat_ket_qua"], 0)
+        self.assertEqual(_suat_don(n), u_truoc,
+                         "hãng từ chối THẬT thì phải hoàn suất — nếu không, gửi lại mất suất oan")
 
 
 # =============================================================================

@@ -6,3 +6,15 @@ app/du-lieu/
 *.db-shm
 *.db-wal
 .DS_Store
+
+# P-3 (AG-05 đề xuất, AG-00 đo lại 15/10): `.env` KHÔNG bị chặn — `git status` cho `?? .env`,
+# nên một lượt `git add -A` là đưa bí mật vào lịch sử Git, và lịch sử Git thì không xoá sạch
+# được. `.env.example` CỐ Ý không chặn: nó là tài liệu, chỉ chứa tên biến và giá trị giả.
+.env
+.env.*
+!.env.example
+
+# CỐ Ý KHÔNG thêm `*.vipkb` (gói khoá mã hoá). Nghe ngược, nhưng: `sao_luu_khoa.py` hiện
+# TỪ CHỐI ghi gói khoá vào bất kỳ chỗ nào trong repo mà gitignore KHÔNG chặn — tức là chính
+# việc gitignore không chặn `*.vipkb` là thứ đang bảo vệ. Thêm vào đây sẽ cho phép ghi gói
+# khoá vào repo (chỉ là không theo dõi), tức là làm YẾU đi, và làm ca thử `h6` của AG-01 hỏng.

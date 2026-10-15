@@ -42,9 +42,29 @@ def dem_dong(kn):
 
 
 def sao_luu():
+    """Chụp một bản CSDL trước khi nâng cấp. Trả đường dẫn bản sao.
+
+    AG-05 phát hiện ở đợt 3, AG-00 đo lại: bản cũ đặt tên theo GIÂY, nên hai lượt gọi trong
+    cùng một giây trả **đúng cùng một đường dẫn** và lượt sau **ghi đè im lặng** — đo được 2
+    lượt gọi liền nhau chỉ để lại **1 file** trên đĩa.
+
+    Hậu quả thật: migration hỏng rồi chạy lại ngay sẽ **xoá mất bản "trước khi hỏng"** — đúng
+    thứ cần nhất lúc đó. Và nó không báo gì; người vận hành chỉ thấy có một file sao lưu và
+    tưởng đó là bản mình cần.
+
+    Nay: trùng tên thì **thêm hậu tố**, không bao giờ ghi đè. Và **kiểm bản sao > 0 byte**
+    trước khi tin nó — một file sao lưu rỗng còn tệ hơn không có file, vì nó làm người ta
+    tưởng đã có đường lùi (§12.1: thứ dùng để kiểm chứng phải được kiểm trước khi tin).
+    """
     os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
-    dich = os.path.join(THU_MUC_SAO_LUU,
-                        "hub-truoc-migrate-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".db")
+    goc = os.path.join(THU_MUC_SAO_LUU,
+                       "hub-truoc-migrate-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+    dich, n = goc + ".db", 1
+    while os.path.exists(dich):
+        dich = f"{goc}-{n}.db"      # KHÔNG ghi đè bản đã có, dù cùng giây
+        n += 1
+        if n > 1000:
+            raise RuntimeError(f"quá 1000 bản sao lưu cùng giây tại {goc} — có gì đó sai")
     # Dùng API backup của SQLite để lấy bản nhất quán kể cả khi có WAL.
     nguon = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL)
     ban = sqlite3.connect(dich)
@@ -52,6 +72,10 @@ def sao_luu():
         nguon.backup(ban)
     ban.close()
     nguon.close()
+    co = os.path.getsize(dich)
+    if co <= 0:
+        raise RuntimeError(f"bản sao lưu {dich} rỗng ({co} byte) — KHÔNG có đường lùi, "
+                           f"dừng trước khi nâng cấp")
     return dich
 
 

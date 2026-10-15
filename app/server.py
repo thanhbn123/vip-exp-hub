@@ -51,6 +51,7 @@ class BoXuLy(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         if cookie:
             self.send_header("Set-Cookie", cookie)
+        self._header_bao_mat()
         for k, v in (them_header or {}).items():
             self.send_header(k, str(v))
         self.end_headers()
@@ -60,6 +61,31 @@ class BoXuLy(BaseHTTPRequestHandler):
     GIOI_HAN_BODY_IMPORT = 20 * 1024 * 1024     # chỉ đường upload file mới được lớn
 
     TRAN_RUT_BODY = 32 * 1024 * 1024    # rút tối đa chừng này rồi mới bỏ cuộc
+
+    def _tra_tep(self, body, loai, dinh_kem=None, ma=200):
+        """Trả một thân nhị phân (tệp tĩnh, CSV xuất...). MỘT chỗ duy nhất dựng header cho
+        loại phản hồi này.
+
+        Vì sao phải gộp: trước đây ba đường (tệp tĩnh · xuất CSV đơn · xuất CSV import) mỗi
+        đường tự dựng header, nên khi thêm bốn header bảo mật thì **cả ba đều thiếu** —
+        `_tra` có, ba đường kia không. Thêm `_header_bao_mat()` ba lần nữa chỉ là rải ra lần
+        thứ hai: chỗ thứ tư sẽ lại quên. Gộp vào một hàm thì không còn chỗ để quên.
+
+        `dinh_kem` là TÊN FILE cho `Content-Disposition`, phải do MÃ dựng — tên có CRLF hoặc
+        dấu nháy là một đường tiêm header. Hàm này lọc thêm một lớp, nhưng người gọi vẫn
+        phải đưa tên an toàn.
+        """
+        self.send_response(ma)
+        self.send_header("Content-Type", loai)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if dinh_kem:
+            sach = re.sub(r"[^A-Za-z0-9._-]", "_", str(dinh_kem))[:120]
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % sach)
+        self._header_bao_mat()
+        self.end_headers()
+        self.wfile.write(body)
+
 
     def _doc_body(self, gioi_han=None):
         """Đọc body, chặn theo `gioi_han`.
@@ -83,6 +109,46 @@ class BoXuLy(BaseHTTPRequestHandler):
 
     # Kiểu được phép cho một trường thường. `bool` là con của `int` trong Python nên nằm sẵn.
     VO_HUONG = (str, int, float, type(None))
+
+    # --- P-2 (AG-05 đề xuất, AG-00 đo lại 15/10): bốn header này TRƯỚC ĐÂY KHÔNG CÓ MỘT CÁI
+    # NÀO. Đo bằng `curl -D -` trên máy chủ thật: chỉ có Server/Date/Content-*/Cache-Control.
+    # Đặt ở ĐÚNG MỘT CHỖ (`_tra` và `_phuc_vu_tinh` đều gọi `_header_bao_mat`), không rải ra
+    # từng endpoint: rải ra là chỗ chắc chắn sẽ quên ở endpoint thứ hai mươi, và quên một
+    # header thì không có gì báo.
+    #
+    # CSP ở đây cố ý cho `'unsafe-inline'` cho style: giao diện hiện dùng style nội tuyến ở
+    # nhiều chỗ. Siết chặt hơn mà chưa đo bằng trình duyệt thật thì CSP sẽ chặn mất giao diện,
+    # và một CSP làm hỏng giao diện là một CSP sẽ bị tắt đi cho xong — tức là tệ hơn không có.
+    # Siết tiếp là việc sau khi tầng 3 frontend chạy được (V-13906-01).
+    HEADER_BAO_MAT = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; font-src 'self'; "
+            "object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"),
+    }
+
+    @staticmethod
+    def _dung_https():
+        """Có đang chạy sau HTTPS không. Quyết định cờ `Secure` của cookie và HSTS.
+
+        CỐ Ý là một cờ, KHÔNG bật cứng: bật cứng `Secure` thì mọi lượt đăng nhập qua
+        `http://127.0.0.1` sẽ im lặng không nhận cookie, và màn hình chỉ nói "sai tên đăng
+        nhập hoặc mật khẩu" trong khi mật khẩu chưa bao giờ sai. Đó đúng là ca sinh ra §12.2
+        của `CLAUDE.md` — mất gần ba tiếng cho một lỗi mà thông báo nói sai hoàn toàn.
+        """
+        return os.environ.get("VIP_HUB_HTTPS", "0") == "1"
+
+    def _header_bao_mat(self):
+        for k, v in self.HEADER_BAO_MAT.items():
+            self.send_header(k, v)
+        if self._dung_https():
+            # Chỉ gửi HSTS khi THẬT SỰ sau HTTPS. Gửi qua HTTP là vô nghĩa, và nếu trình
+            # duyệt từng thấy nó trên một tên miền thì nó sẽ từ chối HTTP của tên miền đó
+            # về sau — hỏng khó gỡ.
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
 
     def _doc_json(self, gioi_han=None, long_khoa=()):
         """Đọc body JSON và CHẶN NGAY Ở BIÊN mọi trường mang list/dict không được khai trước.
@@ -203,12 +269,8 @@ class BoXuLy(BaseHTTPRequestHandler):
         loai = mimetypes.guess_type(full)[0] or "application/octet-stream"
         with open(full, "rb") as f:
             body = f.read()
-        self.send_response(200)
-        self.send_header("Content-Type", loai + ("; charset=utf-8" if loai.startswith("text/") else ""))
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        return self._tra_tep(
+            body, loai + ("; charset=utf-8" if loai.startswith("text/") else ""))
 
     # ---------- router ----------
     def _chay(self, method):
@@ -287,7 +349,10 @@ class BoXuLy(BaseHTTPRequestHandler):
             # CHỈ đặt lại khi thành công — thiếu bước này thì người thật gõ sai 4 lần rồi gõ
             # đúng vẫn bị trần đè cho tới hết cửa sổ.
             gioi_han.dat_lai("auth.dang_nhap", ip=self.client_address[0], dinh_danh=ten)
-            cookie = f"phien={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={cau_hinh.PHIEN_SONG_GIO * 3600}"
+            # `Secure` chỉ thêm khi sau HTTPS — xem `_dung_https` để biết vì sao không bật cứng.
+            them_secure = "; Secure" if self._dung_https() else ""
+            cookie = (f"phien={token}; HttpOnly; SameSite=Lax; Path=/"
+                      f"; Max-Age={cau_hinh.PHIEN_SONG_GIO * 3600}{them_secure}")
             return self._tra(200, {"ok": True}, cookie=cookie)
         if duong == "/api/v2/auth/quen-mat-khau" and method == "POST":
             self._can_csrf()
@@ -705,12 +770,8 @@ class BoXuLy(BaseHTTPRequestHandler):
                 return '"' + sach.replace('"', '""') + '"'
             csv = "﻿" + ",".join(cot) + "\n" + "\n".join(",".join(o(d[c]) for c in cot) for d in ds)
             body = csv.encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/csv; charset=utf-8")
-            self.send_header("Content-Disposition", "attachment; filename=don-hang.csv")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            return self._tra_tep(body, "text/csv; charset=utf-8",
+                                 dinh_kem="don-hang.csv")
             return
         if duong == "/api/v2/don" and method == "POST":
             self._can(nc, "tenant.don.ghi")
@@ -874,12 +935,8 @@ class BoXuLy(BaseHTTPRequestHandler):
             body = csv.encode()
             # Tên file do NGƯỜI DÙNG đặt — tuyệt đối không ghép thẳng vào header (CRLF/quote injection).
             ten_an_toan = "import-batch-%d.csv" % int(m.group(1))
-            self.send_response(200)
-            self.send_header("Content-Type", "text/csv; charset=utf-8")
-            self.send_header("Content-Disposition", f'attachment; filename="{ten_an_toan}"')
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            return self._tra_tep(body, "text/csv; charset=utf-8",
+                                 dinh_kem=ten_an_toan)
             return
         m = re.fullmatch(r"/api/v2/import/dong/(\d+)/xac-nhan", duong)
         if m and method == "POST":
@@ -1010,9 +1067,32 @@ def chay(cong=cau_hinh.CONG_MAC_DINH):
     import khoi_tao
     khoi_tao.seed_providers()   # capability adapter đổi thì CSDL phải theo (vd J&T webhook)
     webhook.khoi_dong()
-    sv = ThreadingHTTPServer(("127.0.0.1", cong), BoXuLy)
-    print(f"[hub] VIP Express Hub SaaS (local) chạy tại http://127.0.0.1:{cong} — Ctrl+C để dừng")
-    print(f"[hub] Giao diện quản trị: http://127.0.0.1:{cong}/admin/")
+    # --- P-1 (AG-05 đề xuất, AG-00 đo lại 15/10) ---
+    # Bản cũ ghim cứng `127.0.0.1`. Trong container điều đó nghĩa là **không ai gọi được từ
+    # ngoài**, kể cả khi đã map cổng: dịch vụ chạy, health xanh từ bên trong, mà không ai nối
+    # được — và không có thông báo nào nói tại sao.
+    #
+    # Mặc định VẪN là `127.0.0.1`: mở ra ngoài phải là việc người vận hành CHỦ ĐỘNG khai, chứ
+    # không phải thứ xảy ra vì ai đó nâng cấp mã.
+    dia_chi = os.environ.get("VIP_HUB_BIND", "127.0.0.1")
+    ra_ngoai = dia_chi not in ("127.0.0.1", "localhost", "::1")
+    if ra_ngoai and cau_hinh.HIEN_TOKEN_RESET:
+        # Chốt chặn: bind ra ngoài + cửa trả token đặt-lại-mật-khẩu đang mở = ai cũng chiếm
+        # được tài khoản bất kỳ bằng ba lượt HTTP. Hai thứ đó riêng lẻ thì còn chấp nhận được,
+        # cùng lúc thì không. Dừng hẳn, đừng cảnh báo rồi chạy tiếp.
+        print(f"[hub] DỪNG: bind ra {dia_chi} nhưng VIP_HUB_RESET_TOKEN đang bật.")
+        print("[hub] Cửa đó trả token đặt lại mật khẩu cho bất kỳ ai gọi — chỉ dùng ở local.")
+        print("[hub] Tắt VIP_HUB_RESET_TOKEN, hoặc bind lại 127.0.0.1.")
+        raise SystemExit(4)
+    sv = ThreadingHTTPServer((dia_chi, cong), BoXuLy)
+    # In ĐỊA CHỈ THẬT đã bind, không in một hằng viết sẵn: bản cũ luôn in "127.0.0.1" nên nếu
+    # địa chỉ có đổi thì dòng log vẫn nói y như cũ — dòng log nói sai về chính nó.
+    that = sv.server_address
+    print(f"[hub] VIP Express Hub SaaS chạy tại http://{that[0]}:{that[1]} — Ctrl+C để dừng")
+    print(f"[hub] Giao diện quản trị: http://{that[0]}:{that[1]}/admin/")
+    if ra_ngoai:
+        print(f"[hub] LƯU Ý: đang bind RA NGOÀI ({dia_chi}). HTTPS: "
+              f"{'bật' if os.environ.get('VIP_HUB_HTTPS') == '1' else 'TẮT — cookie không có cờ Secure'}")
     try:
         sv.serve_forever()
     except KeyboardInterrupt:

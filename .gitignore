@@ -18,3 +18,20 @@ app/du-lieu/
 # TỪ CHỐI ghi gói khoá vào bất kỳ chỗ nào trong repo mà gitignore KHÔNG chặn — tức là chính
 # việc gitignore không chặn `*.vipkb` là thứ đang bảo vệ. Thêm vào đây sẽ cho phép ghi gói
 # khoá vào repo (chỉ là không theo dõi), tức là làm YẾU đi, và làm ca thử `h6` của AG-01 hỏng.
+
+# ── G12 15/10 (AG-02 đề xuất, D-1 anh Thành duyệt) ──────────────────────────
+# Playwright cài RIÊNG TRONG DỰ ÁN nên trình duyệt nằm trong `node_modules/` của repo.
+# ĐO ĐƯỢC 15/10: 869 file, **498MB**, trong đó Chromium 141 là 308MB. Không chặn thì một
+# lượt `git add -A` đưa cả 498MB vào lịch sử Git — và lịch sử Git thì không xoá sạch được.
+# Cùng họ với ghi chú P-3 về `.env` ở trên: thứ nặng hoặc thứ bí mật phải chặn TRƯỚC lượt
+# `add` đầu tiên, không phải sau.
+node_modules/
+
+# Đầu ra mỗi lượt chạy tầng 3: báo cáo HTML, ảnh chụp khi ca hỏng, trace.zip.
+# Sinh lại được bằng `sh thu_giao_dien/chay.sh` nên không vào git.
+thu_giao_dien/_bao-cao/
+thu_giao_dien/_ket-qua/
+
+# CỐ Ý KHÔNG chặn `package-lock.json` — nó PHẢI vào git: đó là chỗ duy nhất ghi
+# `@playwright/test` đang khoá ở bản nào. Thiếu nó thì hai máy cài hai bản khác nhau mà
+# không ai thấy, và lúc đó một bộ thử xanh ở máy này đỏ ở máy kia không ai giải thích được.

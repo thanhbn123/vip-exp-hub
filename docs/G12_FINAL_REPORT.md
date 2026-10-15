@@ -7,12 +7,21 @@ AG-00 PROJECT CONTROLLER · ngày **15/10/2026** · chỉ thị G12 (20 mục).
 
 ## 1. FINAL LOCAL SHA (mục 20)
 
-```
-936467b5e9d782dd3100e46fd38a58b1736c9e53
-```
+| Cái gì | SHA |
+|---|---|
+| **commit MÃ cuối** (hết mục 5, 11–13) | `936467b5e9d782dd3100e46fd38a58b1736c9e53` |
+| **commit TÀI LIỆU** (mục 19 — gồm chính tệp này) | `0a35de1e1fd81d5574c2e053529240e9534c6ff2` |
+| **FINAL LOCAL SHA** | `0a35de1e1fd81d5574c2e053529240e9534c6ff2` |
+
+Ghi **hai** dòng vì một tài liệu không tự ghi được SHA của chính commit chứa nó: lúc viết thì
+SHA chưa tồn tại, lúc commit xong thì SHA đã đổi. Bản đầu của tệp này ghi `936467b` làm FINAL
+SHA — **sai**, vì commit tài liệu ngay sau đó dời `main` sang `0a35de1`. Ai chạy
+`git rev-parse HEAD` sẽ thấy lệch và không biết tin bên nào (§12.1 luật 4: trường nào là dữ
+kiện đo được thì phải lấy từ lệnh). Nên: `936467b` là mốc **mã** nghiệm thu được bằng bộ thử;
+`0a35de1` là mốc cây làm việc.
 
 Nhánh `main`, **local**. Chưa push GitHub, chưa triển khai VPS (chỉ thị mục 16, 17).
-So với nền G12 (`9af8115`): **59 tệp, +10.010 dòng, −125 dòng**, 20 commit.
+So với nền G12 (`9af8115`): **63 tệp, +10.628 dòng, −125 dòng**, 21 commit.
 
 ## 2. NGHIỆM THU CUỐI
 

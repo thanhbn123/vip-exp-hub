@@ -590,10 +590,45 @@ Từ nay, **mọi báo cáo có số đo** (của AG-00, AG-01, AG-02, AG-03, AG
 
 1. **Vân tay cây** — lấy bằng lệnh, không điền tay:
    ```bash
-   find app gateway thu_frontend thu_giao_dien -type f \
-     \( -name '*.py' -o -name '*.mjs' -o -name '*.sh' -o -name '*.json' \) \
-     | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256
+   { git ls-files -s; git status --porcelain=v1; } | shasum -a 256
    ```
+
+   > **BẢN ĐẦU CỦA LỆNH NÀY MÙ — AG-01 phát hiện (`G16-09`, MEDIUM).** Lệnh cũ là
+   > `find app gateway thu_frontend thu_giao_dien -type f \( -name '*.py' -o -name '*.mjs' -o -name '*.sh' -o -name '*.json' \) | …`,
+   > tức **`docs/` không nằm trong phạm vi** và **`.md` không nằm trong danh sách đuôi**. Đo được:
+   > thêm một dòng vào **chính tệp hợp đồng này** (`docs/SHARED_CONTRACTS.md`) mà vân tay
+   > **không nhúc nhích một ký tự** (`9a72ec87…` trước = sau). Luật §41 sinh ra để bảo đảm *"con số
+   > nào cũng đối chiếu được với một cây"*, mà nó **mù đúng ở tệp quan trọng nhất** — §36–§42, thứ
+   > định nghĩa ba cổng đang được nghiệm thu. Một lượt sửa hợp đồng giữa lượt đo sẽ **lọt qua** cả
+   > vân tay **và** mắt người đọc.
+   >
+   > **AG-01 tự nhận đây là lỗi của chính nó** — nó viết lệnh đó trước, AG-00 chép nguyên văn vào
+   > luật; rồi nó **tự kiểm cái mình viết** và thấy nó **hổng**. Ghi lại đúng như vậy.
+   >
+   > **Vì sao lệnh mới kín hơn:** `git ls-files -s` liệt kê **mọi tệp được theo dõi** kèm hash blob
+   > ⇒ phủ **mọi thư mục, mọi đuôi tệp**, không phụ thuộc danh sách mà ai đó nhớ để viết ra; còn
+   > `git status --porcelain` phủ **thay đổi chưa commit**. Hai vế cộng lại thì không còn đường nào
+   > sửa nội dung mà vân tay đứng yên. Đã kiểm chứng: sửa tệp hợp đồng ⇒ vân tay đổi
+   > (`f673c48c…` → `eb028e61…`); hoàn tác ⇒ về đúng `f673c48c…`.
+   >
+   > **Bài học giữ nguyên hiệu lực:** *thứ dùng để kiểm chứng cũng phải được kiểm.* Lệnh vân tay là
+   > một **bộ dò**, và bộ dò này đã **hổng một lượt** trước khi có người thử phá nó.
+
+   **THỨ TỰ ƯU TIÊN (AG-01 đề nghị, AG-00 chốt).** Khi cây **đã commit và sạch**, khoá **bằng Git**
+   là **CHÍNH** — nó phủ **mọi tệp được theo dõi**, kể cả `docs/**`, `.env.example`, `.gitignore`,
+   nên **mạnh hơn** vân tay:
+
+   | | Khi cây SẠCH (đã commit) | Khi cây BẨN (nhiều làn cùng ghi) |
+   |---|---|---|
+   | **CHÍNH** | `git rev-parse HEAD` + **`git diff HEAD` phải RỖNG** + **`git status --porcelain -uall` phải RỖNG** | vân tay (lệnh ở trên) |
+   | **DỰ PHÒNG** | vân tay | `git status -uall` ghi kèm |
+
+   **Vì sao thứ tự này, có ví dụ sống:** `HEAD` đi `c9fcaef → eb6cb3a` mà **vân tay KHÔNG đổi**
+   (`9a72ec87…`). Vân tay **một mình** không phân biệt được *"chỉ thêm một tài liệu"* với *"không ai
+   đụng gì"* — cả hai cho **cùng một con số**. Thứ **chứng minh được** là Git:
+   `git diff --name-only c9fcaef eb6cb3a` → **đúng một** đường dẫn `docs/G16_ACCEPTANCE.md`,
+   **0 tệp mã**. Nhờ đó mới dám nói câu **có căn cứ**: *"lượt đo trên `c9fcaef` vẫn đúng cho
+   `eb6cb3a` vì mã không đổi một byte"*.
 2. **Mốc giờ** của lượt đo.
 
 Con số **không** kèm vân tay là con số **không đối chiếu được** — nó đúng với *một cây nào đó*,

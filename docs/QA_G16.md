@@ -22,7 +22,8 @@ Mọi hợp đồng §1–§41 còn hiệu lực.
 | Baseline lượt 3 (`6d05c74`, 15:49–15:51) | **exit 1** · 1268 ca · 36 bộ · **2 bộ hỏng**: `thu_qa_g16.py` + `thu_qa_jt.py` |
 | Baseline lượt 5 (`6d05c74`, 15:58) | **exit 0** · 1270 ca · 36 bộ · 0 bộ hỏng · tự cộng lại **khớp** |
 | **Baseline lượt 7 — LƯỢT CHỐT (`6d05c74`, 16:04:41–16:05:50)** | **exit 0** · **1284 ca** · 36 bộ · **0 bộ hỏng** · tự cộng lại **1284 ✔** · **CÂY ĐỨNG YÊN** |
-| Vân tay cây giữa các lượt | **ĐỔI ở 6/7 lượt**; **lượt 7 ĐỨNG YÊN** lần đầu trong phiên (§1.3) |
+| **Baseline lượt 8 — TRÊN BẢN ĐÃ COMMIT (`c9fcaef`, 16:14:56–16:16:28)** | **exit 0** · **1284 ca** · 36 bộ · **0 bộ hỏng** · tự cộng lại **1284 ✔** · **CÂY ĐỨNG YÊN** · `git diff HEAD` **RỖNG** |
+| Vân tay cây giữa các lượt | **ĐỔI ở 6/8 lượt**; **lượt 7 và 8 ĐỨNG YÊN** (§1.3) |
 | Lời khai AG-00 #1 (`main` không chứa G13–G15) | **XÁC NHẬN** — cả ba mệnh đề, đo lại được |
 | Lời khai AG-00 #2 (CSDL thật `aaf713…`) | **XÁC NHẬN TUYỆT ĐỐI** — trùng từng ký tự |
 | Lời khai AG-00 #2 ("cây sạch") | **ĐÚNG LÚC GHI · SAI VỀ SAU** (§2.2) |
@@ -31,7 +32,7 @@ Mọi hợp đồng §1–§41 còn hiệu lực.
 | **G16-A / 3 CONTRACT TESTS** | **ĐẠT** — 8 ca |
 | Bộ G16-A của AG-01 | `thu_qa_g16.py` · **61 ca · exit 0** · 19,2 giây · thuần trong tiến trình |
 | Hồi quy các làn khác trong lượt chốt | `thu_http_jt.py` **37 ca ✓** (AG-02) · `thu_adapter_jt.py` **71 ca ✓** (AG-03) · `thu_qa_jt.py` **22 ca ✓** |
-| Phát hiện | **8** (§4): 1 HIGH · 6 MEDIUM · 1 LOW · **7 đã đóng trong lượt** · **1 CÒN MỞ** (`G16-08`) |
+| Phát hiện | **9** (§4): 1 HIGH · 7 MEDIUM · 1 LOW · **8 đã đóng** · **1 CÒN MỞ** (`G16-09`) |
 
 **G16-A ĐẠT ở mức "ba cổng đã đo được", KHÔNG phải "gọi được hãng".** §40 cấm mọi câu đọc như
 `LIVE VERIFIED`: chưa có lượt gọi API thật nào, `V-G09-01` + `V-13906-05` **CHƯA CẤP**, và tài liệu
@@ -61,7 +62,8 @@ VIP_HUB_DATA=/tmp/veh_g16_ag01x sh app/thu/chay_tat_ca.sh; echo "MÃ THOÁT TH�
 | 3 | `6d05c74` | `/tmp/veh_g16_ag01c` | **1** | 36 | 1268 | **1268** | ✅ | 2 |
 | 5 | `6d05c74` | `/tmp/veh_g16_ag01e` | **0** | 36 | 1270 | **1270** | ✅ | 0 |
 | 6 | `6d05c74` (giữa lượt AG-02/AG-03 sửa) | `/tmp/veh_g16_ag01f` | **1** | 36 | 1271 | **1271** | ✅ | **2** (`thu_http_jt` · `thu_adapter_jt`) |
-| **7 · CHỐT** | `6d05c74` · `http_jt = 3d9d8f0a` · **cây ĐỨNG YÊN** | `/tmp/veh_g16_ag01g` | **0** | 36 | **1284** | **1284** | ✅ | **0** |
+| 7 | `6d05c74` · `http_jt = 3d9d8f0a` · **cây ĐỨNG YÊN** | `/tmp/veh_g16_ag01g` | **0** | 36 | 1284 | **1284** | ✅ | 0 |
+| **8 · CHỐT TRÊN BẢN ĐÃ COMMIT** | **`c9fcaef`** `[integration/g16]` · `git diff HEAD` **RỖNG** · **cây ĐỨNG YÊN** | `/tmp/veh_g16_c9f` | **0** | 36 | **1284** | **1284** | ✅ | **0** |
 
 Cách tự cộng: bóc **từng dòng** `✓ <bộ> <N> ca` rồi cộng bằng `awk` — **không** đọc con số tổng
 mà script in. Khớp ở **cả năm** lượt tự cộng được. (Lượt 3: 1190 ca của 34 bộ đạt + 56 `thu_qa_g16` + 22
@@ -84,13 +86,18 @@ Vân tay = sha256 của danh sách sha256 **mọi** tệp `.py/.mjs/.sh/.json` t
 | 4 | 15:55–15:56 | `214682bb…` | `ff0180c5…` | **ĐỔI** |
 | 5 | 15:58:48–15:59:51 | `e0396466…` | `61fa338e…` | **ĐỔI** |
 | 6 | 16:02:22–16:03:25 | `e76366c6…` | `bb11ee74…` | **ĐỔI** |
-| **7 · CHỐT** | **16:04:41–16:05:50** | **`9a72ec87…`** | **`9a72ec87…`** | **ĐỨNG YÊN** ✅ |
+| 7 | 16:04:41–16:05:50 | `9a72ec87…` | `9a72ec87…` | **ĐỨNG YÊN** ✅ |
+| **8 · TRÊN BẢN ĐÃ COMMIT** | **16:14:56–16:16:28** | **`9a72ec87…`** | **`9a72ec87…`** | **ĐỨNG YÊN** ✅ |
 
 **LƯỢT 7 — LƯỢT CHỐT, và là lượt DUY NHẤT ghim được vào một mốc mã:** vân tay **giống nhau trước
 và sau** (`9a72ec87…`), `app/http_jt.py` **không đổi** trong lượt (`3d9d8f0a…`), `HEAD = 6d05c74`.
 Kết quả: **exit 0 · 1284 ca · 36 bộ · 0 bộ hỏng · tự cộng lại = 1284 ✔**.
 
-⇒ **Sáu lượt đầu KHÔNG ghim được; lượt 7 ghim được.** Đây là điều đáng nói nhất của §1: cây **có**
+**Lượt 8 khớp `HEAD`:** vân tay lượt 8 = `9a72ec87…` = **đúng** vân tay lượt 7, mà lượt 8 chạy trên
+cây **đã commit** `c9fcaef` với `git diff HEAD` **RỖNG**. ⇒ **Bản đã commit CHÍNH LÀ cây tôi đã
+nghiệm thu ở lượt 7** — không phải suy đoán, mà là hai vân tay bằng nhau cộng với một cây sạch.
+
+⇒ **Sáu lượt đầu KHÔNG ghim được; lượt 7 và 8 ghim được.** Đây là điều đáng nói nhất của §1: cây **có**
 những khoảng đứng yên, nên **luật §41 không phải án tử hình** — nó chỉ bắt người báo cáo **chứng minh**
 mình đo trong khoảng đứng yên. Lượt 5 (1270) và lượt 7 (1284) **khác nhau 14 ca** mà **cùng một
 `HEAD`** — đó chính là lý do không con số nào được dùng mà thiếu vân tay.
@@ -429,7 +436,14 @@ thành `if False:` (tức 408/429 quay về "4xx vĩnh viễn") ⇒ chạy lại
   tiêm secret thật vào **bản sao `transport.py`** ⇒ bộ dò **PHẢI** bắt. Đo lại: `0` phát hiện trên
   30+ mô-đun sản phẩm, và **6 mẫu đối chứng** (1 bắt buộc bắt + 5 bắt buộc không kêu) đều đúng.
 
-### `G16-08` · **MEDIUM · CÒN MỞ** · **Toàn bộ sản phẩm G16-A KHÔNG nằm trong Git** — `git clean`/`stash` xoá sạch, im lặng
+### `G16-08` · **MEDIUM** · **Toàn bộ sản phẩm G16-A KHÔNG nằm trong Git** · **ĐÃ ĐÓNG (`6bae1bc`…`c9fcaef`)**
+
+**Bằng chứng đóng (AG-01 đo lại, `16:14`, cây `c9fcaef`):** `git ls-files` theo dõi **13 tệp** G16
+(`app/http_jt.py` · `app/thu/stub_jt.py` · `app/thu/thu_http_jt.py` · `app/thu/thu_qa_g16.py` ·
+`app/thu/thu_qa_jt.py` · 4× `docs/G16_*.md` · `docs/QA_G16.md` · 4× `trien_khai/g16/**`) —
+trước mốc là **0**. `6bae1bc` chứa **2090 dòng** gồm cả bộ thử và tài liệu của tôi. **Đã đóng.**
+*(Ghi chú nhỏ: lệnh AG-00 trích trong báo cáo — `grep -E 'http_jt|G16_'` — cho **6**, không phải 13;
+con số **13** đúng khi tính **đủ bộ §39**. Kết luận đúng, chỉ lệnh trích là thiếu.)*
 
 - **Tái hiện (`16:01:15`):**
   ```bash
@@ -467,6 +481,50 @@ thành `if False:` (tức 408/429 quay về "4xx vĩnh viễn") ⇒ chạy lại
   `docs/QA_G16.md` · `trien_khai/g16/**` — rồi **ghi hash tệp vào §41** như mốc G16-A.
   **Không** tự commit được: hạ tầng chặn ghi `.git` (§39), nên đây **phải** là việc của AG-00.
 
+### `G16-09` · **MEDIUM · CÒN MỞ** · **LUẬT VÂN TAY §41 MÙ với `docs/`** — kể cả với chính bản hợp đồng đã đóng băng
+
+- **Tái hiện (`16:17`, cây `c9fcaef`, `git diff HEAD` RỖNG):**
+  ```bash
+  FP() { find app gateway thu_frontend thu_giao_dien -type f \
+           \( -name '*.py' -o -name '*.mjs' -o -name '*.sh' -o -name '*.json' \) \
+           | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256; }
+  FP                                                    # 9a72ec87…
+  printf '\n<!-- THU NGHIEM -->\n' >> docs/SHARED_CONTRACTS.md
+  FP                                                    # 9a72ec87…   ← KHÔNG ĐỔI
+  git status --porcelain docs/SHARED_CONTRACTS.md       #  M docs/SHARED_CONTRACTS.md
+  ```
+  ⇒ Sửa **chính bản hợp đồng đã đóng băng** mà vân tay **không nhúc nhích một ký tự**.
+  *(Đã hoàn tác nguyên trạng; `git status` sau hoàn tác = rỗng.)*
+- **Nguyên nhân gốc:** lệnh vân tay mà §41 chép lại **chỉ quét 4 thư mục `app/ gateway/ thu_frontend/
+  thu_giao_dien` và 4 đuôi `.py/.mjs/.sh/.json`**. `docs/` **không** nằm trong phạm vi, `.md` cũng
+  không. Và đây là **lỗi của chính tôi**: lệnh đó do tôi viết ra (§1.3), rồi AG-00 chép **nguyên văn**
+  vào luật. Tôi đã tự kiểm cái mình viết — và nó **hổng**.
+- **Vì sao MEDIUM chứ không thấp hơn:** §41 tồn tại để bảo đảm *"con số nào cũng đối chiếu được với
+  một cây"*. Nó **mù đúng ở tệp quan trọng nhất** — §36–§41, thứ định nghĩa ba cổng tôi đang nghiệm
+  thu. Một lượt sửa hợp đồng giữa lượt đo sẽ **lọt qua** cả vân tay **và** mắt người đọc §41.
+- **Bằng chứng cụ thể trong chính lượt này:** `docs/G16_ACCEPTANCE.md` **được tạo lúc `16:15:11`** —
+  **giữa** lượt đo của tôi (`16:14:56`–`16:16:28`) — mà **vân tay trước = sau**. `git status` đi từ
+  **0 → 1 dòng**. Nếu tôi chỉ ghi vân tay mà không ghi `git status`, tôi đã **không thấy** nó.
+  *(Đây cũng là dữ kiện cho câu "bốn làn đã DỪNG": có một tệp mới ra đời trong lượt — không phải mã,
+  nên **không** làm hỏng phép đo, nhưng nói đúng rằng cây **chưa** hoàn toàn đứng yên.)*
+
+- **Ví dụ sống, ngay sau lượt chốt:** `HEAD` đi `c9fcaef` → **`eb6cb3a`**, và **vân tay KHÔNG đổi**
+  (`9a72ec87…`). Vân tay **một mình** không nói được đó là *"chỉ thêm một tài liệu"* hay *"không ai
+  đụng gì"* — cả hai đều cho cùng một con số. Thứ **chứng minh được** là Git:
+  `git diff --name-only c9fcaef eb6cb3a` → **đúng một** đường dẫn, `docs/G16_ACCEPTANCE.md`, **không**
+  tệp `.py/.sh/.mjs/.json` nào. Nhờ vậy tôi nói được câu có căn cứ: **lượt đo trên `c9fcaef` vẫn
+  đúng cho `eb6cb3a`**, vì **mã không đổi một byte**.
+  ⇒ Đây là lý do **cụ thể** để đảo thứ tự ưu tiên ở mục *cách sửa* dưới đây.
+- **Cách sửa bắt buộc — và nay đã làm được, rẻ hơn trước:** cây đã **commit và sạch**, nên **thứ tự
+  ưu tiên đảo lại**:
+  1. **Khóa bằng Git là chính:** `git rev-parse HEAD` + **`git diff HEAD` phải RỖNG** +
+     `git status --porcelain -uall` phải **RỖNG**. Cách này phủ **mọi tệp được theo dõi**, kể cả
+     `docs/**`, `.env.example`, `.gitignore` — **mạnh hơn** vân tay.
+  2. **Vân tay chỉ còn là phương án DỰ PHÒNG** cho lúc cây **bẩn** (bốn làn cùng ghi) — và khi đó
+     phải mở rộng phạm vi: thêm `docs` và `-name '*.md'` + các tệp cấu hình ở gốc, **hoặc** ghi kèm
+     `git status --porcelain -uall` để phần ngoài phạm vi vân tay **vẫn nhìn thấy được**.
+- **Ai sửa:** AG-00 (chủ `SHARED_CONTRACTS.md` §41). Đây là **sửa luật**, không phải sửa mã.
+
 ### Ghi chú (KHÔNG phải phát hiện) — `carrier_accounts.credentials_duoi`
 
 `app/csdl.py` khai `credentials_duoi TEXT NOT NULL DEFAULT ''` — *"4 ký tự cuối để hiển thị"*. Đây là
@@ -494,6 +552,8 @@ trong lượt này.
 | **V5/V6/V7 toàn cục** (tenant · RBAC · AES đầy đủ) | **vẫn mở** từ `QA_G13_G15.md` §L2.8 | bộ ca riêng — lượt này **không** đóng |
 | Frontend tầng 3 (DOM/CSS Chromium) | không chạy trong `chay_tat_ca.sh` | `sh thu_giao_dien/chay.sh` |
 | **Đa luồng trên `http_jt`** | bộ G16-A chạy **tuần tự** | chưa đo tranh chấp khi nhiều luồng cùng `gui_form` |
+| **Nhánh `integration/g16` chưa gộp vào `main`** | `--is-ancestor` vẫn **thất bại** (đúng như thiết kế) | việc gộp là quyết định của AG-00/anh Thành — **không** thuộc G16-A |
+| **Harness SANDBOX của AG-04** (`trien_khai/g16/**`) | AG-00 chạy riêng (*"đạt 32 · ĐẠT (MOCK) 12 · BLOCKED 2"*); tôi **chưa** dựng phép đo độc lập cho nó | bộ ca riêng — **không** tính là AG-01 đã nghiệm thu |
 | PostgreSQL · VPS · đa tiến trình · Safari/Firefox · dữ liệu lớn | ngoài phạm vi bộ chạy | theo `G12_POSTGRES.md` / `G11_FINAL_REPORT.md` |
 
 ---

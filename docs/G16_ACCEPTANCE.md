@@ -186,16 +186,49 @@ nâng mức. **Không đoán thuật toán ký.**
 
 ## 8. ĐIỀU **CHƯA** ĐO — LỖ HỔNG PHẠM VI, KHÔNG PHẢI ĐẠT
 
-Nói thẳng, không giấu:
+**Danh sách này do AG-01 lập** (`docs/QA_G16.md` §5) và AG-00 **giữ nguyên, không rút gọn** — rút
+gọn một danh sách "chưa đo" là cách biến nó thành "đã đo":
 
-- **Chưa có lượt gọi hãng nào.** Chưa chứng minh được: hãng chấp nhận chữ ký, mã lỗi thật khớp
-  bảng, sandbox sống, callback ký bằng khoá nào, mã HTTP nào đúng.
-- **Ba mục AG-01 tự ghi là CHƯA đo độc lập** (từ `QA_G13_G15.md` §L2.8, **vẫn mở**): cách ly tenant
-  **toàn cục** ngoài đường webhook · **RBAC** · **AES-256-GCM đầy đủ** (tự sửa bản mã / đổi chỗ bản
-  mã giữa hai tenant / sai AAD).
-- Chưa deploy · chưa push · chưa HTTPS thật · chưa tunnel · chưa VPS.
-- Chưa chuyển CSDL nghiệp vụ sang PostgreSQL (D-8) — **vẫn SQLite**.
-- **Chưa có người đọc lại.** Toàn bộ là tác tử AI.
+1. **Gọi hãng thật, kể cả sandbox** — `V-G09-01` + `V-13906-05` CHƯA CẤP.
+   **TLS thật tới `*.jtexpress.vn` CHƯA ĐO.**
+2. **`cancelOrder` / `getShippingFee` / `getShippingLabel` / `getOrder` đầu-cuối** — đường dẫn
+   **CHƯA ĐỌC ĐƯỢC**, adapter **cố ý DỪNG** (`duong=None`).
+3. **V5/V6/V7 toàn cục** — cách ly tenant ngoài đường webhook · RBAC · AES-256-GCM đầy đủ —
+   **vẫn mở** từ `QA_G13_G15.md` §L2.8.
+4. **Đa luồng trên `http_jt`** — bộ thử chạy tuần tự.
+5. **Harness SANDBOX của AG-04** (`trien_khai/g16/**`) — AG-00 có chạy riêng (*đạt 32 ·
+   `ĐẠT (MOCK)` 12 · BLOCKED 2*), nhưng **AG-01 chưa dựng phép đo độc lập** ⇒ **không** tính là
+   AG-01 đã nghiệm thu.
+6. **Frontend tầng 3 (Chromium)** — AG-00 đo *26 passed · 1 skipped*; AG-01 **không** chạy lại.
+7. **`integration/g16` chưa gộp `main`** — đúng thiết kế; việc gộp **không** thuộc G16-A.
+
+Và: chưa deploy · chưa push · chưa HTTPS thật · chưa tunnel · chưa VPS · chưa chuyển CSDL nghiệp
+vụ sang PostgreSQL (D-8, **vẫn SQLite**) · **chưa có người đọc lại** — toàn bộ là tác tử AI.
+
+---
+
+## 8b. HAI PHÁT HIỆN VỀ CHÍNH **BỘ DÒ** — và cả hai đều được sửa
+
+Đáng ghi riêng, vì cả hai đều là *"thứ dùng để kiểm chứng tự nó nói sai"* (`BAN_GIAO.md` §7.1):
+
+**`G16-05` · cổng che bí mật kêu nhầm và hở.** Ngưỡng che đặt theo **ĐỘ DÀI ≥ 8** ⇒ credential
+**ngắn** lộ nguyên văn. AG-01 tìm ra bằng cách đo **HAI đường** và thấy **hai câu trả lời khác nhau**
+(qua thân form thì không rò vì bị percent-encode, qua **header** thì rò) ⇒ *"kết luận 'không rò' chỉ
+từ một đường là SAI"*. Đã vá **theo TÊN TRƯỜNG, bất kể độ dài**; AG-00 tự đo lại: bí mật 4 ký tự và
+3 ký tự nay đều thành `[DA-CHE]` ở **cả hai** đường.
+
+**`G16-09` · LUẬT VÂN TAY §41 MÙ với `docs/` — kể cả với chính bản hợp đồng.** Lệnh vân tay chỉ quét
+`app/ gateway/ thu_frontend/ thu_giao_dien` với 4 đuôi `.py/.mjs/.sh/.json` ⇒ **`docs/` và `.md` nằm
+ngoài phạm vi**. Đo được: thêm một dòng vào **chính `docs/SHARED_CONTRACTS.md`** mà vân tay **không
+đổi một ký tự** — tức sửa bản hợp đồng định nghĩa ba cổng nghiệm thu vẫn **lọt qua**. Bằng chứng
+sống: `docs/G16_ACCEPTANCE.md` ra đời lúc **16:15:11**, **giữa** lượt đo, mà vân tay trước = sau; chỉ
+`git status` mới thấy. **AG-01 tự nhận đây là lỗi của chính nó** (nó viết lệnh đó, AG-00 chép nguyên
+văn vào luật) rồi tự kiểm cái mình viết — và nó hổng. **Đã sửa:** khoá **bằng Git là CHÍNH**
+(`HEAD` + `git diff HEAD` rỗng + `git status -uall` rỗng), vân tay chỉ còn là **dự phòng** cho lúc
+cây bẩn; lệnh vân tay cũng đổi sang dạng phủ mọi tệp được theo dõi.
+
+**Cả hai đều là cổng do AG-00 hoặc AG-01 tạo ra, và cả hai đều hổng cho tới khi có người thử phá.**
+Ghi lại vì đó là bài học, không phải vì nó đã xong.
 
 ---
 

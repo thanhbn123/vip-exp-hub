@@ -38,7 +38,7 @@ import math
 import socket
 import ssl
 from email.utils import parsedate_to_datetime
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
 
 import transport
 
@@ -223,27 +223,147 @@ def _gia_tri_trong_json(chuoi, ra):
             hang_doi.extend(n)
 
 
-def _gia_tri_can_che(headers, than_gui):
-    """Mọi giá trị TA ĐÃ GỬI ĐI (header + thân form) ĐÁNG bị che. TÊN trường không bao giờ bị che.
+def _dang_che(ten, gia_tri):
+    """Hai mức: TÊN thuộc credential ⇒ che BẤT KỂ độ dài; tên khác ⇒ chỉ che khi đủ dài.
 
-    Hai mức: giá trị của trường có TÊN là credential ⇒ che bất kể độ dài; giá trị khác ⇒ chỉ che khi
-    đủ dài (`DAI_TOI_THIEU_DE_CHE`).
+    Ngưỡng độ dài một mình bỏ sót credential NGẮN — đo được hai lần (`thu_qa_g16.t18b` của AG-01 và
+    `thu_http_jt.e3`) — nên mức theo TÊN là mức BẮT BUỘC, không phải mức "thêm cho chắc".
+    TÊN không bao giờ bị che: tên là thứ cần cho chẩn đoán, giá trị mới là bí mật.
+    """
+    if not gia_tri:
+        return False
+    return len(gia_tri) >= DAI_TOI_THIEU_DE_CHE or ten.lower() in TRUONG_CREDENTIAL
+
+
+def _escape_json(s):
+    """Dạng một chuỗi mang khi nằm trong JSON `ensure_ascii=True` (`ậ` → `\\u1ead`).
+
+    Hãng Trung Quốc hay trả JSON escape ASCII; đo được (`thu_http_jt.j3`) rằng dạng này LỌT qua phép
+    che theo chuỗi gốc khi chính người gọi cũng dựng `bizContent` bằng `ensure_ascii=True`.
+    """
+    try:
+        return json.dumps(s, ensure_ascii=True)[1:-1]
+    except Exception:
+        return s
+
+
+def _bien_the(s):
+    """MỌI dạng mà MỘT giá trị đã gửi đi có thể mang khi hãng echo nó lại.
+
+    Vì sao cần — phép che cũ so khớp ĐÚNG chuỗi đã gửi, nhưng chuỗi ấy còn đi qua các lớp mã hoá
+    trước khi lên dây, và hãng echo lại **byte trên dây**, không phải chuỗi Python của ta:
+
+      · `urlencode` percent-encode giá trị form ⇒ `aB?cd&e=f` lên dây là `aB%3Fcd%26e%3Df`
+      · `bizContent` là JSON **lồng trong một trường form** ⇒ giá trị bên trong có thể bị mã hoá
+        hai lớp (`%253F`), và dạng JSON-escape của nó cũng bị percent-encode
+      · JSON `ensure_ascii=True` viết `ậ` thành `\\u1ead`
+
+    ĐO ĐƯỢC trước khi vá (AG-02, 15/10/2026, `thu_http_jt.j3`): bí mật `aB?cd&e=f` ở
+    `bizContent.password` RÒ NGUYÊN VĂN dạng `aB%3Fcd%26e%3Df` trong `than_da_che` của ngoại lệ.
+    Một đường khác cũng rò: bí mật phi-ASCII gửi bằng `ensure_ascii=True` hiện lại thành
+    `m%5Cu1eadt-…`. Vì vậy tập che phải gồm MỌI biến thể, không chỉ chuỗi gốc.
+
+    Bao đóng hai lớp của {percent-encode, JSON-escape} là đủ cho mọi đường đã đo (form phẳng, form
+    lồng JSON, JSON escape ASCII). Biến thể KHÔNG bao giờ làm mất an toàn: che thừa chỉ làm thông
+    điệp chẩn đoán khó đọc hơn, còn che thiếu là một credential đi vào log.
+    """
+    ra = {s}
+    lop = [s]
+    for _ in range(2):
+        moi = []
+        for v in lop:
+            for f in (quote_plus, quote, _escape_json):
+                try:
+                    w = f(v)
+                except Exception:
+                    continue
+                if w and w not in ra:
+                    ra.add(w)
+                    moi.append(w)
+        lop = moi
+    return ra
+
+
+def _mo_rong_bien_the(can_che):
+    """Mở rộng tập giá trị GỐC ra mọi biến thể (`_bien_the`)."""
+    ra = set()
+    for gt in can_che:
+        ra |= _bien_the(gt)
+    return ra
+
+
+def _gia_tri_tu_url(url):
+    """Giá trị trong QUERY của URL — cũng là thứ TA GỬI ĐI, nên cũng phải che nếu hãng echo lại.
+
+    ĐO ĐƯỢC (AG-02, `thu_http_jt.j5`): một token đặt ở query (`?tk=…`) đi ra ngoài trong dòng yêu
+    cầu và bị máy chủ echo lại, nhưng `_gia_tri_can_che` chỉ nhìn header + thân form, nên bí mật RÒ
+    trong `than_da_che`. Hai mức như mọi giá trị khác; TÊN tham số không bao giờ bị che.
+
+    PHẠM VI: chỉ QUERY. ĐƯỜNG DẪN vẫn được in nguyên văn trong mô tả yêu cầu (nó là thứ cho biết
+    lượt gọi đi tới endpoint nào) — xem `docs/G17_TRANSPORT.md` §5, mục "NGOÀI PHẠM VI".
+    """
+    ra = set()
+    try:
+        for ten, gt in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+            if _dang_che(ten, gt):
+                ra.add(gt)
+    except Exception:
+        pass
+    return ra
+
+
+def _che_chuoi(chuoi, can_che):
+    """Che một CHUỖI (không phải bytes) — dùng cho mô tả yêu cầu và thông điệp lỗi."""
+    return che_bi_mat(chuoi.encode("utf-8", "replace"), can_che).decode("utf-8", "replace")
+
+
+def _mo_ta_ten(ten):
+    """Mô tả một TÊN header/trường form mà KHÔNG in ra giá trị của nó.
+
+    Vì sao không in thẳng tên: hàm này chỉ được gọi khi tên KHÔNG hợp lệ, mà đường duy nhất để một
+    tên không hợp lệ là ai đó truyền nhầm GIÁ TRỊ vào vị trí tên (`headers={token: "Bearer …"}`).
+    In tên ra là in chính giá trị đó. ĐO ĐƯỢC trước khi vá (AG-02, `thu_http_jt.j6`): bản cũ in
+    `str(ten)[:40]`, nên bí mật ở vị trí tên RÒ vào thông điệp lỗi — đúng chỗ mà chú thích cũ khẳng
+    định là "giá trị thì không được in ra".
+
+    Tên HỢP LỆ được trả nguyên văn: nó không phải bí mật, và nó là thứ duy nhất chỉ đúng chỗ sai.
+    """
+    if not isinstance(ten, str):
+        return f"<kiểu {type(ten).__name__}>"
+    if not ten:
+        return "<rỗng>"
+    for i, c in enumerate(ten):
+        if c in "\r\n: \t" or ord(c) < 0x21 or ord(c) > 0x7E:
+            return f"<{len(ten)} ký tự, ký tự không hợp lệ tại vị trí {i}: U+{ord(c):04X}>"
+    return ten
+
+
+def _gia_tri_can_che(headers, than_gui, url=None):
+    """Mọi dạng có thể xuất hiện lại của những giá trị TA ĐÃ GỬI ĐI. TÊN trường không bao giờ bị che.
+
+    Hai mức: TÊN thuộc credential thì che BẤT KỂ độ dài; tên khác chỉ che khi đủ dài
+    (`DAI_TOI_THIEU_DE_CHE`) — xem `_dang_che`.
+
+    Ba nguồn: header, thân form (kể cả JSON lồng trong `bizContent`), và query của URL. Đầu ra đã
+    MỞ RỘNG ra mọi biến thể mã hoá (`_bien_the`) — đó là chỗ vá lỗ hổng đo được ngày 15/10/2026.
     """
     ra = set()
     for ten, gt in headers.items():
         if ten.lower() in HEADER_KHONG_CHE:
             continue
         s = str(gt)
-        if s and (len(s) >= DAI_TOI_THIEU_DE_CHE or ten.lower() in TRUONG_CREDENTIAL):
+        if _dang_che(ten, s):
             ra.add(s)
     try:
         for ten, gt in parse_qsl(than_gui.decode("utf-8"), keep_blank_values=True):
-            if gt and (len(gt) >= DAI_TOI_THIEU_DE_CHE or ten.lower() in TRUONG_CREDENTIAL):
+            if _dang_che(ten, gt):
                 ra.add(gt)
             _gia_tri_trong_json(gt, ra)
     except Exception:
         pass
-    return ra
+    if url:
+        ra |= _gia_tri_tu_url(url)
+    return _mo_rong_bien_the(ra)
 
 
 def che_bi_mat(du_lieu: bytes, can_che) -> bytes:
@@ -301,10 +421,30 @@ def tach_url(url):
     if not isinstance(url, str) or not url.strip():
         raise _loi_vinh_vien("url-sai", f"URL phải là chuỗi khác rỗng, nhận {type(url).__name__}",
                              KET_CUC_KHONG_GUI_DI)
-    if any(c in url for c in " \t\r\n"):
-        raise _loi_vinh_vien("url-sai", "URL chứa khoảng trắng/xuống dòng — dán sai hoặc bị chèn",
-                             KET_CUC_KHONG_GUI_DI)
-    phan = urlsplit(url)
+    # Ký tự điều khiển/khoảng trắng: TỪ CHỐI ở đây, TRƯỚC `urlsplit` và trước mọi thao tác mạng.
+    # Không chỉ vì URL dán sai: `http.client` cũng từ chối đúng tập ký tự này, nhưng nó ném
+    # `InvalidURL` MANG THEO CẢ URL trong thông điệp — mà URL có thể chở bí mật ở query. ĐO ĐƯỢC
+    # (AG-02, `thu_http_jt.j5`): bí mật trong query RÒ vào `str(e)` qua đúng đường đó. Chặn ở đây
+    # thì không có ngoại lệ nào của thư viện mang dữ liệu của ta đi cả.
+    # Thông điệp chỉ nêu VỊ TRÍ + MÃ ký tự, không nêu giá trị (URL có thể chứa bí mật).
+    for _i, _c in enumerate(url):
+        if ord(_c) < 0x21 or ord(_c) == 0x7F:
+            raise _loi_vinh_vien(
+                "url-sai",
+                f"URL chứa ký tự không hợp lệ tại vị trí {_i} (U+{ord(_c):04X}) — dán sai hoặc bị "
+                "chèn. TỪ CHỐI trước khi mở socket",
+                KET_CUC_KHONG_GUI_DI)
+    try:
+        phan = urlsplit(url)
+    except ValueError as e:
+        # `urlsplit` ném `ValueError` trần cho URL hỏng (ví dụ `http://[abc/`). Để nó đi ra ngoài là
+        # phá hợp đồng ba kết cục: `transport.goi()` chỉ bắt `LoiTamThoi`/`LoiVinhVien`, nên một
+        # `ValueError` trần sẽ nổi lên tận Order Service như một lỗi 500. ĐO ĐƯỢC (AG-02,
+        # `thu_http_jt.j8`). Thông điệp chỉ nêu LOẠI lỗi, không nêu URL.
+        raise _loi_vinh_vien(
+            "url-sai",
+            f"URL không phân tích được ({type(e).__name__}) — dán sai. TỪ CHỐI trước khi mở socket",
+            KET_CUC_KHONG_GUI_DI) from None
     if phan.scheme not in ("http", "https"):
         raise _loi_vinh_vien("url-sai", f"scheme {phan.scheme!r} không dùng được (chỉ http/https)",
                              KET_CUC_KHONG_GUI_DI)
@@ -369,16 +509,15 @@ def _chuan_bi_headers(headers):
     for ten, gt in headers.items():
         if not isinstance(ten, str) or not ten or any(c in ten for c in "\r\n: \t") \
                 or not ten.isascii():
-            # TÊN header không phải bí mật, nhưng vẫn cắt ngắn: một lời gọi sai kiểu có thể đặt
-            # GIÁ TRỊ vào vị trí tên, và giá trị thì không được in ra.
+            # TÊN header không phải bí mật, nhưng một lời gọi sai kiểu có thể đặt GIÁ TRỊ vào vị trí
+            # tên — và giá trị thì KHÔNG được in ra. `_mo_ta_ten` mô tả chỗ sai mà không in giá trị.
             raise _loi_vinh_vien("tham-so-sai",
-                                 f"tên header không hợp lệ: {str(ten)[:40]!r} "
-                                 f"(kiểu {type(ten).__name__})",
+                                 f"tên header không hợp lệ: {_mo_ta_ten(ten)}",
                                  KET_CUC_KHONG_GUI_DI)
         if ten.lower() == "transfer-encoding":
             # Thân là bytes đã mã hoá trọn vẹn; Content-Length do http.client đặt đúng.
             raise _loi_vinh_vien("tham-so-sai", "không nhận Transfer-Encoding",
-                                 KET_CUC_KHONG_GUI_DI, header=ten)
+                                 KET_CUC_KHONG_GUI_DI, header=_mo_ta_ten(ten))
         if ten.lower() == "content-length":
             # Bỏ qua giá trị người gọi đưa: để http.client đặt ĐÚNG độ dài thân thật.
             continue
@@ -386,21 +525,23 @@ def _chuan_bi_headers(headers):
             # `str(None)` thành "None" và `str(b'x')` thành "b'x'" — đều là dữ liệu SAI gửi đi
             # mà không báo gì. Chặn ở đây.
             raise _loi_vinh_vien("tham-so-sai",
-                                 f"header {ten!r} nhận giá trị {type(gt).__name__} — không gửi được",
-                                 KET_CUC_KHONG_GUI_DI, header=ten)
+                                 f"header {_mo_ta_ten(ten)!r} nhận giá trị {type(gt).__name__} — "
+                                 "không gửi được",
+                                 KET_CUC_KHONG_GUI_DI, header=_mo_ta_ten(ten))
         s = gt if isinstance(gt, str) else str(gt)
         if "\r" in s or "\n" in s:
             # Chèn header (CRLF injection): giá trị KHÔNG được in ra, chỉ nêu tên.
             raise _loi_vinh_vien("tham-so-sai",
-                                 f"header {ten!r} chứa CR/LF — chèn header, TỪ CHỐI",
-                                 KET_CUC_KHONG_GUI_DI, header=ten)
+                                 f"header {_mo_ta_ten(ten)!r} chứa CR/LF — chèn header, TỪ CHỐI",
+                                 KET_CUC_KHONG_GUI_DI, header=_mo_ta_ten(ten))
         try:
             s.encode("latin-1")
         except UnicodeEncodeError:
             raise _loi_vinh_vien(
                 "tham-so-sai",
-                f"header {ten!r} có ký tự ngoài latin-1 — chữ có dấu phải nằm trong THÂN (UTF-8)",
-                KET_CUC_KHONG_GUI_DI, header=ten) from None
+                f"header {_mo_ta_ten(ten)!r} có ký tự ngoài latin-1 — chữ có dấu phải nằm trong "
+                "THÂN (UTF-8)",
+                KET_CUC_KHONG_GUI_DI, header=_mo_ta_ten(ten)) from None
         ra[ten] = s
     if not any(ten.lower() == "content-type" for ten in ra):
         ra["Content-Type"] = CONTENT_TYPE_FORM
@@ -419,20 +560,22 @@ def _ma_hoa_form(body):
                              KET_CUC_KHONG_GUI_DI)
     for ten, gt in body.items():
         if not isinstance(ten, str) or not ten:
-            raise _loi_vinh_vien("tham-so-sai", f"tên trường form không hợp lệ: {ten!r}",
+            raise _loi_vinh_vien("tham-so-sai",
+                                 f"tên trường form không hợp lệ: {_mo_ta_ten(ten)}",
                                  KET_CUC_KHONG_GUI_DI)
         if gt is None or isinstance(gt, (bytes, bytearray)):
             raise _loi_vinh_vien("tham-so-sai",
-                                 f"trường form {ten!r} nhận {type(gt).__name__} — không gửi được",
-                                 KET_CUC_KHONG_GUI_DI, truong=ten)
+                                 f"trường form {_mo_ta_ten(ten)!r} nhận {type(gt).__name__} — "
+                                 "không gửi được",
+                                 KET_CUC_KHONG_GUI_DI, truong=_mo_ta_ten(ten))
         if isinstance(gt, float) and not math.isfinite(gt):
-            raise _loi_vinh_vien("tham-so-sai", f"trường form {ten!r} là NaN/vô cùng",
-                                 KET_CUC_KHONG_GUI_DI, truong=ten)
+            raise _loi_vinh_vien("tham-so-sai", f"trường form {_mo_ta_ten(ten)!r} là NaN/vô cùng",
+                                 KET_CUC_KHONG_GUI_DI, truong=_mo_ta_ten(ten))
         if not isinstance(gt, (str, int, float, bool)):
             raise _loi_vinh_vien("tham-so-sai",
-                                 f"trường form {ten!r} nhận {type(gt).__name__} — chỉ nhận "
-                                 "str/int/float/bool",
-                                 KET_CUC_KHONG_GUI_DI, truong=ten)
+                                 f"trường form {_mo_ta_ten(ten)!r} nhận {type(gt).__name__} — "
+                                 "chỉ nhận str/int/float/bool",
+                                 KET_CUC_KHONG_GUI_DI, truong=_mo_ta_ten(ten))
     try:
         chuoi = urlencode(dict(body), encoding="utf-8", errors="strict")
     except (TypeError, ValueError, UnicodeEncodeError) as e:
@@ -458,18 +601,26 @@ def _dong(ket_noi):
 
 
 # ---- Biến ngoại lệ của thư viện thành ĐÚNG một trong hai loại lỗi của transport.py ---------------
-def _loi_tu_ngoai_le(e, mo_ta, giai_doan, ma_http=0):
+def _loi_tu_ngoai_le(e, mo_ta, giai_doan, ma_http=0, can_che=None):
     """Ánh xạ NGOẠI LỆ của tầng socket/http.client sang `LoiTamThoi`/`LoiVinhVien`.
 
     `giai_doan` là thứ quyết định `ket_cuc`: hỏng TRƯỚC khi nối xong thì chắc chắn chưa có gì ra
     khỏi máy (`khong-gui-di`); hỏng sau đó thì KHÔNG BIẾT (`khong-biet`).
+
+    `can_che`: tập giá trị phải che. Ngoại lệ THÔ của thư viện là dữ liệu NGOÀI — nó có thể mang
+    theo thứ ta vừa gửi (`InvalidURL` mang URL, `IncompleteRead` mang thân đọc dở…), nên `str(e)`
+    đi qua phép che TRƯỚC khi vào thông điệp. Đây là lớp chặn thứ hai; lớp thứ nhất là chặn URL
+    chứa ký tự điều khiển ở `tach_url`.
     """
     da_gui = giai_doan != "kết nối"
     ket_cuc = KET_CUC_KHONG_BIET if da_gui else KET_CUC_KHONG_GUI_DI
     giai_doan_tv = {"kết nối": "khi đang nối", "gửi": "khi đang gửi yêu cầu",
                     "chờ phản hồi": "khi đang chờ phản hồi", "đọc thân": "khi đang đọc thân"}.get(
                         giai_doan, giai_doan)
-    chung = f"{mo_ta} — hỏng {giai_doan_tv}: {type(e).__name__}: {e}"
+    tho = f"{type(e).__name__}: {e}"
+    if can_che:
+        tho = _che_chuoi(tho, can_che)
+    chung = f"{mo_ta} — hỏng {giai_doan_tv}: {tho}"
     # Hỏng NGAY GIỮA lúc đọc thân (đã có dòng trạng thái, thân chưa trọn) là một kết cục riêng:
     # ta BIẾT hãng đã trả lời, nhưng KHÔNG BIẾT nội dung — và thân đọc dở TUYỆT ĐỐI không được trả về.
     doc_do = giai_doan == "đọc thân"
@@ -665,6 +816,11 @@ def gui_form(url, headers, body, *, timeout):
     `timeout` là hạn ĐỌC (giây) sau khi đã nối; hạn NỐI là `min(timeout, HET_GIO_KET_NOI_TOI_DA)`.
     Cả hai đều tường minh, không có nhánh "chờ vô hạn".
 
+    ĐO ĐƯỢC (AG-02, `thu_http_jt.k6`): `timeout` là hạn của TỪNG thao tác đọc trên socket, KHÔNG
+    phải hạn tổng của lượt gọi. Một máy chủ nhỏ giọt (mỗi byte cách nhau ít hơn `timeout`) giữ được
+    lượt gọi lâu hơn `timeout` mà vẫn trả về thân TRỌN VẸN. Đó là giới hạn đã biết, không phải "hạn
+    tổng" — xem `docs/G17_TRANSPORT.md` §4.4.
+
     Hai thuộc tính người gọi nên đọc trên ngoại lệ: `.timeout` (True = KHÔNG BIẾT kết quả) và
     `.ket_cuc` (`khong-biet` / `khong-gui-di` / `hang-tu-choi`) — xem chú thích đầu tệp.
     """
@@ -673,12 +829,16 @@ def gui_form(url, headers, body, *, timeout):
     het_gio_ket_noi = min(het_gio_doc, HET_GIO_KET_NOI_TOI_DA)
     headers_gui = _chuan_bi_headers(headers)
     than_gui = _ma_hoa_form(body)
-    can_che = _gia_tri_can_che(headers_gui, than_gui)
+    can_che = _gia_tri_can_che(headers_gui, than_gui, url)
+    # `mo_ta` KHÔNG đi qua phép che, và đó là chủ ý: nó chỉ nêu TÊN (header, trường form) và ĐƯỜNG
+    # DẪN, không nêu query. Che nó đi sẽ làm hỏng chính ca tự kiểm `test_g3` — ca đó đột biến hàm
+    # dựng mô tả để in giá trị header ra và đòi ca rò rỉ phải ĐỎ. Che `mo_ta` là làm ca đó hết răng.
     mo_ta = mo_ta_yeu_cau(url, headers_gui, than_gui)
 
     ket_noi = None
     ma_http = 0
     giai_doan = "kết nối"
+    loi = None
     try:
         ket_noi = _mo_ket_noi(scheme, host, cong, het_gio_ket_noi)
         ket_noi.connect()                                          # hạn NỐI ở đây
@@ -696,8 +856,15 @@ def gui_form(url, headers, body, *, timeout):
         headers_tra_loi = phan_hoi.getheaders()
     except Exception as e:
         _dong(ket_noi)
-        raise _loi_tu_ngoai_le(e, mo_ta, giai_doan, ma_http) from None
+        # Ngoại lệ THÔ có thể mang theo dữ liệu của ta (`IncompleteRead` giữ nguyên thân đọc dở,
+        # `InvalidURL` giữ nguyên URL). Dựng ngoại lệ ĐÃ CHE ở đây, nhưng NÉM nó ở NGOÀI khối
+        # `except`: ném trong khối thì Python gắn ngoại lệ thô vào `__context__`, và `__context__`
+        # là thứ một bộ ghi log đi theo chuỗi cũng đọc tới. Ném ngoài ⇒ `__context__` là `None` —
+        # đo được (`thu_http_jt.j7`).
+        loi = _loi_tu_ngoai_le(e, mo_ta, giai_doan, ma_http, can_che=can_che)
     _dong(ket_noi)
+    if loi is not None:
+        raise loi from None
     if giai_doan != "đọc thân":
         # Không thể tới đây: `read()` là bước cuối. Giữ lại như một chốt chặn chống sửa sai về sau.
         raise _loi_vinh_vien("loi-khong-ro", f"{mo_ta} — luồng gửi kết thúc ở giai đoạn lạ",

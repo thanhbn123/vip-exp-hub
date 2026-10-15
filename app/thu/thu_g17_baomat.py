@@ -920,8 +920,20 @@ def _quyet_dinh_B(e, ma, text, j=None):
 CHU_QUA_CHA = {"don_lich_su": ("don_hang", "don_id"), "import_dong": ("import_batch", "batch_id"),
                "wh_su_kien": ("carrier_accounts", "carrier_account_id"),
                "don_mat_hang": ("don_hang", "don_id")}
+# Bảng BẤT BIẾN: không cửa nào của tenant được phép đụng vào. ĐỔI một hàng trong đây là VI PHẠM.
+# Đây KHÔNG phải danh sách "bỏ qua cho xanh" — nó là một khẳng định mạnh.
 KHONG_DOI = ("schema_version", "roles", "permissions", "role_permissions", "goi_dich_vu",
              "carrier_providers")
+
+# Bảng DÙNG CHUNG, ĐỔI ĐƯỢC: kho đếm toàn cục, khoá theo IP/định danh/endpoint chứ KHÔNG theo
+# tenant. Chúng ĐỔI trong lượt của B là ĐÚNG — không phải rò rỉ, mà là bản chất của luật chống
+# lạm dụng (kẻ tấn công không được nhân trần bằng cách tạo thêm tenant).
+# Nên chúng không thuộc `KHONG_DOI` (bất biến) và cũng không phân loại được chủ sở hữu.
+#
+# VÁ G19 (AG-00): lần sửa ĐẦU của tôi thêm hai bảng này vào `KHONG_DOI` — SAI, vì tôi đọc
+# `KHONG_DOI` là "bảng không thuộc tenant" trong khi nó nghĩa là "bảng KHÔNG ĐƯỢC ĐỔI". Ca thử
+# kêu lại ngay (`bảng gioi_han_luot ĐỔI trong lượt B`) và nó kêu ĐÚNG. Đây là loại thứ ba.
+DUNG_CHUNG = ("gioi_han_luot", "gioi_han_chan")
 
 
 def _chup(n):
@@ -980,6 +992,13 @@ def _so_sanh_chu_so_huu(n, truoc, sau):
                     vi_pham.append(f"bảng tenants: tenant A bị ĐỔI trong lượt B: {tuple(row)[:4]}")
                 elif row[cols.index("id")] not in (n.tb,) and row[cols.index("id")] not in                         [r[cols.index("id")] for r in (them | bot)]:
                     vi_pham.append(f"bảng tenants: hàng lạ bị ĐỔI: {tuple(row)[:4]}")
+            continue
+        if ten in DUNG_CHUNG:
+            # Kho đếm toàn cục: ĐỔI được, và đổi trong lượt B là ĐÚNG. Không phân loại chủ.
+            # Vẫn GHI RA để người đọc biết nó đã đổi và đổi bao nhiêu — im lặng bỏ qua thì
+            # một bảng dùng chung bị lợi dụng làm kênh rò sẽ không ai thấy.
+            ghi_chu.append(f"{ten}: bảng DÙNG CHUNG đổi trong lượt B (+{len(them)}/-{len(bot)})"
+                           " — khoá theo IP/định danh/endpoint, KHÔNG theo tenant")
             continue
         if ten in KHONG_DOI:
             vi_pham.append(f"bảng {ten} ĐỔI trong lượt B (+{len(them)}/-{len(bot)}) — không "

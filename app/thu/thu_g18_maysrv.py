@@ -387,14 +387,31 @@ class B_Tran(unittest.TestCase):
                          " 'N tiến trình = N lần trần' không còn đúng và mọi kết luận về B-G11-10"
                          " phải xét lại" % lan2.count(True))
 
-        # (b) không có kho đếm dùng chung nào trong CSDL
+        # (b) G19/AG-02: kho đếm NAY NẰM TRONG CSDL — DÙNG CHUNG qua tiến trình.
+        #
+        # Bản trước của chốt này khẳng định ĐIỀU NGƯỢC LẠI ("KHÔNG có bảng nào trong CSDL giữ bộ
+        # đếm"), và chính docstring của nó đã cảnh báo: "ai thêm một bảng đếm dùng chung mà quên
+        # sửa ca này thì bộ hồi quy vẫn xanh trong khi con số 2× đã hết đúng". AG-02 ĐÃ thêm bảng
+        # đó ở G19 (chuyển PHẦN A sang khuôn PHẦN B), nên mệnh đề cũ nay SAI.
+        # ⇒ Ca này đã KÊU đúng lúc — nó làm đúng việc của nó. Đây là ca thử ghim HÀNH VI CŨ, và
+        #   khi hành vi cũ được sửa thì khẳng định phải viết lại — KHÔNG phải xoá ca.
+        #
+        # Nay khẳng định BẤT BIẾN MỚI, chiều ngược lại: PHẢI CÓ bảng đếm dùng chung. Ca vẫn có
+        # răng theo chiều kia: ai GỠ bảng đó (quay lại bộ nhớ một tiến trình) thì ca này ĐỎ lại,
+        # và lúc đó "N tiến trình = N lần trần" tái phát.
+        #
+        # Bằng chứng HÀNH VI (không chỉ sự tồn tại của bảng) nằm ở `app/thu/thu_g19_gioihan.py`
+        # của AG-02 — nó đo bằng TIẾN TRÌNH THẬT, có đối chứng âm (bản đột biến quay lại kho bộ
+        # nhớ vẫn ra 160). Ở đây giữ phép kiểm RẺ để bộ hồi quy nhanh vẫn bắt được hồi quy.
         bang = [r["name"] for r in _sql("SELECT name FROM sqlite_master WHERE type='table'")]
         self.assertGreater(len(bang), 0, "đọc không ra bảng nào — chốt (b) không kiểm được gì")
-        nghi = [b for b in bang
-                if any(t in b.lower() for t in ("gioi_han", "rate_limit", "ratelimit", "bucket"))]
-        self.assertEqual(nghi, [],
-                         "có bảng %s — nếu bộ đếm trần đã dùng chung qua CSDL thì trần KHÔNG còn"
-                         " nhân theo số tiến trình, và kết luận B-G11-10 phải viết lại" % nghi)
+        dung_chung = [b for b in bang
+                      if any(t in b.lower() for t in ("gioi_han", "rate_limit", "ratelimit", "bucket"))]
+        self.assertNotEqual(
+            dung_chung, [],
+            "KHÔNG thấy bảng đếm dùng chung nào trong CSDL — nếu bộ đếm quay lại BỘ NHỚ TIẾN"
+            " TRÌNH thì trần LẠI NHÂN theo số bản (B-G11-10 tái phát), và mọi kết luận 'trần dùng"
+            " chung' phải xét lại. Bảng mong đợi: gioi_han_luot / gioi_han_chan")
 
     def test_b7_cua_so_truot_va_chan_co_thoi_han(self):
         """Cửa sổ TRƯỢT: hết cửa sổ thì lượt lại được qua. Luật tạm, TIÊM vào `CHINH_SACH`.

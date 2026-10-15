@@ -306,7 +306,7 @@ env GIT_CONFIG_COUNT=0 VIP_HUB_DATA=/tmp/veh_g18_ag03_data \
 | `python3 app/thu/thu_g18_bi_mat.py` | **15** | 0 | **0** |
 | `python3 app/thu/thu_http_jt.py` | **57** | 0 | **0** |
 | `python3 app/thu/thu_qa_g16.py` | **61** | 0 | **0** |
-| `env GIT_CONFIG_COUNT=0 … sh app/thu/chay_tat_ca.sh` | **1474** · 39 bộ | 0 | **0** |
+| `env GIT_CONFIG_COUNT=0 … sh app/thu/chay_tat_ca.sh` | **1475** · 39 bộ | 0 | **0** — xem §6.7 |
 
 `thu_g18_bi_mat.py` xuất hiện trong bảng của cổng với dòng
 `✓ thu_g18_bi_mat.py  15 ca` — **không phải sửa danh sách viết cứng nào**, vì `chay_tat_ca.sh`
@@ -331,14 +331,61 @@ tunnel, KHÔNG đụng `main`.**
 | Commit | Nội dung | Vì sao tách |
 |---|---|---|
 | `7b741c88b3b280d65f80b5e11301f17ebd767b26` | **nền** (`integration/g17`) | điểm rẽ của làn |
-| `d23d875b47cc4696efbe2bd488181fb881721779` | mã + bộ thử + tài liệu | lượt chạy cổng **XANH** đầu tiên (§8) |
-| *(commit kế)* | + ca `k2e` (query) và các số cuối | xem §6.7 |
+| `d23d875b47cc4696efbe2bd488181fb881721779` | mã + bộ thử (14 ca) + tài liệu | lượt cổng XANH đầu tiên (1474 ca) |
+| `7f504c6b90abe9cf26845f767bb6678f861bbde1` | + ca `k2e` (query) + phép đột biến #11 + số liệu | lượt cổng đóng băng (§6.7) |
+| *(commit chứa chính tệp này)* | + §6.7 | tài liệu; **không** chạm mã |
 
-Xem §6.7 cho bảng số cuối cùng của lượt chạy đóng băng.
+Đối chứng: `git diff --stat d23d875 7f504c6` → **2 tệp, +61 / −8** (`app/thu/thu_g18_bi_mat.py`,
+`docs/G18_SECRET_PATHS.md`) — `app/http_jt.py` **không đổi** giữa hai commit.
 
-### 6.7 BẢNG SỐ CUỐI CÙNG
+### 6.7 BẢNG SỐ CUỐI CÙNG — LƯỢT ĐÓNG BĂNG
 
-*(điền ở commit chứa chính tệp này — xem khối "LƯỢT ĐÓNG BĂNG" ở cuối tệp)*
+```sh
+env GIT_CONFIG_COUNT=0 VIP_HUB_DATA=/tmp/veh_g18_ag03_data3 \
+    sh app/thu/chay_tat_ca.sh > /tmp/veh_g18_ag03_gate3.log 2>&1
+echo "GATE_EXIT=$?"
+```
+
+**`GATE_EXIT=0`.** Trích nguyên văn từ log:
+
+```
+  ✓ thu_g18_bi_mat.py          15 ca
+  ✓ thu_http_jt.py             57 ca
+  ✓ thu_qa_g16.py              61 ca
+  ✓ thu_qa_g17.py              53 ca
+  ...
+  python:   1475 ca · 39 bộ chạy thật
+  frontend: 56 + 36 ca (hai tầng tự động)
+  E2E:      KẾT QUẢ: 41/41
+  bộ hỏng:  KHÔNG
+```
+
+Số bộ HỎNG: **0** (`grep -c "✗"` trên log = **0**).
+
+| Vật | Giá trị tại lượt đóng băng |
+|---|---|
+| Nhánh | `g18-ag03-secretpaths` |
+| `HEAD` khi chạy cổng | `7f504c6b90abe9cf26845f767bb6678f861bbde1` |
+| Commit nền | `7b741c88b3b280d65f80b5e11301f17ebd767b26` |
+| Số commit của làn trên nền | **2** (`git rev-list --count 7b741c8..HEAD` = 2) |
+| `app/http_jt.py` — sha256 | `7750f35da998050150adb1d579ec2e2f3b349a59abf093b3f864fdf008ba5c9c` |
+| `app/thu/thu_g18_bi_mat.py` — sha256 | `5182c6c29bbf0d6001c6a5b61b5ab04f2d635fca488cebb4cc414407d8c5f491` |
+| `app/thu/thu_http_jt.py` | **không có trong `git diff --name-only 7b741c8 HEAD`** |
+| Tệp thay đổi (toàn làn) | `app/http_jt.py` · `app/thu/thu_g18_bi_mat.py` (mới) · `docs/G18_SECRET_PATHS.md` (mới) |
+| `main` | `de740dcd16617328f49f5ab97fac3ceb741e39fa` — **không đụng tới**; `git rev-list --count HEAD..main` = **0**; `merge-base --is-ancestor main HEAD` → **exit 0** |
+
+**Chốt an toàn đã soát lại bằng máy, không bằng mắt** — nạp CẢ HAI bản `http_jt.py` (nền và hiện
+tại) rồi so từng hằng số:
+
+| Hằng | Kết quả |
+|---|---|
+| `HOST_HANG` | **GIỮ NGUYÊN** — `('demoopenapi.jtexpress.vn', 'ylopenapi.jtexpress.vn')` |
+| `CHO_PHEP_MOI_TRUONG` | **GIỮ NGUYÊN** — `{'mock': True, 'sandbox': False, 'production': False}` |
+| `LY_DO_CHAN_MOI_TRUONG` | **GIỮ NGUYÊN** |
+| `HET_GIO_KET_NOI_TOI_DA` | **GIỮ NGUYÊN** |
+| `TRUONG_CREDENTIAL` · `HEADER_KHONG_CHE` · `DAI_TOI_THIEU_DE_CHE` | **GIỮ NGUYÊN** |
+| Bốn hằng `KET_CUC_*` | **GIỮ NGUYÊN** |
+| `TRUONG_CREDENTIAL_PHAN_HOI` | **MỚI** (hằng duy nhất được thêm) |
 
 ---
 
@@ -387,6 +434,14 @@ vi phạm chốt nào: **không `push`, không `deploy`, không `tunnel`**, và 
 Bản ghi đáng giữ lại ở đây là: **một làn giao tệp mới mà không commit thì cổng toàn dự án ĐỎ** —
 người sau gặp lại đúng dòng `FAIL: test_a1_cay_sach_va_head` này nên đọc mục này trước khi đi tìm
 lỗi trong mã.
+
+**Kết quả sau khi commit:** `FAIL` biến mất; `thu_qa_g17.py` **53 ca · ✓**. Lượt cổng đóng băng
+(§6.7) chạy trên `HEAD = 7f504c6` với **0 bộ hỏng**.
+
+Một chi tiết của môi trường đáng ghi: lệnh `git commit` **bị chặn bởi sandbox tệp** của phiên làm
+việc (`fatal: Unable to create '…/.git/worktrees/g18-ag03-secretpaths/index.lock': Operation not
+permitted` — thư mục `.git` nằm **ngoài** workspace được cấp quyền ghi). Nó chỉ chạy được sau khi
+được cấp quyền rộng hơn cho **đúng lệnh đó**. Không có đường vòng nào được dùng.
 
 ---
 

@@ -7,7 +7,52 @@ class VuotHanMuc(Exception):
     pass
 
 
+_CO_BANG_PHIEN_BAN = None
+
+
+def _co_bang_phien_ban():
+    """Hai bảng của G08 đã có chưa (chỉ có sau migration v8). Nhớ kết quả để khỏi tra mãi."""
+    global _CO_BANG_PHIEN_BAN
+    if _CO_BANG_PHIEN_BAN is None:
+        co = {r["name"] for r in csdl.nhieu(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+            " AND name IN ('dang_ky','goi_phien_ban')")}
+        _CO_BANG_PHIEN_BAN = {"dang_ky", "goi_phien_ban"} <= co
+    return _CO_BANG_PHIEN_BAN
+
+
+def quen_cache_phien_ban():
+    """Gọi sau migration — nếu không, tiến trình đang chạy vẫn nhớ "chưa có bảng"."""
+    global _CO_BANG_PHIEN_BAN
+    _CO_BANG_PHIEN_BAN = None
+
+
 def goi_cua_tenant(tenant_id):
+    """Hạn mức ĐANG HIỆU LỰC của tenant. Ưu tiên PHIÊN BẢN GÓI ĐÃ GHIM trong `dang_ky`.
+
+    AG-02 nêu ở đợt 3, AG-00 đo lại: bản cũ đọc hạn mức **hiện tại** từ `goi_dich_vu`, nên
+    bốn chốt chặn thật (`kiem_va_tang_don` · `kiem_va_tang_ai` · `chen_membership_co_tran` ·
+    `chen_tai_khoan_hang_co_tran`) **không tôn trọng phiên bản tenant đã ghim**.
+
+    Đo được: tenant ghim `free` v1 (trần 50 đơn). Phát hành v2 rồi sửa `goi_dich_vu` lên
+    9999 → `goi_dich_vu.han_muc_hieu_luc` vẫn nói **v1**, nhưng `goi_cua_tenant` trả **9999**.
+    Nghĩa là tenant bị áp hạn mức của phiên bản nó KHÔNG đăng ký. Hướng nào cũng sai: nới ra
+    thì hệ cho dùng quá thoả thuận, siết lại thì chặn đúng người đang trả tiền.
+
+    Lùi về `goi_dich_vu` khi: chưa migrate v8 (hai bảng chưa có), hoặc tenant chưa có đăng ký
+    đang hoạt động. Lượt lùi đó CỐ Ý im lặng — mọi tenant có trước G08 đều ở ca này, và báo
+    động cho ca bình thường là cách nhanh nhất làm người ta bỏ qua báo động.
+    """
+    if _co_bang_phien_ban():
+        r = csdl.mot(
+            "SELECT pb.goi_id AS id, pb.ten, pb.gia_thang_dong AS gia_thang,"
+            " pb.han_muc_don_thang, pb.han_muc_ai_thang, pb.so_nhan_vien,"
+            " pb.so_tai_khoan_hang, pb.phien_ban AS goi_phien_ban"
+            " FROM dang_ky dk"
+            " JOIN goi_phien_ban pb ON pb.goi_id=dk.goi_id AND pb.phien_ban=dk.goi_phien_ban"
+            " WHERE dk.tenant_id=? AND dk.trang_thai='dang_hoat_dong'", (tenant_id,))
+        if r is not None:
+            return r
     return csdl.mot(
         "SELECT g.* FROM tenants t JOIN goi_dich_vu g ON g.id=t.goi_id WHERE t.id=?", (tenant_id,))
 
@@ -156,6 +201,29 @@ def chen_tai_khoan_hang_co_tran(tenant_id, hang, ten, moi_truong, cred_ma_hoa,
     if not duoc:
         raise VuotHanMuc(f"gói {goi['ten']} chỉ cho {tran} kết nối hãng")
     return id_moi
+
+
+def hoan_ai(tenant_id):
+    """Hoàn một lượt AI đã trừ, khi nhà cung cấp KHÔNG trả được kết quả.
+
+    AG-04 đề xuất: `kiem_va_tang_ai` trừ suất TRƯỚC khi gọi nhà cung cấp. Nhà cung cấp lỗi
+    thì suất đã mất. Ở chế độ mock không tốn tiền nên chưa đau; nối thật rồi thì **một chuỗi
+    lỗi ăn hết hạn mức tháng của tenant** mà tenant không nhận được gì.
+
+    Cùng khuôn `hoan_don`: không cho `so_ai` xuống âm — trừ nhiều hơn số đã cộng là dấu hiệu
+    lỗi logic ở chỗ khác, và che nó bằng một số âm thì sau này không ai dựng lại được.
+
+    CHỈ hoàn khi biết CHẮC nhà cung cấp không làm gì (lỗi mạng, từ chối rõ ràng). Lượt
+    timeout **KHÔNG được hoàn**: lúc đó mình không biết nhà cung cấp đã tính phí chưa — cùng
+    lý do `gui_don` không hoàn suất khi hãng timeout.
+    """
+    thang = csdl.thang_nay()
+    with csdl.khoa_ghi:
+        kn = csdl.mo()
+        cur = kn.execute("UPDATE usage_thang SET so_ai=so_ai-1"
+                         " WHERE tenant_id=? AND thang=? AND so_ai >= 1", (tenant_id, thang))
+        kn.commit()
+    return cur.rowcount == 1
 
 
 def kiem_han_muc_nhan_vien(tenant_id):

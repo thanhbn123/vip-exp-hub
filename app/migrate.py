@@ -463,6 +463,19 @@ def chay(im_lang=False):
 
     csdl.dong()
     quyen.seed()
+    # Quên mọi cache SCHEMA sau khi nâng cấp. Thiếu bước này thì một tiến trình đang chạy
+    # vẫn nhớ "bảng chưa có" và tiếp tục đi đường lùi — hỏng im lặng, vì đường lùi vẫn trả
+    # kết quả hợp lệ, chỉ là kết quả của schema cũ.
+    for mod, ham in (("billing", "quen_cache_phien_ban"), ("webhook", "xoa_cache_cot"),
+                     ("don_hang", "quen_cache_schema"), ("tai_chinh", "quen_cache_bang"),
+                     ("goi_dich_vu", "nap_lai_bang")):
+        try:
+            __import__(mod)
+            f = getattr(sys.modules[mod], ham, None)
+            if f:
+                f()
+        except Exception as e:
+            noi(f"[migrate] bỏ qua {mod}.{ham}: {type(e).__name__}: {e}")
     noi(f"[migrate] Bước đã làm: {'; '.join(buoc)}")
     noi(f"[migrate] Số dòng sau: {sau}  → bảo toàn ĐẠT")
     noi(f"[migrate] Xong, phiên bản {csdl.PHIEN_BAN_SCHEMA}. Rollback nếu cần: "

@@ -99,23 +99,80 @@ class AdapterJT(CarrierAdapter):
     # nên createOrder được phép thử lại có kiểm soát (xem transport.py).
     KHOA_CHONG_TRUNG = True
 
+    # Trường hành chính BẮT BUỘC theo bảng tham số J&T. Thiếu là hãng trả `1450033315`.
+    TRUONG_HANH_CHINH = (("sender", "prov", "nguoi_gui_tinh"),
+                         ("sender", "area", "nguoi_gui_quan"),
+                         ("receiver", "prov", "nguoi_nhan_tinh"),
+                         ("receiver", "area", "nguoi_nhan_quan"))
+
+    def truong_hanh_chinh_thieu(self, don):
+        """Trường hành chính bắt buộc nào đang rỗng. Trả danh sách tên cột của hệ.
+
+        Tách thành hàm riêng để cả adapter, bộ thử và giao diện dùng CHUNG một định nghĩa
+        "đủ dữ liệu để gửi J&T" — ba định nghĩa rời là ba định nghĩa sẽ lệch nhau.
+        """
+        thieu = []
+        for _, _, cot in self.TRUONG_HANH_CHINH:
+            gt = don.get(cot) if hasattr(don, "get") else None
+            if not str(gt or "").strip():
+                thieu.append(cot)
+        return thieu
+
     def _dung_bizcontent_tao_don(self, don):
-        """Dựng bizContent đúng theo bảng tham số docs (phần bắt buộc)."""
-        return {
+        """Dựng bizContent theo bảng tham số docs.
+
+        AG-03 phát hiện ở đợt 3, AG-00 đo lại trên mã: bản cũ có BA lỗi sẽ làm mọi đơn bị
+        hãng từ chối, hoặc tệ hơn là lọt mà KHÔNG THU ĐƯỢC TIỀN:
+
+        1. `prov` và `area` là **bắt buộc** nhưng gửi **chuỗi rỗng** ⇒ hãng trả `1450033315`.
+           Bốn cột dữ liệu đã có sẵn từ migration v7 (`nguoi_gui_tinh/quan`, `nguoi_nhan_*`),
+           chỉ là chưa ai nối vào.
+        2. **COD gán vào `itemsValue`** trong khi tài liệu dùng **`codMoney`**; `itemsValue`
+           KHÔNG có trong bảng tham số. Nếu đơn lọt qua thì hãng **không biết phải thu COD** —
+           hàng đi, tiền không về, và không có lỗi nào báo.
+        3. Thiếu hai trường bắt buộc `isInsured` và `goodsValue`.
+
+        CHƯA CHẮC, đã ghi vào `docs/JT_CAU_HOI_CHINH_THUC.md` (câu về cấp hành chính): hệ này
+        có BA cấp (tỉnh/quận/xã), J&T có HAI (`prov`/`area`). Em map `area` ← **quận/huyện**,
+        vì đó là cấp J&T dùng để chia tuyến ở Việt Nam. Đây là **giả định**, không phải dữ kiện
+        — hãng xác nhận khác thì đổi đúng một dòng ở `TRUONG_HANH_CHINH`.
+        """
+        g = lambda k: str(don.get(k) or "").strip()      # noqa: E731
+        biz = {
             "customerCode": self.credentials.get("customerCode", ""),
             "password": self.credentials.get("password", ""),
             "txlogisticId": don["ma_don"],          # mã đơn nội bộ = chống trùng phía hãng
             "orderType": 1, "serviceType": 1, "payType": "PP_CASH",
             "productType": "EXPRESS", "goodsType": "bm000010", "deliveryType": 1,
             "sender": {"name": don["nguoi_gui_ten"], "mobile": don["nguoi_gui_sdt"],
-                       "prov": "", "area": "", "address": don["nguoi_gui_dia_chi"]},
+                       "prov": g("nguoi_gui_tinh"), "area": g("nguoi_gui_quan"),
+                       "address": don["nguoi_gui_dia_chi"]},
             "receiver": {"name": don["nguoi_nhan_ten"], "mobile": don["nguoi_nhan_sdt"],
-                         "prov": "", "area": "", "address": don["nguoi_nhan_dia_chi"]},
+                         "prov": g("nguoi_nhan_tinh"), "area": g("nguoi_nhan_quan"),
+                         "address": don["nguoi_nhan_dia_chi"]},
             "packageInfo": {"weight": f"{don['khoi_luong_gram'] / 1000:.2f}"},
-            "itemsValue": don.get("cod", 0),
+            # COD vào ĐÚNG cột `codMoney`. Số nguyên đồng (§16) — J&T nhận chuỗi số.
+            "codMoney": str(int(don.get("cod") or 0)),
+            # `isInsured` 0/1 và `goodsValue` bắt buộc. Chưa bán bảo hiểm nên 0, và giá trị
+            # khai lấy từ `gia_tri_khai`; không có thì dùng COD (giá trị người nhận trả).
+            "isInsured": 0,
+            "goodsValue": str(int(don.get("gia_tri_khai") or don.get("cod") or 0)),
         }
+        return biz
 
     def yeu_cau_tao_don(self, don, bay_gio=None):
+        # Thiếu trường hành chính bắt buộc thì DỪNG Ở ĐÂY, đừng để hãng từ chối rồi mới biết:
+        # lỗi của hãng là một mã số khó tra, còn lỗi ở đây nói rõ thiếu cột nào của hệ.
+        # Ở MOCK vẫn cho đi (bộ thử và dữ liệu demo chưa có địa chỉ hành chính), nhưng gắn
+        # danh sách thiếu vào payload để nó không biến mất im lặng.
+        thieu = self.truong_hanh_chinh_thieu(don)
+        if thieu and self.moi_truong != "mock":
+            raise loi_hang.NormalizedCarrierError(
+                loi_hang.THAM_SO_SAI,
+                thong_diep=("thiếu trường hành chính bắt buộc của J&T: "
+                            + ", ".join(thieu)
+                            + " — hãng sẽ từ chối đơn (mã 1450033315)"),
+                hang="jt", thao_tac="createOrder")
         """Dựng TRỌN gói yêu cầu tạo đơn (url · headers · body) mà KHÔNG gửi đi đâu cả.
 
         Tách ra để bộ thử hợp đồng kiểm được đúng công thức chữ ký, header và Content-Type

@@ -8,7 +8,27 @@ import re
 
 import billing
 
+# Nối AI THẬT cần MỞ CẢ HAI khoá, không phải một.
+#
+# AG-04 đề xuất (đợt 3), AG-00 nhận: một hằng là một hằng có thể bị sửa vô ý — ai đó dọn mã,
+# đổi `True` thành `False` để "thử một lượt", rồi quên. Lúc đó dữ liệu khách hàng rời khỏi hệ
+# mà không ai quyết định điều đó. Khoá thứ hai buộc người mở phải mở ở HAI chỗ, nên không có
+# lượt mở nào là vô tình.
+#
+# `DA_DUYET_NOI_THAT` chỉ được đặt True khi anh Thành duyệt V-G10-01 — và lúc đó còn phải làm
+# đủ năm bước ở `docs/G10_FINAL_REPORT.md` (trong đó có gỡ chốt ở `ai_job.kiem_ra` đang từ
+# chối kết quả `mock=False`). Chốt đó CỐ Ý ở đó để đợt này không ai vô tình mở đường.
+DA_DUYET_NOI_THAT = False     # V-G10-01 — CHƯA ĐƯỢC CẤP QUYỀN
+
 MOCK = True  # VIP AI Brain chưa nối — toàn bộ kết quả là mô phỏng và được gắn nhãn
+
+
+def _kiem_khoa_noi_that():
+    """Gọi trước mọi lượt ra ngoài. `MOCK=False` một mình KHÔNG đủ để nối thật."""
+    if not MOCK and not DA_DUYET_NOI_THAT:
+        raise RuntimeError(
+            "MOCK=False nhưng DA_DUYET_NOI_THAT=False — nối AI thật cần MỞ CẢ HAI khoá. "
+            "Quyền V-G10-01 chưa được cấp; xem docs/G10_FINAL_REPORT.md mục 5 bước phải làm.")
 
 
 def _goi(tenant_id):

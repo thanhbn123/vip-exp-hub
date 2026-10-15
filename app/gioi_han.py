@@ -31,22 +31,27 @@
 # ---------------------------------------------------------------------------------------
 # GIỚI HẠN CỦA PHẦN A — ĐỌC TRƯỚC KHI TIN (CLAUDE.md §12.1 luật 3)
 #
-#   - Trạng thái nằm trong **bộ nhớ tiến trình**. Khởi động lại máy chủ là **mất sạch** bộ đếm:
-#     ngay sau khi restart, mọi trần đều về 0. Đây là cửa lách THẬT, không phải lý thuyết.
-#   - **Nhiều tiến trình KHÔNG dùng chung** bộ đếm. Chạy 4 worker thì trần thực tế là 4 lần trần
-#     khai báo. Hiện `app/server.py` là `ThreadingHTTPServer` một tiến trình nên đúng, nhưng
-#     ngày nào chuyển sang nhiều tiến trình / nhiều máy thì PHẢI đổi sang kho dùng chung
-#     (Redis, hoặc một bảng CSDL có UPDATE điều kiện như PHẦN B đang làm).
-#   - Vì vậy phần này chặn **lạm dụng tự động** (dò mật khẩu, spam quên-mật-khẩu), KHÔNG chặn
-#     được **tấn công phân tán** nhiều IP, và không thay cho WAF/gateway.
-#   - PHẦN B (hạn mức nhập) thì KHÁC: nó đếm trong CSDL nên sống qua restart và dùng chung giữa
-#     các tiến trình. Hai phần cố ý khác nhau vì hậu quả khác nhau: mất bộ đếm tần suất là mất
-#     một lớp chống dò; mất bộ đếm hạn mức là tenant dùng quá gói mà không ai biết.
+#   HAI CỬA LÁCH DƯỚI ĐÂY TỪNG LÀ THẬT, ĐÃ ĐÓNG Ở G19/AG-02 — mỗi cái có ca thử đo lại:
+#     · Trần NHÂN THEO SỐ BẢN (bộ đếm nằm trong bộ nhớ một tiến trình). Nay trạng thái nằm trong
+#       CSDL, dùng chung: N tiến trình trên cùng một CSDL vẫn chỉ có ĐÚNG MỘT trần.
+#       Đo: `app/thu/thu_g19_gioihan.py` mục P1 (+ P2 là đối chứng âm).
+#     · MẤT SẠCH BỘ ĐẾM KHI KHỞI ĐỘNG LẠI. Nay kho nằm trong CSDL nên sống qua restart, kể cả
+#       khi chỉ có một tiến trình. Đo: mục P4 (+ P4.2 là đối chứng âm).
+#
+#   ĐIỀU CÒN LẠI — nói thẳng, đây là PHẠM VI chứ không phải lời hứa:
+#   - Kho dùng chung chỉ trong phạm vi MỘT CSDL. Nhiều MÁY, hoặc mỗi máy một CSDL, thì trần vẫn
+#     nhân theo số máy: chỗ đó phải là Redis hoặc một CSDL chung. CHƯA đo, CHƯA làm.
+#   - Mỗi lượt kiểm là một GIAO DỊCH GHI vào CSDL (giá của tính đúng qua tiến trình).
+#   - CSDL hỏng thì `kiem` NÉM LỖI, cố ý KHÔNG im lặng cho qua — xem `KhoCSDL.giao_dich`.
+#   - Vẫn chặn **lạm dụng tự động** (dò mật khẩu, spam quên-mật-khẩu), KHÔNG chặn được **tấn
+#     công phân tán** nhiều IP, và không thay cho WAF/gateway.
+#   - PHẦN B (hạn mức nhập) vốn đã đếm trong CSDL từ trước. Hai phần nay CÙNG MỘT KHUÔN; khác
+#     nhau ở chỗ PHẦN A cần CỬA SỔ TRƯỢT nên mỗi lượt là một dòng, còn PHẦN B chỉ cộng một bộ đếm.
+import contextlib
 import ipaddress
 import os
 import threading
 import time
-from collections import OrderedDict, deque
 
 import csdl
 
@@ -193,12 +198,177 @@ def luat_cua(endpoint: str):
     return CHINH_SACH.get(endpoint, LUAT_MAC_DINH)
 
 
-# --- A.3 Trạng thái --------------------------------------------------------------------
-_khoa = threading.Lock()
-# khoa_bucket -> deque[mốc thời gian]. OrderedDict để dọn được theo thứ tự chạm gần nhất.
-_lan: "OrderedDict[str, deque]" = OrderedDict()
-_chan_den = {}                     # khoa_bucket -> mốc hết chặn
+# --- A.3 Kho trạng thái — ĐẾM TRONG CSDL -------------------------------------------------
+#
+# VÌ SAO KHO NẰM TRONG CSDL (G19/AG-02 — vá hai lỗ hổng ĐÃ ĐO ĐƯỢC, không thêm tính năng):
+#
+#   (a) TRẦN NHÂN THEO SỐ BẢN. Bản trước giữ bộ đếm trong BỘ NHỚ MỘT TIẾN TRÌNH, nên N tiến
+#       trình máy chủ dùng chung một CSDL cho trần thực = N × trần khai báo. G18/AG-02 đo được
+#       (`app/thu/thu_g18_multiprocess.py`, mục P1): khai 20 ⇒ cho qua đúng 20·40·80·160 lượt
+#       với N = 1·2·4·8.
+#   (b) CỬA LÁCH KHỞI ĐỘNG LẠI. Bộ đếm trong bộ nhớ mất sạch khi tiến trình chết: khởi động lại
+#       là mọi trần về 0 — cửa lách này ĐỘC LẬP với số tiến trình.
+#
+# KHUÔN: y hệt PHẦN B của chính tệp này — TRẦN NẰM TRONG CÂU GHI, CSDL tự so, kết quả xét qua
+# `rowcount`. Khác một điểm: PHẦN A cần CỬA SỔ TRƯỢT, nên mỗi lượt được cho qua là MỘT DÒNG
+# `(khoa, mốc)`, và "đếm trong cửa sổ" là đếm dòng có `moc > bay - cua_so`. Câu ghi:
+#
+#     INSERT INTO gioi_han_luot (khoa, moc)
+#     SELECT ?, ? WHERE (SELECT COUNT(*) FROM gioi_han_luot WHERE khoa=? AND moc>?) < ?
+#
+# Trần vẫn nằm trong CHÍNH câu ghi nên không có khe hở giữa đọc và ghi; `rowcount == 0` nghĩa là
+# vượt trần. Cửa sổ trượt giữ nguyên (KHÔNG đổi sang cửa sổ cố định: cửa sổ cố định cho vượt gần
+# 2× trần quanh mốc chuyển cửa sổ, tức là nới trần ở một chỗ khác).
+#
+# BA HỆ QUẢ NÓI RÕ, KHÔNG GIẤU:
+#   1. Mỗi lượt kiểm là MỘT GIAO DỊCH GHI (`BEGIN IMMEDIATE`) — giá của việc trần đúng tuyệt đối
+#      qua tiến trình. Đo chi phí ở docs/G19_GIOI_HAN.md §5.
+#   2. CSDL trở thành phụ thuộc CỨNG của đường kiểm. CSDL hỏng thì `kiem` NÉM LỖI, CỐ Ý không im
+#      lặng cho qua: một giới hạn tần suất tự tắt khi kho hỏng là hỏng im lặng, tệ hơn một lượt 500.
+#   3. Kho dùng chung chỉ trong phạm vi MỘT CSDL. Nhiều MÁY (mỗi máy một CSDL) thì trần vẫn nhân
+#      theo số máy — chỗ đó phải là Redis hoặc một CSDL chung. CHƯA đo, CHƯA làm (docs §6).
+#
+# BẢNG MỚI — do chính module tạo bằng `CREATE TABLE IF NOT EXISTS` (thao tác THÊM, không ALTER
+# bảng nào đang có), cùng khuôn với `han_muc_nhap_thang` của PHẦN B. AG-00 nên đưa đúng khối DDL
+# này vào `csdl.SCHEMA` + một bước migration, như đã ghi cho PHẦN B.
+DDL_GIOI_HAN = (
+    "CREATE TABLE IF NOT EXISTS gioi_han_luot (khoa TEXT NOT NULL, moc REAL NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS ix_gh_luot ON gioi_han_luot (khoa, moc)",
+    "CREATE TABLE IF NOT EXISTS gioi_han_chan (khoa TEXT PRIMARY KEY, chan_den REAL NOT NULL)",
+)
+
+HAN_DOI_DDL = 20              # số lượt thử tạo bảng khi nhiều tiến trình cùng khởi động
+_da_tao_bang_gh = False       # biến TOÀN CỤC, chỉ là bộ nhớ đệm: cờ sai thì cùng lắm DDL chạy lại
+_khoa_bang_gh = threading.Lock()
+# Trần số khoá giữ trong CSDL. Giữ nguyên tên và mặc định của bản cũ để không đổi hành vi vận
+# hành; bộ thử `thu_gioi_han.test_b11` hạ nó xuống 50 và đòi kho tự dọn.
 TOI_DA_KHOA = int(os.environ.get("VIP_HUB_GIOI_HAN_TOI_DA_KHOA", "50000"))
+
+
+def _cua_so_lon_nhat() -> float:
+    """Cửa sổ dài nhất trong MỌI luật đang áp — dùng làm ngưỡng dọn kho.
+
+    Tính từ CHÍNH chính sách, không viết cứng 3600 như bản trước: viết cứng thì ngày ai thêm một
+    luật có cửa sổ dài hơn, chỗ dọn này ÂM THẦM cắt ngắn trần của luật đó — nới lỏng mà không báo.
+    """
+    return max([lt.cua_so_giay for nhom in (LUAT_MAC_DINH, *CHINH_SACH.values()) for lt in nhom])
+
+
+class KhoCSDL:
+    """Kho trạng thái PHẦN A: đếm trong CSDL — DÙNG CHUNG qua tiến trình, SỐNG qua khởi động lại.
+
+    Vì sao là MỘT LỚP chứ không phải vài hàm rời: chỗ quyết định "trạng thái nằm ở đâu" phải là
+    MỘT chỗ (CLAUDE.md §19.4). Nhờ tách được lớp này mà bộ thử `app/thu/thu_g19_gioihan.py` dựng
+    được ĐỐI CHỨNG ÂM: một bản `gioi_han` giữ NGUYÊN phần quyết định, chỉ thay lớp kho về khuôn
+    cũ (bộ nhớ một tiến trình) — phép đo không phân biệt được hai bản đó thì là phép đo MÙ.
+
+    Mốc thời gian là `time.time()` (epoch giây), KHÔNG phải `time.monotonic()`: monotonic là thang
+    của một lần chạy hệ điều hành, không so được giữa các tiến trình khác lần khởi động và không
+    sống qua reboot. Cùng lý do đã ghi ở PHẦN B cho `_moc_truoc_day`.
+    """
+
+    def _dam_bao_bang(self):
+        global _da_tao_bang_gh
+        if _da_tao_bang_gh:
+            return
+        with _khoa_bang_gh:
+            if _da_tao_bang_gh:
+                return
+            for lan in range(HAN_DOI_DDL):
+                try:
+                    for cau in DDL_GIOI_HAN:
+                        csdl.ghi(cau)
+                    _da_tao_bang_gh = True
+                    return
+                except csdl.LoiVanHanh:
+                    # Nhiều tiến trình cùng tạo bảng lúc khởi động. Thua lượt đua này KHÔNG phải
+                    # lỗi (bảng đã có thì `IF NOT EXISTS` không đổi gì) — nhưng hết lượt thử thì
+                    # PHẢI NỔ, không được đi tiếp với cái bảng chưa chắc có.
+                    if lan == HAN_DOI_DDL - 1:
+                        raise
+                    time.sleep(0.05 * (lan + 1))
+
+    @contextlib.contextmanager
+    def giao_dich(self):
+        """MỘT giao dịch ghi cho TRỌN một lượt kiểm (và cho `dat_lai`).
+
+        `BEGIN IMMEDIATE` (khoá ghi NGAY) là CỐ Ý:
+          · Nó giữ được LUẬT THIẾT KẾ số 4 ở đầu tệp — "kiểm hết rồi mới ghi": cả lượt kiểm nằm
+            trong MỘT giao dịch, nên một yêu cầu chạm trần ở chiều thứ hai KHÔNG cộng lượt ở
+            chiều thứ nhất. Ghi rời từng câu thì khe hở nằm giữa hai chiều, và ở đó kẻ bị chặn
+            vẫn đẩy được trần của người khác lên (tự gây DoS cho nạn nhân).
+          · Khoá ngay từ đầu thì không còn lượt "nâng khoá" nào để thất bại: `SAVEPOINT` trần mở
+            giao dịch HOÃN, tới câu ghi mới xin nâng, và `SQLITE_BUSY_SNAPSHOT` trả NGAY chứ
+            `busy_timeout` không chờ ca đó (đo trong `csdl.giao_dich`).
+        """
+        self._dam_bao_bang()
+        with csdl.giao_dich():
+            yield self
+
+    def dem(self, khoa, tu_moc) -> int:
+        """Số lượt đang nằm TRONG cửa sổ của khoá này."""
+        return int(csdl.mot("SELECT COUNT(*) c FROM gioi_han_luot WHERE khoa=? AND moc>?",
+                            (khoa, tu_moc))["c"])
+
+    def moc_cu_nhat(self, khoa, tu_moc):
+        """Mốc CŨ NHẤT còn trong cửa sổ — để nói `Retry-After` khi chạm trần không có phạt."""
+        r = csdl.mot("SELECT MIN(moc) m FROM gioi_han_luot WHERE khoa=? AND moc>?", (khoa, tu_moc))
+        return None if (r is None or r["m"] is None) else float(r["m"])
+
+    def ghi_luot(self, khoa, moc, tu_moc, tran) -> bool:
+        """Ghi MỘT lượt CHỈ KHI cửa sổ còn chỗ — TRẦN NẰM TRONG CHÍNH CÂU GHI. True nếu ghi được."""
+        con = csdl.ghi(
+            "INSERT INTO gioi_han_luot (khoa, moc)"
+            " SELECT ?, ? WHERE (SELECT COUNT(*) FROM gioi_han_luot WHERE khoa=? AND moc>?) < ?",
+            (khoa, moc, khoa, tu_moc, tran))
+        return con.rowcount == 1
+
+    def doc_chan(self, khoa):
+        r = csdl.mot("SELECT chan_den FROM gioi_han_chan WHERE khoa=?", (khoa,))
+        return None if r is None else float(r["chan_den"])
+
+    def ghi_chan(self, khoa, den):
+        csdl.ghi("INSERT OR REPLACE INTO gioi_han_chan (khoa, chan_den) VALUES (?,?)", (khoa, den))
+
+    def xoa(self, khoa):
+        csdl.ghi("DELETE FROM gioi_han_luot WHERE khoa=?", (khoa,))
+        csdl.ghi("DELETE FROM gioi_han_chan WHERE khoa=?", (khoa,))
+
+    def xoa_het(self):
+        self._dam_bao_bang()
+        csdl.ghi("DELETE FROM gioi_han_luot")
+        csdl.ghi("DELETE FROM gioi_han_chan")
+
+    def so_khoa(self) -> int:
+        return int(csdl.mot("SELECT COUNT(*) c FROM (SELECT khoa FROM gioi_han_luot"
+                            " UNION SELECT khoa FROM gioi_han_chan)")["c"])
+
+    def don(self, bay):
+        """Giữ kho trong tầm: bỏ lượt đã trôi khỏi MỌI cửa sổ, bỏ lệnh chặn đã hết hạn, rồi nếu
+        vẫn quá `TOI_DA_KHOA` khoá thì bỏ dần khoá LÂU KHÔNG DÙNG NHẤT.
+
+        Ngưỡng dọn tính từ `_cua_so_lon_nhat()` chứ không viết cứng — xem chú thích hàm đó.
+        """
+        csdl.ghi("DELETE FROM gioi_han_luot WHERE moc <= ?", (bay - _cua_so_lon_nhat(),))
+        csdl.ghi("DELETE FROM gioi_han_chan WHERE chan_den <= ?", (bay,))
+        qua = self.so_khoa() - TOI_DA_KHOA
+        if qua <= 0:
+            return
+        for r in csdl.nhieu(
+                "SELECT khoa, MAX(moc) m FROM (SELECT khoa, moc FROM gioi_han_luot"
+                " UNION ALL SELECT khoa, chan_den FROM gioi_han_chan) GROUP BY khoa"
+                " ORDER BY m ASC LIMIT ?", (qua,)):
+            self.xoa(r["khoa"])
+
+    def thong_ke(self) -> dict:
+        self._dam_bao_bang()
+        return {"so_bucket": self.so_khoa(),
+                "so_dang_chan": int(csdl.mot("SELECT COUNT(*) c FROM gioi_han_chan")["c"]),
+                "tran_bucket": TOI_DA_KHOA}
+
+
+#: Kho đang dùng. Đây là CHỖ DUY NHẤT quyết định trạng thái PHẦN A nằm ở đâu.
+KHO = KhoCSDL()
 
 
 class KetQuaGioiHan:
@@ -231,22 +401,6 @@ def _gia_tri_chieu(chieu, ip, dinh_danh, tenant_id):
     return None if tenant_id in (None, "") else str(tenant_id)
 
 
-def _don_neu_qua_dong(bay):
-    """Giữ số khóa trong tầm. Dọn khóa đã trôi hết trước, hết cách thì bỏ khóa cũ nhất."""
-    if len(_lan) <= TOI_DA_KHOA:
-        return
-    for k in list(_lan.keys()):
-        d = _lan[k]
-        if not d or d[-1] < bay - 3600:
-            _lan.pop(k, None)
-            _chan_den.pop(k, None)
-        if len(_lan) <= TOI_DA_KHOA:
-            return
-    while len(_lan) > TOI_DA_KHOA:
-        k, _ = _lan.popitem(last=False)
-        _chan_den.pop(k, None)
-
-
 def kiem(endpoint, ip=None, dinh_danh=None, tenant_id=None, ghi_nhan=True) -> KetQuaGioiHan:
     """Kiểm MỘT lượt gọi `endpoint`. Trả `KetQuaGioiHan`.
 
@@ -258,43 +412,45 @@ def kiem(endpoint, ip=None, dinh_danh=None, tenant_id=None, ghi_nhan=True) -> Ke
     biến giới hạn thành cửa để một người chặn tất cả.
 
     `ghi_nhan=False` chỉ xem trạng thái, không cộng lượt.
+
+    Toàn bộ lượt kiểm nằm trong MỘT giao dịch ghi (xem `KhoCSDL.giao_dich`): nhờ vậy luật "kiểm
+    hết rồi mới ghi" vẫn đúng khi có nhiều TIẾN TRÌNH, không chỉ nhiều luồng.
     """
     luats = luat_cua(endpoint)
-    bay = time.monotonic()
+    bay = time.time()
     chat_nhat = None
-    with _khoa:
-        can_ghi = []
+    can_ghi = []
+    with KHO.giao_dich():
         for lt in luats:
             gt = _gia_tri_chieu(lt.chieu, ip, dinh_danh, tenant_id)
             if gt is None:
                 continue
             k = f"{endpoint}|{lt.chieu}|{gt}"
-            den = _chan_den.get(k)
-            if den and den > bay:
+            den = KHO.doc_chan(k)
+            if den is not None and den > bay:
                 return KetQuaGioiHan(False, 0, int(den - bay) + 1, lt.chieu, k, lt)
-            d = _lan.get(k)
-            if d is None:
-                d = _lan[k] = deque()
-            else:
-                _lan.move_to_end(k)
-            moc = bay - lt.cua_so_giay
-            while d and d[0] <= moc:
-                d.popleft()
-            if len(d) >= lt.so_lan:
-                cho = int(d[0] + lt.cua_so_giay - bay) + 1
+            tu_moc = bay - lt.cua_so_giay
+            so_da = KHO.dem(k, tu_moc)
+            if so_da >= lt.so_lan:
+                cu = KHO.moc_cu_nhat(k, tu_moc)
+                cho = int(cu + lt.cua_so_giay - bay) + 1 if cu is not None else 1
                 if lt.chan_giay > 0:
-                    _chan_den[k] = bay + lt.chan_giay
+                    KHO.ghi_chan(k, bay + lt.chan_giay)
                     cho = int(lt.chan_giay) + 1
                 return KetQuaGioiHan(False, 0, max(1, cho), lt.chieu, k, lt)
-            con = lt.so_lan - len(d) - (1 if ghi_nhan else 0)
+            con = lt.so_lan - so_da - (1 if ghi_nhan else 0)
             if chat_nhat is None or con < chat_nhat[0]:
                 chat_nhat = (con, lt.chieu, k, lt)
-            can_ghi.append(d)
+            can_ghi.append((k, tu_moc, lt))
         # Chỉ ghi nhận khi MỌI chiều đều còn chỗ (xem LUẬT THIẾT KẾ số 4).
         if ghi_nhan:
-            for d in can_ghi:
-                d.append(bay)
-        _don_neu_qua_dong(bay)
+            for k, tu_moc, lt in can_ghi:
+                if not KHO.ghi_luot(k, bay, tu_moc, lt.so_lan):
+                    # KHÔNG THỂ tới đây: cả lượt kiểm nằm trong MỘT giao dịch ghi nên số đếm
+                    # không đổi giữa chừng. Tới được nghĩa là cấu trúc đã sai — ĐÓNG cửa (từ chối
+                    # lượt này), tuyệt đối không cho qua.
+                    return KetQuaGioiHan(False, 0, 1, lt.chieu, k, lt)
+        KHO.don(bay)
     if chat_nhat is None:
         return KetQuaGioiHan(True, -1, 0)      # -1 = không chiều nào áp được (thiếu dữ liệu)
     con, chieu, k, lt = chat_nhat
@@ -316,15 +472,16 @@ def dat_lai(endpoint, ip=None, dinh_danh=None, tenant_id=None):
 
     Vì sao cần: không có nó thì người dùng thật gõ sai 4 lần rồi gõ đúng vẫn bị trần đè ở lần
     sau. Chỉ gọi sau một lượt THÀNH CÔNG, tuyệt đối không gọi khi thất bại.
+
+    Xoá trong CSDL nên có tác dụng với MỌI tiến trình — trước đây lượt đăng nhập thành công ở
+    bản máy chủ này không xoá được bộ đếm của bản khác (đo ở `thu_g19_gioihan` P5.2).
     """
-    with _khoa:
+    with KHO.giao_dich():
         for lt in luat_cua(endpoint):
             gt = _gia_tri_chieu(lt.chieu, ip, dinh_danh, tenant_id)
             if gt is None:
                 continue
-            k = f"{endpoint}|{lt.chieu}|{gt}"
-            _lan.pop(k, None)
-            _chan_den.pop(k, None)
+            KHO.xoa(f"{endpoint}|{lt.chieu}|{gt}")
 
 
 def tieu_de(kq: KetQuaGioiHan) -> dict:
@@ -342,15 +499,13 @@ def tieu_de(kq: KetQuaGioiHan) -> dict:
 
 def xoa_het():
     """Xóa toàn bộ trạng thái — CHỈ dùng cho bộ thử."""
-    with _khoa:
-        _lan.clear()
-        _chan_den.clear()
+    with KHO.giao_dich():
+        KHO.xoa_het()
 
 
 def thong_ke():
-    """Số bucket đang giữ — để nhìn được mức tiêu tốn bộ nhớ, không chứa dữ liệu người dùng."""
-    with _khoa:
-        return {"so_bucket": len(_lan), "so_dang_chan": len(_chan_den), "tran_bucket": TOI_DA_KHOA}
+    """Số bucket đang giữ — để nhìn được mức tiêu tốn bộ nhớ/CSDL, không chứa dữ liệu người dùng."""
+    return KHO.thong_ke()
 
 
 # =======================================================================================

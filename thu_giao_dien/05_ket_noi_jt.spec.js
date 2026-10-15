@@ -31,6 +31,52 @@ const TIEU_DE = "Kết nối J&T";
 const CANARY = [{ hang: "jt", gia_tri: "CANARY-AG06-9Q7Z", duoi: "9Q7Z" },
                 { hang: "vtp", gia_tri: "CANARY-AG06-VTP-4X8K", duoi: "4X8K" }];
 
+/* ============================================================================================
+   NGÂN SÁCH CHỜ CỦA CA (N-G18-01) — và vì sao phải có biến này
+   --------------------------------------------------------------------------------------------
+   `playwright.config.js` đặt `expect: { timeout: 5000 }` cho MỌI khẳng định `expect`. Lối vào
+   sâu `admin/index.html#ket-noi-jt` không phải một phép đo rẻ: nó phải qua `GET /api/v2/auth/toi`
+   rồi BA route của màn (`g09/suc-khoe-hang` · `hang` · `tai-khoan-hang`) mới có chữ trên
+   `#tieu-de`. Ngày 15/10 lượt nghiem thu G18 chạy 6 làn trên cùng một máy: chuỗi ấy vượt 5 giây
+   ⇒ ca ĐỎ dù sản phẩm ĐÚNG (docs/QA_G18.md §373, mã `N-G18-01`; 4/5 lượt xanh 36/0/1, 1 lượt
+   đỏ 33/1/2). Một ca thử đỏ vì máy bận là ca thử sẽ bị người ta học cách bỏ qua.
+   Nên ở đây KHÔNG chờ đồng hồ: chờ ĐÚNG hai điều kiện sản phẩm phải làm xong (phản hồi của
+   bốn route đã về, rồi chữ trên màn đã đúng), với ngân sách của CA chứ không phải 5 giây áp
+   cho mọi phép đo. Ca 11 TỰ KIỂM điều này bằng cách trễ nhân tạo 6 giây — dài hơn ngân sách cũ.
+   ============================================================================================ */
+const CHO_MAN = 20_000;
+
+/** Bốn route mà lối vào sâu `#ket-noi-jt` BẮT BUỘC đi qua trước khi `#tieu-de` có chữ. */
+const ROUTE_LOI_VAO_SAU = [
+  "/api/v2/auth/toi", "/api/v2/g09/suc-khoe-hang", "/api/v2/hang", "/api/v2/tai-khoan-hang",
+];
+
+/** Trễ NHÂN TẠO đúng ba route của màn Kết nối J&T: biến "máy có tải" thành thứ TẤT ĐỊNH.
+ *  Dùng cho ca tự kiểm; không dùng ở ca nào khác. */
+async function treBaRouteManKetNoi(page, ms) {
+  for (const d of ["/api/v2/g09/suc-khoe-hang", "/api/v2/hang", "/api/v2/tai-khoan-hang"]) {
+    await page.route(`**${d}`, async (r) => { await new Promise((s) => setTimeout(s, ms)); await r.continue(); });
+  }
+}
+
+/** Mở lối vào sâu ĐÚNG NHƯ DÁN LINK VÀO TAB MỚI: nạp một TÀI LIỆU MỚI ở địa chỉ ấy.
+ *  (`page.goto` từ chính `/admin/index.html#...` sang một hash khác là điều hướng CÙNG tài liệu,
+ *  KHÔNG nạp lại — bản đầu của ca này chờ `auth/toi` và đã treo đủ 20 giây vì trang không nạp
+ *  lại. Ghi lại đây để lần sau không ai "tối ưu" bỏ bước `about:blank`.) Rồi CHỜ THEO ĐIỀU KIỆN:
+ *  bốn route trả lời xong, rồi mới đòi chữ trên màn.
+ *  Trả về số mili-giây thật — một con số đo được, không phải "trông ổn". */
+async function moLoiVaoSau(page, duong) {
+  const t0 = Date.now();
+  const cho = ROUTE_LOI_VAO_SAU.map((d) =>
+    page.waitForResponse((r) => r.url().includes(d), { timeout: CHO_MAN }));
+  await page.goto("about:blank");
+  await page.goto(duong, { waitUntil: "domcontentloaded" });
+  await Promise.all(cho);
+  await expect(page.locator("#tieu-de")).toHaveText(TIEU_DE, { timeout: CHO_MAN });
+  await expect(page.locator("#kn-cong")).toBeVisible({ timeout: CHO_MAN });
+  return Date.now() - t0;
+}
+
 /** Đọc lại BA route thật TỪ TRONG TRANG (mang cookie phiên như giao diện mang). */
 async function docApi(page) {
   return page.evaluate(async () => {
@@ -358,23 +404,30 @@ test("07 — màn không gọi ra hãng, không lỗi console, không hụt tệ
 
 test("08 — lối vào sâu `#ket-noi-jt` mở ĐÚNG màn, và trang pages/carriers.html bấm sang được", async ({ page }) => {
   await U.dangNhap(page, "shopa-owner");
+  const ms = await moLoiVaoSau(page, "/admin/index.html#ket-noi-jt");
+  console.log(`[đo] lối vào sâu #ket-noi-jt (tài liệu mới): màn dựng xong sau ${ms}ms (ngân sách ca ${CHO_MAN}ms)`);
+
+  // Đường thứ HAI vào cùng màn: đổi hash NGAY TRONG TRANG (`#man-khac`) — điều hướng CÙNG tài
+  // liệu, KHÔNG nạp lại, nên nó đi qua nhánh `hashchange` của `admin.js` chứ không qua `khoiDong`.
+  // Đây đúng là đường bản G17 đo; giữ lại để bản vá chờ-theo-điều-kiện không làm rơi phép đo cũ.
+  await U.moMan(page, "don");
   await page.goto("/admin/index.html#ket-noi-jt", { waitUntil: "domcontentloaded" });
-  await page.locator(".menu-quan-tri a").first().waitFor({ state: "visible" });
-  await expect(page.locator("#tieu-de")).toHaveText(TIEU_DE);
-  await expect(page.locator("#kn-cong")).toBeVisible();
+  await expect(page.locator("#tieu-de")).toHaveText(TIEU_DE, { timeout: CHO_MAN });
+  await expect(page.locator("#kn-cong")).toBeVisible({ timeout: CHO_MAN });
 
   // Trang demo `pages/carriers.html` phải đọc dữ liệu THẬT (không còn danh sách hãng mô phỏng)
-  // và có lối bấm sang màn quản trị.
-  await page.goto("/pages/carriers.html", { waitUntil: "networkidle" });
-  await expect(page.locator("#c-credential [data-truong]")).toHaveCount(4);
+  // và có lối bấm sang màn quản trị. KHÔNG `waitUntil: "networkidle"`: chờ mạng "im 500ms" là
+  // chờ đồng hồ, còn thứ ca này cần là bốn trường credentials ĐÃ HIỆN — chờ đúng nó.
+  await page.goto("/pages/carriers.html", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#c-credential [data-truong]")).toHaveCount(4, { timeout: CHO_MAN });
   const chu = gon(await page.locator("#c-noi-dung").textContent());
   expect(chu, "trang vẫn hiện số liệu mô phỏng của bản cũ").not.toMatch(/đơn mô phỏng|Cấu hình \(giả lập\)/);
   expect(chu).toMatch(/CỔNG MỞ|CỔNG CHƯA MỞ/);
 
   await page.locator('#c-lien-ket a[href$="#ket-noi-jt"]').click();
-  await page.locator(".menu-quan-tri a").first().waitFor({ state: "visible" });
-  await expect(page.locator("#tieu-de")).toHaveText(TIEU_DE);
-  await expect(page.locator("#kn-thao-tac")).toBeVisible();
+  await page.locator(".menu-quan-tri a").first().waitFor({ state: "visible", timeout: CHO_MAN });
+  await expect(page.locator("#tieu-de")).toHaveText(TIEU_DE, { timeout: CHO_MAN });
+  await expect(page.locator("#kn-thao-tac")).toBeVisible({ timeout: CHO_MAN });
 });
 
 test("09 — chưa đăng nhập: trang nói thẳng, KHÔNG hiện số suy đoán và KHÔNG hiện tên trường", async ({ page }) => {
@@ -399,4 +452,36 @@ test("10 — màn Kết nối J&T và trang carriers không tràn ngang ở 375p
   console.log("[đo] " + U.moTaTran("375px · pages/carriers.html", b));
   expect(b.tai_lieu, "pages/carriers.html tràn ngang ở 375px").toBe(0);
   expect(b.phan_tu).toEqual([]);
+});
+
+// ============================================================================================
+// 11. TỰ KIỂM BỘ ĐO — ca này phải LÀM ĐỎ ĐƯỢC cách chờ cũ
+// ============================================================================================
+// Một ca thử chỉ đáng tin nếu có thứ chứng minh nó ĐỎ ĐƯỢC khi điều kiện xấu xảy ra (§12.1).
+// Ca 08 đã đổi sang chờ theo điều kiện; ca này dựng lại N-G18-01 thành TẤT ĐỊNH — trễ nhân tạo
+// 6 giây, dài hơn ngân sách 5 giây cũ — rồi đo CẢ HAI cách chờ trên cùng cái trễ ấy.
+test("11 — TỰ KIỂM: trễ 6 giây làm cách chờ CŨ đỏ, cách chờ MỚI vẫn xanh", async ({ page }) => {
+  await U.dangNhap(page, "shopa-owner");
+  await treBaRouteManKetNoi(page, 6000);
+
+  // (a) CÁCH CHỜ CŨ — đúng 5 giây mặc định của `expect` trong `playwright.config.js`.
+  //     Phải ĐỎ. Nếu nó xanh thì phép dựng lại không chạm tới nguyên nhân, và ca 08 là một
+  //     ca xanh vô nghĩa (xanh vì không đo gì). Cùng đường vào như (b): tài liệu MỚI.
+  await page.goto("about:blank");
+  await page.goto("/admin/index.html#ket-noi-jt", { waitUntil: "domcontentloaded" });
+  await page.locator(".menu-quan-tri a").first().waitFor({ state: "visible", timeout: CHO_MAN });
+  const t0 = Date.now();
+  let cu = "xanh";
+  try {
+    await expect(page.locator("#tieu-de")).toHaveText(TIEU_DE, { timeout: 5000 });
+  } catch { cu = "đỏ"; }
+  console.log(`[đo] cách chờ CŨ (ngân sách 5 giây) dưới trễ 6 giây → ${cu} sau ${Date.now() - t0}ms`);
+  expect(cu, "trễ 6 giây mà cách chờ cũ VẪN xanh ⇒ ca này không dựng lại được N-G18-01").toBe("đỏ");
+
+  // (b) CÁCH CHỜ MỚI — điều kiện thật + ngân sách của CA, trên CÙNG cái trễ đó. Phải XANH, và
+  //     phải mất ÍT NHẤT bằng độ trễ: nhanh hơn nghĩa là nó không thật sự chờ dữ liệu.
+  const ms = await moLoiVaoSau(page, "/admin/index.html#ket-noi-jt");
+  console.log(`[đo] cách chờ MỚI (điều kiện, ngân sách ${CHO_MAN}ms) dưới trễ 6 giây → xanh sau ${ms}ms`);
+  expect(ms, "cách chờ mới xanh nhưng nhanh hơn cả độ trễ ⇒ nó không chờ dữ liệu thật")
+    .toBeGreaterThan(5000);
 });

@@ -1531,9 +1531,14 @@ class L_G17_ReplayUyQuyen(Nen):
         nguon_hong = nguon.replace(" WHERE id=? AND trang_thai<>'dang_xu_ly'", " WHERE id=?")
         self.assertNotEqual(nguon_hong, nguon,
                             "không tạo được đột biến — phép tự kiểm này vô nghĩa")
+        # G17-H1: câu ghi nay mang THÊM điều kiện TRẦN (`REPLAY_TOI_DA`) — xem `app/webhook.py`.
+        # Không gian tên của bản đột biến phải có tên đó, nếu không thì phép đối chứng hỏng vì
+        # `NameError` chứ không phải vì nó đo được điều nó định đo — và một phép đối chứng hỏng
+        # vì lý do khác là một phép đối chứng VÔ NGHĨA.
         ns = {"csdl": csdl, "su_kien_cua_tenant": wh.su_kien_cua_tenant,
               "uy_quyen_replay": wh.uy_quyen_replay, "co_the_replay": wh.co_the_replay,
-              "nap": wh.nap, "QUYEN_REPLAY": wh.QUYEN_REPLAY}
+              "nap": wh.nap, "QUYEN_REPLAY": wh.QUYEN_REPLAY,
+              "REPLAY_TOI_DA": wh.REPLAY_TOI_DA}
         exec(compile(nguon_hong, "<dot-bien-yeu-cau-replay>", "exec"), ns)   # noqa: S102
         return ns["yeu_cau_replay"]
 

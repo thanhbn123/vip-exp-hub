@@ -1188,27 +1188,39 @@ def yeu_cau_replay(sk_id, tenant_id, user_id=None, vai_tro=None):
         csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
                    tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
         return False, ly_do
-    duoc, ly_do = co_the_replay(sk_id)
-    if not duoc:
-        csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
-                   tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
-        return False, ly_do
-    # Cùng `csdl.khoa_ghi` với `_nhan_viec`: câu "nhận việc" và câu "đặt lại" không chen được
-    # vào nhau, nên trạng thái đọc lúc quyết định và trạng thái ghi là MỘT trạng thái.
+    # VÁ G17 (H1 — AG-01 tìm ra ở lượt nghiệm thu tích hợp, KHÔNG phải AG-04):
+    # trần replay TRƯỚC ĐÂY đọc ở `co_the_replay()` — tức ĐỌC NGOÀI `khoa_ghi` — còn câu ghi chỉ
+    # kiểm `trang_thai`. Hai yêu cầu chồng nhau cùng đọc được `n < REPLAY_TOI_DA`, cùng đi qua, và
+    # cùng ghi audit ⇒ TRẦN BỊ VƯỢT. Đo được: tuần tự cho 202/409 ĐÚNG, chồng nhau cho 202/202 và
+    # `so_lan_replay=6 > trần 5`.
+    # Đây ĐÚNG khuôn đọc-rồi-ghi mà chính G17 đã vá cho chốt `dang_xu_ly` nhưng BỎ SÓT chốt TRẦN.
+    # Nay CẢ HAI điều kiện nằm trong câu ghi, VÀ lượt ghi audit cũng nằm TRONG cùng khoá: nếu audit
+    # ghi ngoài khoá thì yêu cầu sau vẫn đọc được số CŨ và trần vẫn thủng y như trước.
     with csdl.khoa_ghi:
-        con = csdl.ghi("UPDATE wh_su_kien SET trang_thai='moi', so_lan_thu=0, loi_cuoi=NULL"
-                       " WHERE id=? AND trang_thai<>'dang_xu_ly'", (sk_id,))
+        con = csdl.ghi(
+            "UPDATE wh_su_kien SET trang_thai='moi', so_lan_thu=0, loi_cuoi=NULL"
+            " WHERE id=? AND trang_thai<>'dang_xu_ly'"
+            "   AND (SELECT COUNT(*) FROM audit WHERE hanh_dong='webhook_replay'"
+            "        AND resource_type='su_kien' AND resource_id=?) < ?",
+            (sk_id, str(sk_id), REPLAY_TOI_DA))
         dat = con.rowcount == 1
+        if dat:
+            uy_quyen = (f"vai trò {vai_tro} có {QUYEN_REPLAY}" if vai_tro is not None
+                        else "tầng gọi đã uỷ quyền (route HTTP: _can)")
+            csdl.audit("webhook_replay", f"su_kien:{sk_id}",
+                       f"trạng thái trước: {sk['trang_thai']} · uỷ quyền: {uy_quyen}",
+                       tenant_id=tenant_id, user_id=user_id)
     if not dat:
+        # QUYẾT ĐỊNH đã nằm trong câu ghi; phần dưới chỉ ĐẶT TÊN lý do cho đúng thông báo.
+        duoc, ly_do = co_the_replay(sk_id)
+        if not duoc:
+            csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
+                       tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
+            return False, ly_do
         ly_do = "sự kiện đang được xử lý — đợi xong rồi replay (bắt ở chính câu ghi)"
         csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
                    tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
         return False, ly_do
-    uy_quyen = (f"vai trò {vai_tro} có {QUYEN_REPLAY}" if vai_tro is not None
-                else "tầng gọi đã uỷ quyền (route HTTP: _can)")
-    csdl.audit("webhook_replay", f"su_kien:{sk_id}",
-               f"trạng thái trước: {sk['trang_thai']} · uỷ quyền: {uy_quyen}",
-               tenant_id=tenant_id, user_id=user_id)
     nap(sk_id)
     return True, ""
 

@@ -473,3 +473,135 @@ bộ đều được chạy và đều được báo.
 | Cây làm việc Orca | sạch, 0 tệp dở, 0 stash |
 | HEAD | `de740dc` — `41ed553` là **tổ tiên** (12 commit), KHÔNG reset về nó |
 | Bản sao lưu mã nguồn | `/tmp/veh_backup_de740dc/workspace_src.tgz` (1,0 MB) |
+
+---
+
+# ĐÓNG BĂNG G16 — 15/10/2026 (AG-00 DeepSeek chốt, agent KHÔNG tự đổi)
+
+**Nền: `integration/g13-g15` @ `449bb2d`.** Mọi hợp đồng **§1–§35 vẫn hiệu lực nguyên vẹn**.
+
+> **XÁC MINH BẮT BUỘC ĐÃ LÀM — `main` KHÔNG chứa G13–G15.** Đo được: `main` = `de740dc`,
+> `integration/g13-g15` = `449bb2d`, và `git merge-base --is-ancestor integration/g13-g15 main`
+> **THẤT BẠI** ⇒ **CHƯA merge**. Mọi việc G16 làm **trên nền `integration/g13-g15`**, KHÔNG trên
+> `main`. Ai đọc lịch sử `main` sẽ **không thấy** G13–G15 ở đó.
+
+## 36. HỢP ĐỒNG LỚP HTTP — chốt TRƯỚC khi giao việc
+
+`app/transport.py` **đã có** chính sách (số lần thử, backoff, hết giờ, `duoc_thu_lai`) và bộ chạy
+`goi()`. **Thiếu đúng một thứ: hàm HTTP thật để `goi()` gọi.** G16 lấp chỗ đó.
+
+```python
+# app/http_jt.py  — AG-02 sở hữu
+MOCK = "mock"; SANDBOX = "sandbox"; PRODUCTION = "production"
+
+class TraLoiHTTP:            # kết quả MỘT lượt gửi
+    ma_http: int             # mã HTTP; 0 nếu không có phản hồi
+    than: bytes              # thân thô, nguyên văn
+    headers: dict
+
+def gui_form(url, headers, body: dict, *, timeout: float) -> TraLoiHTTP
+    """Gửi MỘT lượt POST `application/x-www-form-urlencoded`.
+    Ném `transport.LoiTamThoi`  khi ĐÁNG thử lại (mạng, hết giờ, 5xx).
+    Ném `transport.LoiVinhVien` khi thử lại VÔ ÍCH (4xx, URL sai, chữ ký sai).
+    KHÔNG tự thử lại — việc thử lại thuộc `transport.goi()`."""
+```
+
+**Ba luật cứng của lớp này:**
+
+1. **Thao tác GHI không được tự thử lại.** `createOrder`/`cancelOrder` chỉ thử lại qua
+   `transport.chinh_sach_cho(..., co_khoa_chong_trung=True)`, và chỉ vì J&T có `txlogisticId`
+   chống trùng. `http_jt` **không** được tự retry — nó chỉ ném đúng loại lỗi.
+2. **Danh sách TRẮNG máy chủ.** Chỉ nhận host trong `DUONG_API` (sandbox/production của J&T)
+   **hoặc** `127.0.0.1`/`localhost` (để bộ thử dựng stub cục bộ). Host khác ⇒ **TỪ CHỐI**.
+   Đây là chốt chặn để một URL gõ sai không biến thành một lượt gọi ra ngoài.
+3. **Ba kết cục không gộp** (§4): `ok` / `hãng TỪ CHỐI` / `KHÔNG BIẾT` (hết giờ, mạng chập) —
+   kết cục thứ ba **không bao giờ** được coi là thành công.
+
+## 37. MOCK / SANDBOX / PRODUCTION — tách rõ, và mặc định là MOCK
+
+| Môi trường | Điều kiện chạy | Trạng thái đợt này |
+|---|---|---|
+| `mock` | **MẶC ĐỊNH.** Không chạm mạng, không cần credentials | **MỞ** |
+| `sandbox` | Cần `V-G09-01` **VÀ** `V-13906-05` ⇒ **hiện CHƯA CẤP** | **BLOCKED** |
+| `production` | Cần duyệt riêng của anh Thành | **KHÔNG ĐƯỢC PHÉP** |
+
+Cấm mọi agent **tự mở** hai mức dưới. Code phải **đủ khả năng** chạy sandbox, nhưng phải **TỪ CHỐI**
+cho tới khi Owner cấp. Từ chối kèm **lý do đọc được**, không im lặng.
+
+## 38. CREDENTIALS — bề mặt cấu hình còn CHƯA TỒN TẠI
+
+Đo được: **không có tệp `.env` nào**, và `.env.example` **không khai một khoá J&T nào**. Cần 4 tên
+trường, **hai lớp, hai nguồn cấp** (đúng `docs/G09_CREDENTIALS_CHECKLIST.md`):
+
+| Nhóm | Trường | Nguồn cấp |
+|---|---|---|
+| Nền tảng (Console J&T) | `apiAccount` · `privateKey` | J&T Open Platform |
+| Bưu cục hợp tác | `customerCode` · `password` | bưu cục J&T |
+
+**Luật — không ngoại lệ:**
+- **CẤM** hard-code secret trong mã. **CẤM** đưa credentials vào Git (`.gitignore` đã chặn `.env*`,
+  giữ `.env.example`). **CẤM** in ra log/terminal/stdout/prompt.
+- Đường lưu **duy nhất** là `carrier_accounts.credentials_ma_hoa` qua **`bao_mat.ma_hoa_cred`**
+  (AES-256-GCM, bản mã mang `key_id` dạng `v3$…`). Bốn hàm ở §3 là **hợp đồng**, không tự viết mã hoá.
+- `.env.example` chỉ được khai **TÊN** khoá + mô tả, **giá trị luôn để rỗng**.
+
+## 39. Quyền sở hữu file — G16
+
+Bốn làn chạy **đồng thời trong CÙNG một cây** (hạ tầng chặn ghi `.git` nên không tách worktree được).
+
+| Làn | SỞ HỮU (được ghi) | CẤM chạm |
+|---|---|---|
+| **AG-01 QA** | `docs/QA_G16.md` (mới) · `app/thu/thu_qa_g16.py` (mới) | **mọi mã sản phẩm** |
+| **AG-02 HTTP TRANSPORT** | `app/http_jt.py` (mới) · `app/thu/thu_http_jt.py` (mới) · `app/thu/stub_jt.py` (mới) · `docs/G16_TRANSPORT.md` (mới) | `adapter_jt.py`, `webhook.py`, `csdl.py`, `migrate.py`, `server.py` |
+| **AG-03 J&T BUSINESS API** | `app/adapter_jt.py` · `app/thu/thu_adapter_jt.py` · `app/thu/thu_hop_dong_jt.py` · `docs/G16_JT_API.md` (mới) | `http_jt.py` (chỉ GỌI), `webhook.py`, `csdl.py`, `migrate.py`, `server.py` |
+| **AG-04 WEBHOOK** | `app/webhook.py` · `app/thu/thu_webhook_jt.py` · `trien_khai/g16/` (mới) · `docs/G16_WEBHOOK.md` (mới) · `docs/G16_SANDBOX_HARNESS.md` (mới) | `adapter_jt.py`, `http_jt.py`, `csdl.py`, `migrate.py`, `server.py` |
+| **AG-00** | `app/cau_hinh.py` · `.env.example` · `app/transport.py` · `app/server.py` · `app/csdl.py` · `app/migrate.py` · `app/thu/chay_tat_ca.sh` · `SHARED_CONTRACTS.md` · `.gitignore` · mọi file của agent SAU KHI bàn giao | — |
+
+**Không agent nào được mở `CHO_PHEP_LIVE`.** Không agent nào được gọi mạng ra ngoài `127.0.0.1`.
+
+## 40. Luật riêng của G16
+
+- **KHÔNG gọi API hãng thật, kể cả sandbox** — `V-G09-01` + `V-13906-05` **CHƯA CẤP**. Mọi phép đo
+  của lớp HTTP dùng **stub cục bộ trên `127.0.0.1`**. Đó là cách đo lớp HTTP thật mà không gọi hãng.
+- **KHÔNG mở cổng ra Internet**, không tunnel, không deploy — `V-G11-01` chưa cấp.
+- **KHÔNG đoán mã trạng thái `110`** (D-4). Mã chưa xác minh ⇒ `NEEDS_REVIEW`, cấm `DELIVERED`,
+  cấm kích hoạt đối soát COD (§18).
+- **GIỮ chốt chặn `city`/`area`** (D-9) — chưa có J&T xác nhận thì vẫn CHẶN CỨNG ngoài `mock`.
+- **KHÔNG báo `LIVE VERIFIED`** nếu chưa có bằng chứng gọi API thật thành công. G16-A **không thể**
+  đạt mức đó, và **không được** viết bất cứ câu nào đọc như đã đạt.
+- Mỗi làn dùng `VIP_HUB_DATA` riêng (`/tmp/veh_g16_ag0x`) vì bốn làn chung một cây.
+
+## 41. MỐC MÃ của G16 — và LUẬT VÂN TAY (AG-01 `G16-01`/`G16-02`, AG-00 chốt)
+
+**Bảng "MỐC BẢO VỆ" ở §35 là bản ghi LỊCH SỬ của lượt G13–G15** (lúc đó cây thật sự sạch). Nó
+**không** còn mô tả lượt G16 — đọc nó như hiện trạng là sai. Mốc của G16:
+
+| Đối tượng | Giá trị G16 |
+|---|---|
+| Nền mã | `integration/g13-g15` @ **`449bb2d`** |
+| `main` | **`de740dc`** — và **KHÔNG chứa G13–G15** (`merge-base --is-ancestor` thất bại) |
+| CSDL THẬT | sha256 `aaf71362f86f7391f9394f77a5c8a3b24c81e7e1b6ca49da116143eb556d0c54` |
+
+**LUẬT VÂN TAY — bắt buộc, không phải thiện chí.** Bốn làn ghi đồng thời vào **một** cây, nên một
+lượt hồi quy **không** ghim được vào một mốc mã. Đo được (`docs/QA_G16.md` §1.3): vân tay cây đổi
+**giữa** lượt chạy, và `git status` đi từ 1 → 6 tệp bẩn trong **2 phút**.
+
+Từ nay, **mọi báo cáo có số đo** (của AG-00, AG-01, AG-02, AG-03, AG-04) phải kèm **hai** thứ:
+
+1. **Vân tay cây** — lấy bằng lệnh, không điền tay:
+   ```bash
+   find app gateway thu_frontend thu_giao_dien -type f \
+     \( -name '*.py' -o -name '*.mjs' -o -name '*.sh' -o -name '*.json' \) \
+     | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256
+   ```
+2. **Mốc giờ** của lượt đo.
+
+Con số **không** kèm vân tay là con số **không đối chiếu được** — nó đúng với *một cây nào đó*,
+không ai biết cây nào. Đây là **N-05 tái phát lần thứ ba**; theo `CLAUDE.md` §12.2, hỏng cùng kiểu
+lần thứ hai thì **đổi CẤU TRÚC**, và luật này là cấu trúc thay cho lời dặn.
+
+**Hệ quả đã ghi nhận:** hai con số `1133` và `1138` đều **đúng**, nhưng **không** con số nào là
+*"hồi quy của mốc `449bb2d`"* — chúng là hồi quy của **hai cây khác nhau** trong cùng một buổi.
+
+**Bổ sung quyền sở hữu (AG-01 `G16-04`):** `app/thu/thu_tich_hop.py` **thuộc AG-00** (bộ thử hợp
+đồng/tích hợp). §39 ghi thiếu tên tệp này; nay xác nhận rõ.

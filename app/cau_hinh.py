@@ -44,3 +44,69 @@ GOI_MAC_DINH = [
 
 WEBHOOK_SO_LAN_THU = 3
 WEBHOOK_BACKOFF_GOC = float(os.environ.get("VIP_HUB_BACKOFF", "0.5"))
+
+
+# ============================================================================
+# G16 — J&T: MÔI TRƯỜNG và CREDENTIALS   (AG-00 sở hữu; agent KHÔNG tự đổi — §38/§39)
+# ============================================================================
+# Vì sao để ở đây chứ không ở `adapter_jt.py`: "đang chạy ở môi trường nào" và "được phép gọi tới
+# đâu" là quyết định của NGƯỜI VẬN HÀNH, không phải của mã adapter. Để trong adapter thì mỗi
+# adapter tự trả lời một kiểu, và không có chỗ nào để CHẶN.
+JT_MOCK = "mock"
+JT_SANDBOX = "sandbox"
+JT_PRODUCTION = "production"
+JT_MOI_TRUONG_HOP_LE = (JT_MOCK, JT_SANDBOX, JT_PRODUCTION)
+
+# MẶC ĐỊNH LÀ MOCK. Không đặt biến môi trường nào thì hệ KHÔNG chạm mạng.
+JT_MOI_TRUONG = os.environ.get("VIP_JT_MOI_TRUONG", JT_MOCK).strip().lower()
+
+# Tên 4 trường credentials — CHỈ TÊN, KHÔNG BAO GIỜ GIÁ TRỊ.
+# Hai lớp, hai nguồn cấp (docs/G09_CREDENTIALS_CHECKLIST.md):
+JT_TRUONG_NEN_TANG = ("apiAccount", "privateKey")     # J&T Open Platform (Console)
+JT_TRUONG_BUU_CUC = ("customerCode", "password")      # bưu cục hợp tác J&T
+JT_TRUONG_CREDENTIALS = JT_TRUONG_NEN_TANG + JT_TRUONG_BUU_CUC
+
+# Hết giờ gọi hãng. Tách "kết nối" khỏi "đọc": kết nối chậm là chuyện mạng, đọc chậm là chuyện
+# hãng đang xử lý. Gộp làm một con số thì lúc có sự cố không phân biệt được hai nguyên nhân.
+JT_HET_GIO_KET_NOI = float(os.environ.get("VIP_JT_TIMEOUT_KET_NOI", "5"))
+JT_HET_GIO_DOC = float(os.environ.get("VIP_JT_TIMEOUT_DOC", "15"))
+
+# CỔNG GỌI HÃNG — MẶC ĐỊNH ĐÓNG, và CỐ Ý KHÔNG đọc từ biến môi trường.
+# `V-G09-01` (gọi API hãng thật, kể cả sandbox) và `V-13906-05` (credentials sandbox) CHƯA CẤP.
+# Lý do không cho đọc từ env: một biến môi trường bật được là một biến môi trường bật NHẦM được,
+# và nó nằm trong môi trường tiến trình — thứ `docker inspect` đọc ra được. Muốn mở thì phải
+# SỬA MÃ và có phiếu duyệt của anh Thành; đó là chủ ý, không phải thiếu sót.
+JT_CHO_PHEP_SANDBOX = False
+JT_CHO_PHEP_PRODUCTION = False
+
+
+def jt_kiem_moi_truong(moi_truong=None):
+    """Cổng môi trường J&T. Trả `(cho_qua: bool, ly_do: str)`.
+
+    MẶC ĐỊNH CHẶN `sandbox` và `production`. Lý do trả về là câu ĐỌC ĐƯỢC, không phải mã lỗi:
+    người vận hành phải biết CHÍNH XÁC còn thiếu giấy phép nào, chứ không phải đoán.
+    """
+    mt = (moi_truong if moi_truong is not None else JT_MOI_TRUONG) or ""
+    mt = str(mt).strip().lower()
+    if mt == JT_MOCK:
+        return True, "mock: không chạm mạng, không cần credentials"
+    if mt not in JT_MOI_TRUONG_HOP_LE:
+        return False, (f"môi trường lạ {mt!r}; chỉ nhận {JT_MOI_TRUONG_HOP_LE}")
+    if mt == JT_SANDBOX and not JT_CHO_PHEP_SANDBOX:
+        return False, ("sandbox CHƯA ĐƯỢC CẤP QUYỀN — cần V-G09-01 (gọi API hãng thật, kể cả "
+                       "sandbox) và V-13906-05 (credentials sandbox). "
+                       "Xem docs/SHARED_CONTRACTS.md §25 và §37.")
+    if mt == JT_PRODUCTION and not JT_CHO_PHEP_PRODUCTION:
+        return False, ("production KHÔNG ĐƯỢC PHÉP — cần anh Thành duyệt riêng. "
+                       "Xem docs/SHARED_CONTRACTS.md §37.")
+    return True, f"{mt}: đã được cấp quyền"
+
+
+def jt_thieu_truong(cred):
+    """Tên các trường credentials còn THIẾU. CHỈ TRẢ TÊN — KHÔNG BAO GIỜ TRẢ GIÁ TRỊ.
+
+    Vì sao trả tên chứ không trả dict: câu "còn thiếu gì" là thứ hay bị đưa vào log và màn hình.
+    Trả về ĐÚNG tên trường thì không còn đường nào để một giá trị lọt ra theo.
+    """
+    cred = cred or {}
+    return [t for t in JT_TRUONG_CREDENTIALS if not str(cred.get(t) or "").strip()]

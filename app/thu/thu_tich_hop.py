@@ -86,5 +86,127 @@ class CanhCauTruc(unittest.TestCase):
             self.assertFalse(lop.CHO_PHEP_LIVE, f"{ma} đã MỞ đường LIVE — Owner chưa duyệt")
 
 
+# ============================================================================
+# G16 — cấu hình credentials, cổng môi trường, và LUẬT PHÂN TẦNG của lớp HTTP
+# ============================================================================
+class G16_CauHinhVaPhanTang(unittest.TestCase):
+    """Bốn ca sinh ra từ yêu cầu G16: credentials an toàn, tách MOCK/SANDBOX/PRODUCTION,
+    và chỉ MỘT mô-đun được nói chuyện với mạng."""
+
+    def test_07_credential_chi_tra_TEN_truong_khong_bao_gio_tra_gia_tri(self):
+        """`jt_thieu_truong` là thứ sẽ bị đưa vào log/màn hình. Nó phải trả ĐÚNG tên trường.
+
+        Ca này gieo một giá trị BÍ MẬT giả vào dict credentials rồi khẳng định chuỗi đó
+        KHÔNG xuất hiện ở bất kỳ đâu trong kết quả — kể cả khi in cả list ra.
+        """
+        import cau_hinh
+        self.assertEqual(sorted(cau_hinh.JT_TRUONG_CREDENTIALS),
+                         sorted(["apiAccount", "privateKey", "customerCode", "password"]),
+                         "tên trường credentials đã đổi — hợp đồng §38 ghi bốn tên này")
+        BI_MAT = "ZZZ-KHONG-DUOC-LO-RA-9f3a"
+        # đủ cả bốn ⇒ không thiếu gì
+        self.assertEqual(cau_hinh.jt_thieu_truong(
+            {t: BI_MAT for t in cau_hinh.JT_TRUONG_CREDENTIALS}), [])
+        # thiếu hai ⇒ trả ĐÚNG HAI TÊN, và KHÔNG kèm giá trị nào
+        thieu = cau_hinh.jt_thieu_truong({"apiAccount": BI_MAT, "privateKey": BI_MAT})
+        self.assertEqual(sorted(thieu), ["customerCode", "password"])
+        self.assertNotIn(BI_MAT, repr(thieu) + str(thieu),
+                         "giá trị credential lọt ra qua kết quả của jt_thieu_truong")
+        # đầu vào rỗng/None cũng không được nổ
+        self.assertEqual(len(cau_hinh.jt_thieu_truong(None)), 4)
+        self.assertEqual(len(cau_hinh.jt_thieu_truong({})), 4)
+
+    def test_08_cong_moi_truong_MAC_DINH_chan_sandbox_va_production(self):
+        """Mặc định phải là MOCK, và hai mức dưới phải TỪ CHỐI kèm lý do đọc được."""
+        import cau_hinh
+        self.assertEqual(cau_hinh.JT_MOI_TRUONG, "mock", "mặc định KHÔNG còn là mock")
+        self.assertFalse(cau_hinh.JT_CHO_PHEP_SANDBOX, "cổng sandbox đã bị mở — Owner chưa cấp")
+        self.assertFalse(cau_hinh.JT_CHO_PHEP_PRODUCTION, "cổng production đã bị mở")
+        ok, ly_do = cau_hinh.jt_kiem_moi_truong("mock")
+        self.assertTrue(ok, ly_do)
+        for mt in ("sandbox", "production", "la-bay", ""):
+            ok, ly_do = cau_hinh.jt_kiem_moi_truong(mt)
+            self.assertFalse(ok, f"{mt!r} phải bị CHẶN")
+            self.assertTrue(str(ly_do).strip(), f"{mt!r} bị chặn nhưng không nêu lý do")
+        # đối chứng: mock ĐI QUA được — thiếu vế này thì một hàm "chặn tất cả" cũng xanh
+        self.assertTrue(cau_hinh.jt_kiem_moi_truong("mock")[0])
+
+    def test_09_chi_MOT_mo_dun_san_pham_duoc_noi_chuyen_voi_mang(self):
+        """Từ G16, adapter ĐƯỢC gọi mạng — nhưng chỉ QUA `http_jt.py`.
+
+        Đây là bất biến phân tầng: mọi lượt HTTP của hãng đi qua đúng một tệp, nên chốt chặn
+        (danh sách trắng máy chủ, hết giờ, không tự thử lại) chỉ cần đúng ở một chỗ.
+        Dò bằng **AST**, không bằng grep: `urllib.parse` là xử lý CHUỖI, không phải gọi mạng,
+        và grep sẽ bắt nhầm nó — hoặc bỏ sót `from urllib import request`.
+        """
+        import ast
+        # Hai danh sách TÁCH RỜI, và đó là chỗ bản đầu của ca này SAI — đo được bằng đột biến:
+        #   · `import urllib.request` là `ast.Import` với tên ĐẦY ĐỦ "urllib.request"; lấy
+        #     `name.split(".")[0]` ra "urllib" nên nó LỌT (bản đầu chỉ so tên gốc ⇒ bỏ sót).
+        #   · `urllib.parse` là xử lý CHUỖI, không phải gọi mạng — cấm "urllib" là bắt nhầm nó.
+        # Nên: tên GỐC cấm theo gốc, còn họ `urllib`/`http` chỉ cấm theo tên ĐẦY ĐỦ.
+        MANG_GOC = {"requests", "httpx", "aiohttp", "urllib3", "socket", "pycurl", "websocket"}
+        MANG_DAY_DU = {"urllib.request", "urllib.error", "http.client"}
+        # Ba dạng viết đều phải bắt được:
+        #   import urllib.request            → Import,        name="urllib.request"
+        #   from urllib import request       → ImportFrom,    module="urllib", alias="request"
+        #   import socket                    → Import,        name="socket"
+        duoc_phep = {"http_jt.py"}
+        vi_pham = []
+        for ten in sorted(os.listdir(GOC_APP)):
+            if not ten.endswith(".py") or ten in duoc_phep:
+                continue
+            duong = os.path.join(GOC_APP, ten)
+            try:
+                cay = ast.parse(doc(duong))
+            except SyntaxError as e:
+                vi_pham.append(f"{ten}: KHÔNG PHÂN TÍCH ĐƯỢC ({e})")
+                continue
+            for nut in ast.walk(cay):
+                if isinstance(nut, ast.Import):
+                    for a in nut.names:
+                        if a.name in MANG_DAY_DU or a.name.split(".")[0] in MANG_GOC:
+                            vi_pham.append(f"{ten}: import {a.name}")
+                elif isinstance(nut, ast.ImportFrom) and nut.module:
+                    if nut.module in MANG_DAY_DU or nut.module.split(".")[0] in MANG_GOC:
+                        vi_pham.append(f"{ten}: from {nut.module} import …")
+                    else:
+                        # dạng `from urllib import request` — tên bị cấm nằm ở ALIAS
+                        for a in nut.names:
+                            if f"{nut.module}.{a.name}" in MANG_DAY_DU:
+                                vi_pham.append(f"{ten}: from {nut.module} import {a.name}")
+        self.assertEqual(vi_pham, [], "chỉ `http_jt.py` được nói chuyện với mạng; "
+                                      "chỗ khác phải đi qua nó: " + ", ".join(vi_pham))
+
+    def test_10_env_mau_khai_du_bon_TEN_va_khong_chua_gi_bi_mat(self):
+        """`.env.example` là tài liệu đi theo repo — nó phải KHAI TÊN và để GIÁ TRỊ RỖNG."""
+        duong = os.path.join(GOC_DA, ".env.example")
+        self.assertTrue(os.path.exists(duong), "thiếu .env.example")
+        noi_dung = doc(duong)
+        for ten in ("apiAccount", "privateKey", "customerCode", "password"):
+            self.assertIn(ten, noi_dung, f".env.example không nhắc tên trường {ten}")
+        self.assertIn("VIP_JT_MOI_TRUONG=mock", noi_dung,
+                      "mặc định trong .env.example phải là mock")
+        # KHÔNG được có dòng nào gán giá trị thật cho bốn trường credentials
+        for dong in noi_dung.splitlines():
+            d = dong.strip()
+            if d.startswith("#") or "=" not in d:
+                continue
+            khoa, _, gia_tri = d.partition("=")
+            if khoa.strip() in ("apiAccount", "privateKey", "customerCode", "password"):
+                self.assertEqual(gia_tri.strip(), "",
+                                 f".env.example đang gán giá trị cho {khoa.strip()} — CẤM")
+
+    def test_11_khong_co_secret_that_trong_cay_lam_viec(self):
+        """Không tệp `.env` thật nào được tồn tại trong cây, và `.env*` phải bị git chặn."""
+        import subprocess
+        for ten in os.listdir(GOC_DA):
+            if ten == ".env" or (ten.startswith(".env.") and ten != ".env.example"):
+                self.fail(f"có tệp cấu hình bí mật trong cây: {ten} — phải nằm ngoài repo")
+        for duong in (".env", ".env.local"):
+            kq = subprocess.run(["git", "check-ignore", "-q", duong], cwd=GOC_DA)
+            self.assertEqual(kq.returncode, 0, f"{duong} KHÔNG bị gitignore")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -13,6 +13,8 @@
 * **Nền**: `integration/g17` @ **`7b741c8`** (đúng mốc G18 chỉ định) · nhánh `g18-ag02-multiprocess`
 * **Bộ đo**: `app/thu/thu_g18_multiprocess.py` (**mới**) · **26 ca · 0 hỏng · 0 bỏ qua · exit 0**
 * **Máy đo**: macOS 15 · Python 3.9.6 · SQLite 3.51.0 · MỘT máy · loopback · CSDL **tạm**
+* **Mốc đo (đóng băng)**: commit **`a9f076b`** trên nhánh này; hồi quy chạy trên ĐÚNG cây đó
+  (xem §6). Mọi số ở đây là của lượt chạy trên cây đóng băng, không phải "chạy một lần rồi kể".
 
 ---
 
@@ -40,9 +42,12 @@ không lấy mã thoát của `tail`/`grep`.
 
 ```sh
 export GIT_CONFIG_COUNT=0            # N-G17-00: biến GIT_CONFIG_* hỏng thì MỌI lệnh git hỏng
-git rev-parse HEAD; echo "EXIT=$?"
-#   7b741c88b3b280d65f80b5e11301f17ebd767b26
+git rev-parse HEAD HEAD^; echo "EXIT=$?"
+#   a9f076b42b3307a64c8e2a7f70075053478a7c1a      ← mốc đo (commit của làn này)
+#   7b741c88b3b280d65f80b5e11301f17ebd767b26      ← nền G18 chỉ định (integration/g17)
 #   EXIT=0
+git status --porcelain=v1 -uall; echo "EXIT=$?"   # cây SẠCH tại mốc đo
+#   EXIT=0        (không dòng nào)
 ```
 
 ```sh
@@ -55,18 +60,28 @@ grep -E "ca ĐẠT:|ca — " /tmp/g18.log; echo "EXIT=$?"
 ```
 
 **Số ca: 26 · Số bỏ qua: 0 · Số hỏng: 0 · exit 0.** Thời gian thật: **~30 giây** (mỗi lượt đo dựng
-nền tạm riêng rồi dọn sạch).
+nền tạm riêng rồi dọn sạch). **Ba lượt chạy liên tiếp trên cây đóng băng cho CÙNG kết quả**
+(26 ĐẠT · 0 HỎNG · 0 BỎ QUA · exit 0), nên các con số ở §2–§4 không phải may rủi một lượt:
+
+```sh
+for i in 1 2 3; do python3 app/thu/thu_g18_multiprocess.py > /dev/null 2>&1; echo "luot $i EXIT=$?"; done
+#   luot 1 EXIT=0 · luot 2 EXIT=0 · luot 3 EXIT=0
+```
 
 Băm tệp (bằng chứng "đúng bản đã đo"):
 
 ```sh
-shasum -a 256 app/thu/thu_g18_multiprocess.py app/thu/stub_jt.py app/http_jt.py; echo "EXIT=$?"
+shasum -a 256 app/thu/thu_g18_multiprocess.py app/thu/stub_jt.py app/http_jt.py docs/G18_MULTIPROCESS.md
+#   5621d3fb…  app/thu/thu_g18_multiprocess.py
+#   bc827f7b…  app/thu/stub_jt.py
+#   57213f46…  app/http_jt.py
+#   (băm của tệp tài liệu này đổi mỗi lần sửa tài liệu — lấy bằng lệnh trên, đừng chép ở đây)
 ```
 
 Hồi quy toàn bộ (bộ chạy tự dò `app/thu/thu_*.py` nên bộ mới **tự vào**, không phải sửa danh sách):
 
 ```sh
-sh app/thu/chay_tat_ca.sh; echo "EXIT=$?"          # số ở §6
+sh app/thu/chay_tat_ca.sh; echo "EXIT=$?"          # exit 0 — số ở §6
 ```
 
 ---
@@ -115,9 +130,9 @@ sh app/thu/chay_tat_ca.sh; echo "EXIT=$?"          # số ở §6
   cùng `VIP_HUB_DATA`).
 * **Biến thể "mỗi bản một CSDL riêng" (N=4)**: `[20, 20, 20, 20]` ⇒ tổng **80**. Việc nhân **không
   phải** vì CSDL tách rời — thủ phạm là **bộ đếm trong bộ nhớ tiến trình** (`gioi_han._lan`).
-* **Đồng thời là THẬT, không phải nối đuôi**: N=8 có lúc **161 lượt đang bay** thuộc **8 bản khác
-  nhau**, và log JSON của chính 8 tiến trình máy chủ cho thấy **8 pid khác nhau** phục vụ trong
-  **cùng một giây**.
+* **Đồng thời là THẬT, không phải nối đuôi**: N=8 có lúc **159–191 lượt đang bay** thuộc **8 bản
+  khác nhau** (ba lượt chạy độc lập), và log JSON của chính 8 tiến trình máy chủ cho thấy **8 pid
+  khác nhau** phục vụ trong **cùng một giây**.
 
 **ĐỐI CHỨNG ÂM (bắt buộc, và nó ĐẠT):** N=1 ⇒ đo được **20 = khai báo**, và chính máy chủ tự khai
 chiều chặn `ip`, `Retry-After = 300`, `X-RateLimit-Limit = 20`. Nếu ca này lệch thì mọi kết luận
@@ -278,15 +293,27 @@ python3 app/thu/thu_hop_dong_jt.py;echo "EXIT=$?"     # exit 0 — 84 ca · hỏ
 python3 app/thu/thu_qa_jt.py;      echo "EXIT=$?"     # exit 0 — 22 ca · hỏng 0 · bỏ qua 0
 ```
 
-Toàn bộ bộ chạy hồi quy (tự dò bộ thử mới, không sửa danh sách):
+Toàn bộ bộ chạy hồi quy (tự dò bộ thử mới, không sửa danh sách), chạy trên **cây đóng băng
+`a9f076b`**:
 
 ```sh
 sh app/thu/chay_tat_ca.sh; echo "EXIT=$?"             # exit 0
-#   python: 1486 ca · 39 bộ chạy thật   (+ 26 ca của bộ G18 này so với mốc 1460/38)
-#   bộ hỏng: KHÔNG
+#   ✓ thu_g18_multiprocess.py    26 ca
+#   ✓ thu_qa_g17.py              53 ca
+#   python:   1486 ca · 39 bộ chạy thật
+#   frontend: 56 + 36 ca (hai tầng tự động)
+#   E2E:      KẾT QUẢ: 41/41
+#   bộ hỏng:  KHÔNG
 ```
 
-> Con số ở trên lấy từ **lượt chạy đóng băng** — xem §8 để biết mốc băm chính xác của cây lúc chạy.
+**Đối chiếu mốc G17**: `1460 ca / 38 bộ` ⇒ **`1486 ca / 39 bộ`**: chênh **+26 ca và +1 bộ**, đúng
+bằng bộ G18 này. Không bộ nào khác đổi số ca.
+
+> **Một ghi chú về cổng "cây sạch" của AG-01.** `thu_qa_g17.test_a1` đòi `git status -uall` **rỗng**
+> — nên khi 4 tệp của làn này còn **chưa commit** thì cổng đó **HỎNG (exit 1)** dù mã sản phẩm không
+> có gì sai: đó là *thiết kế* của cổng (mốc đo phải đóng băng). Sau khi commit (`a9f076b`), cổng
+> xanh trở lại — 53 ca ĐẠT. Người chạy nghiệm thu nên biết điều này trước khi đọc một lượt HỎNG của
+> `thu_qa_g17` trong lúc có làn khác đang mở.
 
 ---
 
@@ -301,6 +328,9 @@ sh app/thu/chay_tat_ca.sh; echo "EXIT=$?"             # exit 0
 
 **KHÔNG sửa**: `app/gioi_han.py`, `app/csdl.py`, `app/server.py` — việc chuyển PHẦN A sang bộ đếm
 dùng chung là **thay đổi mã của AG-01**, không thuộc làn này. Tài liệu này chỉ **đo** và **chỉ chỗ**.
+
+Toàn bộ nằm trong **một commit** trên nhánh `g18-ag02-multiprocess` (`a9f076b`, không push, không
+deploy, không tunnel). Bộ chạy hồi quy tự dò `app/thu/thu_*.py` nên **không phải sửa danh sách** nào.
 
 ---
 

@@ -23,3 +23,17 @@ docs/
 thu_frontend/
 app/thu/
 gateway/
+
+# ── G12 15/10: thư mục công cụ KHÔNG được vào image runtime ──────────────────
+# AG-04 đo: `Dockerfile` dòng 47 có `COPY trien_khai/`, và `.dockerignore` không loại gì
+# dưới đó ⇒ mọi thư mục mới thêm vào `trien_khai/` tự động lọt vào image. Hai thư mục của
+# G12 (`postgres/` dựng cụm thử, `sao_luu_ngoai/` script đưa gói khoá ra ngoài) là công cụ
+# vận hành/kiểm thử, không phải mã chạy — chúng không có bí mật, nhưng mỗi tệp thừa trong
+# image là một tệp nữa phải rà khi có sự cố.
+#
+# Đây đúng là rủi ro r-1 mà AG-05 đã ghi ra ở G11: `.dockerignore` là DANH SÁCH ĐEN, nên nó
+# rò khi có thứ mới. Nó rò sau **đúng một ngày**. Lớp chặn thật vẫn là `COPY` liệt kê từng
+# đường, và phép nghiệm thu thật là `find` TRONG image đã build — lượt đó chưa chạy được
+# vì máy chưa có Docker.
+trien_khai/postgres/
+trien_khai/sao_luu_ngoai/

@@ -303,3 +303,54 @@ docker compose config >/dev/null && echo "compose HOP LE"
 | Phát hiện cần vá | **1** — `trien_khai/postgres/` lọt vào image (mục 4), có bản vá sẵn |
 | Phát hiện cần biết | **1** — `cryptography` ghim 43.0.1, bộ thử chỉ chạy trên 50.0.1 (mục 2) |
 | Anh cần quyết | Có cài Docker không. Nếu có: **đường A (Colima)**, lệnh ở mục 5 |
+
+---
+
+# PHỤ LỤC G15 (15/10/2026, AG-04) — XÁC NHẬN LẠI: DOCKER VẪN **BLOCKED**
+
+> Bổ sung, không thay thế mục nào ở trên. Báo cáo đầy đủ: [`G15_INFRA.md`](G15_INFRA.md) §4.1.
+> Chạy lại: `python3 trien_khai/g15/kiem_ha_tang.py` (phần P1).
+
+## Q.1 Đo lại trên PATH, 15/10/2026
+
+```
+docker         = KHÔNG CÓ
+podman         = KHÔNG CÓ
+colima         = KHÔNG CÓ
+docker-compose = KHÔNG CÓ
+brew           = /opt/homebrew/bin/brew   (CÓ)
+```
+
+**`Docker build` và `docker compose up` vẫn là BLOCKED.** Cài được bằng `brew`, nhưng **cài là
+đổi máy của anh Thành ⇒ phải anh duyệt** (`V-13913`, `SHARED_CONTRACTS.md` §27/§29).
+**Lượt G15 KHÔNG cài gì.**
+
+> **KHÔNG có — và KHÔNG được có — dòng "Docker build PASS" nào trong bất kỳ tài liệu nào của
+> G15.** `Dockerfile` (4.681 byte) · `docker-compose.yml` (3.485 byte) · `.dockerignore`
+> (1.744 byte) **đã viết nhưng CHƯA CHẠY LƯỢT NÀO**. Phép đo duy nhất làm được là **soát tĩnh**
+> (đã làm ở mục 1–5 ở trên), và soát tĩnh **không** chứng minh được `HEALTHCHECK`,
+> `read_only: true`, `tmpfs`, hay `security_opt` chạy đúng.
+
+## Q.2 Một điều G15 đo được mà Docker sẽ **không** sửa
+
+`HEALTHCHECK` của `Dockerfile` gọi `/api/v2/suc-khoe` (health), cố ý **không** gọi `/san-sang`
+(readiness) — lý do ở mục "HEALTHCHECK = HEALTH, KHÔNG PHẢI READINESS" trong `Dockerfile`.
+Lượt G15 **đo lại và xác nhận chủ ý đó là đúng**, bằng một đối chứng âm thật:
+
+| Phép đo (nền migrate đủ nhưng **thiếu khoá mã hoá**) | Kết quả |
+|---|---|
+| `GET /api/v2/suc-khoe` | **200** — nên bộ giám sát **KHÔNG** restart vòng quanh |
+| `GET /api/v2/san-sang` | **503** · **chỉ** phép kiểm `khoa` hỏng, 4 phép kia vẫn chạy (không ngắn mạch) |
+
+Nghĩa là khi Docker được cài, `HEALTHCHECK` sẽ hành xử đúng như thiết kế — nhưng **điều đó vẫn
+chưa được chứng minh bằng một lượt chạy container nào**, vì **chưa có container nào chạy**.
+
+## Q.3 Việc G15 thêm vào danh sách chờ Docker
+
+| # | Việc | Vì sao cần Docker |
+|---|---|---|
+| 1 | Chạy `docker build` + `docker compose up` lượt đầu tiên | `V-13913` |
+| 2 | Chứng minh `HEALTHCHECK` chuyển sang `unhealthy` khi tiến trình treo | mục Q.2 mới đo được ở mức HTTP, chưa đo ở mức container |
+| 3 | Chứng minh `read_only: true` + `tmpfs /tmp` không làm hỏng đường upload | chưa chạy lượt nào |
+| 4 | Chạy bộ thử trong container với `cryptography` **43.0.1** đã ghim | nợ **d-8** ở mục 7 phía trên |
+| 5 | Chứng minh `X-Request-Id` và log JSON đi ra được `docker logs` | mới thêm ở G15 (P-G15-01); chưa đo trong container |

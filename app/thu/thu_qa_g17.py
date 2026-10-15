@@ -33,6 +33,7 @@ Chạy: VIP_G17_HEAD=98baeb357214d41a9380467fde2fee2b94fd31cc python3 app/thu/th
 """
 import ast
 import atexit
+import fnmatch
 import hashlib
 import http.client
 import http.server
@@ -161,16 +162,41 @@ def _git(*tham_so, env=None):
     return subprocess.run(["git", "-C", GOC_CAY, *tham_so], capture_output=True, text=True, env=e)
 
 
-# Hai tệp mà AG-01 G17 ĐƯỢC PHÉP tạo. Chúng là tệp MỚI nên `git status` thấy chúng là `??`;
-# nếu không trừ ra thì chính bộ thử làm cổng "cây sạch" của nó đỏ — và tệp thử tự chặn mình là
-# một cổng vô dụng. Trừ ĐÚNG hai đường này, không trừ gì khác.
-TEP_CUA_AG01_G17 = ("app/thu/thu_qa_g17.py", "docs/QA_G17.md")
+# Tệp của làn AG-01 G17 — khai bằng MẪU thuộc QUYỀN SỞ HỮU, không bằng danh sách ĐÓNG BĂNG.
+#
+# H5 (AG-01 tự tìm ra ở lượt nghiệm thu tích hợp): bản trước ghim CỨNG đúng hai đường của LƯỢT 1
+# (`app/thu/thu_qa_g17.py`, `docs/QA_G17.md`). Chỉ cần làn này giao thêm tệp ở lượt sau
+# (`thu_qa_g17_tich_hop.py`, `QA_G17_INTEGRATED.md`) là cổng "cây sạch" tự ĐỎ — KHÔNG phải vì cây
+# bẩn, mà vì CHÍNH BỘ THỬ vừa tạo tệp. Một cổng đỏ vì người ta làm đúng việc của mình là một cổng
+# sẽ bị học cách bỏ qua. Đây là ca thử ghim SỰ THẬT MÔI TRƯỜNG thay vì ghim TÍNH CHẤT.
+#
+# Nay khai theo MẪU. Cổng GIỮ NGUYÊN sức mạnh: một tệp SẢN PHẨM (`app/webhook.py`) hay tệp của
+# làn KHÁC bị bẩn vẫn ĐỎ, vì chúng không khớp mẫu nào dưới đây.
+MAU_TEP_CUA_AG01_G17 = ("app/thu/thu_qa_g17*.py", "docs/QA_G17*.md")
+
+# Giữ tên cũ cho tương thích các chỗ gọi hiện có.
+TEP_CUA_AG01_G17 = MAU_TEP_CUA_AG01_G17
+
+
+def _la_tep_cua_lan(duong):
+    """Đường này có thuộc quyền sở hữu của làn AG-01 G17 không."""
+    return any(fnmatch.fnmatch(duong, m) for m in MAU_TEP_CUA_AG01_G17)
 
 
 def _cay_ban(ngoai=(), env=None):
-    """Các dòng `git status` KHÔNG thuộc danh sách miễn trừ."""
+    """Các dòng `git status` KHÔNG thuộc quyền sở hữu của làn này.
+
+    `ngoai` là danh sách đường KHỚP CHÍNH XÁC (giữ cho tương thích); phần quyền sở hữu nay
+    do `MAU_TEP_CUA_AG01_G17` quyết định, nên cổng không còn vỡ khi làn giao thêm tệp.
+    """
     dong = _git("status", "--porcelain=v1", "-uall", env=env).stdout.splitlines()
-    return [d for d in dong if d[3:].strip().strip('"') not in ngoai]
+    ra = []
+    for d in dong:
+        p = d[3:].strip().strip('"')
+        if p in ngoai or _la_tep_cua_lan(p):
+            continue
+        ra.append(d)
+    return ra
 
 
 def van_tay_cay(bo_qua=(), env=None):
@@ -183,7 +209,12 @@ def van_tay_cay(bo_qua=(), env=None):
     ls = _git("ls-files", "-s", env=env).stdout
     st = _git("status", "--porcelain=v1", env=env).stdout
     if bo_qua:
-        giu = [d for d in st.splitlines() if d[3:].strip().strip('"') not in bo_qua]
+        # H5: lọc theo QUYỀN SỞ HỮU (mẫu) chứ không chỉ theo danh sách khớp chính xác, để vân tay
+        # không đổi khi chính làn này giao thêm tệp ở lượt sau. Mặc định `bo_qua=()` vẫn giữ
+        # NGUYÊN VĂN output của git — khớp từng byte với lệnh shell.
+        giu = [d for d in st.splitlines()
+               if d[3:].strip().strip('"') not in bo_qua
+               and not _la_tep_cua_lan(d[3:].strip().strip('"'))]
         st = ("\n".join(giu) + "\n") if giu else ""
     return hashlib.sha256((ls + st).encode("utf-8")).hexdigest()
 

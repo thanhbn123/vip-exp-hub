@@ -136,3 +136,39 @@ Nếu sau này có người đọc tài liệu này rồi tưởng đó là ch�
 - **Không chuyển CSDL nghiệp vụ sang PostgreSQL** (D-8) — vẫn SQLite; PostgreSQL chỉ **diễn tập trên
   cụm RIÊNG**, không đụng cụm `:5432`.
 - **`main` giữ nguyên `de740dc`** cho tới khi có phê duyệt riêng.
+
+---
+
+## 8. WAVE G18 — "ĐO ĐA TIẾN TRÌNH & NHỮNG CHỖ CHƯA TỪNG CHẠM" (đang chạy)
+
+**Nền:** `integration/g17` @ `7b741c8` · Run `run_695b048104a9` · 6 worktree `g18-*`, mỗi làn một nhánh.
+**Nguyên tắc:** wave này **chỉ đóng lỗ hổng đã ghi ra**, không làm lại mục đã đạt (G16-A và G17 đã ĐẠT).
+
+| Làn | Worktree | Việc | Nguồn |
+|---|---|---|---|
+| AG-01 | `g18-ag01-qa` | QA độc lập: kế hoạch + baseline + 2 chốt chặn | `QA_G13_G15.md` §6.3 |
+| AG-02 | `g18-ag02-multiprocess` | **ĐA TIẾN TRÌNH** thật (không thread) + đo lại `B-G11-10` | AG-01 ghi "chỉ chồng luồng trong MỘT tiến trình" |
+| AG-03 | `g18-ag03-secretpaths` | **Bí mật bị hãng ECHO LẠI** + bí mật trong **ĐƯỜNG DẪN URL** | AG-01 ghi 2 lỗ hổng phạm vi của AG-02 |
+| AG-04 | `g18-ag04-httpserver` | **Máy chủ HTTP THẬT dưới tải** (`ThreadingHTTPServer`) | `BAN_GIAO.md` §6.1 `V-13914(b)` |
+| AG-05 | `g18-ag05-pgwrite` | **PostgreSQL ĐƯỜNG GHI** (`csdl.ghi`, `rowcount`) | AG-01 ghi "AG-05 chỉ dựng SCHEMA" |
+| AG-06 | `g18-ag06-crash` | **Tắt tiến trình GIỮA giao dịch** (SIGKILL) | `BAN_GIAO.md` §6.1 `V-13914(a)` |
+
+### Danh sách ACCEPTANCE của G18 — phải nộp đủ, nếu không thì ghi CHƯA ĐO
+
+1. **AG-02:** số **tiến trình thật** (1/2/4/8) × trần thực tế so với khai báo; **đối chứng âm** với 1
+   tiến trình phải ĐÚNG bằng khai báo; kết luận lớp nào an toàn qua tiến trình, lớp nào không.
+2. **AG-03:** hai bẫy (echo + path) có **ca âm/dương**; bộ dò phủ **6 dạng** bí mật; **quyết định**
+   về việc in path nguyên văn (giữ thì phải có lý do + ca canh).
+3. **AG-04:** máy chủ thật bind `127.0.0.1` cổng 0; số **yêu cầu/giây**, tỉ lệ lỗi, `5xx`, và hạn chế
+   tốc độ qua **HTTP thật** (khác khi gọi hàm trực tiếp); tắt máy chủ theo **đúng PID**.
+4. **AG-05:** `rowcount` **SQLite vs PostgreSQL** trên cùng câu ghi; 5 dạng ghi; **vân tay cụm `:5432`
+   TRƯỚC = SAU**; không để cụm sót lại.
+5. **AG-06:** giết ở **5 điểm** trong/ quanh giao dịch; sau mỗi lần mở lại CSDL đo **tính toàn vẹn**
+   (số dòng, tổng COD, dòng mồ côi); **đối chứng dương** khi không giết; đo trên **cả SQLite và PostgreSQL**.
+6. **AG-01:** kế hoạch + baseline riêng + **ca tự kiểm bộ dò** + **đối chứng dương**; mục CHƯA ĐO nói thẳng.
+7. **AG-00:** commit hộ từng làn (worker không ghi được `.git`), tích hợp `integration/g18`, regression
+   trên **commit sạch** có **SHA · lệnh · exit code · số ca · số bộ · số hỏng · số skip · vân tay trước/sau**.
+
+### Ràng buộc riêng của G18
+**Concurrency CHỈ trên DB test riêng** — mỗi tiến trình `VIP_HUB_DATA` riêng hoặc CSDL tạm riêng; **cấm
+dùng CSDL thật**. PostgreSQL **chỉ cụm riêng**, **cấm đụng `:5432`**. Không mở cổng ra ngoài.

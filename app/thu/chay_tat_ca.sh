@@ -9,6 +9,39 @@ set -e
 GOC=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$GOC"
 
+# VÁ 15/10/2026 (N-G18-00, AG-01 phát hiện — AG-00 chốt): MÔI TRƯỜNG GIT HỎNG LÀM HAI NHIỆT KẾ
+# ĐO HAI THỨ KHÁC NHAU.
+#
+# `GIT_CONFIG_COUNT=N` đòi hỏi đủ `GIT_CONFIG_KEY_0..N-1` VÀ `GIT_CONFIG_VALUE_0..N-1`. Phiên nào
+# đặt `GIT_CONFIG_COUNT` mà THIẾU khoá — gặp thật: có `COUNT=2` + `VALUE_0`/`VALUE_1` nhưng KHÔNG
+# có `KEY_0`/`KEY_1` — thì MỌI lệnh git thoát 128, kể cả `git status`.
+#
+# Hệ quả ĐO ĐƯỢC: CÙNG một cây, CÙNG `HEAD`, CÙNG số ca, mà lượt chạy "nguyên văn" cho
+# exit 1 + 2 bộ hỏng, còn lượt đã gỡ biến cho exit 0. AG-00 luôn gỡ biến trước khi đo nên báo 0;
+# AG-01 chạy nguyên văn nên báo 1. HAI CON SỐ ĐỀU ĐÚNG — nhưng chúng đo HAI MÔI TRƯỜNG khác nhau,
+# và như thế thì không con số nào đối chiếu được với con số kia. Một bộ chạy mà kết quả phụ thuộc
+# vào việc người gọi có nhớ gỡ một biến hay không là một bộ chạy không đáng tin.
+#
+# Nay bộ chạy TỰ CHUẨN HOÁ: thấy gia đình `GIT_CONFIG_*` dị dạng thì gỡ nó đi rồi mới chạy.
+# Gỡ ở ĐÂY chứ không dặn lòng vòng, vì lời dặn thì người sau quên, còn dòng mã thì không.
+if [ -n "${GIT_CONFIG_COUNT:-}" ] && [ "${GIT_CONFIG_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+    _i=0; _thieu=0
+    while [ "$_i" -lt "$GIT_CONFIG_COUNT" ]; do
+        eval "_k=\${GIT_CONFIG_KEY_$_i:-}"
+        if [ -z "$_k" ]; then _thieu=1; fi
+        _i=$((_i + 1))
+    done
+    if [ "$_thieu" -eq 1 ]; then
+        echo "[cảnh báo] GIT_CONFIG_COUNT=$GIT_CONFIG_COUNT nhưng thiếu GIT_CONFIG_KEY_* —"
+        echo "           gỡ gia đình GIT_CONFIG_* dị dạng (nếu không, MỌI lệnh git thoát 128)."
+        echo "           Xem N-G18-00 trong docs/QA_G18.md."
+        unset GIT_CONFIG_COUNT
+        for _v in $(env | sed -n 's/^\(GIT_CONFIG_[A-Z_0-9]*\)=.*/\1/p'); do unset "$_v"; done
+        unset _v
+    fi
+    unset _i _thieu
+fi
+
 TOI_THIEU=${VIP_TOI_THIEU_BO:-12}
 
 echo "══════════ BỘ THỬ PYTHON (unittest) ══════════"

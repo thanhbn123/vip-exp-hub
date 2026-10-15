@@ -97,6 +97,33 @@ def ca_a4_tu_kiem_bo_do():
             assert bat == phai_bat, f"mẫu '{nhan}': bộ dò {'bắt' if bat else 'bỏ qua'}, phải {'bắt' if phai_bat else 'bỏ qua'}"
     print(f"  a4: bộ dò đúng trên {len(mau)}/{len(mau)} mẫu (4 ca nạp thật + 4 ca không phải nạp)")
 
+def ca_a5_khong_goi_commit_rollback_tren_ket_noi_cua_thread():
+    """Kết nối của `csdl.mo()` ở chế độ TƯỜNG MINH — `commit()`/`rollback()` là LỆNH RỖNG.
+
+    Rỗng mà không báo lỗi, nên nó là cái bẫy tệ nhất: mã trông như có đường hoàn tác.
+    Đã dính thật ngày 15/10/2026: `usage.ghi_su_kien` gọi `kn.rollback()` để bỏ một sự kiện
+    vừa ghi khi vượt trần; lệnh đó thành rỗng và để lại sự kiện MỒ CÔI, khiến lần thử lại
+    cùng `idem_key` bị coi là trùng rồi lặng lẽ không thu gì — mất tiền một chiều.
+    Muốn gộp nhiều câu thì dùng `csdl.giao_dich()`; muốn bỏ một câu đã ghi thì XOÁ theo id.
+    """
+    import re
+    pham = sorted(f for f in os.listdir(GOC) if f.endswith(".py"))
+    # csdl.py GIỮ giao dịch nên nó được gọi; migrate.py dùng kết nối riêng của chính nó.
+    mien = {"csdl.py", "migrate.py"}
+    xau = []
+    for f in pham:
+        if f in mien:
+            continue
+        for k, d in enumerate(open(os.path.join(GOC, f), encoding="utf-8"), 1):
+            if d.lstrip().startswith("#"):
+                continue
+            if re.search(r"\bkn\.(commit|rollback)\(\)", d):
+                xau.append("%s:%d %s" % (f, k, d.strip()[:60]))
+    assert not xau, ("gọi commit/rollback trên kết nối của thread — LỆNH RỖNG, dùng "
+                     "csdl.giao_dich() hoặc xoá theo id:\n    " + "\n    ".join(xau))
+    print("  a5: %d tệp — 0 chỗ gọi kn.commit()/kn.rollback() (miễn %s)"
+          % (len(pham), sorted(mien)))
+
 
 if __name__ == "__main__":
     print("[bien-driver] PHẠM VI: chỉ app/*.py tầng một. KHÔNG phủ app/thu/ (12 tệp thử")

@@ -342,7 +342,9 @@ def mo():
     if kn is not None:
         return kn
     os.makedirs(cau_hinh.THU_MUC_DU_LIEU, exist_ok=True)
-    kn = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL, timeout=30)
+    # `isolation_level=None`: TẮT phần tự quản giao dịch của mô-đun. Cùng lý do như
+    # `ket_noi(tuong_minh=True)` — hai bộ điều khiển tranh một giao dịch thì không bộ nào đúng.
+    kn = sqlite3.connect(cau_hinh.DUONG_DAN_CSDL, timeout=30, isolation_level=None)
     kn.row_factory = Row
     _dat_wal(kn)
     kn.execute("PRAGMA foreign_keys=ON")
@@ -373,10 +375,9 @@ def ghi(sql, tham_so=()):
     """Ghi MỘT câu. Tự commit NẾU không nằm trong `giao_dich()`; nằm trong thì để khối ngoài chốt."""
     kn = mo()
     with khoa_ghi:
-        con = kn.execute(sql, tham_so)
-        if not getattr(_local, "sau_giao_dich", 0):
-            kn.commit()
-        return con
+        # Kết nối ở chế độ tường minh (isolation_level=None) nên MỘT câu ngoài giao dịch
+        # tự chốt luôn — không cần `commit()`. Trong giao dịch thì tuyệt đối không chốt.
+        return kn.execute(sql, tham_so)
 
 
 @contextlib.contextmanager
@@ -408,23 +409,38 @@ def giao_dich():
     with khoa_ghi:
         sau = getattr(_local, "sau_giao_dich", 0)
         ten = "gd%d" % sau
-        kn.execute("SAVEPOINT " + ten)
+        if sau == 0:
+            # TẦNG NGOÀI lấy khoá GHI NGAY (`BEGIN IMMEDIATE`), không mở giao dịch hoãn.
+            #
+            # `SAVEPOINT` trần mở giao dịch HOÃN: khoá đọc trước, tới câu ghi mới xin nâng
+            # lên khoá ghi. Nếu tiến trình khác đã commit kể từ ảnh đọc của mình thì SQLite
+            # trả SQLITE_BUSY_SNAPSHOT — và `busy_timeout` KHÔNG chờ ca này, nó trả NGAY.
+            # Đo 15/10/2026 (2 tiến trình × 15 lượt đọc-sửa-ghi): 14/30 lượt nhận
+            # "database is locked" ở 0,0 giây. Không phải chờ lâu — là bị từ chối tức thì.
+            # Xin khoá ghi ngay từ đầu thì không còn lượt nâng nào để mà thất bại, và
+            # `busy_timeout` CÓ phủ `BEGIN IMMEDIATE` (đo: các tiến trình chờ 0,047–0,106s
+            # rồi vào được, ở bộ thu_migrate_dong_thoi).
+            kn.execute("BEGIN IMMEDIATE")
+        else:
+            kn.execute("SAVEPOINT " + ten)
         _local.sau_giao_dich = sau + 1
         try:
             yield kn
         except BaseException:
             # BaseException chứ không Exception: KeyboardInterrupt/SystemExit giữa chừng cũng
             # phải lùi, không được để lại nửa bút toán rồi đi ra.
-            kn.execute("ROLLBACK TO " + ten)
-            kn.execute("RELEASE " + ten)
-            _local.sau_giao_dich = sau
             if sau == 0:
-                kn.commit()
+                kn.execute("ROLLBACK")
+            else:
+                kn.execute("ROLLBACK TO " + ten)
+                kn.execute("RELEASE " + ten)
+            _local.sau_giao_dich = sau
             raise
-        kn.execute("RELEASE " + ten)
-        _local.sau_giao_dich = sau
         if sau == 0:
-            kn.commit()
+            kn.execute("COMMIT")
+        else:
+            kn.execute("RELEASE " + ten)
+        _local.sau_giao_dich = sau
 
 
 def mot(sql, tham_so=()):

@@ -203,7 +203,6 @@ def _dam_bao_bang():
         with csdl.khoa_ghi:
             kn = csdl.mo()
             kn.executescript(DDL_G08)
-            kn.commit()
         _da_tao_bang = True
         _dam_bao_phien_ban_goc()
 
@@ -237,7 +236,6 @@ def _dam_bao_phien_ban_goc():
                 (g["id"], g["ten"], int(g["gia_thang"]), int(g["han_muc_don_thang"]),
                  int(g["han_muc_ai_thang"]), int(g["so_nhan_vien"]), int(g["so_tai_khoan_hang"]),
                  "ảnh chụp phiên bản gốc từ goi_dich_vu", csdl.bay_gio()))
-        kn.commit()
 
 
 def phien_ban_moi_nhat(goi_id) -> int:
@@ -306,7 +304,6 @@ def phat_hanh_phien_ban(goi_id, han_muc: dict, gia_thang_dong=None, ghi_chu="", 
             (goi_id, pb, cu["ten"], gia, moi["han_muc_don_thang"], moi["han_muc_ai_thang"],
              moi["so_nhan_vien"], moi["so_tai_khoan_hang"], moi["han_muc_api_thang"],
              ghi_chu, boi, csdl.bay_gio()))
-        kn.commit()
     ghi_nhat_ky(None, None, "phat_hanh_phien_ban", f"{goi_id} v{pb}", boi=boi)
     return doc_phien_ban(goi_id, pb)
 
@@ -352,7 +349,6 @@ def kich_hoat(tenant_id, goi_id=None, phien_ban=None, boi=None, ly_do="") -> dic
             " tao_luc) VALUES (?,?,?,'dang_hoat_dong',?,?)",
             (tenant_id, goi_id, pb, ky, csdl.bay_gio()))
         dk_id = cur.lastrowid
-        kn.commit()
     _dong_bo_tenant_goi(tenant_id, goi_id)
     _ghi_lich_su(tenant_id, dk_id, "kich_hoat", None, None, goi_id, pb, ly_do=ly_do, boi=boi)
     ghi_nhat_ky(tenant_id, ky, "kich_hoat_dang_ky", f"{goi_id} v{pb}", boi=boi)

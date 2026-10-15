@@ -113,7 +113,6 @@ def bao_dam_bang():
         with csdl.khoa_ghi:
             kn = csdl.mo()
             kn.executescript(DDL_G10)
-            kn.commit()
         _da_bao_dam = True
 
 

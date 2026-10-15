@@ -69,7 +69,6 @@ def _tang(tenant_id, cot):
         kn = csdl.mo()
         kn.execute("INSERT OR IGNORE INTO usage_thang (tenant_id, thang) VALUES (?,?)", (tenant_id, thang))
         kn.execute(f"UPDATE usage_thang SET {cot}={cot}+1 WHERE tenant_id=? AND thang=?", (tenant_id, thang))
-        kn.commit()
 
 
 def kiem_va_tang_don(tenant_id):
@@ -104,7 +103,6 @@ def hoan_don(tenant_id):
         kn = csdl.mo()
         cur = kn.execute("UPDATE usage_thang SET so_don=so_don-1"
                          " WHERE tenant_id=? AND thang=? AND so_don >= 1", (tenant_id, thang))
-        kn.commit()
     return cur.rowcount == 1
 
 
@@ -124,7 +122,6 @@ def _cong_bo_dem_co_tran(tenant_id, cot, tran):
             f"UPDATE usage_thang SET {cot}={cot}+1"
             f" WHERE tenant_id=? AND thang=? AND {cot}+1 <= ?", (tenant_id, thang, tran))
         duoc = cur.rowcount == 1
-        kn.commit()
     return duoc
 
 
@@ -172,7 +169,6 @@ def chen_membership_co_tran(tenant_id, user_id, role, moi_boi):
             f" SELECT ?,?,?,?,? WHERE ({SQL_DEM_NHAN_VIEN}) < ?",
             (user_id, tenant_id, role, moi_boi, csdl.bay_gio(), tenant_id, tran))
         duoc, mid = cur.rowcount == 1, cur.lastrowid
-        kn.commit()
     if not duoc:
         raise VuotHanMuc(f"gói {goi['ten']} chỉ cho {tran} tài khoản nhân viên")
     return mid
@@ -197,7 +193,6 @@ def chen_tai_khoan_hang_co_tran(tenant_id, hang, ten, moi_truong, cred_ma_hoa,
             (tenant_id, hang, ten, moi_truong, cred_ma_hoa, cred_duoi, webhook_ma,
              webhook_secret_ma_hoa, csdl.bay_gio(), tenant_id, tran))
         duoc, id_moi = cur.rowcount == 1, cur.lastrowid
-        kn.commit()
     if not duoc:
         raise VuotHanMuc(f"gói {goi['ten']} chỉ cho {tran} kết nối hãng")
     return id_moi
@@ -222,7 +217,6 @@ def hoan_ai(tenant_id):
         kn = csdl.mo()
         cur = kn.execute("UPDATE usage_thang SET so_ai=so_ai-1"
                          " WHERE tenant_id=? AND thang=? AND so_ai >= 1", (tenant_id, thang))
-        kn.commit()
     return cur.rowcount == 1
 
 

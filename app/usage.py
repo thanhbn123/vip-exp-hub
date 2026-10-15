@@ -223,7 +223,6 @@ def ghi_su_kien(tenant_id, loai, so_luong=1, idem_key=None, nguon="he_thong",
             cur = kn.execute(f"INSERT INTO su_kien_dung ({cot_sk}) VALUES (?,?,?,?,?,?,?,?)",
                              gia_tri_sk)
         except csdl.LoiToanVen:
-            kn.rollback()
             cu = csdl.mot("SELECT * FROM su_kien_dung WHERE tenant_id=? AND idem_key=?",
                           (tenant_id, idem_key))
             return {"ok": True, "trung": True, "su_kien_id": cu["id"] if cu else None,
@@ -234,11 +233,20 @@ def ghi_su_kien(tenant_id, loai, so_luong=1, idem_key=None, nguon="he_thong",
         if nguon_dem == "g08":
             tran = gdv.tran_cua_loai(tenant_id, loai)
             if not _cong_co_tran(kn, tenant_id, ky, loai, so_luong, tran):
-                kn.rollback()           # bỏ cả sự kiện lẫn lượt cộng — thử lại sau vẫn ghi được
+                # BỎ cả sự kiện vừa ghi lẫn lượt cộng — thử lại sau vẫn ghi được.
+                #
+                # Trước 15/10/2026 chỗ này gọi `kn.rollback()`, dựa vào việc mô-đun sqlite3
+                # TỰ mở giao dịch cho câu INSERT ở trên. Từ khi kết nối chuyển sang chế độ
+                # tường minh (isolation_level=None) thì mỗi câu tự chốt ngay, nên
+                # `kn.rollback()` thành LỆNH RỖNG: nó không báo lỗi, không lùi gì, và để lại
+                # một sự kiện MỒ CÔI. Mồ côi ở đây không vô hại — lần thử lại cùng `idem_key`
+                # sẽ bị coi là TRÙNG rồi lặng lẽ không thu gì, tức mất tiền một chiều.
+                # `thu_usage.test_d2` bắt được ngay. Nay xoá thẳng theo id, không dựa vào
+                # giao dịch ngầm nào.
+                kn.execute("DELETE FROM su_kien_dung WHERE id=?", (sk_id,))
                 da = _dem_g08(tenant_id, ky, loai)
                 raise billing.VuotHanMuc(
                     f"đã dùng {da}/{tran} {gdv.LOAI_HAN_MUC[loai]['ten']} kỳ {ky}")
-            kn.commit()
             return {"ok": True, "trung": False, "su_kien_id": sk_id, "loai": loai,
                     "so_luong": so_luong, "bo_dem": _dem_g08(tenant_id, ky, loai),
                     "nguon_dem": nguon_dem}
@@ -248,9 +256,7 @@ def ghi_su_kien(tenant_id, loai, so_luong=1, idem_key=None, nguon="he_thong",
             _goi_bo_dem_ngoai(tenant_id, loai, so_luong)
         except Exception:
             kn.execute("DELETE FROM su_kien_dung WHERE id=?", (sk_id,))
-            kn.commit()
             raise
-        kn.commit()
         return {"ok": True, "trung": False, "su_kien_id": sk_id, "loai": loai,
                 "so_luong": so_luong, "nguon_dem": nguon_dem,
                 "bo_dem": muc_dang_dung(tenant_id, ky).get(loai)}
@@ -479,9 +485,7 @@ def lap_du_thao(tenant_id, ky=None, boi=None) -> dict:
                  p["tien_goi_dong"], p["tien_vuot_dong"], p["tong_dong"], p["phan_du_bo_dong"],
                  json.dumps(p, ensure_ascii=False), boi, csdl.bay_gio()))
             dt_id = cur.lastrowid
-            kn.commit()
         except csdl.LoiToanVen:
-            kn.rollback()
             cu = csdl.mot("SELECT * FROM du_thao_hoa_don WHERE tenant_id=? AND ky=?",
                           (tenant_id, ky))
             gdv.ghi_nhat_ky(tenant_id, ky, "lap_du_thao", "đã có dự thảo — không lập lần hai",

@@ -577,6 +577,10 @@ class H_CauHinhTrienKhai(unittest.TestCase):
 
 if __name__ == "__main__":
     try:
-        unittest.main(verbosity=2, exit=False)
+        # GIỮ kết quả rồi THOÁT theo nó. `exit=False` một mình làm bộ thử
+        # LUÔN thoát 0 kể cả khi có ca hỏng — cổng chặn hồi quy mất tác dụng,
+        # và nó không báo gì cả (§12.2: hỏng im lặng).
+        _kq = unittest.main(verbosity=2, exit=False)
     finally:
         shutil.rmtree(_tam, ignore_errors=True)
+    sys.exit(0 if _kq.result.wasSuccessful() else 1)

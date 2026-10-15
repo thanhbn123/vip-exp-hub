@@ -244,7 +244,7 @@ trước. AG-00 là người duy nhất chạy migration lên đó, sau khi đã
 
 | Mã | Việc | Trạng thái |
 |---|---|---|
-| V-13906-01 | Thư viện ngoài để tự động hoá kiểm giao diện tầng 3 | **CHƯA CẤP** |
+| V-13906-01 | Thư viện ngoài để tự động hoá kiểm giao diện tầng 3 | **ĐÃ CẤP 14/10/2026** — quyết định D-1, anh Thành: "Đồng ý Playwright, cài riêng trong dự án". Cài tại `node_modules/` của repo, trình duyệt ở `playwright-core/.local-browsers/` (KHÔNG dùng cache hệ thống — cache đó có bản của dự án khác). |
 | V-13906-02 | Xoay khoá mã hoá thật | **CHƯA CẤP** |
 | V-13906-03 | Sao lưu bí mật ra ngoài máy (VIP Vault) | **CHƯA CẤP** |
 | V-13906-04 | Nghĩa của mã J&T `110` | **CHƯA CẤP** |
@@ -313,3 +313,46 @@ Luật §22–§24 giữ nguyên: không agent nào ghi `csdl.py`/`migrate.py`/`
   đầu tiên phải hỏi anh.
 - **CẤM điền giá** cho bất kỳ gói nào (D-6).
 - **CẤM tự tuyên bố production-ready.**
+
+## 30. Ranh giới giao dịch — luật sau đợt G12 mục 5 (15/10/2026)
+
+Đổi cấu trúc, không phải thêm lời dặn. Ba điều dưới đây là **bắt buộc**, mỗi điều sinh ra
+từ một lỗi đo được thật, và mỗi điều có chốt chặn trong bộ thử.
+
+**30.1 — Chỉ `csdl.py` được `import sqlite3`.** Mã nghiệp vụ dùng `csdl.Row`,
+`csdl.LoiCSDL`, `csdl.LoiToanVen`, `csdl.LoiVanHanh`, `csdl.ket_noi()`.
+Chốt chặn: `app/thu/thu_bien_driver.py` ca a1 (dò bằng AST, không grep).
+
+**30.2 — Nhiều câu ghi phải thành MỘT đơn vị thì bọc `csdl.giao_dich()`.**
+`with csdl.khoa_ghi:` KHÔNG phải giao dịch — nó chỉ chặn hai thread giẫm nhau. Lỗi đã dính:
+`ghi_but_toan` có docstring ghi "cùng một transaction" mà ép bước hai hỏng thì bút toán
+777.000đ vào sổ còn công nợ đứng yên; `ghi_nhan_thanh_toan` để lại dòng thanh toán 90.000đ
+mồ côi và KẸT VĨNH VIỄN vì UNIQUE chặn làm lại.
+Chốt chặn: `app/thu/thu_giao_dich.py` ca c1, c2.
+
+**30.3 — CẤM `kn.commit()` / `kn.rollback()` trên kết nối của `csdl.mo()`.**
+Kết nối ấy ở chế độ tường minh (`isolation_level=None`) nên hai lệnh đó là **LỆNH RỖNG** —
+rỗng mà không báo lỗi, nên mã trông như có đường hoàn tác. Lỗi đã dính:
+`usage.ghi_su_kien` gọi `kn.rollback()` để bỏ sự kiện khi vượt trần → sự kiện mồ côi → lần
+thử lại cùng `idem_key` bị coi là trùng rồi lặng lẽ không thu gì (mất tiền một chiều).
+Muốn gộp thì `giao_dich()`; muốn bỏ một câu đã ghi thì XOÁ theo id.
+Chốt chặn: `app/thu/thu_bien_driver.py` ca a5. Miễn trừ: `csdl.py`, `migrate.py`.
+
+**30.4 — Điều phải biết về SQLite, đã đo, đừng suy lại:**
+
+| Điều | Đo được |
+|---|---|
+| `RAISE(ABORT)` của trigger | huỷ **CÂU**, KHÔNG huỷ giao dịch — câu sau vẫn commit. PostgreSQL thì `RAISE EXCEPTION` huỷ cả giao dịch |
+| `executescript()` | **tự COMMIT** giao dịch đang mở, lặng lẽ. Dùng `migrate.chay_ddl_trong_giao_dich()` |
+| `with kn:` của python | mở giao dịch cho DML, **KHÔNG** cho `CREATE`/`ALTER` |
+| `BEGIN IMMEDIATE` | nổ nếu python đã tự mở giao dịch; dùng được khi `isolation_level=None` |
+| `SAVEPOINT` trần | mở giao dịch **HOÃN** — đọc-rồi-ghi qua nhiều tiến trình nhận `SQLITE_BUSY_SNAPSHOT` NGAY, `busy_timeout` không chờ |
+| `PRAGMA foreign_keys` | **bị bỏ qua** nếu đặt trong giao dịch, không báo lỗi |
+| `PRAGMA journal_mode=WAL` | cần khoá độc quyền; `busy_timeout` **không** phủ nó |
+
+**30.5 — Phép đo đồng thời (chỉ thị G12 mục 11):**
+`app/thu/dong_thoi/chay.py`, mặc định **8 tiến trình hệ điều hành thật × 400 phép**.
+Phân biệt bốn kết cục: `CHOT_THANH_CONG` · `TU_CHOI_NGHIEP_VU` · `KHOA_HET_GIO` ·
+`GIAO_DICH_HONG`, cộng `MAT_CAP_NHAT` chỉ phát hiện được bằng đối chiếu cuối lượt.
+Đo bằng **tiến trình**, không bằng thread: `khoa_ghi` là RLock của Python, chỉ phủ MỘT tiến
+trình — đo bằng thread là đo chính cái khoá đó rồi kết luận "an toàn" cho ca nó không phủ.

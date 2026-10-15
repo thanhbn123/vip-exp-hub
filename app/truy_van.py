@@ -530,7 +530,6 @@ def ap_ddl(kn=None):
             cau = cau.strip()
             if cau:
                 kn.execute(cau)
-        kn.commit()
 
 
 # ============================================================================

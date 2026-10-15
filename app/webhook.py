@@ -673,7 +673,6 @@ def khoi_dong():
     kn = csdl.mo()
     with csdl.khoa_ghi:
         kn.execute("UPDATE wh_su_kien SET trang_thai='moi' WHERE trang_thai='dang_xu_ly'")
-        kn.commit()
     for d in kn.execute("SELECT id FROM wh_su_kien WHERE trang_thai IN ('moi','cho_thu_lai') ORDER BY id"):
         nap(d["id"])
     _dung.clear()

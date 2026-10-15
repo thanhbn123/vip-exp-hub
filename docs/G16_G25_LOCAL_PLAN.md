@@ -190,6 +190,28 @@ dùng CSDL thật**. PostgreSQL **chỉ cụm riêng**, **cấm đụng `:5432`*
 | **AG-01** | QA độc lập + **nghiệm thu trên bản đã gộp** | như G18 |
 | **AG-00** | Route `truy_van.py` + `DDL_G12Q` vào **migration v9**; `P-3`/`P-4` | `BAN_GIAO.md` §6.1 — tệp `migrate.py` thuộc AG-00 |
 
+### §9b ĐÍNH CHÍNH QUYỀN SỞ HỮU — HAI LỖI THIẾT KẾ CỦA CHÍNH AG-00 (phát hiện lúc phóng wave)
+
+Bảng §9 ban đầu **trùng quyền sở hữu ở hai chỗ**. Đã sửa **trước khi phóng**:
+
+1. **`gioi_han.py` bị hai làn cùng nhận.** §9 định giao AG-02 việc "PHẦN A nhân trần" và AG-03 việc
+   "bộ đếm mất khi khởi động lại" — nhưng **cả hai đều nằm trong `app/gioi_han.py`**. Hai làn cùng
+   ghi một tệp là đúng thứ luật quyền sở hữu sinh ra để chặn.
+   ⇒ **Gộp cả hai việc vào MỘT làn (AG-02)** — chúng là **cùng một hệ thống**, một người sửa thì
+   nhất quán; và **giao AG-03 việc khác** (21 mã VTP).
+
+2. **`admin/` + `pages/` bị hai làn cùng nhận.** §9 định giao AG-05 `V-13910` và AG-06 `V-13911` —
+   cả hai đều phải sửa `admin/*.js` và `pages/*.html`.
+   ⇒ **Tách theo TỆP, rời nhau hẳn:**
+   - **AG-05** chỉ ghi `admin/admin.js` · `admin/finance.js` · `admin/health.js` ·
+     `admin/carrier_health.js` · `admin/billing.js`
+   - **AG-06** chỉ ghi `pages/*.html` · `admin/logic.js` · `thu_giao_dien/*.spec.js`
+   Mỗi spec ghi **CANH BAO TRUNG QUYEN** nói rõ tệp nào của làn kia.
+
+**Bài học ghi lại:** lỗi này **không lộ ra khi đọc bảng** — nó chỉ lộ khi **đối chiếu bảng quyền với
+DANH SÁCH TỆP THẬT**. Luật "quyền sở hữu không trùng" phải được kiểm bằng **tệp**, không bằng **mô tả
+công việc**: hai mô tả khác nhau vẫn có thể trỏ vào cùng một tệp.
+
 ### Acceptance của G19
 1. **AG-02:** trần tần suất **giữ nguyên** qua N=1·2·4·8 tiến trình **thật**; **đối chứng âm** —
    cố tình quay lại bộ đếm trong bộ nhớ thì phép đo **phải ĐỎ**.

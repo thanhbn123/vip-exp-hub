@@ -104,16 +104,18 @@ sh app/thu/chay_tat_ca.sh; echo "EXIT=$?"          # exit 0 — số ở §6
   khác nhau cùng bay) + phía máy chủ (log JSON của chính các tiến trình: bao nhiêu **pid khác nhau**
   phục vụ trong **cùng một giây**).
 
-> **BẪY 1 — đọc trần bằng máy chủ đang đo.** Header `X-RateLimit-Limit` **chỉ có trên lượt 429**;
-> muốn đọc phải để máy chủ từ chối một lượt, mà mỗi lượt đều tiêu một suất. Bản đầu của bộ đo đọc
-> trần bằng một lượt gọi vào **chính bản sắp đo** ⇒ N=1 ra **19** thay vì 20 (HỎNG GIẢ). Nay trần
-> đọc trên một **máy chủ dùng một lần rồi tắt**.
+> **BẪY 1 — trần chỉ đọc được ở lượt BỊ CHẶN.** `X-RateLimit-Limit` **chỉ có trên lượt 429** (đo
+> được: lượt 401 không mang header nào). Muốn biết trần khai báo thì phải để máy chủ TỪ CHỐI một
+> lượt — mà mỗi lượt đều tiêu một suất. Đọc nó bằng một lượt gọi vào **chính bản sắp đo** là tự trừ
+> đi một suất: N=1 sẽ ra **19** thay vì 20. Bộ đo vì vậy đọc trần trên một **máy chủ dùng một lần
+> rồi tắt**, và ca `P1.0` kiểm luôn rằng máy chủ **nói trần bao nhiêu thì chặn đúng ở đó**.
 >
-> **BẪY 2 — đo nhầm chiều.** Bản đầu dùng **cùng một tên đăng nhập** cho mọi lượt của máy chủ dò
-> ⇒ chiều `dinh_danh` (trần **12**, `chan_giay=900`) chặn trước chiều `ip`, và bộ đo đọc ra trần
-> **12**. Số vòng bắn bị chặn trần theo con số sai đó ⇒ mọi bản "cho qua" đúng bằng **số vòng** mà
-> **không hề bị chặn** — tức *"không thấy chặn"* bị đọc thành *"trần rộng"*. Đây đúng khuôn **HỎNG
-> GIẢ N-05** và là lý do bộ đo nay **bắt buộc mỗi bản phải kết thúc bằng một lượt 429** mới tính ĐẠT.
+> **BẪY 2 — đo nhầm chiều (ĐÃ SẬP vào, đã sửa).** Bản đầu của bộ đo dùng **cùng một tên đăng nhập**
+> cho mọi lượt của máy chủ dò ⇒ chiều `dinh_danh` (trần **12**, `chan_giay=900`) chặn trước chiều
+> `ip`, và bộ đo đọc ra trần **12** rồi lấy con số sai đó làm **số vòng bắn**. Kết quả: mọi bản
+> "cho qua" đúng bằng **số vòng** mà **không hề bị chặn** — tức *"không thấy chặn"* bị đọc thành
+> *"trần rộng"*. Đây đúng khuôn **HỎNG GIẢ N-05**. Nay: tên đăng nhập **KHÁC NHAU mỗi lượt**, và bộ
+> đo **bắt buộc mỗi bản phải kết thúc bằng một lượt 429** mới tính ĐẠT.
 
 ### 2.2 Số đo
 
@@ -153,7 +155,7 @@ Hai đường đo **độc lập**: quét **cấu trúc** (AST) và đo **hành 
 ### 3.1 Quét cấu trúc (AST) — `P3a`
 
 * `http_jt` có **20 tên mức mô-đun**; trong đó **2 là dict HẰNG số cấu hình**
-  (`CHO_PHEP_MOI_TRUONG` dòng 54, `LY_DO_CHAN_MOI_TRUONG` dòng 55) — dict, nhưng **không ai ghi**.
+  (`CHO_PHEP_MOI_TRUONG` dòng 70, `LY_DO_CHAN_MOI_TRUONG` dòng 71) — dict, nhưng **không ai ghi**.
 * **0 dấu hiệu GHI trạng thái mức mô-đun**: không `global`, không `X[…] = …`, không
   `append/update/pop/…`, không `del X[…]`; **0 ghi tệp**: không `open(…, "w"/"a"/"x"/"+")`, không
   `tempfile`, không `shutil`, không `write_text`.
@@ -169,7 +171,7 @@ Hai đường đo **độc lập**: quét **cấu trúc** (AST) và đo **hành 
 | `P3b` | 4 **tiến trình** (pid khác nhau), nối đuôi, cùng URL | mỗi tiến trình nhận **đúng** `txlogisticId` + `apiAccount` của mình · **0** lượt nhận dấu vết của tiến trình khác · mã thoát các con `[0,0,0,0]` |
 | `P3c` | bao nhiêu **kết nối TCP** cho 4 lượt gọi | **+4** kết nối, **+4** yêu cầu — **một kết nối cho một lượt, KHÔNG pool** (đo từ **tiến trình stub**, không phải client tự khai) |
 | `P3d` | **đối chứng dương** cho máy đếm kết nối | 3 yêu cầu **trên MỘT kết nối** ⇒ kết nối **+1**, yêu cầu **+3** ⇒ máy đếm đếm **kết nối**, không đếm yêu cầu |
-| `P3e` | 4 tiến trình × 4 luồng, song song | stub báo **cao nhất 16 yêu cầu cùng lúc** · 16 kết nối cho 16 lượt · **0,39 s** (nếu tuần tự hoá hết phải ≥ 4,8 s) |
+| `P3e` | 4 tiến trình × 4 luồng, song song | stub báo **cao nhất 16 yêu cầu cùng lúc** · 16 kết nối cho 16 lượt · **0,37–0,39 s** (nếu tuần tự hoá hết phải ≥ 4,8 s) |
 | `P3f` | **đối chứng âm** cho "song song" | cùng stub, 4 tiến trình **nối đuôi** ⇒ cao nhất **= 1** (nên con số 16 ở `P3e` không phải hằng số) |
 
 **Trả lời trực tiếp câu hỏi đặt ra** — bốn thứ được hỏi, từng thứ một:
@@ -315,10 +317,11 @@ bằng bộ G18 này. Không bộ nào khác đổi số ca.
 > xanh trở lại — 53 ca ĐẠT. Người chạy nghiệm thu nên biết điều này trước khi đọc một lượt HỎNG của
 > `thu_qa_g17` trong lúc có làn khác đang mở.
 >
-> **Sau mốc `a9f076b` chỉ có TÀI LIỆU NÀY đổi** (commit `22c85f6`, **không một dòng mã nào**), nên
-> bảng hồi quy ở trên vẫn đúng cho mã. Riêng cổng "cây sạch" đã được chạy **LẠI** ở mốc mới:
-> `python3 app/thu/thu_qa_g17.py` ⇒ **exit 0**, 53 ca, sổ đối chứng `cay-sach = {âm 0, dương 1}`,
-> `HEAD=22c85f6`. Bộ đo G18 cũng chạy lại ở mốc mới: **26 ca · 0 hỏng · 0 bỏ qua · exit 0**.
+> **Sau mốc `a9f076b` chỉ có TÀI LIỆU NÀY đổi** — mọi commit tiếp theo trên nhánh chỉ sửa đúng tệp
+> `docs/G18_MULTIPROCESS.md`, **không một dòng mã nào** — nên bảng hồi quy ở trên vẫn đúng cho mã.
+> Riêng hai cổng đã được chạy **LẠI** ở các mốc mới (lần cuối: `d5d9bba`):
+> `python3 app/thu/thu_qa_g17.py` ⇒ **exit 0**, 53 ca (`cay-sach = {âm 0, dương 1}`) và bộ đo G18
+> ⇒ **26 ca · 0 hỏng · 0 bỏ qua · exit 0**. Kiểm lại bằng `git log --oneline` + `git status -uall`.
 
 ---
 

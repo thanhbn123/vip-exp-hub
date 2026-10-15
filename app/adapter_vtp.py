@@ -1,15 +1,27 @@
 # G05 — Adapter Viettel Post.
 # TRẠNG THÁI: MOCK hoàn toàn.
 #
-# ĐÃ ĐỌC repo `vip-viettelpost` ngày 14/10/2026 (Owner cho phép, CHỈ ĐỌC). Khảo sát lại lần hai
-# cùng ngày tại commit `4df8ce7`, kết quả đầy đủ ghi ở docs/VIETTELPOST_REUSE_AUDIT.md.
-# KẾT QUẢ cho LỚP TÍCH HỢP HÃNG — thứ adapter này cần: KHUNG RỖNG, không tái dùng được gì. Đo được:
-#   - app/providers/viettel_post/status_mapper.py : STATUS_MAP = {} rỗng, kèm
-#     "TODO: Fill only after verifying official VTP status codes."
-#   - auth.py       : raise NotImplementedError — chưa có contract xác thực
-#   - provider.py   : get_services / calculate_fee / create_shipment / get_shipment / cancel_shipment
-#                     đều raise NotImplementedError
-#   - docs/VIETTEL_POST_INTEGRATION.md : "Scaffold cố ý không điền endpoint/path cụ thể"
+# ĐÍNH CHÍNH 15/10/2026 (AG-03, G12) — KHỐI CHÚ THÍCH CŨ Ở ĐÂY NÓI SAI.
+#
+# Khảo sát ngày 14/10 đo trên bản clone `4df8ce7`, mà bản đó đi sau `origin/develop`
+# **194 commit**. Bản clone không báo lỗi gì — nó chỉ cũ. Kết luận "KHUNG RỖNG, không tái
+# dùng được gì" là kết luận về một bản mã đã lỗi thời, không phải về repo.
+#
+# Đo lại trên `develop` (`68e9642`, 14/10) — đỉnh thật, KHÔNG phải `main` (`main` và
+# `develop` đã rẽ nhánh: ahead 21, behind 1):
+#   - lớp tích hợp VTP: **2.391 dòng hoàn chỉnh**, không phải khung rỗng
+#   - `status_mapper.py`: **21 mã trạng thái** (15 có ánh xạ, 6 cố ý `None` kèm lý do)
+#   - `auth.py`: **141 dòng** — Login → ownerconnect → LoginVTP, có đệm token, `invalidate()`
+#   - webhook: **~1.000 dòng** — kiểm cỡ → `TOKEN` qua `hmac.compare_digest` → vân tay
+#     SHA-256 → chống trùng → lưu thô → ánh xạ → ACK
+#   - đã chạy THẬT trên `partnerdev` ngày 02/10/2026 (tạo đơn thử rồi huỷ)
+#
+# TÁI DÙNG ĐƯỢC **DỮ KIỆN** (endpoint, bảng mã, khuôn webhook, cách xác thực), KHÔNG tái dùng
+# được **MÃ** — repo đó chạy nền async, dự án này là stdlib đồng bộ.
+#
+# Và một dữ kiện câu cũ nói sai: token VTP đi ở header **`Token`**, không phải `Bearer`.
+#
+# Chi tiết + 15 câu đính chính: docs/G12_VTP_KHAO_SAT.md §6.
 #   - docs/STATUS_MAPPING.md           : "Không điền mã trạng thái Viettel Post bằng suy đoán"
 # Thứ DUY NHẤT cụ thể lấy được (và vẫn CHƯA XÁC MINH với tài liệu Partner chính thức):
 #   - host: https://partner.viettelpost.vn   (app/core/config.py: vtp_base_url, .env.example)

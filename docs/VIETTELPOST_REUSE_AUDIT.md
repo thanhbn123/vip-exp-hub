@@ -1,3 +1,27 @@
+> # ⚠ ĐÍNH CHÍNH — TOÀN BỘ FILE NÀY ĐO TRÊN BẢN CLONE SAI
+>
+> **AG-03 đo lại ngày 15/10/2026 (G12).** File này đo trên bản clone `4df8ce7`, mà bản đó đi
+> sau `origin/develop` **194 commit**. Nó khai phạm vi *"bản 4df8ce7"* — khai phạm vi là đúng
+> luật, nhưng **không ai kiểm bản clone trước khi tin nó**. Bản clone không báo lỗi gì; nó chỉ
+> cũ. Đây đúng là §12.1: thứ dùng để kiểm chứng phải được kiểm TRƯỚC khi tin.
+>
+> **15 câu trong file này nói sai.** Bảng đối chiếu đầy đủ: `docs/G12_VTP_KHAO_SAT.md` §6.
+> Bốn câu nặng nhất:
+>
+> | Câu trong file này | Thực tế trên `develop` (`68e9642`) |
+> |---|---|
+> | "lớp tích hợp hãng: khung rỗng, không tái dùng được gì" | **2.391 dòng hoàn chỉnh**; tái dùng được DỮ KIỆN, không tái dùng được MÃ |
+> | "`STATUS_MAP = {}`, không có mã trạng thái nào" | **21 mã** (15 có ánh xạ, 6 cố ý `None` kèm lý do) |
+> | "`auth.py` 11 dòng `NotImplementedError`" | **141 dòng** đầy đủ, có đệm token |
+> | "nút thắt thật là TÀI LIỆU PARTNER API + credentials" | Tài liệu **không còn là nút thắt**; còn lại **chỉ credentials** |
+>
+> Câu sai ở đây đã **lan sang ba chỗ trong mã nguồn** (`trang_thai_hang.py`, `webhook.py`,
+> `adapter_vtp.py`) — cả ba đã được đính chính cùng ngày. Sửa mỗi file gốc là sửa thiếu.
+>
+> **Giữ nguyên phần dưới làm lịch sử.** Đọc để biết đã sai thế nào, đừng dùng làm căn cứ.
+
+---
+
 # Audit: repo `vip-viettelpost` có gì tái dùng được cho VIP EXPRESS HUB?
 
 **Người khảo sát:** AG-02 CARRIER · **Ngày đo:** 14/10/2026

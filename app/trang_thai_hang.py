@@ -46,11 +46,26 @@ JT_MA = {
 #   - Ý nghĩa chính xác của 121 FINISH (sau giao thành công hay sau hoàn hàng).
 
 # ---- Viettel Post ----
-# CHƯA CÓ TÀI LIỆU HÃNG trong tay: adapter VTP hiện là MOCK hoàn toàn.
-# SỬA 14/10/2026: ghi chú cũ nói "repo `vip-viettelpost` Owner chưa cho phép đọc" — nay Owner ĐÃ
-# cho phép và repo ĐÃ ĐỌC (chỉ đọc). Kết quả: lớp tích hợp hãng ở repo đó là khung rỗng,
-# `STATUS_MAP = {}`, không có mã trạng thái VTP nào. Chi tiết: docs/VIETTELPOST_REUSE_AUDIT.md.
-# ⇒ Nút thắt thật là TÀI LIỆU PARTNER API + credentials, không phải quyền đọc repo.
+# Adapter VTP hiện là MOCK hoàn toàn.
+#
+# ĐÍNH CHÍNH 15/10/2026 (AG-03, G12) — ghi chú ngày 14/10 ở đây NÓI SAI, và nó nói sai vì
+# `docs/VIETTELPOST_REUSE_AUDIT.md` nói sai trước. Cả hai đo trên bản clone `4df8ce7`, mà bản
+# đó đi sau `origin/develop` **194 commit**. Bản clone KHÔNG BÁO LỖI GÌ — nó chỉ cũ, nên không
+# ai nghĩ phải kiểm nó. Đây đúng là §12.1: thứ dùng để kiểm chứng phải được kiểm TRƯỚC khi tin.
+#
+# Câu cũ: "lớp tích hợp hãng là khung rỗng, `STATUS_MAP = {}`, không có mã trạng thái nào".
+# Đo lại trên `develop` (`68e9642`, 14/10): lớp tích hợp VTP **hoàn chỉnh 2.391 dòng**, có
+# **21 mã trạng thái** (15 có ánh xạ, 6 cố ý `None` kèm lý do từng mã), `auth.py` **141 dòng**
+# đầy đủ, webhook **~1.000 dòng** có kiểm `TOKEN` bằng `hmac.compare_digest` + vân tay chống
+# trùng. Repo đang SỐNG (`pushed_at` 14/10), và đã chạy thật trên `partnerdev` ngày 02/10.
+#
+# Câu cũ: "nút thắt thật là TÀI LIỆU PARTNER API + credentials".
+# Đo lại: **tài liệu KHÔNG còn là nút thắt** — đã đọc được và đối chiếu từng trang. Còn lại
+# **chỉ credentials**.
+#
+# Vì sao mục này vẫn chỉ có mã MOCK: 21 mã kia là dữ kiện của repo khác, mang sang phải qua
+# một lượt đối chiếu riêng (và mã `104` của VTP là **ca nhập nhằng thứ hai** — bảng nói là
+# trạng thái cuối, đoạn "Lưu ý" nói không). Chưa mang sang thì KHÔNG bịa mã hãng.
 # Vì vậy chỉ ánh xạ đúng các mã mà BỘ MÔ PHỎNG của chính dự án này sinh ra — không bịa mã hãng.
 VTP_MA_MOCK = {
     "cho_lay": ("MOCK chờ lấy", "cho_lay"),

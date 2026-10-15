@@ -147,7 +147,13 @@ BO_XAC_THUC = {
 # Sơ đồ của từng hãng cho môi trường KHÁC mock. None = BLOCKED (chưa có tài liệu callback).
 SO_DO_THEO_HANG = {
     "jt": "jt_digest",
-    "vtp": None,        # chưa có tài liệu Partner API → không nhận callback thật
+    # ĐÍNH CHÍNH 15/10 (AG-03): câu cũ "chưa có tài liệu Partner API" NÓI SAI — tài
+    # liệu đã đọc được. Lý do thật để `None`: **Viettel Post KHÔNG KÝ webhook**. Cơ chế
+    # chính thức là so sánh hằng thời gian trường `TOKEN` TRONG THÂN với một bí mật
+    # chung — khác hẳn sơ đồ ký của J&T, nên cần một sơ đồ riêng chứ không phải chờ
+    # tài liệu. Lưu ý khi làm: bí mật đi qua THÂN nên nó lộ trong log của mọi lớp
+    # trung gian, không như chữ ký ở header.
+    "vtp": None,
 }
 
 

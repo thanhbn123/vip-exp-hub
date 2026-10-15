@@ -82,6 +82,80 @@ def dung_body(biz_content_json: str) -> dict:
     return {"bizContent": biz_content_json}
 
 
+# ── CHỐT CHẶN D-9: ánh xạ `area` CHƯA ĐƯỢC HÃNG XÁC NHẬN ──────────────────────
+# Anh Thành chốt 15/10/2026: "Chưa chốt cách ánh xạ `area` cho đến khi hãng xác nhận."
+#
+# AG-03 đo 15/10 trên `open.jtexpress.vn/apiDoc/orderserve/create` (bảng tham số và ví dụ
+# nằm CÙNG MỘT TRANG): ví dụ của CHÍNH HÃNG đặt **quận vào `city`** và **phường vào `area`**
+# — NGƯỢC với ánh xạ đang dùng trong `TRUONG_HANH_CHINH`. Và hệ này hiện **không gửi `city`**
+# lượt nào. Đọc theo cách khác (địa chỉ hai cấp từ 2025) cũng ra `area` = phường/xã.
+# **Cả hai cách đọc đều không ra "quận".**
+#
+# KHÔNG đổi ánh xạ ở đây — đổi lúc này là thay một giả định bằng một giả định khác. Chỉ
+# CHẶN, để giả định không lặng lẽ đi ra đường LIVE. Chi tiết: docs/G12_VTP_KHAO_SAT.md §5.
+ANH_XA_AREA_DA_XAC_NHAN = False
+NGUON_XAC_NHAN_AREA = ""          # ai nói · ngày nào · kênh nào. Rỗng = chưa xác nhận.
+CAP_HANH_CHINH_CHO_AREA = "quan-huyen"
+
+CAP_HOP_LE = ("quan-huyen", "phuong-xa")
+DAI_NGUON_TOI_THIEU = 20
+TU_GIU_CHO = ("todo", "tbd", "n/a", "na", "?", "chua biet", "chưa biết", "xxx", "...",
+              "sau", "updating", "fixme")
+
+
+def chot_chan_anh_xa_area(moi_truong, da_xac_nhan=None, nguon=None, cap=None):
+    """Chặn đường LIVE khi ánh xạ `area` chưa được J&T xác nhận (D-9).
+
+    MOCK luôn đi qua. Mọi môi trường khác phải qua đủ BA cửa:
+      1. cờ `ANH_XA_AREA_DA_XAC_NHAN` còn False ⇒ chặn. Mặc định là CHẶN, không phải cho
+         qua kèm cảnh báo — cảnh báo là thứ người ta học cách bỏ qua.
+      2. cờ True nhưng nguồn rỗng / là chuỗi giữ chỗ / quá ngắn ⇒ chặn.
+      3. cấp hành chính không thuộc danh sách hợp lệ ⇒ chặn.
+
+    Cửa 2 dùng danh sách ĐEN, cửa 3 dùng danh sách TRẮNG — theo câu hỏi phân biệt của §12.2:
+    quên một từ giữ chỗ thì chỉ cho qua một chuỗi vô hại; quên một cấp khỏi danh sách trắng
+    thì kết quả là BỊ CHẶN, tức là an toàn.
+
+    Tham số để `None` ⇒ đọc hằng của module (đường chạy thật). Truyền tường minh ⇒ dùng giá
+    trị truyền vào (đường bộ thử), nhờ vậy ca thử không phải vá hằng toàn cục.
+    """
+    if moi_truong == "mock":
+        return
+
+    da = ANH_XA_AREA_DA_XAC_NHAN if da_xac_nhan is None else da_xac_nhan
+    ng = NGUON_XAC_NHAN_AREA if nguon is None else nguon
+    cp = CAP_HANH_CHINH_CHO_AREA if cap is None else cap
+
+    def _chan(ly_do):
+        raise loi_hang.NormalizedCarrierError(
+            loi_hang.THAM_SO_SAI,
+            thong_diep=(
+                "CHỐT CHẶN D-9 — ánh xạ trường `area` của J&T CHƯA ĐƯỢC HÃNG XÁC NHẬN, "
+                "nên không được gửi đơn thật. " + ly_do + " "
+                "Cần J&T trả lời câu hỏi 28 (docs/JT_CAU_HOI_CHINH_THUC.md): với địa chỉ "
+                "hành chính HAI CẤP của Việt Nam từ 2025, `prov` và `area` phải điền chính "
+                "xác chuỗi nào, và có danh mục địa danh chuẩn tải về được không. "
+                "Lưu ý: ví dụ trong chính tài liệu tạo đơn đặt QUẬN vào `city` và PHƯỜNG "
+                "vào `area` — ngược với ánh xạ đang dùng. "
+                "Có trả lời rồi thì đặt ANH_XA_AREA_DA_XAC_NHAN=True, điền "
+                "NGUON_XAC_NHAN_AREA (ai nói · ngày nào · ở đâu) và CAP_HANH_CHINH_CHO_AREA."),
+            hang="jt", thao_tac="createOrder")
+
+    if not da:
+        _chan("Cờ ANH_XA_AREA_DA_XAC_NHAN đang là False.")
+    chuoi = str(ng or "").strip()
+    if not chuoi:
+        _chan("Cờ đã đặt True nhưng NGUON_XAC_NHAN_AREA còn RỖNG — "
+              "không có nguồn thì không có xác nhận.")
+    thap = chuoi.lower()
+    if len(chuoi) < DAI_NGUON_TOI_THIEU or any(t == thap for t in TU_GIU_CHO):
+        _chan("NGUON_XAC_NHAN_AREA đang là chuỗi giữ chỗ hoặc quá ngắn "
+              f"({len(chuoi)} ký tự, cần tối thiểu {DAI_NGUON_TOI_THIEU}) — "
+              "phải ghi rõ ai xác nhận, ngày nào, bằng kênh nào.")
+    if cp not in CAP_HOP_LE:
+        _chan(f"CAP_HANH_CHINH_CHO_AREA = {cp!r} không thuộc danh sách hợp lệ {CAP_HOP_LE}.")
+
+
 @dang_ky
 class AdapterJT(CarrierAdapter):
     ma_hang = "jt"
@@ -137,6 +211,10 @@ class AdapterJT(CarrierAdapter):
         vì đó là cấp J&T dùng để chia tuyến ở Việt Nam. Đây là **giả định**, không phải dữ kiện
         — hãng xác nhận khác thì đổi đúng một dòng ở `TRUONG_HANH_CHINH`.
         """
+        # Chốt D-9 đặt Ở ĐÂY chứ không ở `__init__`: `__init__` chỉ chặn lúc dựng
+        # adapter, còn chốt ở chỗ DÙNG thì mọi đường mới dẫn tới `bizContent` sau này
+        # đều tự bị canh — kể cả khi ai đó mở LIVE cho riêng thao tác chỉ-đọc.
+        chot_chan_anh_xa_area(self.moi_truong)
         g = lambda k: str(don.get(k) or "").strip()      # noqa: E731
         biz = {
             "customerCode": self.credentials.get("customerCode", ""),

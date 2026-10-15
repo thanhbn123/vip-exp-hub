@@ -1232,23 +1232,23 @@ class BoXuLy(BaseHTTPRequestHandler):
         #
         # ĐƯỜNG CÓ ĐOẠN CHỮ đặt TRƯỚC nhánh có `(\d+)`.
         if duong == "/api/v2/tai-chinh/cod" and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             loc = {k: ts[k] for k in ("trang_thai", "hang", "don_id") if ts.get(k)}
             ds = tai_chinh.bang_cod(tenant_id, loc or None,
                                     self._so_nguyen(ts, "gioi_han", 200))
             return self._tra(200, {"cod": [x for x in ds]})
         if duong == "/api/v2/tai-chinh/tong-so" and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             return self._tra(200, tai_chinh.tong_so_tai_chinh(tenant_id))
         if duong == "/api/v2/tai-chinh/cong-no" and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             return self._tra(200, tai_chinh.cong_no(tenant_id))
         if duong == "/api/v2/tai-chinh/dieu-chinh" and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             ds = tai_chinh.lich_su_dieu_chinh(tenant_id, self._so_nguyen(ts, "gioi_han", 200))
             return self._tra(200, {"dieu_chinh": [x for x in ds]})
         if duong == "/api/v2/tai-chinh/dieu-chinh" and method == "POST":
-            self._can(nc, "tenant.don.duyet")
+            self._can(nc, "tenant.taichinh.ghi")
             d = self._doc_json()
             ly_do = str(d.get("ly_do") or "").strip()
             if not ly_do:
@@ -1259,13 +1259,13 @@ class BoXuLy(BaseHTTPRequestHandler):
                        tenant_id=tenant_id, user_id=nc.user_id)
             return self._tra(201, kq)
         if duong == "/api/v2/tai-chinh/kiem-nhat-ky" and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             return self._tra(200, tai_chinh.kiem_nhat_ky(tenant_id))
         if duong == "/api/v2/tai-chinh/tinh-lai-cong-no" and method == "POST":
-            self._can(nc, "tenant.don.duyet")
+            self._can(nc, "tenant.taichinh.ghi")
             return self._tra(200, tai_chinh.tinh_lai_cong_no(tenant_id))
         if duong == "/api/v2/tai-chinh/dot-thanh-toan" and method == "POST":
-            self._can(nc, "tenant.don.duyet")
+            self._can(nc, "tenant.taichinh.ghi")
             d = self._doc_json()
             kq = tai_chinh.tao_dot_thanh_toan(
                 tenant_id, nc.user_id, str(d.get("hang") or ""), str(d.get("ma_dot") or ""),
@@ -1275,7 +1275,8 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(201, kq)
         m = re.fullmatch(r"/api/v2/tai-chinh/dot-thanh-toan/(\d+)/(ghi-nhan|chot)", duong)
         if m and method == "POST":
-            self._can(nc, "tenant.don.duyet")
+            # DUYỆT TIỀN, không phải ghi thường: đây là lúc tiền của hãng vào sổ.
+            self._can(nc, "tenant.taichinh.duyet")
             dot_id, viec = int(m.group(1)), m.group(2)
             d = self._doc_json()
             if viec == "ghi-nhan":
@@ -1288,7 +1289,7 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, kq)
         m = re.fullmatch(r"/api/v2/tai-chinh/cod/(\d+)", duong)
         if m and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             don_id = int(m.group(1))
             return self._tra(200, {
                 "cod": tai_chinh.cod_cua_don(tenant_id, don_id),
@@ -1298,7 +1299,7 @@ class BoXuLy(BaseHTTPRequestHandler):
 
         # --- đối soát bảng kê của hãng ---
         if duong == "/api/v2/doi-soat/nap" and method == "POST":
-            self._can(nc, "tenant.don.duyet")
+            self._can(nc, "tenant.taichinh.ghi")
             if self._gioi_han("import.upload", dinh_danh=nc.user_id, tenant_id=tenant_id):
                 return
             d = self._doc_json(self.GIOI_HAN_BODY_IMPORT)
@@ -1316,13 +1317,18 @@ class BoXuLy(BaseHTTPRequestHandler):
                 phien_ban=d.get("phien_ban"))
             return self._tra(201, kq)
         if duong == "/api/v2/doi-soat/dot" and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             ds = doi_soat.danh_sach_dot(tenant_id, self._so_nguyen(ts, "gioi_han", 100))
             return self._tra(200, {"dot": [x for x in ds]})
         m = re.fullmatch(r"/api/v2/doi-soat/dot/(\d+)/(doi-chieu|duyet|tu-choi)", duong)
         if m and method == "POST":
-            self._can(nc, "tenant.don.duyet")
             dot_id, viec = int(m.group(1)), m.group(2)
+            # `doi-chieu` chỉ SO SÁNH, không áp gì vào sổ → quyền ghi là đủ.
+            # `duyet`/`tu-choi` quyết định số của hãng CÓ VÀO SỔ TIỀN hay không → quyền DUYỆT.
+            # Tách ở đây chính là thứ D-7 mua được: trước kia cả ba dùng chung
+            # `tenant.don.duyet`, nên ai duyệt đơn thì duyệt được cả đối soát tiền.
+            self._can(nc, "tenant.taichinh.ghi" if viec == "doi-chieu"
+                      else "tenant.taichinh.duyet")
             if viec == "doi-chieu":
                 kq = doi_soat.doi_chieu(tenant_id, dot_id)
             elif viec == "duyet":
@@ -1337,7 +1343,7 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, kq)
         m = re.fullmatch(r"/api/v2/doi-soat/dot/(\d+)/(bang-ke|chenh-lech|xuat-csv)", duong)
         if m and method == "GET":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             dot_id, viec = int(m.group(1)), m.group(2)
             if viec == "bang-ke":
                 ds = doi_soat.bang_ke_cua_dot(tenant_id, dot_id,
@@ -1352,7 +1358,7 @@ class BoXuLy(BaseHTTPRequestHandler):
                                  dinh_kem="chenh-lech-dot-%d.csv" % dot_id)
         m = re.fullmatch(r"/api/v2/doi-soat/chenh-lech/(\d+)/xu-ly", duong)
         if m and method == "POST":
-            self._can(nc, "tenant.don.duyet")
+            self._can(nc, "tenant.taichinh.ghi")
             d = self._doc_json()
             kq = doi_soat.xu_ly_chenh_lech(tenant_id, nc.user_id, int(m.group(1)),
                                            str(d.get("xu_ly") or ""),
@@ -1361,7 +1367,7 @@ class BoXuLy(BaseHTTPRequestHandler):
 
         # --- billing / audit / ai ---
         if duong == "/api/v2/billing":
-            self._can(nc, "tenant.billing.xem")
+            self._can(nc, "tenant.taichinh.xem")
             return self._tra(200, {"goi": dict(billing.goi_cua_tenant(tenant_id)),
                                    "usage": billing.usage_hien_tai(tenant_id)})
         if duong == "/api/v2/audit":

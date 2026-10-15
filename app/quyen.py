@@ -37,6 +37,16 @@ QUYEN = {
     "tenant.webhook.xem": "Xem sự kiện webhook",
     "tenant.webhook.replay": "Replay sự kiện webhook",
     "tenant.billing.xem": "Xem gói và usage",
+    # D-7 — anh Thành duyệt 15/10 "Đồng ý, làm ngay". Ba quyền tài chính RIÊNG, tách khỏi
+    # `tenant.don.duyet`. Trước đó G07 phải dùng `tenant.billing.xem` để đọc và
+    # `tenant.don.duyet` để ghi/duyệt, nên:
+    #   (a) TENANT_STAFF KHÔNG xem được màn tài chính nào — kể cả COD của đơn nó đang giao;
+    #   (b) **ai duyệt đơn thì duyệt được cả đối soát TIỀN** — hai việc khác hẳn nhau về hậu
+    #       quả. Duyệt đơn sai thì sửa đơn; duyệt đối soát sai thì áp số của hãng vào sổ tiền.
+    # `tai_chinh.QUYEN_TC` đã ưu tiên ba quyền này sẵn, nên seed là đủ, không sửa dòng mã nào.
+    "tenant.taichinh.xem": "Xem COD, phí, công nợ, đối soát",
+    "tenant.taichinh.ghi": "Ghi điều chỉnh tài chính, nạp bảng kê của hãng",
+    "tenant.taichinh.duyet": "DUYỆT đợt đối soát và ghi nhận thanh toán của hãng",
     "tenant.audit.xem": "Xem nhật ký của doanh nghiệp",
     "tenant.ai.dung": "Dùng AI gateway",
 }
@@ -52,17 +62,33 @@ MA_TRAN = {
                      "tenant.khach.xem", "tenant.khach.ghi", "tenant.don.xem", "tenant.don.ghi",
                      "tenant.don.duyet", "tenant.hang.xem", "tenant.hang.quan_ly",
                      "tenant.import.ghi", "tenant.import.duyet", "tenant.webhook.xem",
-                     "tenant.webhook.replay", "tenant.billing.xem", "tenant.audit.xem", "tenant.ai.dung"],
+                     "tenant.webhook.replay", "tenant.billing.xem", "tenant.audit.xem", "tenant.ai.dung",
+                     # D-7: chủ doanh nghiệp có cả ba quyền tài chính
+                     "tenant.taichinh.xem", "tenant.taichinh.ghi", "tenant.taichinh.duyet"],
     "TENANT_ADMIN": ["tenant.xem", "tenant.membership.xem", "tenant.membership.quan_ly",
                      "tenant.khach.xem", "tenant.khach.ghi", "tenant.don.xem", "tenant.don.ghi",
                      "tenant.don.duyet", "tenant.hang.xem", "tenant.hang.quan_ly",
                      "tenant.import.ghi", "tenant.import.duyet", "tenant.webhook.xem",
-                     "tenant.webhook.replay", "tenant.billing.xem", "tenant.audit.xem", "tenant.ai.dung"],
+                     "tenant.webhook.replay", "tenant.billing.xem", "tenant.audit.xem", "tenant.ai.dung",
+                     # D-7: ADMIN giữ NGUYÊN năng lực đang có (nó vốn duyệt tiền được qua
+                     # `tenant.don.duyet`), nhưng nay là MỘT NÚM RIÊNG — chủ doanh nghiệp có
+                     # thể thu `tenant.taichinh.duyet` của ADMIN mà KHÔNG mất quyền duyệt đơn
+                     # của nó. Đó mới là cái D-7 mua được: một cái dial tách rời, chứ không
+                     # phải đổi ngay ai làm được gì.
+                     "tenant.taichinh.xem", "tenant.taichinh.ghi", "tenant.taichinh.duyet"],
     "TENANT_STAFF": ["tenant.xem", "tenant.khach.xem", "tenant.khach.ghi", "tenant.don.xem",
                      "tenant.don.ghi", "tenant.hang.xem", "tenant.import.ghi",
-                     "tenant.webhook.xem", "tenant.ai.dung"],
+                     "tenant.webhook.xem", "tenant.ai.dung",
+                     # D-7: nhân viên XEM được tài chính — trước đây không xem được gì, kể cả
+                     # COD của chính đơn nó đang giao. KHÔNG cho ghi, KHÔNG cho duyệt.
+                     # GIỚI HẠN đã ghi ra: `xem` hiện là MỘT quyền phủ CẢ HAI thứ — COD từng
+                     # đơn (nhân viên cần) và công nợ toàn doanh nghiệp (nhân viên không cần).
+                     # Tách nó thành `taichinh.don.xem` / `taichinh.tong.xem` là việc V-13910.
+                     "tenant.taichinh.xem"],
     "TENANT_VIEWER": ["tenant.xem", "tenant.khach.xem", "tenant.don.xem", "tenant.hang.xem",
-                      "tenant.webhook.xem"],
+                      "tenant.webhook.xem",
+                      # D-7: vai trò chỉ-xem thì xem được tài chính, đúng tên của nó
+                      "tenant.taichinh.xem"],
 }
 
 # Vai trò nào được phép CẤP vai trò nào (chặn leo thang đặc quyền).

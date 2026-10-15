@@ -472,6 +472,28 @@
       ghi_chu: "Trạng thái kết nối hiện SUY RA từ việc có tài khoản hãng hay không, " +
                "không phải phép thử gọi hãng.",
     },
+    {
+      ten: "Trạng thái kết nối hãng — từng trường credentials · đường dẫn đã xác minh · chốt D-9",
+      duong: "/api/v2/g09/ket-noi-hang", method: "GET",
+      man: "Kết nối J&T",
+      mong_doi_vao: { hang: "mã hãng, mặc định jt" },
+      mong_doi_ra: {
+        moi_truong: "mock|sandbox|production",
+        cong: "{ mock: bool, sandbox: bool, production: bool, ly_do: { môi trường: [câu] } }",
+        credentials: { "<tên trường>": "bool — CHỈ bool, tuyệt đối không giá trị/độ dài/4 ký tự cuối" },
+        duong_api: { "<tên thao tác>": { da_xac_minh: "bool", nguon: "string" } },
+        chot_D9: { dang_bat: "bool", ly_do: "string", nguon_xac_nhan: "string" },
+      },
+      ghi_chu: "BA dữ kiện màn 'Kết nối J&T' cần mà KHÔNG route nào trả (đo 15/10/2026, " +
+               "AG-06): (1) trạng thái TỪNG trường credentials — route hiện có chỉ nói 'thiếu " +
+               "file credentials', không liệt kê tên trường; (2) bảng đường dẫn đã/chưa xác " +
+               "minh nằm trong app/adapter_jt.py::DUONG_API, không phơi ra HTTP; (3) chốt D-9 " +
+               "(ánh xạ `area`) có trong mã nhưng KHÔNG nằm trong danh sách điều kiện mà " +
+               "/api/v2/g09/suc-khoe-hang trả về — người vận hành đọc payload sẽ tưởng mở đủ " +
+               "bốn điều kiện là chạy được đơn thật. Có route này thì màn bỏ được phần đọc " +
+               "hằng từ mã nguồn. Trường `credentials` CHỈ được trả bool — không giá trị, " +
+               "không độ dài, không 4 ký tự cuối.",
+    },
   ];
 
   /* ===== 13. Danh mục endpoint giao diện ĐANG dùng =====
@@ -483,6 +505,10 @@
     ["GET", "/api/v2/khach-hang"],
     ["GET", "/api/v2/hang"],
     ["GET", "/api/v2/tai-khoan-hang"],
+    // G17 · AG-06: màn "Kết nối J&T" đọc route này (cùng hai đường ngay trên). Khai vào đây để
+    // bộ thử HTTP bắn thật — giao diện gọi một đường không tồn tại là lỗi phải lộ ra, không
+    // phải để người dùng nhìn thấy ô trống rồi tự đoán.
+    ["GET", "/api/v2/g09/suc-khoe-hang"],
     ["GET", "/api/v2/import"],
     ["GET", "/api/v2/webhook/su-kien"],
     ["GET", "/api/v2/billing"],

@@ -247,6 +247,9 @@ const MAN_TENANT = [
   ["khach", "👤 Khách hàng", "tenant.khach.xem"],
   ["import", "📥 Import file", "tenant.import.ghi"],
   ["hang", "🚚 Hãng vận chuyển", "tenant.hang.xem"],
+  /* G17 · AG-06 — màn kết nối J&T. Cùng quyền với màn Hãng vận chuyển vì nó đọc đúng những
+     route mà màn ấy đọc (`tenant.hang.xem` ở backend, không phải ẩn/hiện của giao diện). */
+  ["ket-noi-jt", "🔌 Kết nối J&T", "tenant.hang.xem"],
   ["webhook", "🔔 Webhook", "tenant.webhook.xem"],
   ["thanh-vien", "👥 Thành viên", "tenant.membership.xem"],
   ["goi", "💳 Gói & usage", "tenant.billing.xem"],
@@ -304,7 +307,13 @@ function dungKhung() {
   const quay_lai = MAN_CHO_QUAY_LAI && menu.some(([m]) => m === MAN_CHO_QUAY_LAI) ? MAN_CHO_QUAY_LAI : null;
   MAN_CHO_QUAY_LAI = null;
   if (quay_lai) bao("Đã mở lại màn bạn đang xem trước khi phiên hết hạn.");
-  moMan(quay_lai || menu[0][0]);
+  /* ĐƯỜNG VÀO SÂU `admin/index.html#ket-noi-jt`. SPA này không có router, nên không có hash
+     thì MỌI lối vào đều dừng ở màn đầu menu — và một lối vào không tới được chỗ cần tới thì
+     không phải lối vào. Hash chỉ được mở khi màn đó CÓ trong menu của vai trò này; vai trò
+     không có quyền thì rơi về màn đầu, không hiện màn trắng. */
+  const tu_hash = String(location.hash || "").replace(/^#/, "");
+  const man_hash = tu_hash && menu.some(([mm]) => mm === tu_hash) ? tu_hash : null;
+  moMan(quay_lai || man_hash || menu[0][0]);
 }
 
 function datMan(tieu_de, html) {
@@ -312,10 +321,27 @@ function datMan(tieu_de, html) {
   document.getElementById("man").innerHTML = html;
 }
 
+/* Đổi hash NGAY TRONG TRANG (`#man-khac`) là điều hướng CÙNG TÀI LIỆU: trình duyệt không nạp
+   lại trang, nên nếu chỉ đọc hash lúc dựng khung thì liên kết sâu trông như hỏng — bấm mà
+   không có gì xảy ra. Nghe `hashchange` để mở đúng màn. Chỉ mở màn CÓ trên menu của vai trò
+   đang đăng nhập: hash không được phép mở màn mà người dùng không có quyền thấy. */
+window.addEventListener("hashchange", () => {
+  const ma = String(location.hash || "").replace(/^#/, "");
+  if (!ma || ma === MAN_HIEN_TAI) return;
+  // So bằng `dataset`, KHÔNG ghép hash vào selector: hash là chuỗi người dùng sửa được, và
+  // một dấu nháy trong đó làm `querySelector` ném lỗi ngay giữa lượt điều hướng.
+  const co = Array.from(goc.querySelectorAll(".menu-quan-tri a")).some((a) => a.dataset.man === ma);
+  if (co) moMan(ma);
+});
+
 async function moMan(id) {
   MAN_HIEN_TAI = id;
   goc.querySelectorAll("[data-man]").forEach(a => a.classList.toggle("hien-tai", a.dataset.man === id));
   document.getElementById("sidebar").classList.remove("mo");
+  /* Ghi màn đang xem vào hash để lối vào sâu (`#ket-noi-jt`) và nút Back của trình duyệt có
+     nghĩa. `replaceState` chứ không `pushState`: bấm 6 màn trong menu không nên đắp 6 bước
+     vào lịch sử — người dùng bấm Back sẽ phải bấm 6 lần mới thoát khỏi trang quản trị. */
+  try { history.replaceState(null, "", "#" + id); } catch { /* file:// hoặc trình duyệt chặn — không quan trọng */ }
   try { await CAC_MAN[id](); }
   catch (e) {
     if (e && e.daXuLy) return;                         // 401 đã có màn riêng
@@ -662,6 +688,208 @@ const CAC_MAN = {
     ve();
   },
 
+  /* ================= G17 · AG-06 — MÀN KẾT NỐI J&T =================
+     MỘT chỗ trả lời bốn câu của người vận hành: hệ đang ở môi trường nào và cổng đã mở chưa ·
+     bốn trường credentials đã có chưa · thao tác nào CHƯA làm được và vì sao · chốt D-9 còn
+     chặn không. Trước màn này, bốn câu đó nằm rải trong mã nguồn, tài liệu và đầu người.
+
+     DỮ LIỆU — ba route ĐÃ CÓ, không thêm route nào, không sửa `app/server.py`:
+       `GET /api/v2/g09/suc-khoe-hang` · `GET /api/v2/hang` · `GET /api/v2/tai-khoan-hang`
+     Phần QUYẾT ĐỊNH (cổng mở/chưa, trường nào có/không, thao tác nào khoá) nằm ở
+     `admin/carrier_health.js` mục 8 — ở đây CHỈ dựng HTML, để bộ thử Node kiểm được quyết
+     định mà không cần trình duyệt.
+
+     BA ĐIỀU CẤM Ở MÀN NÀY, ghi ra để người sửa sau không vô tình phá:
+       1. KHÔNG hiện giá trị credential — không giá trị, không độ dài, không 4 ký tự cuối,
+          không băm. Kể cả trong `title`, comment HTML hay chuỗi gửi lên máy chủ.
+       2. KHÔNG có nút nào gọi hãng (kể cả sandbox) và không có nút mở cổng. Mở cổng là việc
+          phải SỬA MÃ + có phiếu duyệt (`app/cau_hinh.py` ghi rõ lý do), không phải một cú bấm.
+       3. KHÔNG bịa số. Chỗ nào API không trả thì hiện "CHƯA ĐO ĐƯỢC" kèm lý do, hoặc nhãn
+          CHỜ BACKEND trỏ về `admin/logic.js → API_CHO_BACKEND` — nơi bộ thử HTTP bắn thật. */
+  async "ket-noi-jt"() {
+    const CH = window.VIPCARRIERHEALTH;
+    if (!CH || !CH.dungManKetNoi) {
+      datMan("Kết nối J&T", `<div class="hop-loi"><b>Không nạp được <code>admin/carrier_health.js</code>.</b>
+        Màn này không tự dựng lại dữ liệu — thiếu module thì phải nói thẳng, không đoán.</div>`);
+      return;
+    }
+    const [bc, hs, tk] = await Promise.all([
+      api("/api/v2/g09/suc-khoe-hang"),
+      api("/api/v2/hang"),
+      api("/api/v2/tai-khoan-hang"),
+    ]);
+    const m = CH.dungManKetNoi(bc, "jt", tk.tai_khoan);
+    const so_hang_live_mo = hs.hang.filter(h => h.live_mo).length;
+    const nhanCo = (co, chu_co, chu_khong) => co === true
+      ? `<span class="huy-hieu hh-xanh">${chu_co}</span>`
+      : co === false ? `<span class="huy-hieu hh-do">${chu_khong}</span>`
+      : '<span class="huy-hieu hh-vang" title="API không trả đủ căn cứ — không suy ra là có">CHƯA ĐO ĐƯỢC</span>';
+    const nhanMo = (mo) => mo === true ? `<span class="huy-hieu hh-xanh">CỔNG MỞ</span>`
+      : mo === false ? `<span class="huy-hieu hh-do">CỔNG CHƯA MỞ</span>`
+      : '<span class="huy-hieu hh-vang">CHƯA ĐO ĐƯỢC</span>';
+
+    datMan("Kết nối J&T", `
+      <div class="hop-nguon" style="margin-bottom:14px">
+        <b>Màn này đọc gì:</b> ba route đã có của hệ (${["GET /api/v2/g09/suc-khoe-hang",
+          "GET /api/v2/hang", "GET /api/v2/tai-khoan-hang"].map(x => `<code>${T(x)}</code>`).join(" · ")}).
+        Nó <b>chỉ đọc</b>: không gọi hãng ở bất kỳ môi trường nào, không có nút mở cổng, không sửa credentials.
+        Dòng nào không đo được từ ba route ấy thì ghi rõ "chưa đo được" ngay trên dòng đó.
+      </div>
+
+      <div class="the" id="kn-tom-tat"><div class="the-dau"><h2>${T(m.ten)} — đang ở đâu</h2>
+        <div class="phai">${hh({ lop: m.suc_khoe.lop, ten: m.suc_khoe.trang_thai, la: false, mo_ta: m.suc_khoe.mo_ta })}</div></div>
+        <div class="the-than">
+          <p style="margin-top:0">${T(m.suc_khoe.mo_ta)} · <span class="ghi-chu-nguon">phạm vi: ${T(m.suc_khoe.pham_vi)}</span></p>
+          <div class="luoi luoi-3">
+            <div><div class="ghi-chu-nguon">Môi trường ghi trên tài khoản hãng</div>
+              ${m.moi_truong_tai_khoan.length
+                ? m.moi_truong_tai_khoan.map(x => `<div><b>${T(x.moi_truong)}</b> · ${T(x.ten)}
+                    ${x.kich_hoat ? '<span class="huy-hieu hh-xanh">đang bật</span>' : '<span class="huy-hieu hh-xam">đang khoá</span>'}
+                    <div class="ghi-chu-nguon">credentials đổi lần cuối: ${x.credentials_doi_luc ? T(x.credentials_doi_luc) : "chưa ghi nhận"}</div></div>`).join("")
+                : '<div class="trang-thai-rong">Chưa có tài khoản hãng nào cho J&T</div>'}</div>
+            <div><div class="ghi-chu-nguon">Khoá an toàn toàn cục</div>
+              ${m.khoa_toan_cuc.live_mo
+                ? '<span class="huy-hieu hh-do">CHO_PHEP_LIVE ĐANG MỞ</span>'
+                : '<span class="huy-hieu hh-xanh">CHO_PHEP_LIVE=False</span>'}
+              <div class="ghi-chu-nguon">${T(m.khoa_toan_cuc.ly_do)}</div>
+              <div class="ghi-chu-nguon">khoá chống trùng: ${m.khoa_toan_cuc.khoa_chong_trung ? "đang bật" : "TẮT"}</div>
+              <div class="ghi-chu-nguon">Hãng mở live trong hệ: <b>${so_hang_live_mo}/${hs.hang.length}</b> (${T((hs.hang.map(h => h.ma).join(", ")) || "—")})</div></div>
+            <div><div class="ghi-chu-nguon">Kết luận của lượt đo gần nhất</div>
+              ${m.ket_luan.map(k => `<div>${hh({ lop: k.lop, ten: k.ten + " = " + k.gia_tri, la: false, mo_ta: "" })}</div>`).join("")}
+              <div class="ghi-chu-nguon">Lượt chạy harness trong báo cáo này:
+                ${m.lan_chay ? T(JSON.stringify(m.lan_chay)) : "<b>chưa có lượt nào</b>"}</div></div>
+          </div>
+        </div></div>
+
+      <div class="the" id="kn-cong" style="margin-top:16px"><div class="the-dau">
+        <h2>Cổng môi trường — đã MỞ hay CHƯA</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">nguồn: ${T("GET /api/v2/g09/suc-khoe-hang")}</span></div></div>
+        <div class="luoi luoi-3">
+          ${m.cong.map(c => `<div class="the the-hang" data-moi-truong="${T(c.ma)}">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <b>${T(c.ten)}</b> ${nhanMo(c.mo)}</div>
+            <div style="font-size:12.5px;color:var(--chu-mo);margin-top:6px">${T(c.ket_luan)}</div>
+            ${c.ly_do.length ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px">
+              ${c.ly_do.map(l => `<li>${T(l)}</li>`).join("")}</ul>` : ""}
+            <div class="ghi-chu-nguon" style="margin-top:auto">nguồn: <code>${T(c.nguon)}</code></div>
+          </div>`).join("")}
+        </div>
+        <div class="the-than" style="padding-top:0">
+          <div class="ghi-chu-nguon">Cổng MỞ khi danh sách "còn thiếu gì" của backend RỖNG —
+            giao diện không tự đặt điều kiện, chỉ đọc. Mở cổng phải SỬA MÃ trong
+            <code>app/cau_hinh.py</code> và có phiếu duyệt của Owner; màn này cố ý không có nút mở.</div>
+        </div></div>
+
+      <div class="the" id="kn-credential" style="margin-top:16px"><div class="the-dau">
+        <h2>Bốn trường credentials — chỉ TÊN và trạng thái có/không</h2>
+        <div class="phai">${m.credential.do_duoc
+          ? '<span class="huy-hieu hh-xanh-duong">backend có trả căn cứ</span>'
+          : '<span class="huy-hieu hh-vang">backend chưa trả đủ căn cứ</span>'}</div></div>
+        <div class="the-than">
+          <div class="hop-loi" style="background:var(--xanh-duong-nhat);border-color:#BFDBFE;color:var(--xanh-duong)">
+            Màn này <b>không hiện giá trị</b>, <b>không hiện độ dài</b>, <b>không hiện 4 ký tự cuối</b>,
+            <b>không hiện băm</b> của bất kỳ trường nào. Cột
+            <code>carrier_accounts.credentials_duoi</code> (4 ký tự cuối) <b>cố ý không được đọc</b>:
+            đó là một phần giá trị credential, không phải thông tin vận hành.
+          </div>
+          <div class="luoi luoi-2">
+            ${m.credential.nhom.map(n => `<div>
+              <div class="ghi-chu-nguon">${T(n.nhom)}</div>
+              <ul style="margin:6px 0 0;padding-left:18px">
+                ${n.truong.map(t => `<li data-truong="${T(t.ten)}"><code>${T(t.ten)}</code>
+                  ${nhanCo(t.co, "ĐÃ CẤU HÌNH", "CHƯA CẤU HÌNH")}
+                  <div class="ghi-chu-nguon">${T(t.ly_do)}</div></li>`).join("")}
+              </ul></div>`).join("")}
+          </div>
+          <div class="ghi-chu-nguon">Căn cứ: <code>${T(m.credential.nguon)}</code></div>
+          ${m.credential.do_duoc ? "" : `<div class="ghi-chu-nguon" style="margin-top:8px">
+            ${m.credential.ly_do.map(l => T(l)).join(" ")}</div>
+            ${hopChoBackend("/api/v2/g09/ket-noi-hang")}`}
+          <div class="ghi-chu-nguon" style="margin-top:8px">Nhóm 2 lấy từ hợp đồng bưu cục:
+            thiếu nhóm này thì ký đúng vẫn không tạo được đơn —
+            <code>app/harness_hang.py</code> mục 3 ghi rõ.</div>
+        </div></div>
+
+      <div class="the" id="kn-thao-tac" style="margin-top:16px"><div class="the-dau">
+        <h2>Thao tác ĐANG BỊ KHOÁ — ${m.so_thao_tac_khoa}/${m.thao_tac.length}</h2>
+        <div class="phai"><span class="huy-hieu hh-xam">nguồn: g09/suc-khoe-hang + /api/v2/hang</span></div></div>
+        <div class="cuon-ngang"><table class="bang">
+          <thead><tr><th style="white-space:nowrap">Thao tác</th><th style="white-space:nowrap">Hạng mục sẵn sàng</th>
+          <th style="white-space:nowrap">Mức backend đo</th>
+          <th style="white-space:nowrap">Năng lực adapter</th><th style="white-space:nowrap">Trạng thái</th>
+          <th style="min-width:420px">Vì sao chưa làm được</th></tr></thead>
+          <tbody>${m.thao_tac.map(t => `<tr data-thao-tac="${T(t.thao_tac)}" data-kha-nang="${T(t.ten_kha_nang)}">
+            <td><code>${T(t.thao_tac)}</code></td>
+            <td>${T(t.ten_hang_muc)}${t.hang_muc ? ` <span class="ghi-chu-nguon">(${T(t.hang_muc)})</span>` : ""}</td>
+            <td>${t.muc ? hh({ lop: t.lop, ten: t.muc, la: t.muc_la, mo_ta: "" }) : '<span class="huy-hieu hh-vang">không có hạng mục</span>'}</td>
+            <td>${t.kha_nang === true ? '<span class="kha-nang co">có</span>' : t.kha_nang === false
+                 ? '<span class="kha-nang khong">KHÔNG</span>' : '<span class="huy-hieu hh-vang">chưa đo được</span>'}</td>
+            <td>${t.khoa ? '<span class="huy-hieu hh-do">BỊ KHOÁ</span>' : '<span class="huy-hieu hh-xanh">không khoá</span>'}</td>
+            <td><ul style="margin:0;padding-left:16px;font-size:12.5px">${t.ly_do.map(l => `<li>${T(l)}</li>`).join("")}</ul>
+              ${t.do_bang_gi ? `<div class="ghi-chu-nguon">đo bằng gì: ${T(t.do_bang_gi)}</div>` : ""}</td>
+          </tr>`).join("")}</tbody></table></div>
+        <div class="the-than" style="padding-top:0">
+          <div class="ghi-chu-nguon"><b>"Bị khoá" là câu SUY RA</b> theo hướng an toàn: còn bất kỳ
+            lý do nào khiến thao tác không gọi được hãng thật thì giao diện coi là khoá — và in
+            ra từng lý do kèm nguồn. Giao diện không hứa thay backend.</div>
+        </div></div>
+
+      <div class="the" id="kn-d9" style="margin-top:16px"><div class="the-dau">
+        <h2>Chốt D-9 — ánh xạ <code>area</code> (city/area)</h2>
+        <div class="phai">${m.d9.dang_bat
+          ? '<span class="huy-hieu hh-do">ĐANG CHẶN</span>'
+          : '<span class="huy-hieu hh-vang">ĐÃ GỠ (theo mã nguồn)</span>'}</div></div>
+        <div class="the-than">
+          <p style="margin-top:0"><b>${T(m.d9.ket_luan)}</b></p>
+          <p>${T(m.d9.vi_sao)}</p>
+          <div class="luoi luoi-3">
+            <div><div class="ghi-chu-nguon">Hằng trong mã nguồn</div>
+              <code>${T(m.d9.hang_so)} = ${m.d9.dang_bat ? "False" : "True"}</code></div>
+            <div><div class="ghi-chu-nguon">Nguồn xác nhận của hãng</div>
+              ${m.d9.nguon_xac_nhan ? T(m.d9.nguon_xac_nhan)
+                : '<span class="huy-hieu hh-do">RỖNG — chưa ai xác nhận</span>'}</div>
+            <div><div class="ghi-chu-nguon">Cấp hành chính đang ánh xạ</div>
+              <code>${T(m.d9.cap_hanh_chinh)}</code></div>
+          </div>
+          <div class="hop-loi" style="margin-top:12px">
+            <b>Đọc dòng này trước khi tin phần còn lại:</b> trạng thái D-9 lấy từ
+            <b>MÃ NGUỒN</b> (<code>${T(m.d9.nguon_ma)}</code>), <b>KHÔNG qua API</b> — vì không
+            route nào trả nó. Ca E2E đọc lại chính tệp đó và so với chữ trên màn: mã nguồn đổi
+            mà màn chưa đổi là ca HỎNG.
+            ${T(m.d9.ghi_chu_api)} ${nhanChoBackend("/api/v2/g09/ket-noi-hang")}
+          </div>
+        </div></div>
+
+      <div class="the" id="kn-san-sang" style="margin-top:16px"><div class="the-dau">
+        <h2>Bảng sáu mức sẵn sàng của ${T(m.ten)} — ${m.san_sang.length} hạng mục</h2>
+        <div class="phai">${hh(m.ngat_mach, " ngắt mạch: " + T(m.ngat_mach.ten))}</div></div>
+        <div class="cuon-ngang"><table class="bang">
+          <thead><tr><th>Hạng mục</th><th>Mức</th><th>Đo bằng gì</th></tr></thead>
+          <tbody>${m.san_sang.map(d => `<tr><td>${T(d.ten)} <span class="ghi-chu-nguon">(${T(d.ma)})</span></td>
+            <td>${hh({ lop: d.lop, ten: d.muc, la: d.muc_la, mo_ta: d.do_bang_gi })}</td>
+            <td style="font-size:12.5px">${T(d.do_bang_gi)}
+            ${d.thieu_do_bang_gi ? ' <span class="huy-hieu hh-vang">thiếu câu đo bằng gì</span>' : ""}</td></tr>`).join("")}
+          </tbody></table></div>
+        <div class="the-than" style="padding-top:0">
+          <div class="ghi-chu-nguon">Ngắt mạch: ${T(m.ngat_mach.mo_ta)}${m.ngat_mach.biet ? "" : " — mặc định KHÔNG phải \"bình thường\", chỉ là chưa đo."}</div>
+          ${m.can_soat.length ? `<div class="ghi-chu-nguon" style="margin-top:6px">Mã trạng thái hãng còn
+            NEEDS_REVIEW/AMBIGUOUS: ${m.can_soat.map(c => `<code>${T(c.ma)}</code> (${T(c.nhan)})`).join(" · ")}
+            — đơn mang mã này KHÔNG tiến trạng thái. Màn này không cho chốt nghĩa: chốt nghĩa đòi căn cứ thật từ hãng.</div>` : ""}
+        </div></div>
+
+      <div class="the" id="kn-nguon" style="margin-top:16px"><div class="the-than">
+        <b>Phạm vi đã đo của màn này</b>
+        <ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px">
+          <li>Đo được: cổng môi trường · mức sẵn sàng từng hạng mục · khoá an toàn · năng lực adapter ·
+            môi trường và lần đổi credentials của tài khoản hãng · kết luận lượt đo.</li>
+          <li>KHÔNG đo được (và màn nói thẳng): trạng thái TỪNG trường credentials khi backend không
+            liệt kê tên trường thiếu · bảng đường dẫn đã/chưa xác minh của hãng · chốt D-9 qua API ·
+            ngắt mạch (payload chưa có trường này).</li>
+          <li>${T(m.khong_vi)}</li>
+        </ul>
+      </div></div>`);
+  },
+
   async khach() {
     const kq = await api("/api/v2/khach-hang");
     datMan("Khách hàng", `
@@ -774,7 +1002,12 @@ const CAC_MAN = {
       <thead><tr><th>Hãng</th><th>Tên</th><th>Môi trường</th><th>Credentials</th><th>Webhook URL</th><th></th></tr></thead>
       <tbody>${tk.tai_khoan.map(t2 => `<tr><td><b>${T(t2.hang)}</b></td><td>${T(t2.ten)}</td>
         <td><span class="tag-demo">${T(t2.moi_truong)}</span></td>
-        <td>…${T(t2.credentials_duoi || "—")} <span style="color:var(--chu-mo);font-size:11px">(mã hóa, không xem lại được${t2.credentials_doi_luc ? "; đổi " + T(t2.credentials_doi_luc) : ""})</span></td>
+        <td>${String(t2.credentials_duoi || "").trim()
+            ? '<span class="huy-hieu hh-xanh">đã có credentials</span>'
+            : '<span class="huy-hieu hh-xam">chưa có credentials</span>'}
+          <div style="color:var(--chu-mo);font-size:11px">đã mã hoá, không xem lại được. Màn này
+          <b>không hiện giá trị</b>, <b>không hiện độ dài</b>, <b>không hiện 4 ký tự cuối</b> —
+          cột <code>credentials_duoi</code> chỉ được đọc để biết CÓ hay KHÔNG${t2.credentials_doi_luc ? "; đổi lần cuối " + T(t2.credentials_doi_luc) : ""}</div></td>
         <td style="font-size:11.5px"><code>/api/v2/webhook/nhan/${T(t2.webhook_ma)}</code></td>
         <td style="white-space:nowrap">${ql ? `
           <button class="nut nut-nho" data-tk="${t2.id}" data-v="${t2.kich_hoat ? "khoa" : "mo"}">${t2.kich_hoat ? "Khóa" : "Mở"}</button>

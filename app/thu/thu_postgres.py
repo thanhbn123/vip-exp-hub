@@ -1083,9 +1083,13 @@ class I_DDLNguyenTuTruocSau(unittest.TestCase):
             _xoa_csdl(self.CSDL_AM)
 
     def test_i3_hai_bang_do_migration_nam_ngoai_bo_ddl(self):
-        """GHIM PHẠM VI, bằng số đo. Bộ DDL 47 bảng là schema NỀN. Hai bảng `don_mat_hang`
-        và `han_muc_nhap_thang` do `migrate.py` tạo ở đường ALTER (`nang_len_v7/v8`), nên
-        CHƯA có trong phép diễn tập này.
+        """GHIM PHẠM VI, bằng số đo. Bộ DDL 47 bảng là schema NỀN. BỐN bảng `don_mat_hang`,
+        `han_muc_nhap_thang`, `gioi_han_luot`, `gioi_han_chan` do `migrate.py` tạo ở đường ALTER
+        (`nang_len_v7/v8/v9`), nên CHƯA có trong phép diễn tập này.
+
+        G19 (AG-00): danh sách này 2 → 4 vì AG-02 chuyển kho trạng thái giới hạn tần suất vào
+        CSDL (hai bảng `gioi_han_*`), áp qua `nang_len_v9`. Cập nhật ĐÚNG danh sách mong đợi —
+        KHÔNG nới điều kiện: ca vẫn KÊU nếu ai thêm bảng mới mà quên một trong hai đường.
 
         Ca này ghim con số đó lại: ai thêm một bảng mới mà quên đưa nó vào MỘT trong hai
         đường thì ca này KÊU — thay vì để phạm vi lặng lẽ trôi."""
@@ -1098,7 +1102,9 @@ class I_DDLNguyenTuTruocSau(unittest.TestCase):
         ngoai = sorted(tat_ca - set(sl))
         print("        %d bảng trong bộ DDL · %d bảng toàn bộ app/ · NGOÀI bộ DDL: %s"
               % (len(sl), len(tat_ca), ", ".join(ngoai)))
-        self.assertEqual(ngoai, ["don_mat_hang", "han_muc_nhap_thang"],
+        self.assertEqual(ngoai,
+                         ["don_mat_hang", "gioi_han_chan", "gioi_han_luot",
+                          "han_muc_nhap_thang"],
                          "tập bảng NGOÀI bộ DDL 47 đã đổi: %s — cập nhật mục PHẠM VI của "
                          "docs/G17_POSTGRES.md trước khi sửa ca này" % ngoai)
 

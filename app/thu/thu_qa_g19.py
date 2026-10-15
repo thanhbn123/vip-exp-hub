@@ -68,7 +68,12 @@ THU_MUC_THU = os.path.dirname(os.path.abspath(__file__))
 GOC_DO = os.environ.get("VIP_G19_GOC", GOC_CAY)
 GOC_APP_DO = os.environ.get("VIP_G19_APP", GOC_APP)
 
-HEAD_GHIM = os.environ.get("VIP_G19_HEAD", "6e61fc1e1f1f9a6d64931464e4f40ed887192ab5").strip()
+# VÁ G19 (N-G19-04, AG-00): bản trước GHIM CỨNG nền `6e61fc1` làm MẶC ĐỊNH, nên ca này ĐỎ
+# ngay khi cây được gộp — nó ghim SỰ THẬT MÔI TRƯỜNG (HEAD lúc đo) thay vì ghim TÍNH CHẤT
+# (cây phải SẠCH, và HEAD phải là một SHA hợp lệ). Cùng họ với H5 của G17.
+# Nay: mặc định RỖNG = không ghim; chỉ ghim khi người đo CHỦ ĐỘNG truyền `VIP_G19_HEAD`
+# (đo trên nền đóng băng thì truyền, đo trên cây gộp thì thôi). Tính chất vẫn được canh.
+HEAD_GHIM = os.environ.get("VIP_G19_HEAD", "").strip()
 DAY_DU = os.environ.get("VIP_G19_DAY_DU", "") == "1"
 
 TEP_CUA_AG01_G19 = ("app/thu/thu_qa_g19.py", "docs/QA_G19.md")
@@ -821,12 +826,21 @@ class A_Nen(unittest.TestCase):
 
     def test_a1_head_dung_ghim_va_cay_sach(self):
         head = _git("rev-parse", "HEAD").stdout.strip()
-        self.assertEqual(head, HEAD_GHIM, "HEAD KHÁC nền đóng băng — mọi số đo phải coi là vô hiệu")
+        # TÍNH CHẤT luôn được canh: HEAD phải là một SHA hợp lệ (đọc được, 40 hex).
+        self.assertRegex(head, r"^[0-9a-f]{40}$", "HEAD không đọc được: %r" % head)
+        # GHIM chỉ áp khi người đo CHỦ ĐỘNG truyền `VIP_G19_HEAD`. Đo trên nền đóng băng thì
+        # truyền; đo trên cây đã gộp thì thôi — nếu không, ca này ĐỎ chỉ vì cây đã tiến lên,
+        # tức nó canh SỰ THẬT MÔI TRƯỜNG chứ không canh điều nó định canh.
+        if HEAD_GHIM:
+            self.assertEqual(head, HEAD_GHIM,
+                             "HEAD KHÁC nền đóng băng đã ghim — mọi số đo phải coi là vô hiệu")
         st = [d for d in _git("status", "--porcelain=v1", "-uall").stdout.splitlines()
               if d.strip() and not _la_tep_ag01(d)]
         self.assertEqual(st, [], "cây có thay đổi NGOÀI hai tệp AG-01 G19: %s" % st[:5])
         _dc_duong("nen-dong-bang")
-        print("\n  [A1] HEAD=%s · cây sạch ngoài 2 tệp AG-01 · vân tay=%s" % (head[:7], VAN_TAY_LUC_NAN[:16]))
+        print("\n  [A1] HEAD=%s · %s · cây sạch ngoài 2 tệp AG-01 · vân tay=%s"
+              % (head[:7], ("ghim " + HEAD_GHIM[:7]) if HEAD_GHIM else "KHÔNG ghim (đo trên cây gộp)",
+                 VAN_TAY_LUC_NAN[:16]))
 
     def test_a2_chot_an_toan_du(self):
         self.assertIsNone(kiem_chot_an_toan(), "chốt an toàn báo sai: %s" % _LY_DO_TU_CHOI)
@@ -1323,6 +1337,31 @@ if __name__ == "__main__":
 # Chọn chế độ Ở ĐÂY, sau khi mọi hàm đã được định nghĩa: `_chon_che_do()` gọi driver trong
 # tiến trình con, mà driver đó dùng `_chay_con`. Đặt sớm hơn sẽ NameError lúc import.
 NHO_DONG, LY_DO_CHE_DO = _chon_che_do()
+
+# VÁ G19 (N-G19-05, AG-00): đây là BỘ ĐO NỀN.
+#
+# Nó khẳng định SÁU KHOẢN NỢ G19 còn NGUYÊN (C1..C6), cộng BỐN PHÉP ĐỘT BIẾN dựng trên chính
+# các khoản nợ đó. Trên cây ĐÃ GỘP thì nợ đã đóng, nên nó KHÔNG THỂ xanh — và ĐÚNG là không nên
+# xanh. Chạy nó trên cây gộp rồi báo "hỏng" là báo hỏng GIẢ, và một cổng kêu nhầm là cổng sẽ bị
+# học cách bỏ qua. Nay nó TỰ NHẬN BIẾT: ngoài nền đóng băng (và không được ghim chủ động) thì
+# BỎ QUA cả bộ kèm lý do, chứ không đỏ.
+#
+# Nghiệm thu cây ĐÃ GỘP thuộc bộ RIÊNG `thu_qa_g19_tich_hop.py` — đúng khuôn đã dùng cho G18.
+_NEN_DONG_BANG = "6e61fc1e1f1f9a6d64931464e4f40ed887192ab5"
+
+
+def setUpModule():
+    head = _git("rev-parse", "HEAD").stdout.strip()
+    if HEAD_GHIM:
+        return                      # người đo ghim CHỦ ĐỘNG — cứ chạy; lệch thì đỏ là ĐÚNG
+    if head != _NEN_DONG_BANG:
+        raise unittest.SkipTest(
+            "BỘ ĐO NỀN — HEAD %s != nền đóng băng %s. Bộ này khẳng định SÁU KHOẢN NỢ G19 còn "
+            "nguyên; trên cây đã gộp thì nợ đã đóng nên nó không thể xanh, và đúng là không nên "
+            "xanh. Nghiệm thu cây ĐÃ GỘP thuộc bộ riêng `thu_qa_g19_tich_hop.py`. "
+            "Muốn chạy trên nền: VIP_G19_HEAD=%s"
+            % (head[:7], _NEN_DONG_BANG[:7], _NEN_DONG_BANG))
+
 
 if __name__ == "__main__":
     print("NỀN ĐO: HEAD=%s · ghim=%s" % (_git("rev-parse", "HEAD").stdout.strip(), HEAD_GHIM))

@@ -21,6 +21,14 @@
 #   W03 — `tenant_tu_account()`: tenant chỉ có MỘT nguồn hợp lệ, gọi tên ra để soi được.
 #   W04 — mã nhập nhằng KHÔNG được rò ra ngoài chính nó: xem `watermark()` (đã vá G14).
 #   W05 — `doi_chieu_hanh_trinh()`: đối chiếu sự kiện ↔ đơn, gồm phép kiểm CHÉO TENANT.
+#
+# Bổ sung đợt G16 (AG-04):
+#   A13 — HỢP ĐỒNG CALLBACK chốt thành dữ liệu MÁY ĐỌC ĐƯỢC, phần biết được và phần BLOCKED:
+#         `CHAN_HOP_DONG_CALLBACK` (mười chỗ hở, mỗi chỗ nói CHÍNH XÁC cái còn thiếu + câu hỏi
+#         gửi hãng + đường mã đang bị chặn), `HOP_DONG_MUC` / `HOP_DONG_XAC_MINH_VOI_HANG` /
+#         `PHAN_HOI_XAC_MINH` (mức THẬT), `bao_cao_hop_dong_callback()` và
+#         `kiem_hop_dong_khong_tu_nang_muc()` (canh bất biến trung thực).
+#         KHÔNG đổi thuật toán ký và KHÔNG nâng mức nào: mức cao nhất vẫn là DOCUMENTED.
 import base64
 import hashlib
 import hmac
@@ -301,10 +309,233 @@ HOP_DONG_CALLBACK = {
         "ghi_chu": "`codMoney`/`goodsValue`/`itemsValue` (câu 29) và cách ánh xạ `area` (D-9)"
                    " chưa chốt ⇒ TUYỆT ĐỐI không suy ra tiền từ callback (hợp đồng §18).",
     },
+    # ---- G16 (AG-04) bổ sung: những chỗ hở CÙNG LOẠI được chỉ đích danh khi rà lại trích lục.
+    # Không trường nào ở đây được điền giá trị: chúng là câu hỏi, không phải dữ kiện.
+    "y_nghia_apiaccount": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 8: header `apiAccount` trong callback là tài khoản API CỦA MÌNH hay của"
+                   " J&T? Mã hiện kiểm nó như tài khoản của mình, và CHỈ khi credentials giải mã"
+                   " được + account có lưu trường đó — đây là phép kiểm PHỤ có ghi chú, không"
+                   " phải dữ kiện đã xác nhận.",
+    },
+    "sandbox_co_day_callback": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 24: môi trường THỬ có đẩy callback không, hay chỉ môi trường thật? Chưa"
+                   " trả lời thì chặng 'callback sandbox' của harness G16 không thể lên lịch"
+                   " được kể cả sau khi có credentials — xem docs/G16_SANDBOX_HARNESS.md §chặng"
+                   " BLOCKED.",
+    },
+    "thu_tu_nhieu_su_kien": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 11: nhiều sự kiện cùng lúc có bảo đảm thứ tự theo thời gian không? Mã"
+                   " đang tự sắp theo `scanTime` + thứ hạng trạng thái + watermark; đó là phòng"
+                   " thủ của phía nhận, không phải bảo đảm của hãng.",
+    },
+    "do_lech_gio_chap_nhan": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 13: J&T chấp nhận lệch giờ tối đa bao nhiêu? Chưa biết thì ngưỡng"
+                   " `LECH_GIO_TOI_DA_MS` (15 phút) là con số CỦA MÌNH, có ghi chú — không phải"
+                   " ngưỡng của hãng.",
+    },
 }
 # Trường nào của hợp đồng còn CHƯA có tài liệu. Bộ thử canh danh sách này để không ai âm thầm
 # đổi một dòng `CHUA_TAI_LIEU` thành `DA_TAI_LIEU` mà không kèm căn cứ từ hãng.
 CALLBACK_CHUA_TAI_LIEU = tuple(t for t, v in HOP_DONG_CALLBACK.items() if v["muc"] == CHUA_TAI_LIEU)
+
+# ---------------------------------------------------------------------------
+# G16 (AG-04) — MỨC CỦA CẢ HỢP ĐỒNG + BẢNG CHẶN MÁY ĐỌC ĐƯỢC
+# ---------------------------------------------------------------------------
+# Mức cao nhất mà hợp đồng callback đạt được. Đây KHÔNG phải chỗ nâng bằng cách sửa một dòng
+# mã: chỉ một lượt đối chiếu với hãng mới nâng được, và lượt đó CHƯA có — `V-G09-01` (gọi API
+# hãng, kể cả sandbox) và `V-13906-05` (credentials sandbox J&T) đều CHƯA CẤP.
+#
+# Vì sao phải có cờ riêng thay vì tin vào docstring: một bản vá làm route chạy được (như B11)
+# rất dễ bị đọc thành "hợp đồng đã xác minh". Cờ này là chỗ để bộ thử và harness đối chiếu.
+HOP_DONG_MUC = MUC_DOCUMENTED
+HOP_DONG_XAC_MINH_VOI_HANG = False
+PHAN_HOI_XAC_MINH = False
+# Trường được phép GIỮ giá trị dù mức là CHUA_TAI_LIEU: giá trị đó là CÂU CHỮ NGUYÊN VĂN của
+# tài liệu, và chính câu đó là chỗ mâu thuẫn — chép nguyên văn thì kiểm được, diễn giải lại thì
+# không. Mọi trường khác ở mức CHUA_TAI_LIEU phải để `gia_tri = None`.
+GIA_TRI_NGUYEN_VAN_DUOC_PHEP = ("header_timestamp",)
+
+# Mười chỗ hở, mỗi chỗ nói CHÍNH XÁC cái còn thiếu. Năm chỗ đầu là danh sách Owner chỉ đích
+# danh (directive 15/10/2026, mục 13); năm chỗ sau là cùng loại, tìm được khi rà lại trích lục.
+#   `cau_hoi`      — số câu gốc trong docs/JT_CAU_HOI_CHINH_THUC.md (+ mã B của docs/G14 §8)
+#   `thieu`        — cái còn thiếu, nói đủ để gửi hãng nguyên văn
+#   `doan_thi_hong`— đoán thì hỏng thế nào (vì sao KHÔNG được đoán)
+#   `dang_chan`    — đường mã / hành vi đang bị chặn cho tới khi có câu trả lời
+#   `go_khi`       — cần đúng cái gì để gỡ
+CHAN_HOP_DONG_CALLBACK = {
+    "khoa_ky_chieu_callback": {
+        "cau_hoi": "câu 6 · G14 §8 B1",
+        "thieu": "Tài liệu KHÔNG nói chiều callback được ký bằng `privateKey` của tài khoản API"
+                 " của mình hay bằng một khoá riêng do J&T cấp cho chiều callback.",
+        "doan_thi_hong": "Đoán khoá ⇒ chữ ký ĐÚNG của hãng vẫn bị từ chối: mất sạch callback,"
+                         " và lỗi hiện ra chỉ là 'digest không khớp' — không chỉ đúng chỗ.",
+        "dang_chan": "`webhook.xac_thuc_jt_digest()` giữ mức DOCUMENTED; `chon_so_do()` chọn"
+                     " `jt_digest` cho mọi môi trường khác `mock` mà KHÔNG có gì bảo đảm khoá.",
+        "go_khi": "hãng trả lời câu 6 kèm một ví dụ đủ ba thứ (chuỗi gốc · khoá che bớt · digest).",
+    },
+    "chuoi_dem_di_ky": {
+        "cau_hoi": "câu 7 · G14 §8 B1",
+        "thieu": "Chuỗi đem đi ký: chỉ chuỗi JSON `bizContent`, hay toàn bộ thân form"
+                 " (`bizContent=...`), hay một chuỗi khác. Chưa có ví dụ đối chiếu từng byte.",
+        "doan_thi_hong": "Đoán chuỗi ký ⇒ TỪ CHỐI SẠCH mọi callback thật, mà không có lỗi nào"
+                         " chỉ đúng nguyên nhân.",
+        "dang_chan": "`xac_thuc_jt_digest()` lấy `bizContent` nguyên văn từ thân form — cách"
+                     " hiểu này là GIẢ ĐỊNH có ghi chú trong mã, không phải dữ kiện.",
+        "go_khi": "hãng trả lời câu 7 (chuỗi gốc + digest kết quả để đối chiếu từng byte).",
+    },
+    "phuong_thuc_http": {
+        "cau_hoi": "câu 2 · G14 §8 B2",
+        "thieu": "Phương thức HTTP của callback (轨迹回传). Trích lục chỉ tả THÂN và HEADER.",
+        "doan_thi_hong": "Ghi `POST` thành dữ kiện là bịa; nếu hãng dùng phương thức khác thì cửa"
+                         " ingest hiện tại KHÔNG có route cho nó — callback rơi vào 404/405 và"
+                         " không ai thấy sự kiện nào đã mất.",
+        "dang_chan": "Route `POST /api/v2/webhook/nhan/<webhook_ma>` (server.py, AG-00) — có"
+                     " thật và đã đo qua HTTP, nhưng chưa được đăng ký với hãng.",
+        "go_khi": "hãng trả lời câu 2 (và URL công khai được cấp — `V-G11-01`).",
+    },
+    "phan_hoi_xac_nhan": {
+        "cau_hoi": "câu 9 · G14 §8 B3",
+        "thieu": "Hình dạng ĐẦY ĐỦ của thân phản hồi: mã HTTP nào là 'đã nhận', còn trường nào"
+                 " khác ngoài `code`, và `200`/`202` có bị coi là hỏng không. Biết đúng MỘT mảnh:"
+                 " phản hồi có trường `code`, và `code=1` là được nhận.",
+        "doan_thi_hong": "Đoán mã HTTP ⇒ hãng coi MỌI callback là hỏng và đẩy lại vô hạn. Chống"
+                         " trùng ở tầng CSDL cứu được DỮ LIỆU nhưng không cứu được TẢI.",
+        "dang_chan": "`phan_hoi_xac_nhan()` đã dựng và đã được cắm vào route (B11) — nhưng mức"
+                     " của trường này VẪN là CHUA_TAI_LIEU; bản vá đó KHÔNG phải nghiệm thu.",
+        "go_khi": "hãng trả lời câu 9. Không có câu trả lời thì giữ nguyên mã HTTP cũ.",
+    },
+    "chinh_sach_thu_lai": {
+        "cau_hoi": "câu 9 · G14 §8 B4",
+        "thieu": "Số lần J&T thử lại callback, khoảng cách giữa các lần, và J&T có đẩy TRÙNG một"
+                 " sự kiện không.",
+        "doan_thi_hong": "Không biết thì không chọn được trần thử lại của phía nhận, và không biết"
+                         " khoá chống trùng của mình có che đúng ca trùng thật hay không.",
+        "dang_chan": "Trần `WEBHOOK_SO_LAN_THU`, `REPLAY_TOI_DA`, `BACKOFF_TRAN_GIAY` — đều là"
+                     " con số CỦA MÌNH, có ghi chú, không phải chính sách của hãng.",
+        "go_khi": "hãng trả lời câu 9/10.",
+    },
+    "y_nghia_apiaccount": {
+        "cau_hoi": "câu 8",
+        "thieu": "`apiAccount` trong header callback là tài khoản API của MÌNH hay của J&T — câu"
+                 " này quyết định phép kiểm phụ trong `xac_thuc_jt_digest` có nghĩa hay không.",
+        "doan_thi_hong": "Nếu header là tài khoản của J&T thì phép kiểm 'apiAccount phải khớp"
+                         " credentials của account này' sẽ TỪ CHỐI OAN mọi callback thật.",
+        "dang_chan": "`xac_thuc_jt_digest()` chỉ kiểm khi credentials giải mã được VÀ account có"
+                     " lưu `apiAccount` — cố ý bỏ qua được, và có ghi trong mã.",
+        "go_khi": "hãng trả lời câu 8 (kèm câu 21: `apiAccount` dùng chung hay mỗi đối tác một bộ).",
+    },
+    "sandbox_co_day_callback": {
+        "cau_hoi": "câu 24",
+        "thieu": "Môi trường THỬ của J&T có đẩy callback về URL của mình không, hay chỉ môi"
+                 " trường thật mới đẩy.",
+        "doan_thi_hong": "Giả định 'sandbox có đẩy' rồi lên lịch nghiệm thu ⇒ chờ một sự kiện"
+                         " không bao giờ tới, và gọi đó là 'chưa tới' thay vì 'không thể tới'.",
+        "dang_chan": "Chặng callback sandbox của harness G16 (`trien_khai/g16/`) — BLOCKED kèm"
+                     " đúng hai lý do: chưa có quyền gọi hãng (`V-G09-01`), chưa có credentials"
+                     " (`V-13906-05`), VÀ chưa biết sandbox có đẩy hay không.",
+        "go_khi": "hãng trả lời câu 24, cùng lúc với `V-G09-01` + `V-13906-05`.",
+    },
+    "thu_tu_nhieu_su_kien": {
+        "cau_hoi": "câu 11",
+        "thieu": "Nhiều sự kiện đẩy cùng lúc có bảo đảm thứ tự theo thời gian không.",
+        "doan_thi_hong": "Không biết ⇒ phải tự phòng thủ; nếu phòng thủ bị gỡ vì tin rằng 'hãng"
+                         " đã sắp thứ tự' thì sự kiện cũ ghi đè sự kiện mới, và đơn lùi trạng thái.",
+        "dang_chan": "Ba lớp phòng thủ của phía nhận: thứ hạng trạng thái, watermark theo `scanTime`"
+                     " (chỉ tính sự kiện ĐÃ ÁP), và `UNIQUE(carrier_account_id, event_id)`.",
+        "go_khi": "hãng trả lời câu 11.",
+    },
+    "do_lech_gio_chap_nhan": {
+        "cau_hoi": "câu 13",
+        "thieu": "J&T chấp nhận lệch giờ tối đa bao nhiêu giữa `timestamp` của họ và giờ máy mình.",
+        "doan_thi_hong": "Đặt ngưỡng quá chặt ⇒ từ chối oan callback thật; quá rộng ⇒ lớp chống"
+                         " phát lại mất tác dụng. Cả hai đều hỏng im lặng.",
+        "dang_chan": "`LECH_GIO_TOI_DA_MS` = 15 phút — con số CỦA MÌNH, có ghi chú trong mã.",
+        "go_khi": "hãng trả lời câu 13 (và câu 12: `timestamp` là mốc Unix thật hay giờ UTC+7 quy đổi).",
+    },
+    "moc_du_lieu_them": {
+        "cau_hoi": "câu 29 + quyết định D-9",
+        "thieu": "`codMoney`/`goodsValue`/`itemsValue` khác nhau chỗ nào và còn dùng không; cách"
+                 " ánh xạ `area`/`city` cho địa chỉ hai cấp Việt Nam.",
+        "doan_thi_hong": "Suy ra TIỀN từ callback chưa xác minh ⇒ sổ COD ghi một khoản không có"
+                         " thật; đúng loại sai đắt nhất (hợp đồng §18).",
+        "dang_chan": "Đường webhook CỐ Ý không chạm sổ COD (ba bảng `tc_` của tài chính); mọi mã"
+                     " chưa xác minh đi vào NEEDS_REVIEW với 0 dòng sổ bị đụng.",
+        "go_khi": "hãng trả lời câu 29 và chốt D-9.",
+    },
+}
+
+
+def bao_cao_hop_dong_callback():
+    """Báo cáo MÁY ĐỌC ĐƯỢC về hợp đồng callback: biết gì, chưa biết gì, và mức thật.
+
+    Tồn tại để ba chỗ dùng CHUNG một nguồn: bộ thử (`thu_webhook_jt.py`), harness G16
+    (`trien_khai/g16/`), và người đọc tài liệu. Không chỗ nào phải chép lại danh sách —
+    chép lại là chỗ để hai bản lệch nhau mà không ai thấy.
+
+    Cố ý KHÔNG có tham số để hạ/nâng mức: mức đọc thẳng từ `HOP_DONG_MUC`, và hàm
+    `kiem_hop_dong_khong_tu_nang_muc()` canh nó.
+    """
+    return {
+        "muc": HOP_DONG_MUC,
+        "muc_toi_da_duoc_phep_dot_nay": MUC_DOCUMENTED,
+        "xac_minh_voi_hang": HOP_DONG_XAC_MINH_VOI_HANG,
+        "phan_hoi_xac_minh": PHAN_HOI_XAC_MINH,
+        "so_truong": len(HOP_DONG_CALLBACK),
+        "da_tai_lieu": sorted(t for t, v in HOP_DONG_CALLBACK.items()
+                              if v["muc"] == DA_TAI_LIEU),
+        "suy_ra": sorted(t for t, v in HOP_DONG_CALLBACK.items() if v["muc"] == SUY_RA),
+        "chua_tai_lieu": sorted(CALLBACK_CHUA_TAI_LIEU),
+        "blocked": [dict(ten=t, **CHAN_HOP_DONG_CALLBACK[t]) for t in sorted(CHAN_HOP_DONG_CALLBACK)],
+        "canh_bao": ("MỘT BẢN VÁ LÀM ĐƯỜNG MÃ CHẠY ĐƯỢC KHÔNG PHẢI LÀ HỢP ĐỒNG ĐÃ XÁC MINH."
+                     " Mức cao nhất đợt này là DOCUMENTED (viết theo tài liệu, chưa đối chiếu với"
+                     " hãng). Muốn nâng mức phải có một lượt đối chiếu thật, và lượt đó đang"
+                     " BLOCKED bởi V-G09-01 + V-13906-05."),
+    }
+
+
+def kiem_hop_dong_khong_tu_nang_muc():
+    """Canh bất biến TRUNG THỰC của hợp đồng. Trả danh sách vi phạm (rỗng = còn trung thực).
+
+    Bốn luật, và luật nào cũng là một cách để một bản vá bị đọc sai:
+      1. Mức của cả hợp đồng không được vượt `DOCUMENTED` (không MOCK/SANDBOX/LIVE).
+      2. Mọi trường trong bảng chặn phải THẬT SỰ ở mức `CHUA_TAI_LIEU` và có `ghi_chu`.
+      3. Trường bị chặn không được khai `gia_tri`, trừ danh sách nguyên-văn có ghi chú.
+      4. `phan_hoi_xac_nhan` không được tự nhận đã xác minh.
+    """
+    loi = []
+    if HOP_DONG_MUC != MUC_DOCUMENTED:
+        loi.append(f"HOP_DONG_MUC={HOP_DONG_MUC!r} — mức hợp đồng bị đổi khỏi DOCUMENTED")
+    if HOP_DONG_MUC in (MUC_MOCK, MUC_SANDBOX, MUC_LIVE):
+        loi.append(f"HOP_DONG_MUC={HOP_DONG_MUC!r} — tự nhận mức đã kiểm với hãng")
+    if HOP_DONG_XAC_MINH_VOI_HANG:
+        loi.append("HOP_DONG_XAC_MINH_VOI_HANG=True — chưa hề có lượt đối chiếu nào với hãng")
+    if PHAN_HOI_XAC_MINH:
+        loi.append("PHAN_HOI_XAC_MINH=True — hình dạng phản hồi đầy đủ vẫn CHƯA có tài liệu")
+    for ten, chan in CHAN_HOP_DONG_CALLBACK.items():
+        truong = HOP_DONG_CALLBACK.get(ten)
+        if truong is None:
+            loi.append(f"{ten}: nằm trong bảng chặn nhưng không có trong HOP_DONG_CALLBACK")
+            continue
+        if truong["muc"] != CHUA_TAI_LIEU:
+            loi.append(f"{ten}: mức {truong['muc']!r} — bảng chặn nói CHƯA có tài liệu")
+        if not str(truong.get("ghi_chu") or "").strip():
+            loi.append(f"{ten}: không ghi lý do")
+        if truong.get("gia_tri") is not None and ten not in GIA_TRI_NGUYEN_VAN_DUOC_PHEP:
+            loi.append(f"{ten}: khai giá trị {truong['gia_tri']!r} trong khi tài liệu chưa trả lời")
+        for khoa in ("cau_hoi", "thieu", "doan_thi_hong", "dang_chan", "go_khi"):
+            if not str(chan.get(khoa) or "").strip():
+                loi.append(f"{ten}: bảng chặn thiếu '{khoa}' — phải nói chính xác cái còn thiếu")
+    if HOP_DONG_CALLBACK["phan_hoi_xac_nhan"]["muc"] != CHUA_TAI_LIEU:
+        loi.append("phan_hoi_xac_nhan: bị nâng mức — bản vá B11 KHÔNG phải nghiệm thu")
+    return loi
 
 
 def phan_hoi_xac_nhan(nhan_duoc: bool, su_kien_id=None, ly_do=None):
@@ -317,6 +548,11 @@ def phan_hoi_xac_nhan(nhan_duoc: bool, su_kien_id=None, ly_do=None):
     Nếu J&T thật sự chỉ chấp nhận `code=1` thì mọi callback của họ bị coi là hỏng và bị đẩy lại
     vô hạn; chống trùng ở tầng CSDL cứu được dữ liệu nhưng không cứu được tải. Đây là một việc
     PHẢI hỏi hãng (câu 2/câu 9), không phải chỗ để tự chọn.
+
+    G16 (AG-04) — ĐỌC KÈM `PHAN_HOI_XAC_MINH` (đang `False`) trước khi tin hàm này: nó DỰNG
+    được phản hồi theo mảnh duy nhất tài liệu nói tới, nhưng hình dạng ĐẦY ĐỦ vẫn nằm trong
+    `CHAN_HOP_DONG_CALLBACK["phan_hoi_xac_nhan"]`. Thân phản hồi CỐ Ý không được thêm trường
+    mới: thêm một trường vào thứ mình chưa biết hình dạng là đoán.
     """
     if nhan_duoc:
         than = {"code": 1, "msg": "success"}

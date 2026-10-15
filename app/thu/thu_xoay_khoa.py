@@ -89,10 +89,44 @@ class A_Quyen(unittest.TestCase):
             u = csdl.mot("SELECT id FROM users WHERE ten_dang_nhap=?", (ten,))
         return u["id"]
 
-    def test_a1_quyen_moi_khong_trung_quyen_co_san(self):
-        """Quyền xoay khóa là quyền MỚI, không phải một quyền sẵn có dùng lại."""
-        self.assertNotIn(xk.QUYEN_XOAY, quyen.QUYEN,
-                         "`platform.khoa.xoay` đang trùng một quyền đã có — D-2 đòi quyền RIÊNG")
+    # Danh sách quyền ĐÃ CÓ TRƯỚC D-2. Viết ra ở đây chứ không đọc `quyen.QUYEN` lúc chạy,
+    # vì cái cần canh là "không dùng lại một quyền CŨ", và danh sách cũ thì cố định.
+    QUYEN_CO_TRUOC_D2 = (
+        "platform.tenant.xem", "platform.tenant.tao", "platform.tenant.sua",
+        "platform.tenant.khoa", "platform.goi.doi", "platform.audit.xem",
+        "tenant.xem", "tenant.sua", "tenant.membership.xem", "tenant.membership.quan_ly",
+        "tenant.khach.xem", "tenant.khach.ghi", "tenant.don.xem", "tenant.don.ghi",
+        "tenant.don.duyet", "tenant.hang.xem", "tenant.hang.quan_ly", "tenant.import.ghi",
+        "tenant.import.duyet", "tenant.webhook.xem", "tenant.webhook.replay",
+        "tenant.billing.xem", "tenant.audit.xem", "tenant.ai.dung",
+    )
+
+    def test_a1_quyen_xoay_la_quyen_RIENG_chi_cap_cho_OWNER(self):
+        """Quyền xoay khóa phải là quyền RIÊNG, và chỉ `PLATFORM_OWNER` được cấp.
+
+        AG-00 sửa 15/10: bản đầu khẳng định `QUYEN_XOAY` **không có** trong `quyen.QUYEN`.
+        Đúng lúc AG-05 viết (quyền chưa được seed), nhưng seed chính là việc AG-05 yêu cầu
+        ở bản vá P-G12-2 — nên khi AG-00 làm đúng yêu cầu đó thì ca này HỎNG. Ca thử chốt
+        **trạng thái việc chưa xong** là một cửa khoá chết ngược chiều tiến bộ; đây là lần
+        thứ TƯ trong ngày (trước đó: `thu_frontend` ca 52, `thu_tai_chinh` j3 và j4).
+
+        Ý định thật gồm hai vế, nay chốt cả hai:
+          (a) nó KHÔNG được là một quyền đã có trước D-2 — tức là không dùng lại quyền cũ;
+          (b) khi đã seed thì CHỈ `PLATFORM_OWNER` có nó, `PLATFORM_ADMIN` thì không.
+        Vế (b) mới là cái D-2 thật sự mua được, và nó chỉ kiểm được SAU khi seed.
+        """
+        self.assertNotIn(xk.QUYEN_XOAY, self.QUYEN_CO_TRUOC_D2,
+                         f"{xk.QUYEN_XOAY} là một quyền ĐÃ CÓ trước D-2 — D-2 đòi quyền RIÊNG")
+        if xk.QUYEN_XOAY not in quyen.QUYEN:
+            self.skipTest("quyền chưa được seed vào quyen.QUYEN — AG-00 chưa cắm P-G12-2")
+        self.assertIn(xk.QUYEN_XOAY, quyen.MA_TRAN["PLATFORM_OWNER"],
+                      "PLATFORM_OWNER phải có quyền xoay khóa")
+        self.assertNotIn(xk.QUYEN_XOAY, quyen.MA_TRAN["PLATFORM_ADMIN"],
+                         "PLATFORM_ADMIN KHÔNG được có quyền xoay khóa — xoay sai là mọi "
+                         "credentials của mọi tenant thành rác")
+        for vt in ("TENANT_OWNER", "TENANT_ADMIN", "TENANT_STAFF", "TENANT_VIEWER"):
+            self.assertNotIn(xk.QUYEN_XOAY, quyen.MA_TRAN[vt],
+                             f"{vt} không được có quyền xoay khóa nền tảng")
 
     def test_a2_chua_seed_thi_OWNER_cung_khong_xoay_duoc(self):
         """Chưa seed quyền vào `role_permissions` thì ngay cả OWNER cũng bị từ chối.

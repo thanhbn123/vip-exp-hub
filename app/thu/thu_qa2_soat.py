@@ -991,6 +991,13 @@ class Qa2(unittest.TestCase):
             ("webhook.py", "don_hang"): "câu resolve CÓ tenant_id; câu còn lại đi qua don_hang",
             ("polling.py", "carrier_accounts"): "join sẵn với don_hang đã lọc tenant",
             ("bao_mat.py", "carrier_accounts"): "xoay khóa: CỐ Ý chạy trên MỌI tenant",
+            ("xoay_khoa.py", "carrier_accounts"):
+                "xoay khóa G12: CỐ Ý chạy trên MỌI tenant — lọc tenant là BỎ SÓT bản mã của "
+                "tenant khác dưới khóa cũ, và bản mã bỏ sót thì không ai giải được nữa sau "
+                "khi khóa cũ bị gỡ. KIỂM ĐƯỢC: ba câu chỉ SELECT hai cột BẢN MÃ "
+                "(credentials_ma_hoa, webhook_secret_ma_hoa), không đọc dữ liệu tenant nào; "
+                "và `grep xoay_khoa app/server.py` ra 0 ⇒ KHÔNG có cửa HTTP, chỉ gọi được "
+                "từ dòng lệnh của người vận hành. Cùng loại miễn với bao_mat.py ngay trên.",
             ("sao_luu_khoa.py", "carrier_accounts"):
                 "sao lưu khóa: CỐ Ý chạy trên MỌI tenant — gói backup phải phủ hết bản mã, "
                 "lọc theo tenant thì khôi phục sẽ thiếu. KIỂM ĐƯỢC: `grep sao_luu_khoa "

@@ -20,6 +20,13 @@ QUYEN = {
     "platform.tenant.khoa": "Khóa/mở tenant",
     "platform.goi.doi": "Đổi gói dịch vụ của tenant",
     "platform.audit.xem": "Xem audit toàn nền tảng",
+    # D-2 — anh Thành duyệt 15/10: "Đồng ý [xoay khoá], nhưng khoá bằng quyền quản trị đặc
+    # biệt và kiểm thử trên bản sao trước." Quyền này CHỈ cấp cho PLATFORM_OWNER, KHÔNG cấp
+    # PLATFORM_ADMIN — xoay khoá sai là mọi credentials của mọi tenant thành rác, và không
+    # có gì báo cho tới lượt gọi hãng đầu tiên.
+    # Hai lớp kiểm cố ý: hằng `VAI_TRO_DUOC_XOAY` trong mã CỘNG quyền này trong CSDL. Nghĩa
+    # là một dòng INSERT seed nhầm KHÔNG biến ADMIN thành người xoay được khoá.
+    "platform.khoa.xoay": "Xoay khoá mã hoá nền tảng",
     # trong tenant
     "tenant.xem": "Xem thông tin doanh nghiệp",
     "tenant.sua": "Sửa thông tin doanh nghiệp",
@@ -54,7 +61,8 @@ QUYEN = {
 # Ma trận vai trò → quyền (nguồn để seed vào CSDL).
 MA_TRAN = {
     "PLATFORM_OWNER": ["platform.tenant.xem", "platform.tenant.tao", "platform.tenant.sua",
-                       "platform.tenant.khoa", "platform.goi.doi", "platform.audit.xem"],
+                       "platform.tenant.khoa", "platform.goi.doi", "platform.audit.xem",
+                       "platform.khoa.xoay"],
     # PLATFORM_ADMIN: quản trị theo quyền được phân công — không đổi gói, không tạo tenant
     "PLATFORM_ADMIN": ["platform.tenant.xem", "platform.tenant.sua", "platform.tenant.khoa",
                        "platform.audit.xem"],

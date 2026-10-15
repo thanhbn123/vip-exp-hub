@@ -6,7 +6,8 @@
 | | |
 |---|---|
 | Mốc đo (HEAD lúc chạy) | `7b741c88b3b280d65f80b5e11301f17ebd767b26` (nền `integration/g17`) |
-| Commit của làn này | `8d5811713fa5dbc38ae171aa28689c0293c12df4` (mã + bộ thử) · `7488236d3c5bf735a192d69a4ecc25141e6fefc9` (tệp này) — nhánh `g18-ag04-httpserver`, **chưa push** |
+| Commit mã + bộ thử | `8d5811713fa5dbc38ae171aa28689c0293c12df4` — nhánh `g18-ag04-httpserver`, **chưa push** |
+| Commit chứa tệp này | Là commit **cuối** của nhánh. Cố ý **không** ghim SHA của chính nó vào đây: `git commit --amend` đổi SHA, nên một SHA viết cứng trong tệp là một con số **sai** ngay sau lần sửa kế tiếp. Đọc bằng `git log -1 --format=%H g18-ag04-httpserver` |
 | Máy | Darwin arm64 · Python **3.9.6** · SQLite 3.51.0 · `os.cpu_count()=10` |
 | Tệp **mới** của lượt này | `app/thu/thu_g18_maysrv.py` · `trien_khai/g18/{chot_an_toan,harness_tai,tiem_loi}.py` · `trien_khai/g18/chay_harness.sh` · `trien_khai/g18/README.md` · tệp này |
 | Tệp **KHÔNG** sửa | `app/webhook.py` (đã chốt ở G17) · `app/server.py` · `app/gioi_han.py` · `app/cau_hinh.py` · mọi tệp khác |

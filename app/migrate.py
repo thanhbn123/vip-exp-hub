@@ -431,6 +431,38 @@ def nang_len_v8(kn):
     return buoc
 
 
+def nang_len_v9(kn):
+    """v9: bảng trạng thái của GIỚI HẠN TẦN SUẤT — G19/AG-02.
+
+    **Không viết lại DDL ở đây.** Hằng nằm trong module của chính nó (`gioi_han.DDL_GIOI_HAN`) và
+    migration CHẠY ĐÚNG HẰNG ĐÓ — cùng lý do đã ghi ở `nang_len_v8`: chép sang đây là tạo bản thứ
+    hai, và hai bản nội dung là hai bản sẽ lệch nhau.
+
+    Vì sao cần bước này (không chỉ để `CREATE TABLE IF NOT EXISTS` trong module tự lo):
+    PHẦN A trước G19 giữ bộ đếm **trong bộ nhớ MỘT tiến trình**, nên trần thực = khai báo × số bản
+    (đo được: khai 20 ⇒ **20/40/80/160** với N=1/2/4/8) và **mất sạch khi khởi động lại**. Nay
+    trạng thái nằm trong CSDL. Module tự tạo bảng khi chạy, nhưng CSDL **đã tồn tại** phải được
+    nâng cấp TƯỜNG MINH: để nó tự lo thì lần ghi đầu tiên mới phát hiện thiếu bảng, và lúc đó
+    đường ghi đang nằm trong giao dịch nghiệp vụ — hỏng ở giữa đường chứ không hỏng lúc nâng cấp.
+
+    `moc` là **epoch giây** (`time.time()`), KHÔNG phải `monotonic`: monotonic là thang riêng của
+    từng tiến trình, không so sánh được qua tiến trình — dùng nó làm mốc thì trần lại thủng im lặng,
+    đúng cái lỗi bước này đóng.
+    """
+    buoc = []
+    import gioi_han
+
+    truoc = {r[0] for r in kn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','index')")}
+    chay_ddl_trong_giao_dich(kn, gioi_han.DDL_GIOI_HAN)
+    sau = {r[0] for r in kn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','index')")}
+    them = sorted(sau - truoc)
+    buoc.append("G19 giới hạn tần suất (kho trong CSDL): "
+                f"+{len(them)} đối tượng" + (f" ({', '.join(them)})" if them else " (đã có sẵn)"))
+    return buoc
+
+
 # Chờ tối đa bao lâu để lấy khoá nâng cấp. 60 giây: đủ cho một lượt nâng cấp thật
 # (lượt v1→v8 trên CSDL rỗng đo được dưới 1 giây; CSDL có dữ liệu thì lâu hơn), và ngắn hơn
 # mọi ngưỡng chờ của người. Hết giờ thì NÉM, không chạy chồng — §13 của chỉ thị G12:
@@ -509,6 +541,8 @@ def chay(im_lang=False):
             buoc += nang_len_v7(kn)
         if pb < 8:
             buoc += nang_len_v8(kn)
+        if pb < 9:
+            buoc += nang_len_v9(kn)
         kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                    " VALUES (?,?,?)",
                    (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

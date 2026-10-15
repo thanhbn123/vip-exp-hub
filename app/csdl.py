@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 
 import cau_hinh
 
-PHIEN_BAN_SCHEMA = 8
+PHIEN_BAN_SCHEMA = 9
 
 HAN_DOI_WAL = 40          # 40 lượt, giãn dần 50ms→2s: tổng ~41 giây
 MUI_GIO_VN = timezone(timedelta(hours=7))

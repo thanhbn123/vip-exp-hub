@@ -256,3 +256,60 @@ trước. AG-00 là người duy nhất chạy migration lên đó, sau khi đã
 **Giao G09 không có nghĩa là được gọi hãng. Giao G10 không có nghĩa là được nối AI thật. Giao
 G11 không có nghĩa là được deploy.** Việc nào chạm vào tám dòng trên thì dừng, ghi **BLOCKED**
 kèm chính xác cái còn thiếu, rồi làm tiếp phần mock/local.
+
+---
+
+# ĐÓNG BĂNG G12 — 15/10/2026 (AG-00 chốt theo 9 quyết định của anh Thành)
+
+Nền: `9af8115`, schema **v8**, **927 phép kiểm đạt**. Mọi hợp đồng ở trên **vẫn hiệu lực**.
+
+## 26. CHÍN QUYẾT ĐỊNH — trạng thái sau khi anh Thành chốt 15/10
+
+| Mã | Quyết định của anh | Hệ quả cho G12 |
+|---|---|---|
+| **D-1** | **Đồng ý Playwright**, cài riêng trong dự án | **MỞ** — AG-02 làm. Cài vào `node_modules` của chính dự án, KHÔNG cài toàn cục |
+| **D-2** | Đồng ý xoay khoá, **nhưng khoá bằng quyền quản trị đặc biệt và kiểm thử trên bản sao trước** | **MỞ CÓ ĐIỀU KIỆN** — AG-05. Chưa xoay khoá thật lượt nào |
+| **D-3** | Đồng ý sao lưu khoá ra VIP Vault **có điều kiện**: mã hoá độc lập · kiểm quyền · diễn tập khôi phục | **MỞ CÓ ĐIỀU KIỆN** — AG-05 dựng cơ chế + diễn tập. **Lượt ghi THẬT đầu tiên ra VIP Vault phải hỏi anh** |
+| **D-4** | Chờ J&T xác nhận; tiếp tục đánh dấu cần rà soát | **GIỮ NGUYÊN** — không thêm mã nào vào bảng ánh xạ |
+| **D-5** | Chưa cấp credentials; **chuẩn bị tài liệu đăng ký và kiểm thử** | **MỞ phần tài liệu** — AG-03 |
+| **D-6** | **Giữ cấu hình giá chưa phát hành, không tự đặt giá** | **KHOÁ** — không agent nào điền giá |
+| **D-7** | **Đồng ý, làm ngay** | **XONG 15/10** — 3 quyền `tenant.taichinh.*`, đo qua HTTP |
+| **D-8** | Tiếp tục SQLite local; **thử PostgreSQL trước khi quyết định** | **MỞ phần THỬ** — AG-04. **KHÔNG chuyển CSDL thật** |
+| **D-9** | **Chưa chốt cách ánh xạ `area`** cho tới khi hãng xác nhận | **KHOÁ** — AG-03 phải biến giả định hiện tại thành **chốt chặn cứng**, không để nó im lặng thành dữ kiện |
+
+## 27. Môi trường ĐÃ ĐO trên máy này (15/10, MacBook)
+
+| Công cụ | Có? | Ghi chú |
+|---|---|---|
+| **PostgreSQL 16.15** | **CÓ** (Homebrew) | Cụm hệ thống đang chạy `:5432` và **đang giữ CSDL của dự án khác** (`vip_customs`, `vip_customs_g16`, `vip_customs_test`) — **CẤM đụng**. Cụm thử phải là **cụm riêng**: `initdb --locale=C`, cổng riêng, **socket ở đường NGẮN** (`mktemp -d /tmp/vhpg.XXXX`) vì đường scratchpad dài quá 103 byte |
+| **node v26.7.0 · npm 11.19.0** | **CÓ** | Playwright cài được |
+| **Docker / podman / colima** | **KHÔNG CÓ** | `brew` có sẵn nên cài được, **nhưng cài là đổi máy của anh ⇒ phải hỏi**. Chưa hỏi thì Docker build = **BLOCKED**, và **CẤM báo "Docker build PASS"** |
+
+## 28. Quyền sở hữu file — G12
+
+| Agent | SỞ HỮU | CHỈ ĐỌC |
+|---|---|---|
+| **AG-01 BACKEND QUERY** | `app/truy_van.py` · `app/thu/thu_truy_van.py` · `docs/G12_QUERY.md` | mọi thứ khác |
+| **AG-02 UI TESTING** | `thu_giao_dien/` (thư mục MỚI) · `package.json` · `package-lock.json` · `playwright.config.js` · `docs/G12_PLAYWRIGHT.md` | mọi thứ khác |
+| **AG-03 CARRIER** | `docs/G12_VTP_KHAO_SAT.md` · `docs/G12_JT_DANG_KY.md` · `app/thu/thu_anh_xa_area.py` | mọi thứ khác |
+| **AG-04 DATA PLATFORM** | `trien_khai/postgres/` (MỚI) · `app/thu/thu_postgres.py` · `docs/G12_POSTGRES.md` · `docs/G12_DOCKER.md` | mọi thứ khác (gồm `Dockerfile`, `docker-compose.yml` — **đọc**, bản vá đề xuất) |
+| **AG-05 SECURITY** | `app/xoay_khoa.py` · `app/thu/thu_xoay_khoa.py` · `trien_khai/sao_luu_ngoai/` (MỚI) · `docs/G12_KEY_OPS.md` · `docs/G12_STAGING_MATRIX.md` | mọi thứ khác |
+| **AG-00** | `app/csdl.py` · `migrate.py` · `server.py` · `cau_hinh.py` · `billing.py` · `quyen.py` · `ai_gateway.py` · `adapter*.py` · `SHARED_CONTRACTS.md` · `.gitignore` | — |
+
+Luật §22–§24 giữ nguyên: không agent nào ghi `csdl.py`/`migrate.py`/`server.py`; khai hằng
+`DDL_G12x` và bảng route; mỗi worktree một CSDL thử riêng qua `VIP_HUB_DATA`.
+
+## 29. Luật riêng của G12
+
+- **CẤM cài gì ở mức TOÀN CỤC.** Playwright vào `node_modules` của dự án. PostgreSQL dùng bản
+  đã có. Docker thì **hỏi trước**, không `brew install` tự ý.
+- **CẤM đụng cụm PostgreSQL `:5432`** — nó giữ dữ liệu dự án khác. Cụm thử phải tự dựng, tự
+  dừng, tự xoá.
+- **CẤM ghi đè bản clone `~/code/vip-viettelpost`** (đang ở `4df8ce7`, nhánh
+  `feature/shp-database`, sạch). Khảo sát bằng **bản clone MỚI riêng** hoặc `gh api`.
+- **CẤM xoay khoá thật.** D-2 cho phép *xây* chức năng + *thử trên bản sao*; lượt xoay thật
+  trên khoá đang dùng vẫn cần anh duyệt riêng.
+- **CẤM ghi thật ra VIP Vault.** D-3 cho phép dựng cơ chế + diễn tập cục bộ; lượt ghi thật
+  đầu tiên phải hỏi anh.
+- **CẤM điền giá** cho bất kỳ gói nào (D-6).
+- **CẤM tự tuyên bố production-ready.**

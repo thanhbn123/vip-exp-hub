@@ -728,7 +728,13 @@ class G_DauVetAnhXa(Nen):
         self.assertIsNone(ct["trang_thai_ap"])
 
     def test_g02_csdl_da_migrate_thi_ghi_vao_cot(self):
-        """Dựng đúng DDL đã đề xuất cho AG-00 rồi kiểm nhánh ghi cột — không chỉ nói là sẽ chạy."""
+        """Dựng đúng DDL đã đề xuất cho AG-00 rồi kiểm nhánh ghi cột — không chỉ nói là sẽ chạy.
+
+        G14 (15/10/2026): ca này đã được SỬA. Bản cũ ghim hành vi "ghi `hang_moc_thoi_gian` cho
+        mọi sự kiện, kể cả sự kiện không được áp" — hành vi đó là LỖI (xem chú thích trong ca và
+        `docs/G14_JT_WEBHOOK.md` §4.3). Nay ca kiểm đúng luật: cột chỉ được ghi khi sự kiện ĐÃ ÁP,
+        dấu vết mốc gốc vẫn còn trong audit, và hai nguồn mốc phải khớp nhau.
+        """
         cot = {r[1] for r in csdl.nhieu("PRAGMA table_info(wh_su_kien)")}
         them = [("hang_ma_goc", "TEXT"), ("hang_mo_ta_goc", "TEXT"), ("hang_su_kien_goc", "TEXT"),
                 ("anh_xa_do_tin_cay", "TEXT"), ("anh_xa_nguon", "TEXT"),
@@ -748,15 +754,37 @@ class G_DauVetAnhXa(Nen):
             self.assertEqual(r["anh_xa_do_tin_cay"], tth.TIN_NHAP_NHANG)
             self.assertEqual(r["can_soat"], 1)
             self.assertEqual(r["don_id"], d)
-            self.assertEqual(r["hang_moc_thoi_gian"], wh._moc_chuan("2026-10-15 10:00:00"))
+            # ĐÍNH CHÍNH G14 (AG-03, 15/10/2026) — ca này TRƯỚC ĐÂY ghim hành vi SAI.
+            #
+            # Bản cũ khẳng định `hang_moc_thoi_gian` được ghi cho mã 110 (sự kiện KHÔNG được áp):
+            #     self.assertEqual(r["hang_moc_thoi_gian"], wh._moc_chuan("2026-10-15 10:00:00"))
+            # Hành vi ấy chính là LỖI: mốc chỉ có nghĩa "mốc hãng mới nhất ĐÃ ÁP", nên ghi nó
+            # cho một sự kiện không đổi được trạng thái là để nó chặn oan bản quét thật đến sau.
+            # Đo được (docs/G14_JT_WEBHOOK.md §4.3): `121` lúc 10:00 rồi `113 Delivered` lúc 09:00
+            # ⇒ đơn đã giao mà hệ thống không bao giờ biết. Ca cũ xanh vì nó KIỂM NHẦM CHỖ, không
+            # phải vì mã đúng — nên nó được sửa theo hành vi đúng, KHÔNG phải nới ra cho vừa mã.
+            self.assertIsNone(r["hang_moc_thoi_gian"],
+                              "mã nhập nhằng (không áp) lại đẩy được mốc hãng của đơn")
             self.assertIsNone(r["trang_thai_chuan"])
+            self.assertIsNone(wh.watermark(d), "mã nhập nhằng đẩy được watermark của đơn")
+            # ...nhưng KHÔNG mất dấu vết: mốc gốc của hãng vẫn nằm trong audit ánh xạ.
+            au = csdl.mot("SELECT chi_tiet FROM audit WHERE hanh_dong='webhook_anh_xa'"
+                          " AND doi_tuong=? ORDER BY id DESC LIMIT 1", (f"su_kien:{sk_id}",))
+            self.assertEqual(json.loads(au["chi_tiet"])["su_kien_hang_goc"]["moc_hang"],
+                             wh._moc_chuan("2026-10-15 10:00:00"),
+                             "bỏ quyền đẩy mốc mà xoá luôn dấu vết mốc gốc")
             self.assertIn("doc-2026-10-14", r["anh_xa_nguon"])
             self.assertIn("Arrival", r["hang_mo_ta_goc"] or "")
-            # watermark giờ đọc được từ CỘT, và phải khớp nguồn audit
+            # Sự kiện ĐÃ ÁP thì mốc được ghi, và HAI NGUỒN phải nói cùng một con số.
             d2 = _don(self.ta, self.uid, self.tk_a, "MVD-G02B", "cho_lay", 1)
             b2 = body_jt("MVD-G02B", 112, "2026-10-15 11:00:00")
-            self.gui(self.tk_a, b2, headers=ky_hub(SECRET_A, b2))
+            sk2, _, _ = self.gui(self.tk_a, b2, headers=ky_hub(SECRET_A, b2))
+            self.assertEqual(self.sk(sk2)["hang_moc_thoi_gian"], wh._moc_chuan("2026-10-15 11:00:00"))
             self.assertEqual(wh.watermark(d2), wh._moc_chuan("2026-10-15 11:00:00"))
+            au2 = csdl.mot("SELECT MAX(chi_tiet) m FROM audit WHERE hanh_dong='webhook_moc_hang'"
+                           " AND resource_id=?", (str(d2),))
+            self.assertEqual(au2["m"], self.sk(sk2)["hang_moc_thoi_gian"],
+                             "nguồn CỘT và nguồn AUDIT nói hai con số khác nhau")
         finally:
             for ten, _ in them:
                 if ten not in cot:

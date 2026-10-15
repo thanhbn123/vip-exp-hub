@@ -13,6 +13,14 @@
 #             không bao giờ rơi vào trạng thái hoàn tất, đánh dấu AMBIGUOUS/NEEDS_REVIEW.
 #   W04/W07 — nhận việc NGUYÊN TỬ (nhiều worker an toàn), retry có trần + backoff có trần, DLQ,
 #             replay có phép + có TRẦN SỐ LẦN + audit.
+#
+# Bổ sung đợt G14 (AG-03):
+#   W02 — HỢP ĐỒNG CALLBACK của J&T khai thành BẢNG MÁY ĐỌC ĐƯỢC (`HOP_DONG_CALLBACK`), mỗi
+#         trường ghi rõ TÀI LIỆU NÓI GÌ / CHƯA NÓI GÌ. Trường nào tài liệu trong repo chưa trả
+#         lời được thì để `CHUA_TAI_LIEU` — KHÔNG suy diễn rồi ghi thành dữ kiện.
+#   W03 — `tenant_tu_account()`: tenant chỉ có MỘT nguồn hợp lệ, gọi tên ra để soi được.
+#   W04 — mã nhập nhằng KHÔNG được rò ra ngoài chính nó: xem `watermark()` (đã vá G14).
+#   W05 — `doi_chieu_hanh_trinh()`: đối chiếu sự kiện ↔ đơn, gồm phép kiểm CHÉO TENANT.
 import base64
 import hashlib
 import hmac
@@ -186,8 +194,159 @@ def bang_muc_xac_thuc():
             for hang, ten in SO_DO_THEO_HANG.items()}
 
 
+# ============================================================================
+# W02 (G14) — HỢP ĐỒNG CALLBACK J&T, KHAI THÀNH BẢNG MÁY ĐỌC ĐƯỢC
+# ============================================================================
+# Nguồn: trích lục trong repo — `docs/JT_CAU_HOI_CHINH_THUC.md` (câu 2, 3, 5) và
+# `docs/G12_JT_DANG_KY.md` mục 5. Cả hai đều chép từ trang
+# `open.jtexpress.vn/apiDoc/logistics/statusFeedback` đọc bằng trình duyệt 14–15/10/2026.
+# Trang đó là SPA nên `fetch` tĩnh trả về vỏ rỗng — trích lục trong repo LÀ nguồn sự thật.
+#
+# Ba mức cho mỗi trường:
+#   DA_TAI_LIEU   — trích lục nói rõ
+#   SUY_RA        — trích lục không nói thẳng, nhưng hệ quả là duy nhất (ghi rõ vì sao)
+#   CHUA_TAI_LIEU — trích lục KHÔNG trả lời được. Đây là BLOCKED, không phải chỗ để đoán.
+DA_TAI_LIEU = "DA_TAI_LIEU"
+SUY_RA = "SUY_RA"
+CHUA_TAI_LIEU = "CHUA_TAI_LIEU"
+
+HOP_DONG_CALLBACK = {
+    "phuong_thuc_http": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Trích lục chỉ tả THÂN và HEADER, không nói phương thức. Không suy ra POST"
+                   " từ chỗ khác rồi ghi thành dữ kiện. Câu hỏi 7 (chuỗi ký) và câu 9 (thử lại)"
+                   " là chỗ hỏi kèm.",
+    },
+    "dinh_danh_url_phia_nhan": {
+        "muc": SUY_RA,
+        "gia_tri": "/api/v2/webhook/nhan/<webhook_ma>",
+        "ghi_chu": "Đây là đường CỦA HUB (server.py), không phải của J&T. J&T gọi vào URL mình"
+                   " khai; URL công khai CHƯA ĐƯỢC CẤP (V-G11-01) nên chưa đăng ký được.",
+    },
+    "than_yeu_cau": {
+        "muc": DA_TAI_LIEU,
+        "gia_tri": "form (application/x-www-form-urlencoded) với trường `bizContent`",
+        "ghi_chu": "Trích lục câu 2: 'thân yêu cầu là form có trường bizContent'.",
+    },
+    "header_bat_buoc": {
+        "muc": DA_TAI_LIEU,
+        "gia_tri": ("apiAccount", "digest", "timestamp"),
+        "ghi_chu": "Trích lục câu 2: 'callback dùng ĐÚNG BA header như mọi API khác'.",
+    },
+    "cong_thuc_chu_ky": {
+        "muc": DA_TAI_LIEU,
+        "gia_tri": "digest = base64( md5-BYTES( <chuỗi JSON của bizContent> + privateKey ) )",
+        "ghi_chu": "Trích lục câu 2, chép từ trang 极兔API简介. Đây là CÔNG THỨC, chưa phải"
+                   " điều kiện đủ để nghiệm thu: còn hai chỗ chưa biết ở dưới.",
+    },
+    "khoa_ky_chieu_callback": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 6: tài liệu KHÔNG nói chiều callback ký bằng `privateKey` của tài khoản"
+                   " mình hay một khoá riêng J&T cấp. Mã hiện dùng `webhook_secret` của carrier"
+                   " account như GIẢ ĐỊNH có ghi chú — mức DOCUMENTED, không hơn.",
+    },
+    "chuoi_dem_di_ky": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 7: chỉ `bizContent`, hay cả thân form `bizContent=...`? Hiện hiểu là"
+                   " CHUỖI JSON của bizContent, lấy nguyên văn từ thân.",
+    },
+    "vi_du_doi_chieu": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 7 xin một ví dụ đủ ba thứ (chuỗi gốc · khoá che bớt · digest). Không có"
+                   " ví dụ thì không chứng minh được cách hiểu nào đúng.",
+    },
+    "dinh_danh_su_kien": {
+        "muc": SUY_RA,
+        "gia_tri": "billCode | scanTime | scanTypeCode (băm SHA-256, 24 hex)",
+        "ghi_chu": "Câu 10: trong `details` KHÔNG có mã sự kiện duy nhất. Đây là khoá TỔ HỢP do"
+                   " mình chọn, hãng chưa xác nhận ⇒ chống trùng đúng trong phạm vi hiểu biết"
+                   " hiện tại, không phải bảo đảm của hãng.",
+    },
+    "moc_thoi_gian_scan": {
+        "muc": DA_TAI_LIEU,
+        "gia_tri": "`scanTime` trong `details`; hai định dạng đã thấy: 'YYYY-MM-DD HH:MM:SS'"
+                   " và 'YYYY-MM-DDTHH:MM:SS'",
+        "ghi_chu": "Câu 15: chưa rõ giờ Việt Nam hay UTC, và đâu là định dạng chuẩn. Hiện hiểu"
+                   " mốc KHÔNG có nhãn múi giờ là UTC+7 (`_moc_chuan`).",
+    },
+    "header_timestamp": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": "mili giây; tài liệu ghi '时区：UTC+7'",
+        "ghi_chu": "Câu 14 (như câu 12): mốc Unix thật (a) hay giờ treo tường UTC+7 quy đổi (b)?"
+                   " Hai cách lệch ĐÚNG 7 TIẾNG mà chữ ký vẫn đúng, nên sai ở đây chỉ hiện ra"
+                   " thành 'từ chối sạch' ở lớp chống phát lại. Hiện làm theo (a).",
+    },
+    "chinh_sach_thu_lai": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "Câu 9: số lần J&T thử lại và khoảng cách — tài liệu không nói. Vì vậy phía"
+                   " nhận PHẢI tự chống trùng (đã làm, cưỡng chế bằng CSDL).",
+    },
+    "phan_hoi_xac_nhan": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "CHỖ HỞ THẬT: câu 9 là nơi DUY NHẤT trong trích lục nhắc tới hình dạng phản"
+                   " hồi — 'khi chúng tôi trả về mã khác code=1'. Tức phản hồi được hiểu là JSON"
+                   " có trường `code`, và `code=1` là được nhận. Nhưng: mã HTTP nào, còn trường"
+                   " nào khác, và 200/202 có bị coi là hỏng không — CHƯA có. Xem"
+                   " `phan_hoi_xac_nhan()` (có dựng sẵn, chờ AG-00 cắm vào route).",
+    },
+    "moc_du_lieu_them": {
+        "muc": CHUA_TAI_LIEU,
+        "gia_tri": None,
+        "ghi_chu": "`codMoney`/`goodsValue`/`itemsValue` (câu 29) và cách ánh xạ `area` (D-9)"
+                   " chưa chốt ⇒ TUYỆT ĐỐI không suy ra tiền từ callback (hợp đồng §18).",
+    },
+}
+# Trường nào của hợp đồng còn CHƯA có tài liệu. Bộ thử canh danh sách này để không ai âm thầm
+# đổi một dòng `CHUA_TAI_LIEU` thành `DA_TAI_LIEU` mà không kèm căn cứ từ hãng.
+CALLBACK_CHUA_TAI_LIEU = tuple(t for t, v in HOP_DONG_CALLBACK.items() if v["muc"] == CHUA_TAI_LIEU)
+
+
+def phan_hoi_xac_nhan(nhan_duoc: bool, su_kien_id=None, ly_do=None):
+    """Dựng phản hồi cho J&T theo chỗ DUY NHẤT trích lục nói tới: `code=1` là được nhận.
+
+    Trả `(ma_http, than_dict)`. CỐ Ý không tự gắn vào route: `server.py` là file của AG-00
+    (hợp đồng §22), và hình dạng phản hồi ĐẦY ĐỦ còn nằm trong `CHUA_TAI_LIEU`.
+
+    Vì sao vẫn dựng: hiện route trả `202 {"ket_qua": "da_nhan", ...}` — KHÔNG có trường `code`.
+    Nếu J&T thật sự chỉ chấp nhận `code=1` thì mọi callback của họ bị coi là hỏng và bị đẩy lại
+    vô hạn; chống trùng ở tầng CSDL cứu được dữ liệu nhưng không cứu được tải. Đây là một việc
+    PHẢI hỏi hãng (câu 2/câu 9), không phải chỗ để tự chọn.
+    """
+    if nhan_duoc:
+        than = {"code": 1, "msg": "success"}
+        if su_kien_id is not None:
+            than["su_kien_id"] = su_kien_id
+        return 200, than
+    than = {"code": 0, "msg": str(ly_do or "rejected")}
+    return 400, than
+
+
 def tim_account_theo_webhook_ma(webhook_ma):
     return csdl.mot("SELECT * FROM carrier_accounts WHERE webhook_ma=? AND kich_hoat=1", (webhook_ma,))
+
+
+def tenant_tu_account(tenant_id, account_id=None):
+    """W03 (G14) — NGUỒN DUY NHẤT hợp lệ của `tenant_id` trên đường callback.
+
+    `tenant_id` đến từ dòng `carrier_accounts` đã tra được trên URL + chữ ký của CHÍNH account
+    đó (hợp đồng §1 và §12). Hàm này tồn tại để chỗ quyết định có TÊN: trước đây việc giải
+    tenant nằm rải trong câu truy vấn đơn, nên không có chỗ nào để soi "tenant này từ đâu ra".
+    Payload có khai `tenant_id` thì cũng KHÔNG đi qua đây — xem `_claim_tenant()` (chỉ ghi lại).
+
+    Người gọi PHẢI truyền giá trị đọc từ dòng `carrier_accounts` (`tk["tenant_id"]`) — chốt
+    chặn cấu trúc `thu_webhook.test_i04` canh đúng chỗ đó, nên chữ ký hàm nhận thẳng giá trị
+    thay vì nhận cả dòng: như vậy phép kiểm "tenant từ đâu ra" vẫn nhìn thấy được ở nơi gọi.
+    Ném `LoiVinhVien` khi account không gắn tenant — dữ liệu hỏng, thử lại không khỏi.
+    """
+    if tenant_id in (None, ""):
+        raise LoiVinhVien(f"carrier_account {account_id} không gắn tenant nào")
+    return tenant_id
 
 
 def kiem_chu_ky(tk_row, headers, body: bytes):
@@ -424,11 +583,32 @@ def watermark(don_id):
       1. cột `wh_su_kien.hang_moc_thoi_gian` + `wh_su_kien.don_id` — khi CSDL đã migrate;
       2. audit `webhook_moc_hang` — chạy được NGAY trên CSDL chưa migrate.
     Cả hai đều là dấu vết do CHÍNH đường cập nhật này ghi ra (§12.1 luật 2).
+
+    VÁ G14 (AG-03) — lỗi đo được, xem `docs/G14_JT_WEBHOOK.md` §4:
+    cột `hang_moc_thoi_gian` từng được ghi cho MỌI sự kiện đọc được, kể cả sự kiện KHÔNG ĐƯỢC ÁP
+    (mã nhập nhằng 110, mã chỉ ghi nhận như 121, mã lạ, và cả sự kiện bị rank guard chặn).
+    Nguồn audit thì chỉ ghi khi ĐÃ ÁP — hai nguồn nói khác nhau, và nguồn được ưu tiên lại là
+    nguồn sai.
+
+    Hậu quả đo được (CSDL đã migrate): `121 FINISH` lúc 10:00 (không áp) đẩy watermark lên
+    10:00, rồi `113 Delivered` lúc 09:00 đến sau bị chặn với lý do "đến muộn" ⇒ đơn KHÔNG BAO
+    GIỜ được đánh dấu đã giao. Mã nhập nhằng 110 một mình không đổi trạng thái đơn, nhưng nó
+    RÒ RA ngoài chính nó bằng đường này.
+
+    Vá hai tầng, và tầng thứ hai là để cứu DỮ LIỆU CŨ:
+      1. `_ghi_watermark()` nay là nơi DUY NHẤT ghi cột, và chỉ ghi khi `ap_dung=1`
+         (`luu_dau_vet` không ghi cột này nữa). Sự kiện không được áp không đẩy mốc.
+      2. Ở đây vẫn lọc `trang_thai_chuan IS NOT NULL`: những dòng do mã CŨ ghi đã nằm trong
+         CSDL thật rồi, và chúng phải tiếp tục bị bỏ qua. Bỏ bộ lọc này là lỗi cũ sống lại
+         trên đúng dữ liệu đang có.
     """
     if cot_co("wh_su_kien", "hang_moc_thoi_gian") and cot_co("wh_su_kien", "don_id"):
+        dk = ["don_id=?", "trang_thai='xong'", "hang_moc_thoi_gian IS NOT NULL"]
+        if cot_co("wh_su_kien", "trang_thai_chuan"):
+            # CSDL chưa migrate thì cột này không có — lùi về hành vi cũ thay vì nổ.
+            dk.append("trang_thai_chuan IS NOT NULL")
         r = csdl.mot("SELECT MAX(hang_moc_thoi_gian) m FROM wh_su_kien"
-                     " WHERE don_id=? AND trang_thai='xong' AND hang_moc_thoi_gian IS NOT NULL",
-                     (don_id,))
+                     f" WHERE {' AND '.join(dk)}", (don_id,))
         if r and r["m"]:
             return r["m"]
     r = csdl.mot("SELECT MAX(chi_tiet) m FROM audit WHERE hanh_dong='webhook_moc_hang'"
@@ -436,10 +616,22 @@ def watermark(don_id):
     return (r["m"] if r else None) or None
 
 
-def _ghi_watermark(don_id, moc, tenant_id):
-    """Ghi mốc hãng vừa áp. `chi_tiet` CHỈ chứa chuỗi 14 chữ số để MAX() so được."""
-    if moc:
-        csdl.audit("webhook_moc_hang", f"don:{don_id}", moc, tenant_id=tenant_id)
+def _ghi_watermark(sk_id, don_id, moc, tenant_id):
+    """Ghi mốc hãng ĐÃ ÁP. Nơi DUY NHẤT được viết `wh_su_kien.hang_moc_thoi_gian`.
+
+    Chỉ gọi khi `don_hang.ap_trang_thai_giao` trả `ap_dung=1`. Một sự kiện KHÔNG đổi được
+    trạng thái (mã nhập nhằng, mã chỉ ghi nhận, mã lạ, hoặc bị rank guard chặn) thì **không**
+    được đẩy mốc: nếu nó đẩy, một bản quét CÓ THẬT đến sau nhưng có `scanTime` cũ hơn sẽ bị
+    chặn oan và mất hẳn — đó đúng là lỗi G14 đã đo được.
+
+    Ghi HAI nơi, cố ý: cột để truy vấn nhanh, audit để không thể mất (và để CSDL chưa migrate
+    vẫn có nguồn). Hai nguồn này phải luôn nói CÙNG một con số — ca `thu_webhook.test_g02` canh.
+    """
+    if not moc:
+        return
+    if cot_co("wh_su_kien", "hang_moc_thoi_gian"):
+        csdl.ghi("UPDATE wh_su_kien SET hang_moc_thoi_gian=? WHERE id=?", (moc, sk_id))
+    csdl.audit("webhook_moc_hang", f"don:{don_id}", moc, tenant_id=tenant_id)
 
 
 # ============================================================================
@@ -451,6 +643,12 @@ def luu_dau_vet(sk_id, qd, don_id=None, tenant_id=None):
 
     Ghi vào CỘT khi CSDL đã migrate; LUÔN LUÔN ghi thêm một dòng audit, để trên CSDL chưa migrate
     vẫn không mất dấu vết nào. (Cột là nơi truy vấn nhanh; audit là nơi không thể mất.)
+
+    G14: hàm này **KHÔNG** ghi `hang_moc_thoi_gian` nữa. Mốc chỉ được ghi khi sự kiện thật sự
+    đổi được trạng thái (`_ghi_watermark`), vì ghi cho mọi sự kiện là cách một mã không được áp
+    chặn oan một bản quét có thật đến sau. Mốc gốc của hãng vẫn nằm nguyên trong
+    `hang_su_kien_goc` (cột) và trong audit `webhook_anh_xa` (dòng `su_kien_hang_goc`) — không
+    mất dấu vết nào, chỉ mất quyền ĐẨY MỐC của sự kiện không được áp.
     """
     chi_tiet = {
         "su_kien": sk_id, "ma_goc": qd.ma_goc, "mo_ta_goc": qd.mo_ta_goc,
@@ -464,7 +662,6 @@ def luu_dau_vet(sk_id, qd, don_id=None, tenant_id=None):
                json.dumps(chi_tiet, ensure_ascii=False, default=str),
                tenant_id=tenant_id, ket_qua="that_bai" if qd.can_soat else "thanh_cong")
     dat, ts = [], []
-    moc = qd.su_kien_hang_goc.get("moc_hang") if isinstance(qd.su_kien_hang_goc, dict) else None
     for cot, gt in (("hang_ma_goc", None if qd.ma_goc is None else str(qd.ma_goc)),
                     ("hang_mo_ta_goc", qd.mo_ta_goc),
                     ("hang_su_kien_goc", json.dumps(qd.su_kien_hang_goc, ensure_ascii=False,
@@ -472,7 +669,6 @@ def luu_dau_vet(sk_id, qd, don_id=None, tenant_id=None):
                     ("anh_xa_do_tin_cay", qd.do_tin_cay),
                     ("anh_xa_nguon", f"{qd.nguon_tai_lieu or ''} [{qd.phien_ban_tai_lieu}]"),
                     ("can_soat", 1 if qd.can_soat else 0),
-                    ("hang_moc_thoi_gian", moc),
                     ("trang_thai_chuan", qd.trang_thai_ap),
                     ("don_id", don_id)):
         if cot_co("wh_su_kien", cot):
@@ -492,6 +688,8 @@ def _xu_ly(sk):
     tk = csdl.mot("SELECT * FROM carrier_accounts WHERE id=?", (sk["carrier_account_id"],))
     if tk is None:
         raise LoiVinhVien("carrier_account đã biến mất")
+    # W03 (G14): tenant giải từ carrier_account, gọi tên ra — KHÔNG đọc từ payload ở bất kỳ đâu.
+    tenant_id = tenant_tu_account(tk["tenant_id"], tk["id"])
     sv = doc_su_kien_hang(tk, body)
     if sv is None:
         raise LoiVinhVien("payload không đọc được (không phải JSON/form hợp lệ của dạng nào đã biết)")
@@ -499,11 +697,11 @@ def _xu_ly(sk):
         raise LoiVinhVien("thiếu mã vận đơn hoặc mã trạng thái")
 
     # Payload cố khai tenant → GHI LẠI rồi BỎ QUA. tenant chỉ đến từ carrier_account.
-    if sv.get("claim_tenant") is not None and str(sv["claim_tenant"]) != str(tk["tenant_id"]):
+    if sv.get("claim_tenant") is not None and str(sv["claim_tenant"]) != str(tenant_id):
         csdl.audit("webhook_claim_tenant_bi_bo_qua", f"su_kien:{sk['id']}",
                    f"payload khai tenant={sv['claim_tenant']!r}, account thuộc tenant"
-                   f"={tk['tenant_id']} — dùng tenant của account",
-                   tenant_id=tk["tenant_id"], ket_qua="tu_choi")
+                   f"={tenant_id} — dùng tenant của account",
+                   tenant_id=tenant_id, ket_qua="tu_choi")
 
     if isinstance(sv.get("tho"), dict) and sv["tho"].get("demo_force_fail"):
         raise RuntimeError("demo_force_fail đang bật")  # lỗi TẠM để kiểm retry/DLQ
@@ -521,29 +719,31 @@ def _xu_ly(sk):
         qd.ghi_chu = "callback hub: tên trạng thái chuẩn, không qua bảng mã hãng"
 
     # RESOLVE: đơn phải thuộc ĐÚNG tenant của account và đúng account — không bao giờ chéo tenant.
+    # `tenant_id` ở đây đã đi qua `tenant_tu_account()`, không phải giá trị nào trong payload.
     don = csdl.mot(
         "SELECT * FROM don_hang WHERE ma_van_don=? AND tenant_id=? AND carrier_account_id=?",
-        (sv["ma_van_don"], tk["tenant_id"], tk["id"]))
+        (sv["ma_van_don"], tenant_id, tk["id"]))
     if not don:
-        luu_dau_vet(sk["id"], qd, None, tk["tenant_id"])
+        luu_dau_vet(sk["id"], qd, None, tenant_id)
         csdl.audit("webhook_khong_khop_don", f"su_kien:{sk['id']}",
-                   f"mã vận đơn {sv['ma_van_don']} không thuộc tenant {tk['tenant_id']}"
-                   f" / account {tk['id']}", tenant_id=tk["tenant_id"], ket_qua="tu_choi")
+                   f"mã vận đơn {sv['ma_van_don']} không thuộc tenant {tenant_id}"
+                   f" / account {tk['id']}", tenant_id=tenant_id, ket_qua="tu_choi")
         return "khong_khop"  # lưu thô, đánh dấu không khớp — không đụng đơn của ai
 
-    luu_dau_vet(sk["id"], qd, don["id"], tk["tenant_id"])
+    luu_dau_vet(sk["id"], qd, don["id"], tenant_id)
 
     if qd.trang_thai_ap is None:
         csdl.audit("webhook_can_soat" if qd.can_soat else "webhook_chi_ghi_nhan",
                    f"don:{don['id']}",
                    f"su_kien:{sk['id']} ma_goc={qd.ma_goc!r} nhan={qd.nhan}"
                    f" tin_cay={qd.do_tin_cay} — KHÔNG đổi trạng thái. {qd.ghi_chu}",
-                   tenant_id=tk["tenant_id"], ket_qua="that_bai" if qd.can_soat else "thanh_cong")
+                   tenant_id=tenant_id, ket_qua="that_bai" if qd.can_soat else "thanh_cong")
         return "xong"
 
     # W05: chặn sự kiện đến muộn bằng MỐC CỦA HÃNG, TRƯỚC cả rank guard.
     # Rank guard một mình không chặn được ca "Delivered cũ đến sau Returning mới": hạng 5 < 6 nên
     # nó bị chặn, nhưng ca "Delivered cũ đến sau dang_giao mới" thì hạng 5 > 3 ⇒ lọt.
+    # G14: `watermark()` chỉ tính sự kiện ĐÃ ÁP, nên mã nhập nhằng không đầu độc được chỗ này.
     moc = sv.get("moc_hang")
     if moc:
         wm = watermark(don["id"])
@@ -551,16 +751,18 @@ def _xu_ly(sk):
             csdl.audit("webhook_den_muon", f"don:{don['id']}",
                        f"su_kien:{sk['id']} moc_hang={moc} < moc đã áp={wm}"
                        f" — KHÔNG áp {qd.trang_thai_ap}",
-                       tenant_id=tk["tenant_id"], ket_qua="tu_choi")
+                       tenant_id=tenant_id, ket_qua="tu_choi")
             return "xong"
 
     ap_dung, ly_do = don_hang.ap_trang_thai_giao(
-        tk["tenant_id"], don["id"], qd.trang_thai_ap, f"webhook:{sk['id']}")
+        tenant_id, don["id"], qd.trang_thai_ap, f"webhook:{sk['id']}")
     if ap_dung and moc:
-        _ghi_watermark(don["id"], moc, tk["tenant_id"])
+        # G14: mốc chỉ được ghi khi trạng thái THẬT SỰ đổi. Sự kiện bị rank guard chặn
+        # (`ap_dung=0`) không được đẩy mốc — xem `_ghi_watermark`.
+        _ghi_watermark(sk["id"], don["id"], moc, tenant_id)
     csdl.audit("webhook_cap_nhat_don", f"don:{don['id']}",
                f"su_kien:{sk['id']} loai={qd.trang_thai_ap} ap_dung={ap_dung} {ly_do}"
-               f" ma_goc={qd.ma_goc!r} tin_cay={qd.do_tin_cay}", tenant_id=tk["tenant_id"])
+               f" ma_goc={qd.ma_goc!r} tin_cay={qd.do_tin_cay}", tenant_id=tenant_id)
     return "xong"
 
 
@@ -627,14 +829,25 @@ def co_the_replay(sk_id):
 def yeu_cau_replay(sk_id, tenant_id, user_id=None):
     """Replay có kiểm soát: đúng tenant · có TRẦN · ghi audit · rồi mới xếp lại hàng.
 
-    Quyền (`tenant.webhook.replay`) do tầng HTTP kiểm — hàm này KHÔNG tự cấp quyền. Nó thêm hai
-    thứ mà tầng HTTP hiện chưa có: chặn chéo tenant một lần nữa, và trần số lần replay.
+    Quyền (`tenant.webhook.replay`) do tầng HTTP kiểm — hàm này KHÔNG tự cấp quyền. Nó thêm ba
+    thứ mà tầng HTTP hiện chưa có: chặn chéo tenant một lần nữa, trần số lần replay, và chặn
+    replay khi sự kiện ĐANG được xử lý.
     Trả (ok, ly_do).
     """
     sk = csdl.mot("SELECT s.*, c.tenant_id t FROM wh_su_kien s JOIN carrier_accounts c"
                   " ON c.id=s.carrier_account_id WHERE s.id=?", (sk_id,))
     if not sk or sk["t"] != tenant_id:
         return False, "không có sự kiện này"
+    # VÁ G14: replay một sự kiện ĐANG xử lý là một lượt replay MẤT IM LẶNG.
+    # `yeu_cau_replay` đặt `trang_thai='moi'` rồi xếp hàng; worker đang giữ sự kiện đó chạy xong
+    # và đặt lại `trang_thai='xong'`; lượt trong hàng đợi tới `_nhan_viec` thì thấy 'xong' nên
+    # bỏ qua. Người bấm thấy HTTP 202 "đã nạp lại" nhưng không có gì chạy lại — đúng kiểu hỏng
+    # không báo lỗi mà §12.2 cấm. Từ chối thẳng thì người vận hành biết phải đợi.
+    if sk["trang_thai"] == "dang_xu_ly":
+        ly_do = "sự kiện đang được xử lý — đợi xong rồi replay"
+        csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
+                   tenant_id=tenant_id, user_id=user_id, ket_qua="tu_choi")
+        return False, ly_do
     duoc, ly_do = co_the_replay(sk_id)
     if not duoc:
         csdl.audit("webhook_replay_tu_choi", f"su_kien:{sk_id}", ly_do,
@@ -693,3 +906,118 @@ def cho_rong(het_gio=10.0):
                 return True
             _cho_trong.wait(timeout=0.1)
     return False
+
+
+# ============================================================================
+# W05 (G14) — ĐỐI CHIẾU HÀNH TRÌNH (tracking reconciliation)
+# ============================================================================
+# Sinh ra từ một câu hỏi rất cụ thể: sau khi webhook chạy một thời gian, LÀM SAO BIẾT nó có
+# đang bỏ sót gì không? Không có hàm này thì chỉ có cách mở CSDL bằng tay, và cách đó không
+# lặp lại được. Hàm dưới đây CHỈ ĐỌC, chỉ trong MỘT tenant, và trả về đúng những chỗ lệch.
+#
+# Trạng thái coi là "đang chạy": hạng thấp hơn `giao_thanh_cong` — suy từ cau_hinh để không
+# khai một danh sách thứ hai rồi hai danh sách lệch nhau (§12.2).
+_HANG_GIAO = cau_hinh.HANG_TRANG_THAI_GIAO
+DANG_CHAY = tuple(sorted((k for k, v in _HANG_GIAO.items() if v < _HANG_GIAO["giao_thanh_cong"]),
+                         key=_HANG_GIAO.get))
+
+
+def doi_chieu_hanh_trinh(tenant_id, giay_gan_nhat=3600, gioi_han=200):
+    """Đối chiếu sự kiện webhook ↔ đơn hàng của MỘT tenant. Chỉ đọc, không sửa gì.
+
+    Trả dict:
+      `lech_tenant`     — BẤT BIẾN: sự kiện của account tenant A lại trỏ vào đơn tenant B.
+                          Đúng thiết kế thì LUÔN rỗng; khác rỗng là đã có rò chéo tenant.
+      `su_kien_mo_coi`  — `don_id` trỏ vào đơn không còn tồn tại.
+      `khong_khop`      — sự kiện không khớp được đơn nào (mã vận đơn lạ / của tenant khác).
+      `cho_nguoi_soat`  — sự kiện `can_soat=1` (NEEDS_REVIEW / AMBIGUOUS) chưa ai chốt.
+      `ket_dinh`        — DLQ + đang chờ thử lại.
+      `don_treo`        — đơn còn đang chạy mà KHÔNG có sự kiện webhook nào trong
+                          `giay_gan_nhat` giây ⇒ ứng viên cho polling (W08).
+      `don_khong_su_kien` — đơn đã gắn tài khoản hãng mà chưa từng có sự kiện nào.
+
+    CSDL chưa migrate (thiếu cột mở rộng) thì trả phần đọc được và nói rõ phần bỏ qua ở
+    `bo_qua` — KHÔNG nổ, và KHÔNG im lặng giả vờ đã đối chiếu đủ.
+    """
+    import time as _time
+    tk = {"tenant_id": tenant_id, "giay_gan_nhat": giay_gan_nhat, "bo_qua": []}
+    co = lambda c: cot_co("wh_su_kien", c)          # noqa: E731
+    tk["khong_khop"] = [dict(r) for r in csdl.nhieu(
+        "SELECT s.id sk_id, s.event_id, s.loi_cuoi FROM wh_su_kien s"
+        " JOIN carrier_accounts c ON c.id=s.carrier_account_id"
+        " WHERE c.tenant_id=? AND s.trang_thai='khong_khop' ORDER BY s.id DESC LIMIT ?",
+        (tenant_id, gioi_han))]
+    tk["ket_dinh"] = [dict(r) for r in csdl.nhieu(
+        "SELECT s.id sk_id, s.event_id, s.trang_thai, s.so_lan_thu, s.loi_cuoi FROM wh_su_kien s"
+        " JOIN carrier_accounts c ON c.id=s.carrier_account_id"
+        " WHERE c.tenant_id=? AND s.trang_thai IN ('dlq','cho_thu_lai')"
+        " ORDER BY s.id DESC LIMIT ?", (tenant_id, gioi_han))]
+
+    if co("don_id"):
+        tk["lech_tenant"] = [dict(r) for r in csdl.nhieu(
+            "SELECT s.id sk_id, s.event_id, c.tenant_id tenant_account, d.tenant_id tenant_don"
+            " FROM wh_su_kien s JOIN carrier_accounts c ON c.id=s.carrier_account_id"
+            " JOIN don_hang d ON d.id=s.don_id"
+            " WHERE c.tenant_id=? AND s.don_id IS NOT NULL AND d.tenant_id<>c.tenant_id LIMIT ?",
+            (tenant_id, gioi_han))]
+        tk["su_kien_mo_coi"] = [dict(r) for r in csdl.nhieu(
+            "SELECT s.id sk_id, s.event_id, s.don_id FROM wh_su_kien s"
+            " JOIN carrier_accounts c ON c.id=s.carrier_account_id"
+            " WHERE c.tenant_id=? AND s.don_id IS NOT NULL"
+            "   AND NOT EXISTS (SELECT 1 FROM don_hang d WHERE d.id=s.don_id) LIMIT ?",
+            (tenant_id, gioi_han))]
+    else:
+        # Không có `don_id` thì KHÔNG kiểm được chéo tenant ở tầng sự kiện. Nói thẳng ra thay
+        # vì trả danh sách rỗng — danh sách rỗng ở đây trùng với "đã kiểm, không sao".
+        tk["lech_tenant"] = None
+        tk["su_kien_mo_coi"] = None
+        tk["bo_qua"].append("lech_tenant/su_kien_mo_coi: CSDL chưa có cột wh_su_kien.don_id")
+
+    if co("can_soat"):
+        tk["cho_nguoi_soat"] = [dict(r) for r in csdl.nhieu(
+            "SELECT s.id sk_id, s.event_id, s.hang_ma_goc, s.trang_thai FROM wh_su_kien s"
+            " JOIN carrier_accounts c ON c.id=s.carrier_account_id"
+            " WHERE c.tenant_id=? AND s.can_soat=1 AND s.trang_thai NOT IN ('dlq','khong_khop')"
+            " ORDER BY s.id DESC LIMIT ?", (tenant_id, gioi_han))]
+    else:
+        tk["cho_nguoi_soat"] = None
+        tk["bo_qua"].append("cho_nguoi_soat: CSDL chưa có cột wh_su_kien.can_soat")
+
+    nguong = _time.time() - giay_gan_nhat
+    tk["don_treo"] = [dict(r) for r in csdl.nhieu(
+        "SELECT d.id don_id, d.ma_van_don, d.trang_thai_giao,"
+        "       (SELECT MAX(s.nhan_luc) FROM wh_su_kien s WHERE s.don_id=d.id) sk_gan_nhat"
+        " FROM don_hang d WHERE d.tenant_id=? AND d.ma_van_don IS NOT NULL"
+        f"   AND COALESCE(d.trang_thai_giao,'cho_lay') IN ({','.join('?' * len(DANG_CHAY))})"
+        "   ORDER BY d.id LIMIT ?", (tenant_id, *DANG_CHAY, gioi_han))] \
+        if co("don_id") else None
+    if tk["don_treo"] is None:
+        tk["bo_qua"].append("don_treo: CSDL chưa có cột wh_su_kien.don_id")
+    else:
+        tk["don_treo"] = [d for d in tk["don_treo"] if _cu_hon(d.get("sk_gan_nhat"), nguong)]
+
+    tk["don_khong_su_kien"] = [dict(r) for r in csdl.nhieu(
+        "SELECT d.id don_id, d.ma_van_don, d.carrier_account_id FROM don_hang d"
+        " WHERE d.tenant_id=? AND d.carrier_account_id IS NOT NULL AND d.ma_van_don IS NOT NULL"
+        + ("   AND NOT EXISTS (SELECT 1 FROM wh_su_kien s WHERE s.don_id=d.id)"
+           if co("don_id") else "")
+        + " LIMIT ?", (tenant_id, gioi_han))]
+    if not co("don_id"):
+        tk["bo_qua"].append("don_khong_su_kien: đếm thô, chưa loại được đơn đã có sự kiện")
+
+    tk["bat_bien_tenant_dat"] = None if tk["lech_tenant"] is None else not tk["lech_tenant"]
+    tk["can_polling"] = bool(tk["don_treo"] or tk["don_khong_su_kien"])
+    return tk
+
+
+def _cu_hon(moc_chuoi, nguong_epoch):
+    """`csdl.bay_gio()` là 'YYYY-MM-DD HH:MM:SS+0700'. Không đọc được thì coi là CŨ (an toàn:
+    thà đối chiếu thừa một đơn còn hơn bỏ sót một đơn không ai nhìn tới)."""
+    if not moc_chuoi:
+        return True
+    import datetime as _dt
+    try:
+        t = _dt.datetime.strptime(str(moc_chuoi)[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return True
+    return (t - _dt.datetime(1970, 1, 1)).total_seconds() - 7 * 3600 < nguong_epoch

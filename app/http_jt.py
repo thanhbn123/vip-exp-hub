@@ -31,14 +31,26 @@
 # KHÔNG BAO GIỜ ghi log ở tệp này, và không có giá trị bí mật nào đi vào ngoại lệ: thông điệp lỗi
 # chỉ nêu TÊN header, không nêu giá trị; thân phản hồi gắn vào NGOẠI LỆ thì đã được CHE; thân trả
 # về cho người gọi thì nguyên văn (hợp đồng §36) — xem `che_bi_mat` và `docs/G16_TRANSPORT.md` §5.
+#
+# G18 (AG-03) ĐÓNG HAI LỖ HỔNG mà lượt nghiệm thu G17 ghi ở mục CHƯA ĐỎ — cả hai đều là "che THIẾU",
+# không phải che sai. Chi tiết + bằng chứng: `docs/G18_SECRET_PATHS.md`.
+#   (a) Bí mật HÃNG ECHO LẠI mà ta CHƯA TỪNG GỬI (`privateKey` của chính hãng trong JSON lỗi, một
+#       header `X-Api-Key`, một `Set-Cookie` phiên). Phép che cũ chỉ biết những giá trị TA gửi đi,
+#       nên bí mật của hãng đi thẳng vào `than_da_che`/`headers_da_che`/thông điệp.
+#       → `TRUONG_CREDENTIAL_PHAN_HOI` + `_gia_tri_bi_mat_tu_phan_hoi` (luật THEO TÊN, không theo
+#         hình dạng giá trị — xem chú thích tại chỗ).
+#   (b) Bí mật nằm trong ĐƯỜNG DẪN URL. Mô tả yêu cầu in `phan.path` nguyên văn, mà mô tả thì KHÔNG
+#       đi qua phép che ⇒ bí mật vào thẳng `str(e)`.
+#       → `_duong_dan_da_che`: che TỪNG ĐOẠN nguy hiểm, giữ nguyên các đoạn còn lại.
 import datetime as _dt
 import http.client
 import json
 import math
+import re
 import socket
 import ssl
 from email.utils import parsedate_to_datetime
-from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, quote_plus, unquote, urlencode, urlsplit
 
 import transport
 
@@ -104,6 +116,36 @@ TRUONG_CREDENTIAL = ("apiaccount", "privatekey", "customercode", "password")
 # Header mà GIÁ TRỊ không phải bí mật (giao thức), không đưa vào tập che — che chúng chỉ làm thông
 # điệp chẩn đoán khó đọc mà không thêm an toàn nào.
 HEADER_KHONG_CHE = ("content-type", "accept", "accept-encoding", "user-agent", "host", "connection")
+
+# ---- G18 lỗ hổng (a): bí mật HÃNG ECHO LẠI mà TA CHƯA TỪNG GỬI --------------------------------
+# `TRUONG_CREDENTIAL` ở trên chỉ là bốn trường của HỢP ĐỒNG J&T. Nó đủ cho luật "che thứ TA gửi đi",
+# nhưng KHÔNG đủ cho mặt còn lại: một máy chủ có thể trả về **bí mật của chính nó** — `privateKey`
+# trong JSON lỗi, `X-Api-Key` trong header, một `Set-Cookie` phiên — và những giá trị đó KHÔNG nằm
+# trong tập che (vì ta chưa từng gửi chúng), nên chúng đi thẳng vào `than_da_che` / `headers_da_che`
+# / thông điệp ngoại lệ, tức là vào log.
+#
+# ĐO ĐƯỢC trước khi vá (AG-03, 15/10/2026, `thu_g18_bi_mat.k1`): stub trả HTTP 401 với thân
+# `{"data":{"privateKey":"HANG-GIUKHOA-…"}}` và header `X-PrivateKey-Echo: HANG-GIUKHOA-…`;
+# bí mật của hãng có mặt trong `str(e)`, `than_da_che` VÀ `headers_da_che`.
+#
+# Danh sách này RỘNG HƠN `TRUONG_CREDENTIAL` một cách có ý thức: nó là TÊN, không phải giá trị, và
+# che theo tên chỉ làm thông điệp chẩn đoán khó đọc hơn — không bao giờ làm mất an toàn. Tên KHÔNG
+# thuộc danh sách thì giá trị của nó KHÔNG bị che (xem đối chứng đường `k4`): đó là điều giữ cho
+# thông điệp lỗi còn đọc được.
+TRUONG_CREDENTIAL_PHAN_HOI = TRUONG_CREDENTIAL + (
+    "authorization", "token", "access_token", "accesstoken", "refresh_token", "secret",
+    "clientsecret", "client_secret", "appsecret", "app_secret", "secretkey", "secret_key",
+    "apikey", "api_key", "x-api-key", "accesskey", "access_key", "private_key",
+    "sign", "signature", "cookie", "set-cookie", "sessionid", "session_id", "credential",
+)
+
+# Dạng `ten=giá_trị` / `ten: giá_trị` / `"ten":"giá_trị"` trong một thân KHÔNG phải JSON (trang lỗi
+# HTML của proxy, văn bản thuần, form). Cần vì `_gia_tri_bi_mat_trong_json` chỉ đọc được JSON, mà
+# một lượt 5xx thật thường là trang HTML — xem `stub_jt.HTTP_500`.
+_MAU_CAP_TEN_BI_MAT = re.compile(
+    r"(?i)(?<![\w-])(" + "|".join(re.escape(t) for t in
+                                 sorted(TRUONG_CREDENTIAL_PHAN_HOI, key=len, reverse=True)) + r")"
+    r"(?![\w-])\s*[\"']?\s*[:=]\s*[\"']?([^\"'\s&,;<>)\]}\\{]{1,4096})")
 
 # Kết cục CHÍNH XÁC của một lượt hỏng, tách khỏi cờ thô `timeout`:
 #   · hang-tu-choi  — biết chắc là hỏng, thử lại vô ích
@@ -223,6 +265,68 @@ def _gia_tri_trong_json(chuoi, ra):
             hang_doi.extend(n)
 
 
+# ---- G18 lỗ hổng (a): bí mật của HÃNG, nhận diện theo TÊN --------------------------------------
+# BA hàm dưới đây là mặt còn lại của phép che: chúng nhìn THÂN/HEADER PHẢN HỒI để tìm những giá trị
+# mà ta CHƯA TỪNG GỬI nhưng vẫn là bí mật. Luật duy nhất, cố ý HẸP và KIỂM ĐƯỢC: **một giá trị bị
+# che khi và chỉ khi TÊN của nó (tên header, khoá JSON, hoặc khoá trong văn bản) thuộc
+# `TRUONG_CREDENTIAL_PHAN_HOI`**. Không có luật nào che theo HÌNH DẠNG giá trị — vì hình dạng không
+# phân biệt được một khoá bí mật với một mã vận đơn, và che nhầm mã vận đơn là làm hỏng chẩn đoán.
+def _gia_tri_bi_mat_trong_json(chuoi, ra):
+    """Giá trị của mọi khoá THUỘC `TRUONG_CREDENTIAL_PHAN_HOI` trong một JSON phản hồi."""
+    try:
+        cay = json.loads(chuoi)
+    except Exception:
+        return
+    hang_doi = [cay]
+    while hang_doi:
+        n = hang_doi.pop()
+        if isinstance(n, str):
+            continue                      # giá trị TRẦN không có tên ⇒ không đủ căn cứ để che
+        if isinstance(n, dict):
+            for khoa, gt in n.items():
+                if (isinstance(gt, str) and gt
+                        and str(khoa).strip().lower() in TRUONG_CREDENTIAL_PHAN_HOI):
+                    ra.add(gt)
+                hang_doi.append(gt)
+        elif isinstance(n, (list, tuple)):
+            hang_doi.extend(n)
+
+
+def _gia_tri_bi_mat_trong_vb(van_ban, ra):
+    """Cùng luật, cho thân KHÔNG phải JSON (trang lỗi HTML, văn bản thuần, form).
+
+    CHI PHÍ ĐÃ ĐO, ghi lại để người sau không phải đo lại: quét 355 KB tốn **12,9 ms** (28 nhánh
+    `(?i)` nên `re` không rút ra được tiền tố chung). Đã thử một bộ lọc thô `lower()` + 28 phép `in`
+    trước khi quét: nó tốn **9,5 ms** cho cùng thân, tức là CHỈ có lợi khi văn bản KHÔNG chứa tên
+    nào, và có hại khi có — một sự đánh đổi hoà, nên nó đã được GỠ BỎ thay vì giữ lại cho "có vẻ
+    nhanh". Đường này chỉ chạy trên thân PHẢN HỒI LỖI, vốn vài trăm byte (≈ 18 µs), và nó luôn nằm
+    cạnh một lượt đi-về mạng tốn hàng mili-giây: chi phí này là nhiễu, không phải nút cổ chai.
+    """
+    for m in _MAU_CAP_TEN_BI_MAT.finditer(van_ban):
+        gt = m.group(2)
+        if gt:
+            ra.add(gt)
+
+
+def _gia_tri_bi_mat_tu_phan_hoi(than, headers_tra_loi):
+    """→ tập giá trị PHẢI CHE nhận diện từ chính phản hồi (bí mật của hãng, ta chưa từng gửi).
+
+    Đầu ra đã mở rộng ra mọi biến thể mã hoá (`_mo_rong_bien_the`) vì lý do y hệt phía yêu cầu:
+    giá trị có thể hiện lại ở dạng percent-encode hoặc JSON-escape.
+    """
+    ra = set()
+    for ten, gt in (headers_tra_loi or ()):
+        if str(ten).strip().lower() in TRUONG_CREDENTIAL_PHAN_HOI:
+            s = str(gt)
+            if s:
+                ra.add(s)
+    if than:
+        van_ban = than.decode("utf-8", "replace")
+        _gia_tri_bi_mat_trong_json(van_ban, ra)
+        _gia_tri_bi_mat_trong_vb(van_ban, ra)
+    return _mo_rong_bien_the(ra)
+
+
 def _dang_che(ten, gia_tri):
     """Hai mức: TÊN thuộc credential ⇒ che BẤT KỂ độ dài; tên khác ⇒ chỉ che khi đủ dài.
 
@@ -299,8 +403,9 @@ def _gia_tri_tu_url(url):
     cầu và bị máy chủ echo lại, nhưng `_gia_tri_can_che` chỉ nhìn header + thân form, nên bí mật RÒ
     trong `than_da_che`. Hai mức như mọi giá trị khác; TÊN tham số không bao giờ bị che.
 
-    PHẠM VI: chỉ QUERY. ĐƯỜNG DẪN vẫn được in nguyên văn trong mô tả yêu cầu (nó là thứ cho biết
-    lượt gọi đi tới endpoint nào) — xem `docs/G17_TRANSPORT.md` §5, mục "NGOÀI PHẠM VI".
+    PHẠM VI: chỉ QUERY. ĐƯỜNG DẪN có đường che RIÊNG (`_duong_dan_da_che`) — G18 đóng nốt lỗ hổng
+    "bí mật nằm trong đường dẫn bị in nguyên văn" mà G17 để lại có ý thức (xem
+    `docs/G18_SECRET_PATHS.md` §2).
     """
     ra = set()
     try:
@@ -338,14 +443,47 @@ def _mo_ta_ten(ten):
     return ten
 
 
-def _gia_tri_can_che(headers, than_gui, url=None):
-    """Mọi dạng có thể xuất hiện lại của những giá trị TA ĐÃ GỬI ĐI. TÊN trường không bao giờ bị che.
+def _gia_tri_tu_duong_dan(url, moc):
+    """Giá trị trong ĐƯỜNG DẪN của URL — cũng là thứ TA GỬI ĐI (nó nằm trên dòng yêu cầu).
+
+    VÌ SAO PHẢI CÓ, chứ không chỉ che lúc IN: một máy chủ hay echo lại đường dẫn trong thân phản
+    hồi (stub `DOI_DAU_LAP` làm đúng như vậy, và `thu_g18_bi_mat` dựng một stub echo `self.path`).
+    Che lúc in mà không đưa giá trị vào TẬP CHE thì bí mật vẫn vào `than_da_che` rồi vào thông điệp
+    — đúng cửa sau. ĐO ĐƯỢC trước khi thêm nhánh này (AG-03, `thu_g18_bi_mat.k2`): sau khi `mo_ta`
+    đã che, `str(e)` VẪN chứa bí mật đường dẫn, vì nó vào qua thân echo.
+
+    `moc` là tập giá trị đã biết từ header/thân/query — dùng làm mốc so khớp đoạn.
+    """
+    ra = set()
+    try:
+        duong = urlsplit(url).path or ""
+    except Exception:
+        return ra
+    for doan in duong.split("/"):
+        if not doan:
+            continue
+        try:
+            doan_giai = unquote(doan)
+        except Exception:
+            doan_giai = doan
+        for d in (doan, doan_giai):
+            if d and d not in ra and (_doan_chua_bi_mat(d, moc) or _la_doan_bi_mat(d)):
+                ra.add(d)
+    return ra
+
+
+def _gia_tri_ta_gui(headers, than_gui, url=None):
+    """Giá trị THÔ (chưa mở rộng biến thể) mà TA ĐÃ GỬI ĐI. TÊN trường không bao giờ bị che.
 
     Hai mức: TÊN thuộc credential thì che BẤT KỂ độ dài; tên khác chỉ che khi đủ dài
     (`DAI_TOI_THIEU_DE_CHE`) — xem `_dang_che`.
 
-    Ba nguồn: header, thân form (kể cả JSON lồng trong `bizContent`), và query của URL. Đầu ra đã
-    MỞ RỘNG ra mọi biến thể mã hoá (`_bien_the`) — đó là chỗ vá lỗ hổng đo được ngày 15/10/2026.
+    Bốn nguồn: header, thân form (kể cả JSON lồng trong `bizContent`), QUERY của URL (G17), và
+    ĐƯỜNG DẪN của URL (G18) — cả bốn đều là thứ ta thật sự gửi đi trên dây.
+
+    Tách khỏi `_gia_tri_can_che` (G18) vì có HAI người dùng khác nhau: phép che cần mọi BIẾN THỂ
+    mã hoá, còn phép che ĐƯỜNG DẪN cần chuỗi GỐC để so khớp đoạn — so một đoạn đường dẫn với
+    `aB%3Fcd` trong khi đoạn đó viết `aB?cd` là so sai chỗ.
     """
     ra = set()
     for ten, gt in headers.items():
@@ -363,7 +501,17 @@ def _gia_tri_can_che(headers, than_gui, url=None):
         pass
     if url:
         ra |= _gia_tri_tu_url(url)
-    return _mo_rong_bien_the(ra)
+        ra |= _gia_tri_tu_duong_dan(url, ra)
+    return ra
+
+
+def _gia_tri_can_che(headers, than_gui, url=None):
+    """`_gia_tri_ta_gui` MỞ RỘNG ra mọi biến thể mã hoá (`_bien_the`).
+
+    Đó là chỗ vá lỗ hổng đo được ngày 15/10/2026 (AG-02, `thu_http_jt.j3`): hãng echo lại BYTE
+    TRÊN DÂY, không phải chuỗi Python của ta.
+    """
+    return _mo_rong_bien_the(_gia_tri_ta_gui(headers, than_gui, url))
 
 
 def che_bi_mat(du_lieu: bytes, can_che) -> bytes:
@@ -384,15 +532,112 @@ def che_bi_mat(du_lieu: bytes, can_che) -> bytes:
     return ra
 
 
+# ---- G18 lỗ hổng (b): bí mật nằm trong ĐƯỜNG DẪN của URL ----------------------------------------
+# G17 in `phan.path` NGUYÊN VĂN trong mô tả yêu cầu, và mô tả đó đi vào MỌI thông điệp ngoại lệ mà
+# KHÔNG qua phép che (`mo_ta` cố ý không che — che cả mô tả là làm ca tự kiểm `test_g3` hết răng).
+# Hệ quả ĐO ĐƯỢC (AG-03, 15/10/2026, `thu_g18_bi_mat.k2`): URL `http://127.0.0.1:…/api/<bí mật>/order`
+# làm bí mật hiện nguyên văn trong `str(e)` và trong `e.mo_ta_yeu_cau`.
+#
+# QUYẾT ĐỊNH (AG-03, 15/10/2026) — KHÔNG che cả đường dẫn, cũng KHÔNG giữ nguyên văn; che ĐOẠN:
+#   · Che cả đường dẫn là bịt thứ duy nhất cho biết lượt gọi đi tới endpoint nào. Một sự cố
+#     `addOrder` hỏng mà thông điệp chỉ nói `/…` thì người trực không có gì để lần.
+#   · Giữ nguyên văn là ĐÚNG lỗ hổng (b) mà lượt nghiệm thu G17 ghi ở mục CHƯA ĐỎ.
+#   · Nên: che ĐOẠN nào *là* bí mật (hoặc chứa bí mật đã gửi, hoặc trông như một credential), giữ
+#     nguyên các đoạn còn lại. `/api/[DA-CHE]/order/addOrder` vẫn nói được endpoint, mà không nói
+#     ra bí mật. Số đoạn bị che cũng được nêu để người đọc biết mô tả đã bị rút gọn.
+DOAN_DUONG_DAN_DAI_TOI_THIEU = 20       # dưới ngưỡng này, một đoạn "trông như bí mật" vẫn là endpoint
+DOAN_DUONG_DAN_KHAC_NHAU_TOI_THIEU = 10  # một đoạn đủ ngẫu nhiên: nhiều ký tự khác nhau
+_CHUOI_DOAN_HOP_LE = re.compile(r"\A[A-Za-z0-9._~%+-]+\Z")
+
+
+def _la_doan_bi_mat(doan):
+    """Một ĐOẠN đường dẫn *trông như* một credential (khoá phiên, token, tên tệp ký).
+
+    Luật, cố ý HẸP — ba điều kiện cùng lúc, nên endpoint thật KHÔNG bị che:
+      · đủ DÀI (≥ `DOAN_DUONG_DAN_DAI_TOI_THIEU`): `addOrder`, `v1`, `jtexpress` thì không;
+      · chỉ gồm ký tự hợp lệ trong một đoạn URL (không dấu cách, không dấu câu lạ);
+      · TRỘN chữ và số VÀ có ≥ `DOAN_DUONG_DAN_KHAC_NHAU_TOI_THIEU` ký tự khác nhau — đây là
+        thứ phân biệt một blob ngẫu nhiên với một từ có nghĩa hoặc một mã đơn thuần.
+
+    HỆ QUẢ ĐÃ BIẾT, ghi thẳng: một mã vận đơn dài ≥ 20 ký tự trộn chữ-số đặt trong đường dẫn SẼ bị
+    che. Chấp nhận có ý thức — cùng đánh đổi mà `TRUONG_CREDENTIAL` đã chọn ở G16 ("thà thông điệp
+    khó đọc còn hơn một credential đi vào log"), và mã vận đơn thật của J&T nằm trong THÂN, không
+    nằm trong đường dẫn (`adapter_jt.DUONG_*` là hằng số).
+    """
+    if len(doan) < DOAN_DUONG_DAN_DAI_TOI_THIEU:
+        return False
+    if not _CHUOI_DOAN_HOP_LE.match(doan):
+        return False
+    co_chu = any(c.isalpha() for c in doan)
+    co_so = any(c.isdigit() for c in doan)
+    return co_chu and co_so and len(set(doan)) >= DOAN_DUONG_DAN_KHAC_NHAU_TOI_THIEU
+
+
+def _doan_chua_bi_mat(doan, can_che):
+    """Đoạn này có phải/ chứa một giá trị TA ĐÃ GỬI ĐI không.
+
+    HAI mức, và mức thấp là mức BẮT BUỘC chứ không phải "cho chắc":
+      · BẰNG NHAU cả đoạn — áp cho MỌI độ dài. Bí mật 1–3 ký tự đặt nguyên một đoạn
+        (`/api/j/order`) phải bị che, và so bằng nhau thì không có tác dụng phụ nào.
+      · NẰM TRONG đoạn — chỉ áp khi bí mật ĐỦ DÀI (`DAI_TOI_THIEU_DE_CHE`). So chuỗi con với một
+        bí mật 1 ký tự là che gần hết đường dẫn vì trùng một chữ cái — che nhầm mà không thêm an
+        toàn, vì một ký tự đơn không mang thông tin.
+    """
+    for gt in can_che:
+        if not gt:
+            continue
+        if doan == gt:
+            return True
+        if len(gt) >= DAI_TOI_THIEU_DE_CHE and gt in doan:
+            return True
+    return False
+
+
+def _duong_dan_da_che(url, headers, than):
+    """Đường dẫn để IN RA (chỉ để in — không đổi đích gửi đi), đã che từng đoạn nguy hiểm.
+
+    → `(duong_dan_da_che, so_doan_bi_che)`. Đoạn bị che thay bằng `[DA-CHE]`; các đoạn còn lại
+    NGUYÊN VĂN (đối chứng đường: `k4` khẳng định endpoint thật đi qua không suy suyển).
+    """
+    try:
+        duong = urlsplit(url).path or "/"
+    except Exception:
+        return "/", 0
+    if duong == "/":
+        return "/", 0
+    can_che = _gia_tri_ta_gui(headers, than, url)
+    ra = []
+    so_che = 0
+    for doan in duong.split("/"):
+        if not doan:
+            ra.append(doan)
+            continue
+        try:
+            doan_giai = unquote(doan)          # đoạn có thể đã bị percent-encode trên URL
+        except Exception:
+            doan_giai = doan
+        if (_doan_chua_bi_mat(doan, can_che) or _doan_chua_bi_mat(doan_giai, can_che)
+                or _la_doan_bi_mat(doan) or _la_doan_bi_mat(doan_giai)):
+            ra.append("[DA-CHE]")
+            so_che += 1
+        else:
+            ra.append(doan)
+    return "/".join(ra), so_che
+
+
 def mo_ta_yeu_cau(url, headers, than) -> str:
     """Mô tả một yêu cầu để đưa vào THÔNG ĐIỆP LỖI — chỉ TÊN, không giá trị, không query.
 
     Hàm này là chỗ DUY NHẤT dựng phần mô tả yêu cầu, nên bộ thử có thể đột biến đúng nó để chứng
     minh bộ dò rò rỉ bí mật thật sự bắt được (xem `thu_http_jt` ca g2).
+
+    G18: ĐƯỜNG DẪN đi qua `_duong_dan_da_che` trước khi in (lỗ hổng (b)). Query vẫn KHÔNG được in
+    (nó đã nằm trong tập che từ G17), và TÊN header/trường vẫn in nguyên văn vì tên không phải bí mật.
     """
     phan = urlsplit(url)
-    duong = phan.path or "/"
-    return (f"POST {phan.scheme}://{phan.hostname}{duong} · header: {sorted(headers)} · "
+    duong, so_doan_che = _duong_dan_da_che(url, headers, than)
+    ghi_chu_che = f" ({so_doan_che} đoạn đường dẫn đã che)" if so_doan_che else ""
+    return (f"POST {phan.scheme}://{phan.hostname}{duong}{ghi_chu_che} · header: {sorted(headers)} · "
             f"trường form: {_ten_truong_form(than)} · thân: {len(than)} byte")
 
 
@@ -481,8 +726,12 @@ def tach_url(url):
                 KET_CUC_KHONG_GUI_DI, host=host)
     duong_dan = phan.path or "/"
     if not duong_dan.startswith("/"):
-        raise _loi_vinh_vien("url-sai", f"đường dẫn {duong_dan!r} không bắt đầu bằng '/'",
-                             KET_CUC_KHONG_GUI_DI, host=host)
+        # G18: KHÔNG in giá trị đường dẫn ra đây — đây là một trong hai chỗ từng in nó nguyên văn
+        # (chỗ kia là `mo_ta_yeu_cau`, xem `_duong_dan_da_che`). Nhánh này gần như không tới được
+        # (`urlsplit` đã bảo đảm đường dẫn của URL tuyệt đối bắt đầu bằng `/`), nhưng "gần như" là
+        # lý do nó từng nằm lại. Thông điệp chỉ nêu SỰ THẬT, không nêu giá trị.
+        raise _loi_vinh_vien("url-sai", "đường dẫn không bắt đầu bằng '/' — dán sai. "
+                             "TỪ CHỐI trước khi mở socket", KET_CUC_KHONG_GUI_DI, host=host)
     if phan.query:
         duong_dan = duong_dan + "?" + phan.query
     return phan.scheme, host, cong, duong_dan
@@ -758,10 +1007,18 @@ def _loi_cho_lai(loai, ma_http, mo_ta, than, headers_tra_loi, can_che, them):
 
 
 def _tra_loi_tu_http(ma_http, than, headers_tra_loi, mo_ta, can_che):
-    """Phân loại theo mã HTTP. CHỈ 2xx mới trả `TraLoiHTTP`; mọi mã khác NÉM, không bao giờ trả."""
+    """Phân loại theo mã HTTP. CHỈ 2xx mới trả `TraLoiHTTP`; mọi mã khác NÉM, không bao giờ trả.
+
+    G18: trước khi che, tập che được MỞ RỘNG bằng `_gia_tri_bi_mat_tu_phan_hoi` — bí mật của CHÍNH
+    HÃNG (lỗ hổng (a)). Thứ tự có ý nghĩa: phải nhận diện trên thân/header THÔ, rồi mới che, vì
+    sau khi che thì không còn gì để nhận diện.
+    """
+    can_che = can_che | _gia_tri_bi_mat_tu_phan_hoi(than, headers_tra_loi)
     if 200 <= ma_http <= 299:
         da_che = {ten: che_bi_mat(str(gt).encode("utf-8", "replace"), can_che).decode(
             "utf-8", "replace") for ten, gt in headers_tra_loi}
+        # THÂN 2xx vẫn NGUYÊN VĂN (hợp đồng §36) — chỉ HEADER được che, vì `TraLoiHTTP` là đối
+        # tượng hay bị đem đi log nhất (xem docstring của chính nó).
         return TraLoiHTTP(ma_http, than, da_che)
     than_sach = che_bi_mat(than, can_che) if than else b""
     them = {"than_da_che": than_sach, "so_byte_than": len(than),
@@ -830,9 +1087,11 @@ def gui_form(url, headers, body, *, timeout):
     headers_gui = _chuan_bi_headers(headers)
     than_gui = _ma_hoa_form(body)
     can_che = _gia_tri_can_che(headers_gui, than_gui, url)
-    # `mo_ta` KHÔNG đi qua phép che, và đó là chủ ý: nó chỉ nêu TÊN (header, trường form) và ĐƯỜNG
-    # DẪN, không nêu query. Che nó đi sẽ làm hỏng chính ca tự kiểm `test_g3` — ca đó đột biến hàm
-    # dựng mô tả để in giá trị header ra và đòi ca rò rỉ phải ĐỎ. Che `mo_ta` là làm ca đó hết răng.
+    # `mo_ta` KHÔNG đi qua phép che `che_bi_mat`, và đó là chủ ý: nó chỉ nêu TÊN (header, trường
+    # form) và ĐƯỜNG DẪN, không nêu query. Che nó bằng `che_bi_mat` sẽ làm hỏng chính ca tự kiểm
+    # `test_g3` — ca đó đột biến hàm dựng mô tả để in giá trị header ra và đòi ca rò rỉ phải ĐỎ.
+    # Che `mo_ta` là làm ca đó hết răng. (G18 che ĐƯỜNG DẪN bằng một đường RIÊNG, ngay bên trong
+    # `mo_ta_yeu_cau` — không đụng tới cơ chế `che_bi_mat` mà `test_g3` đang canh.)
     mo_ta = mo_ta_yeu_cau(url, headers_gui, than_gui)
 
     ket_noi = None

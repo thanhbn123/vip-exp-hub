@@ -20,11 +20,38 @@ don_dep() {
         # một lượt `pkill -f cat` đã từng giết cả Ollama và Synology Drive vì chữ "cat"
         # nằm trong "Application".
         kill "$PID" 2>/dev/null || true
-        sleep 1
+        # Chờ tới khi nó CHẾT THẬT rồi mới thôi. `sleep 1` rồi tin là đã chết chính là cách
+        # một máy chủ mồ côi sống sót qua lượt chạy: tiền lệ pid 41082 nghe cổng 19449 — đúng
+        # dải cổng mà vòng chọn cổng dưới đây dùng — được AG-04 phát hiện ở một lượt sau.
+        k=0
+        while [ $k -lt 25 ]; do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.2; k=$((k+1))
+        done
+        # Vẫn sống sau 5 giây: XÁC MINH DANH TÍNH TRƯỚC KHI dùng tín hiệu mạnh, vì PID có thể
+        # đã được cấp lại cho một tiến trình KHÁC. Chỉ `kill -9` khi tên vẫn là Python; không
+        # xác minh được thì KHÔNG đóng — báo ra để người đọc kiểm tay.
+        if kill -0 "$PID" 2>/dev/null; then
+            TEN=$(ps -o comm= -p "$PID" 2>/dev/null || true)
+            case "$TEN" in
+                *[Pp]ython*) kill -9 "$PID" 2>/dev/null || true ;;
+                *) echo "[giao-dien] CẢNH BÁO: pid $PID còn sống nhưng tên tiến trình là '$TEN' — KHÔNG kill -9 (đề phòng PID được cấp lại). Kiểm tay: kill -0 $PID" >&2 ;;
+            esac
+        fi
+        # Im lặng ở đây là che một tiến trình mồ côi — nói thẳng nếu vẫn còn.
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "[giao-dien] CẢNH BÁO: pid $PID VẪN SỐNG sau khi dọn — còn tiến trình mồ côi." >&2
+        fi
     fi
     rm -rf "$NEN"
+    return 0
 }
-trap don_dep EXIT INT TERM
+# Bắt cả SIGHUP (đóng terminal) — thiếu nó thì trap không chạy và máy chủ ở lại một mình.
+# Mọi tín hiệu đều đi qua `exit` để trap EXIT dọn dẹp, thay vì để script chạy tiếp sau trap.
+trap don_dep EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 if [ ! -d "$GOC/node_modules/@playwright/test" ]; then
     echo "CHƯA CÀI Playwright. Chạy trong thư mục repo:  npm install"

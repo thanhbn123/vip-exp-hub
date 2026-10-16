@@ -304,6 +304,71 @@ test("04 — Tab vào được các điều khiển TRONG màn, không chỉ qua
 });
 
 // ============================================================================================
+// 4b. TỰ KIỂM CHO CA 04 — PHÉP ĐẾM ẤY PHẢI ĐỎ ĐƯỢC
+// ============================================================================================
+// Ca 04 vừa được sửa ngân sách Tab. Một ca thử vừa sửa mà không chứng minh được nó CÒN ĐỎ
+// ĐƯỢC là một ca thử vừa được làm cho vừa. Ca này dựng lại đúng thứ ca 04 canh — điều khiển
+// trong màn KHÔNG nhận được tiêu điểm — bằng cách gỡ khả năng nhận tiêu điểm của chúng, rồi
+// chạy LẠI chính phép đếm ấy. Xanh ở đây nghĩa là ca 04 chỉ đang đếm phần tử CÓ MẶT.
+//
+// GỘP TỪ AG-02 (G20) — ĐỌC TRƯỚC KHI SỬA. Bản gốc (`g20-ag02-frontend/thu_giao_dien/
+// 06_ban_phim.spec.js`) tự kiểm phép đếm `/^input|^select|^textarea|^button/` — tức phép đếm
+// THEO TÊN THẺ của ca 04 BẢN CŨ. Chính phép đếm ấy đã bị ca 04 ở trên THAY THẾ bằng
+// `vetTabTrongMan()` (đếm theo VỊ TRÍ TRONG DOM, `closest("#man")`), vì nó đếm thiếu `<a href>`
+// và vùng cuộn — xem khối chú thích đầu ca 04. Giữ nguyên bản AG-02 thì ca này tự kiểm một
+// phép đếm KHÔNG CÒN TỒN TẠI ở đâu trong bộ: một ca giả, xanh vĩnh viễn mà không canh gì.
+// Nên ca được gộp về ĐÚNG phép đếm đang chạy (vế (b) của ca 04), giữ nguyên tên và mục đích.
+//
+// KHÁC ca 04 vế (d) ở CƠ CHẾ GỠ, không phải ở câu hỏi: vế (d) dùng `inert` trên cả `#man`;
+// ca này gỡ TỪNG phần tử bằng `tabindex="-1"` + `disabled`. Hai đường gỡ độc lập nhau, nên
+// một phép đếm hỏng phải lộ ra ở cả hai — hoặc cả hai cùng tố cáo.
+test("04b — TỰ KIỂM: điều khiển trong màn mất khả năng nhận tiêu điểm ⇒ phép đếm của ca 04 ĐỎ", async ({ page }) => {
+  page.on("dialog", (d) => d.dismiss().catch(() => {}));
+  await U.dangNhap(page, "shopa-owner");
+  await U.moMan(page, "don");
+
+  // Dựng ĐÚNG trạng thái xuất phát của ca 04 vế (b): vừa Tab + Enter qua lối đi tắt.
+  await napLai(page);
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+
+  // ĐỐI CHỨNG DƯƠNG: nguyên vẹn thì phép đếm của ca 04 phải vượt ngưỡng. Thiếu vế này thì ca
+  // tự kiểm vô nghĩa — nó sẽ "đỏ" vì một lý do khác chứ không vì phép đếm.
+  const vet0 = await vetTabTrongMan(page, 30);
+  const vao0 = vet0.filter((x) => x.trong).length;
+  console.log(`[đo] tự kiểm (a) nguyên vẹn: ${vao0} điểm dừng là điều khiển TRONG màn`);
+  expect(vao0, "màn nguyên vẹn đã không đạt ngưỡng của ca 04 ⇒ ca tự kiểm không có gì để so")
+    .toBeGreaterThan(10);
+
+  // Về lại ĐÚNG điểm xuất phát ấy RỒI mới gỡ — `napLai` dựng lại `#man`, nên gỡ trước sẽ mất.
+  // Không làm bước này thì phép đo (c) xuất phát từ một chỗ khác (a) và hai số không so được.
+  await napLai(page);
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+
+  // GỠ khả năng nhận tiêu điểm của MỌI điều khiển trong `#man` — KHÔNG xoá phần tử nào, nên
+  // nếu phép đếm chỉ đếm sự CÓ MẶT thì nó vẫn xanh và ca này tự tố cáo mình.
+  const truoc_go = await page.locator("#man a[href], #man button, #man input, #man select, #man textarea").count();
+  const go = await page.evaluate(() => {
+    const ns = document.querySelectorAll("#man a[href], #man button, #man input, #man select, #man textarea");
+    ns.forEach((n) => { n.setAttribute("tabindex", "-1"); if ("disabled" in n) n.disabled = true; });
+    return ns.length;
+  });
+  console.log(`[đo] tự kiểm (b) gỡ tiêu điểm của ${go} điều khiển trong #man`);
+  expect(go, "không tìm thấy điều khiển nào để gỡ ⇒ ca tự kiểm vô nghĩa").toBeGreaterThan(3);
+
+  const sau_go = await page.locator("#man a[href], #man button, #man input, #man select, #man textarea").count();
+  expect(sau_go, "phép gỡ đã XOÁ điều khiển khỏi DOM ⇒ nó không chứng minh được gì").toBe(truoc_go);
+
+  const vet1 = await vetTabTrongMan(page, 30);
+  const vao1 = vet1.filter((x) => x.trong).length;
+  console.log(`[đo] tự kiểm (c) sau khi gỡ: ${vao1} điểm dừng là điều khiển trong màn `
+    + `(${sau_go} điều khiển VẪN CÓ MẶT trong DOM)`);
+  expect(vao1, `gỡ tiêu điểm của ${go} điều khiển mà phép đếm VẪN ra ${vao1} ⇒ ca 04 đang đếm `
+    + `phần tử CÓ MẶT trong DOM, không đếm thứ Tab tới được`).toBeLessThanOrEqual(10);
+});
+
+// ============================================================================================
 // 5. ĐĂNG XUẤT BẰNG BÀN PHÍM
 // ============================================================================================
 test("05 — Đăng xuất bấm được bằng bàn phím: Tab tới, Enter, về màn đăng nhập", async ({ page }) => {

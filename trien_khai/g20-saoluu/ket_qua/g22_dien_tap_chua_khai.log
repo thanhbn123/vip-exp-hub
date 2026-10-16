@@ -1,0 +1,24 @@
+==============================================================
+ DIEN TAP KHOI PHUC — VIP Express Hub G11
+ Nen tam : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.U4CPBb/du-lieu
+ Luc     : 2026-10-16 16:48:53+0700
+ Luu y   : passphrase o day la passphrase DIEN TAP, sinh tai cho, khong phai cua anh Thanh.
+==============================================================
+
+--- B1. Dung CSDL + schema + du lieu mau ---
+migrate HONG
+[migrate] Phiên bản hiện tại: 0 → đích: 9
+[migrate] TỪ CHỐI: CHƯA KHAI kho đang chạy nên KHÔNG kiểm chứng được bản sao lưu này
+          có chứa dữ liệu đang phục vụ hay không (chưa có nguồn nào khai).
+          TRÊN ĐĨA ĐANG CÓ `hub.db` tại /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.U4CPBb/du-lieu/hub.db.
+          Tệp đó CÓ THỂ là kho đang phục vụ, CŨNG CÓ THỂ là tệp CŨ còn sót lại sau
+          khi dữ liệu đã chuyển sang PostgreSQL. Hai thứ đó KHÔNG phân biệt được
+          bằng mtime / kích thước / tên tệp — nên hàm này KHÔNG đoán.
+          Khai MỘT trong hai:
+            · `KHO_DANG_CHAY = 'sqlite'` (hoặc 'postgresql') trong app/cau_hinh.py, hoặc
+            · biến môi trường VIP_KHO_DANG_CHAY=sqlite|postgresql cho tiến trình chạy `migrate`.
+          Nếu kho đang chạy là PostgreSQL: `sao_luu()` KHÔNG dùng được — sao lưu bằng
+          `pg_dump -Fc`; xem docs/G22_SAOLUU.md.
+          Nếu kho đang chạy là SQLite: khai `sqlite` rồi chạy lại. Chốt này cố ý KHÔNG có
+          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0.
+

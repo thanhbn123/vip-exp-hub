@@ -1,41 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""G21 / AG-02 — BẢN VÁ ĐỀ XUẤT CHO `app/migrate.py` + HAI ĐỐI CHỨNG ĐƯỜNG BẮT BUỘC.
+"""G21 / AG-02 — BẢN VÁ **ĐÃ ÁP** VÀO `app/migrate.py`, VÀ BỐN PHÉP TIÊM LỖI ĐỐI CHỨNG.
 
-`app/migrate.py` là TỆP CỦA AG-00 — làn này (AG-02) KHÔNG được sửa nó. Nên mô-đun này KHÔNG
-sửa gì cả: nó DỰNG RA một `app/` ỨNG VIÊN trong thư mục tạm (mọi tệp là symlink trỏ về cây
-thật, riêng `migrate.py` là bản dựng tại chỗ), rồi chạy ĐÚNG bộ đo `fail_closed.py` trên đó
-qua `G21_APP_DIR`. Ba lượt chạy, ba câu trả lời khác nhau, và cả ba đều cần:
+====== LƯỢT TRƯỚC VÀ LƯỢT NÀY KHÁC NHAU Ở ĐÚNG MỘT CHỖ ======
+Lượt trước bản vá **chưa được áp**: mô-đun này DỰNG RA một `app/` ứng viên trong thư mục tạm
+(mọi tệp là symlink trỏ về cây thật, riêng `migrate.py` là bản dựng tại chỗ) rồi chạy bộ đo
+trên đó. Kết quả 9/10 FAIL_CLOSED khi đó là kết quả **TRÊN BẢN SAO** — nó chứng minh bản vá
+ĐÚNG, nhưng không chứng minh TỆP THẬT đúng.
 
-  1. `goc`     — `app/migrate.py` nguyên bản.            Kỳ vọng: nhiều FAIL_OPEN (đo được: 9/10).
-  2. `ban_va`  — bản vá đề xuất ở tệp này.               Kỳ vọng: các ca hỏng chuyển FAIL_CLOSED.
-  3. `tiem_loi`— CHÍNH bản vá, bị TIÊM LẠI một lỗi fail-open (gỡ đúng một chốt).
-                                                          Kỳ vọng: bộ đo PHẢI bắt được.
-Lượt 3 là lượt quan trọng nhất. Thiếu nó thì "bộ đo báo ĐỎ trên mã chưa vá" có thể chỉ là bộ đo
-đọc nhầm tệp, hoặc một cái ĐỎ cứng đơ bất kể đầu vào — và mọi dòng FAIL_CLOSED ở lượt 2 không
-chứng minh gì. Lượt 3 chứng minh bộ đo PHÂN BIỆT ĐƯỢC.
+Lượt này bản vá **đã nằm trong `app/migrate.py`**. Nên:
 
-====== CÁCH VÁ ======
-Không cắt dán thân hàm (dễ trượt, dễ hỏng im lặng). Bản dựng chèn các định nghĩa MỚI vào NGAY
-TRƯỚC khối `if __name__ == "__main__":` của bản gốc — trong Python, định nghĩa sau thắng. Bản
-dựng TỪ CHỐI chạy nếu không tìm thấy mốc chèn, nên nó không thể "vá trượt mà vẫn xanh".
+  * `ban_va` KHÔNG còn là một bản dựng — nó là **CHÍNH `app/migrate.py`**, đọc từ đĩa, và mọi
+    phép đo của lượt này chạy trên tệp đó. `dung_bien_the()` chép NGUYÊN VĂN tệp thật vào thư
+    mục ứng viên và `xac_nhan()` từ chối chạy nếu tệp thật thiếu bất kỳ mảnh mã nào của bản vá.
+    Nhờ vậy "đo trên bản vá" là một khẳng định KIỂM ĐƯỢC, không phải một lời hứa.
+  * `goc` là bản **ĐÓNG BĂNG** của tệp trước khi vá: `migrate_nguyenban.py`, lấy từ
+    `git show HEAD:app/migrate.py` (md5 khớp từng byte với tệp thật ngay trước lượt vá — có
+    in ra ở `main()`). Không có nó thì bảng "TRƯỚC / SAU" không dựng lại được sau khi đã vá.
 
-====== BA CHỐT MỚI, VÀ VÌ SAO ĐÚNG BA CHỐT NÀY ======
-  (1) DẤU KIỂM `.sha256` đi kèm mỗi bản sao lưu, do `sao_luu()` ghi và `khoi_phuc()` bắt buộc
-      kiểm. Đây là vế DUY NHẤT bắt được "sửa 1 byte trong trang dữ liệu đang dùng": đo được
-      `PRAGMA integrity_check` trả **"ok"** cho tệp đó, nên kiểm cấu trúc KHÔNG đủ.
-      Không có dấu kiểm ⇒ TỪ CHỐI (trừ khi người trực nói rõ là đã biết chưa kiểm được).
-  (2) GHI QUA TỆP TẠM RỒI `os.replace` — hỏng giữa đường thì CSDL đang chạy KHÔNG bị đụng.
-      Đây là vế bắt được "hết đĩa giữa đường khi khôi phục" (đo được: bản gốc để lại CSDL
-      đích ở trạng thái `database disk image is malformed`, MẤT SẠCH 20 bảng).
-  (3) TÊN BẢN CẤT KHÔNG BAO GIỜ ĐÈ + KIỂM PHIÊN BẢN SCHEMA trước khi đè.
+====== VÌ SAO PHẢI CÓ BỐN PHÉP TIÊM ======
+"Mọi kịch bản đều FAIL_CLOSED" chỉ có nghĩa khi bộ đo **PHÂN BIỆT ĐƯỢC**. Bốn phép tiêm dưới
+đây gỡ **ĐÚNG MỘT** chốt khỏi bản vá, mỗi phép có một kịch bản PHẢI bắt được nó. Phép thay phải
+KHỚP TỪNG KÝ TỰ — không khớp thì NÉM, chứ không im lặng bỏ qua: một phép tiêm "trượt" mà vẫn
+chạy tiếp là kiểu hỏng tệ nhất, vì bộ đo sẽ báo ĐỎ trên một bản vá còn nguyên và người đọc
+tưởng bộ đo có răng.
 
-====== MỘT KHOẢNG TRỐNG BẢN VÁ NÀY **KHÔNG** ĐÓNG, NÓI THẲNG ======
-Đo 2 (`hub.db` CŨ còn sót trong khi kho đang chạy là PostgreSQL) vẫn HỞ. Hệ KHÔNG có khái niệm
-"kho đang chạy là kho nào", nên không có gì để đối chiếu — và bịa một phép đoán (mtime, kích
-thước) là vi phạm nguyên tắc "không đoán". Muốn đóng thì cần một QUYẾT ĐỊNH SẢN PHẨM: một cờ
-cấu hình nói rõ kho đang chạy (`SQLite`/`PostgreSQL`), do AG-00/AG-05 chốt. Xem
-`docs/G21_BACKUP_RESTORE.md` §CÒN HỞ.
+====== MỘT PHÉP TIÊM TÔI ĐÃ BỎ, VÀ VÌ SAO — ghi lại để người sau không thêm lại ======
+Tôi đã định tiêm "gỡ chốt bắt buộc DẤU KIỂM `.sha256`" và kỳ vọng `S2` bắt được. ĐO RỒI THÌ
+SAI: gỡ chốt đó KHÔNG tạo ra fail-open nào quan sát được, vì `khoi_phuc()` còn lớp kiểm cấu
+trúc trên chính tệp tạm, và lớp đó bắt được cả hai bản sửa CÓ HẠI THẬT. Một phép tiêm không
+tạo ra khác biệt quan sát được thì không chứng minh được gì.
+
+====== BIẾN THỂ `chinh_sach_tu_choi` ĐÃ BỊ BỎ (G22), VÀ THAY BẰNG GÌ ======
+Lượt trước có một biến thể KHÔNG gỡ chốt nào: nó đổi **quyết định sản phẩm**
+(`CHINH_SACH_CHUA_KHAI`) từ `"sqlite"` sang `"tu_choi"` để ĐO cái giá của việc từ chối. Lượt này
+quyết định đó đã được CHỐT: chưa khai ⇒ TỪ CHỐI, và công tắc bị bỏ hẳn (nó chính là khoảng hở
+`do2b`). Nên biến thể cũ không còn gì để đổi, và nó được thay bằng phép tiêm **`D5`**: DỰNG LẠI
+chính sách cũ (chưa khai ⇒ coi là SQLite) và đòi `S8` PHẢI bắt được. Đó là vế có răng — biến
+thể cũ chỉ ĐO, còn `D5` chứng minh bộ đo PHÂN BIỆT ĐƯỢC.
 """
 import os
 import shutil
@@ -43,278 +45,89 @@ import sys
 
 DAY = os.path.dirname(os.path.abspath(__file__))
 GOC = os.path.dirname(os.path.dirname(DAY))
-MIGRATE_GOC = os.path.join(GOC, "app", "migrate.py")
-MOC_CHEN = '\nif __name__ == "__main__":'
 
+# TỆP THẬT — mọi phép đo của lượt này chạy trên đúng tệp này.
+MIGRATE_THAT = os.path.join(GOC, "app", "migrate.py")
+# Bản ĐÓNG BĂNG trước khi vá, để lượt "TRƯỚC" vẫn đo lại được.
+MIGRATE_NGUYENBAN = os.path.join(DAY, "migrate_nguyenban.py")
+# Băm của bản đóng băng, chép ra NGAY LÚC ĐO LƯỢT "TRƯỚC" (`md5 -q` lúc 15:0x 16/10/2026, khớp
+# từng byte với `app/migrate.py` trước khi vá). Có nó thì con số "1/10 FAIL_CLOSED" của lượt
+# TRƯỚC gắn chặt vào ĐÚNG tệp đã sinh ra nó; đổi tệp là lượt đo TỪ CHỐI chạy, chứ không âm thầm
+# so một bảng TRƯỚC của tệp khác với một bảng SAU của tệp này.
+MD5_NGUYENBAN = "611182a621fd279c3816d5fc5d2785e3"
 
 # ============================================================================
-# THÂN HÀM MỚI — dán vào trước khối `__main__` của bản gốc
+# BẢN VÁ, KHAI THÀNH MẢNH — mỗi mảnh PHẢI có mặt trong tệp thật, đúng MỘT lần
 # ============================================================================
-THAN_MOI = '''
+# Đây là cách "bản vá đã áp" trở thành một khẳng định KIỂM ĐƯỢC thay vì một lời hứa: thiếu
+# bất kỳ mảnh nào, `xac_nhan()` NÉM và không lượt đo nào chạy tiếp.
+MANH_VA = (
+    ("chốt 0a — băm tệp theo khúc",
+     "def _bam_tep(duong):"),
+    ("chốt 0b — tên KHÔNG BAO GIỜ ĐÈ (dùng chung cho sao lưu và bản cất)",
+     "def _duong_chua_dung(goc_ten, duoi, luc=None):"),
+    ("chốt 0c — chép nguyên tử qua tệp tạm",
+     "def _chep_nguyen_tu(nguon, dich):"),
+    ("chốt 1 — kiểm CẤU TRÚC, chốt chống bẫy 0 byte bằng SỐ BẢNG",
+     "    if so_bang < toi_thieu_bang:"),
+    ("chốt 2 — DẤU KIỂM `.sha256` là BẮT BUỘC, không phải 'kiểm nếu có'",
+     "    elif bat_buoc_dau_kiem:"),
+    ("chốt 2b — so băm thật với băm mong đợi",
+     "        if that != mong:"),
+    ("chốt 3 — CHỐT (4) kho đang chạy, đọc từ khai báo",
+     "def _kiem_kho_truoc_khi_sao_luu():"),
+    ("chốt 3b — khai `postgresql` ⇒ TỪ CHỐI khi sao lưu",
+     "    if kho == KHO_POSTGRESQL:"),
+    # G22: chốt (4b) THAY chốt 3c cũ. Chốt cũ là một CÔNG TẮC (`CHINH_SACH_CHUA_KHAI = "sqlite"`)
+    # và chính công tắc đó là khoảng hở `do2b`: chưa khai ⇒ coi là SQLite ⇒ rc 0 với một đường
+    # lùi giả. Nay chưa khai ⇒ TỪ CHỐI, không nhánh nào để nới.
+    ("chốt 3c — CHƯA KHAI kho đang chạy ⇒ TỪ CHỐI (đóng `do2b`), KHÔNG còn công tắc nới",
+     '    if kho is None:\n        _tu_choi_chua_khai(nguon)'),
+    ("chốt 3d — thông báo chưa-khai nói RÕ thiếu gì và khai ở đâu",
+     '"[migrate] TỪ CHỐI: CHƯA KHAI kho đang chạy nên KHÔNG kiểm chứng được bản sao lưu này\\n"'),
+    ("chốt 4 — `hub.db` không tồn tại ⇒ TỪ CHỐI (P-G15-02 `do1`)",
+     "    if not os.path.exists(cau_hinh.DUONG_DAN_CSDL):"),
+    ("chốt 5 — `sao_luu()` ghi qua tệp tạm, KIỂM RỒI mới `os.replace`",
+     "        _kiem_cau_truc(tam, toi_thieu_bang=1)\n        os.replace(tam, dich)"),
+    ("chốt 6 — `sao_luu()` ghi DẤU KIỂM sau khi tệp đã đóng",
+     '        f.write("%s  %s\\n" % (bam, os.path.basename(dich)))'),
+    ("chốt 7 — `khoi_phuc()` TỪ CHỐI khi TỤT SCHEMA",
+     '        if _hien_tai and tt["phien_ban"] < _hien_tai:'),
+    ("chốt 8 — `khoi_phuc()` ghi bản mới ra tệp tạm rồi mới `os.replace`",
+     "        os.replace(tam, cau_hinh.DUONG_DAN_CSDL)"),
+    ("chốt 9 — `khoi_phuc()` bắt buộc kiểm dấu kiểm của bản sao lưu",
+     "    tt = _kiem_ban_sao_luu(duong_backup, bat_buoc_dau_kiem=not toi_da_biet_chua_kiem_duoc)"),
+    ("chốt 10 — đường thoát cho người trực, mặc định là TỪ CHỐI",
+     "def khoi_phuc(duong_backup, toi_da_biet_chua_kiem_duoc=False, luc=None):"),
+    # G22 — ĐỒNG HỒ LÀ ĐẦU VÀO. Bất biến "ba lượt cùng một mốc KHÔNG xoá nhau" chỉ đo được khi
+    # ba lượt THẬT SỰ cùng một mốc; đọc `datetime.now()` ở dưới sâu làm kết quả phụ thuộc tốc độ
+    # máy, và có thể XANH trên một sản phẩm còn lỗi.
+    ("chốt 11 — MỐC THỜI GIAN là THAM SỐ của `sao_luu()`/`khoi_phuc()`, không đọc ngầm",
+     "def sao_luu(luc=None):"),
+    ("chốt 11b — `khoi_phuc()` truyền mốc xuống chỗ đặt tên bản cất",
+     '    cat_di = _duong_chua_dung("hub-truoc-rollback", ".db", luc)'),
+)
 
-# ==========================================================================
-# G21 / AG-02 — BẢN VÁ FAIL-CLOSED (đề xuất; dán trước khối __main__)
-# ==========================================================================
-import hashlib as _hashlib
-import sqlite3 as _sqlite3
-
-
-def _bam_tep(duong):
-    """SHA-256 của một tệp, đọc theo khúc — không nạp cả tệp vào bộ nhớ."""
-    _h = _hashlib.sha256()
-    with open(duong, "rb") as _f:
-        for _khuc in iter(lambda: _f.read(1 << 20), b""):
-            _h.update(_khuc)
-    return _h.hexdigest()
-
-
-def _duong_chua_dung(goc_ten, duoi):
-    """Đường dẫn CHƯA TỒN TẠI: trùng tên thì thêm hậu tố, KHÔNG BAO GIỜ ghi đè.
-
-    Cùng khuôn với `sao_luu()` — hàm đó đã bị bắt đúng lỗi này và đã vá; `khoi_phuc()` thì chưa.
-    Đo được: ba lượt khôi phục trong cùng một giây để lại ĐÚNG MỘT tệp `hub-truoc-rollback-*`,
-    tức bản cất của lượt đầu — thứ duy nhất giữ dữ liệu thật — đã bị lượt sau xoá.
-    """
-    goc = os.path.join(THU_MUC_SAO_LUU, goc_ten + "-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
-    dich, n = goc + duoi, 1
-    while os.path.exists(dich):
-        dich = "%s-%d%s" % (goc, n, duoi)
-        n += 1
-        if n > 1000:
-            raise SystemExit("[migrate] TỪ CHỐI: quá 1000 bản cùng giây tại %s — có gì đó sai" % goc)
-    return dich
-
-
-def _chep_nguyen_tu(nguon, dich):
-    """Chép qua tệp TẠM CÙNG THƯ MỤC rồi `os.replace`. Hỏng giữa đường thì `dich` KHÔNG ĐỔI."""
-    tam = "%s.tam-%d" % (dich, os.getpid())
-    try:
-        shutil.copy2(nguon, tam)
-        with open(tam, "rb+") as _f:
-            _f.flush()
-            os.fsync(_f.fileno())
-        os.replace(tam, dich)
-    except BaseException:
-        if os.path.exists(tam):
-            try:
-                os.remove(tam)
-            except OSError:
-                pass
-        raise
-    return dich
-
-
-def _kiem_cau_truc(duong, toi_thieu_bang=1):
-    """Xác minh CẤU TRÚC một tệp CSDL. NÉM `SystemExit` nếu không dùng được. CHỈ ĐỌC.
-
-    ====== CÁI BẪY ĐÃ ĐO ĐƯỢC, VÀ CÁCH NÓ ĐƯỢC TRÁNH Ở ĐÂY ======
-    Bản sao lưu do `sao_luu()` sinh ra MANG CHẾ ĐỘ WAL (byte 18-19 của phần đầu = 2). Mở nó
-    bằng `file:...?mode=ro` **THẤT BẠI** — `unable to open database file` — vì SQLite cần tạo
-    được tệp `-shm` cạnh nó. Một bản vá ngây thơ dùng `mode=ro` sẽ TỪ CHỐI NHẦM MỌI bản sao lưu
-    TỐT. Đo được 16/10/2026 trên chính cây này:
-        mode=ro              -> OperationalError: unable to open database file
-        mode=ro&immutable=1  -> integrity_check = ok · 51 bảng
-    Nên ở đây dùng `immutable=1`. Đổi lại phải trả giá: `immutable=1` BỎ QUA tệp `-wal` đi kèm,
-    nên nó chỉ đọc đúng phần đã nằm trong tệp chính. Với bản sao lưu của `sao_luu()` thì đúng
-    (API backup của SQLite ghi thẳng nội dung vào tệp chính), và đó là lý do phép kiểm này đặt
-    trên BẢN SAO LƯU, không đặt trên CSDL đang chạy.
-    """
-    if not os.path.exists(duong):
-        raise SystemExit("[migrate] TỪ CHỐI: không thấy tệp %s" % duong)
-    co = os.path.getsize(duong)
-    if co <= 0:
-        raise SystemExit("[migrate] TỪ CHỐI: %s RỖNG (0 byte) — không có gì để dùng" % duong)
-    with open(duong, "rb") as _f:
-        dau = _f.read(16)
-    if not dau.startswith(b"SQLite format 3\\x00"):
-        raise SystemExit("[migrate] TỪ CHỐI: %s KHÔNG PHẢI CSDL SQLite (16 byte đầu: %r)" % (duong, dau))
-    try:
-        _kn = _sqlite3.connect("file:%s?mode=ro&immutable=1" % duong.replace("?", "%3f"), uri=True)
-        try:
-            _kq = _kn.execute("PRAGMA integrity_check").fetchone()[0]
-            if _kq != "ok":
-                raise SystemExit("[migrate] TỪ CHỐI: %s hỏng cấu trúc — integrity_check = %r"
-                                 % (duong, _kq))
-            _so_bang = _kn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
-                                   " AND name NOT LIKE 'sqlite_%'").fetchone()[0]
-            _pb = _kn.execute("SELECT COALESCE(MAX(phien_ban),0) FROM schema_version").fetchone()[0]
-        finally:
-            _kn.close()
-    except _sqlite3.DatabaseError as _e:
-        raise SystemExit("[migrate] TỪ CHỐI: %s KHÔNG ĐỌC ĐƯỢC như CSDL SQLite: %s" % (duong, _e))
-    # CHỐT CHỐNG BẪY 0 BYTE: tệp SQLite dài 0 byte LÀ một CSDL rỗng HỢP LỆ —
-    # `integrity_check` trả "ok" cho nó. Chỉ SỐ BẢNG mới bắt được. Đo được, không suy đoán.
-    if _so_bang < toi_thieu_bang:
-        raise SystemExit("[migrate] TỪ CHỐI: %s chỉ có %d bảng (cần >= %d) — tệp dở hoặc rỗng, "
-                         "KHÔNG phải bản sao lưu dùng được" % (duong, _so_bang, toi_thieu_bang))
-    return {"duong": duong, "so_byte": co, "so_bang": int(_so_bang), "phien_ban": int(_pb),
-            "integrity": _kq}
-
-
-def _kiem_ban_sao_luu(duong, bat_buoc_dau_kiem=True):
-    """Xác minh một bản sao lưu TRƯỚC khi tin nó: cấu trúc + DẤU KIỂM `.sha256` đi kèm.
-
-    Vì sao dấu kiểm là BẮT BUỘC chứ không "kiểm nếu có": đo được rằng một byte bị lật trong
-    TRANG DỮ LIỆU ĐANG DÙNG (`don_hang.ma_don`) làm ĐỔI DỮ LIỆU THẬT mà `integrity_check` vẫn
-    trả **"ok"**. Không có dấu kiểm thì tệp đó đi qua mọi phép kiểm cấu trúc. Còn "kiểm nếu có"
-    thì kẻ làm hỏng chỉ cần xoá tệp `.sha256` là xong — một chốt mà kẻ tấn công bỏ được thì
-    không phải chốt.
-
-    Đường thoát cho người trực: `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`. Mặc định là
-    TỪ CHỐI — fail-closed, và nói rõ vì sao.
-    """
-    tt = _kiem_cau_truc(duong, toi_thieu_bang=1)
-    duong_dau = duong + ".sha256"
-    if os.path.exists(duong_dau):
-        with open(duong_dau, encoding="utf-8") as _f:
-            _mong = _f.read().split()[0].strip()
-        _that = _bam_tep(duong)
-        if _that != _mong:
-            raise SystemExit(
-                "[migrate] TỪ CHỐI: %s KHÁC dấu kiểm %s\\n"
-                "          mong đợi %s\\n          thực tế  %s\\n"
-                "          Tệp đã bị sửa. KHÔNG khôi phục từ nó."
-                % (duong, os.path.basename(duong_dau), _mong, _that))
-        tt["co_dau_kiem"] = True
-    elif bat_buoc_dau_kiem:
-        raise SystemExit(
-            "[migrate] TỪ CHỐI: %s KHÔNG có dấu kiểm %s.\\n"
-            "          Không kiểm chứng được thì không khôi phục: một byte lật trong trang dữ "
-            "liệu đang dùng\\n          vẫn qua được `integrity_check` (đã đo).\\n"
-            "          Nếu đã biết rõ tệp này, chạy lại với `toi_da_biet_chua_kiem_duoc=True`."
-            % (duong, os.path.basename(duong_dau)))
-    else:
-        tt["co_dau_kiem"] = False
-    return tt
-
-
-def sao_luu():
-    """Bản VÁ: chụp một bản CSDL trước khi nâng cấp. Trả đường dẫn bản sao.
-
-    Ba thay đổi so với bản gốc, mỗi thay đổi ứng với một phép đo ĐỎ:
-      (1) `hub.db` KHÔNG tồn tại ⇒ TỪ CHỐI, thay vì `csdl.ket_noi()` TẠO RA một CSDL rỗng rồi
-          sao lưu nó. Đo được trên cụm PostgreSQL riêng: bản gốc thoát 0 và trả một tệp 4.096
-          byte / 0 BẢNG / `integrity_check = ok` trong khi PostgreSQL giữ 6 đơn và 9.324.000
-          đồng — một ĐƯỜNG LÙI GIẢ, và không một dòng cảnh báo.
-      (2) Ghi ra tệp TẠM rồi `os.replace` sang tên thật. Hỏng giữa đường (hết đĩa) thì KHÔNG
-          còn tệp dở nào mang tên bản sao lưu. Đo được: bản gốc để lại
-          `hub-truoc-migrate-*.db` **0 byte** và không dọn.
-      (3) Ghi DẤU KIỂM `<bản-sao-lưu>.sha256` sau khi tệp đã đóng và đã kiểm cấu trúc.
-    """
-    if not os.path.exists(cau_hinh.DUONG_DAN_CSDL):
-        raise SystemExit(
-            "[migrate] TỪ CHỐI: không thấy CSDL tại %s nên KHÔNG có gì để sao lưu.\\n"
-            "          (Bản cũ vẫn 'thành công' ở đây bằng cách TẠO RA một CSDL rỗng rồi sao "
-            "lưu nó —\\n           đó là đường lùi giả. Nếu kho đang chạy là PostgreSQL thì "
-            "`sao_luu()` này không dùng được;\\n           xem docs/G21_BACKUP_RESTORE.md.)"
-            % cau_hinh.DUONG_DAN_CSDL)
-    os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
-    dich = _duong_chua_dung("hub-truoc-migrate", ".db")
-    tam = dich + ".dang-ghi"
-    try:
-        nguon = csdl.ket_noi()
-        ban = csdl.ket_noi(tam)
-        try:
-            with ban:
-                nguon.backup(ban)
-        finally:
-            ban.close()
-            nguon.close()
-        with open(tam, "rb+") as _f:
-            _f.flush()
-            os.fsync(_f.fileno())
-        tt = _kiem_cau_truc(tam, toi_thieu_bang=1)
-        os.replace(tam, dich)
-    except BaseException:
-        if os.path.exists(tam):
-            try:
-                os.remove(tam)
-            except OSError:
-                pass
-        raise
-    bam = _bam_tep(dich)
-    with open(dich + ".sha256", "w", encoding="utf-8") as _f:
-        _f.write("%s  %s\\n" % (bam, os.path.basename(dich)))
-    return dich
-
-
-def khoi_phuc(duong_backup, toi_da_biet_chua_kiem_duoc=False):
-    """Bản VÁ: rollback CSDL về đúng tệp backup — FAIL-CLOSED.
-
-    ====== BẤT BIẾN ======
-    Hỏng ở BẤT KỲ bước nào thì CSDL ĐANG CHẠY phải còn NGUYÊN VẸN, và phải có thông báo nói
-    rõ hỏng ở đâu. Ba bước, theo đúng thứ tự này:
-      1. KIỂM BẢN SAO LƯU **TRƯỚC KHI ĐỤNG** CSDL đang chạy (cấu trúc + dấu kiểm + phiên bản);
-      2. CẤT bản đang chạy vào một tên KHÔNG BAO GIỜ ĐÈ, và kiểm bản cất đọc được;
-      3. GHI BẢN MỚI RA TỆP TẠM cùng thư mục, kiểm lại, RỒI MỚI `os.replace`.
-    Bước 3 là vế bắt được "hết đĩa giữa đường". Đo được trên bản gốc: CSDL đích bị để lại ở
-    280.576 byte với `DatabaseError: database disk image is malformed` và MẤT SẠCH 20 bảng.
-    """
-    tt = _kiem_ban_sao_luu(duong_backup, bat_buoc_dau_kiem=not toi_da_biet_chua_kiem_duoc)
-    os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
-
-    if os.path.exists(cau_hinh.DUONG_DAN_CSDL) and not toi_da_biet_chua_kiem_duoc:
-        try:
-            _hien_tai = _kiem_cau_truc(cau_hinh.DUONG_DAN_CSDL, toi_thieu_bang=1)["phien_ban"]
-        except SystemExit:
-            _hien_tai = None
-        if _hien_tai and tt["phien_ban"] < _hien_tai:
-            raise SystemExit(
-                "[migrate] TỪ CHỐI: TỤT SCHEMA. Bản sao lưu ở phiên bản **v%d**, CSDL đang chạy "
-                "ở **v%d**.\\n          Khôi phục sẽ bỏ rơi dữ liệu của %d phiên bản migration. "
-                "Đo được: v6 đè lên v9 làm CSDL còn\\n          20 bảng thay vì 51 và tổng tiền "
-                "rơi từ 34.336.000 xuống 1.298.000 đồng — KHÔNG một lời cảnh báo.\\n"
-                "          Nếu đây đúng là ý định, chạy lại với `toi_da_biet_chua_kiem_duoc=True`."
-                % (tt["phien_ban"], _hien_tai, _hien_tai - tt["phien_ban"]))
-
-    cat_di = _duong_chua_dung("hub-truoc-rollback", ".db")
-    if os.path.exists(cau_hinh.DUONG_DAN_CSDL):
-        _chep_nguyen_tu(cau_hinh.DUONG_DAN_CSDL, cat_di)
-        for _duoi in ("-wal", "-shm"):
-            if os.path.exists(cau_hinh.DUONG_DAN_CSDL + _duoi):
-                _chep_nguyen_tu(cau_hinh.DUONG_DAN_CSDL + _duoi, cat_di + _duoi)
-        _kiem_cau_truc(cat_di, toi_thieu_bang=1)
-
-    tam = cau_hinh.DUONG_DAN_CSDL + ".dang-khoi-phuc-%d" % os.getpid()
-    try:
-        shutil.copy2(duong_backup, tam)
-        with open(tam, "rb+") as _f:
-            _f.flush()
-            os.fsync(_f.fileno())
-        _kiem_cau_truc(tam, toi_thieu_bang=tt["so_bang"])
-        for _duoi in ("-wal", "-shm"):
-            _p = cau_hinh.DUONG_DAN_CSDL + _duoi
-            if os.path.exists(_p):
-                os.remove(_p)
-        os.replace(tam, cau_hinh.DUONG_DAN_CSDL)
-    except BaseException as _e:
-        if os.path.exists(tam):
-            try:
-                os.remove(tam)
-            except OSError:
-                pass
-        raise SystemExit(
-            "[migrate] KHÔI PHỤC HỎNG: %s\\n"
-            "          CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn).\\n"
-            "          Bản cất trước khi khôi phục: %s" % (_e, cat_di))
-    print("[migrate] Đã khôi phục từ %s (kiểm cấu trúc + dấu kiểm TRƯỚC khi đè). "
-          "Bản trước khi khôi phục cất ở %s" % (duong_backup, cat_di))
-'''
+# Mảnh mã của BẢN GỐC phải VẮNG. Đây là vế chống "vá mà tệp thật không đổi": bốn dòng dưới là
+# đúng bốn đường fail-open mà P-G15-02 / S3 / S6b / `do2b` đo được. Còn dòng nào trong tệp thật
+# nghĩa là bản vá CHƯA thật sự thay thế hành vi cũ.
+MANH_GOC_PHAI_VANG = (
+    ("đường lui GIẢ: `csdl.ket_noi(dich)` TẠO RA CSDL rỗng rồi sao lưu nó",
+     "csdl.ket_noi(dich)"),
+    ("bản cất đặt tên theo GIÂY, ghi đè im lặng",
+     '"hub-truoc-rollback-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".db"'),
+    ("chép THẲNG lên CSDL đang chạy, không qua tệp tạm",
+     "    shutil.copy2(duong_backup, cau_hinh.DUONG_DAN_CSDL)"),
+    # G22 — CHÍNH SÁCH CŨ. Còn dòng này nghĩa là chưa khai vẫn bị COI LÀ SQLITE và hàm vẫn trả
+    # mã thoát 0: đúng đường lùi giả của `do2b`. Đây là mảnh mà phép tiêm `D5` dựng lại.
+    ("chưa khai ⇒ COI KHO LÀ SQLITE rồi đi tiếp (chính sách cũ, khoảng hở `do2b`)",
+     "— lượt này COI KHO LÀ SQLITE"),
+)
 
 # ============================================================================
 # TIÊM LỖI FAIL-OPEN — mỗi phép thay phải KHỚP, không khớp thì NÉM
 # ============================================================================
 # Bốn phép tiêm, MỖI PHÉP GỠ ĐÚNG MỘT CHỐT và mỗi phép có một kịch bản PHẢI bắt được nó.
-# Không khớp ⇒ AssertionError. Một phép tiêm "trượt" mà vẫn chạy tiếp là kiểu hỏng tệ nhất:
-# bộ đo sẽ báo ĐỎ trên một bản vá còn nguyên, và người đọc tưởng bộ đo có răng.
-#
-# ====== MỘT PHÉP TIÊM TÔI ĐÃ BỎ, VÀ VÌ SAO — ghi lại để người sau không thêm lại ======
-# Tôi đã định tiêm "gỡ chốt bắt buộc DẤU KIỂM `.sha256`" và kỳ vọng `S2` bắt được. ĐO RỒI THÌ
-# SAI: gỡ chốt đó KHÔNG tạo ra fail-open nào quan sát được, vì `khoi_phuc()` còn lớp kiểm cấu
-# trúc trên chính tệp tạm, và lớp đó bắt được cả hai bản sửa CÓ HẠI THẬT (`e-trang-dung` hỏng
-# chỉ mục, `d-byte0` mất magic). Ba bản sửa còn lại lật byte vào vùng trống nên DỮ LIỆU KHÔNG
-# ĐỔI — nhận chúng là ĐÚNG. Một phép tiêm không tạo ra khác biệt quan sát được thì không chứng
-# minh được gì; giữ nó lại chỉ làm bảng tự kiểm trông đẹp hơn thực tế. Nên nó bị bỏ.
 TIEM_LOI = (
     ("D1 — bỏ tệp tạm: chép THẲNG lên CSDL đang chạy (đúng lỗi gốc)",
      "PHẢI bị S6b bắt",
@@ -336,7 +149,7 @@ TIEM_LOI = (
 
     ("D2 — tên bản cất đặt theo GIÂY, cho phép ĐÈ (đúng lỗi gốc)",
      "PHẢI bị S4 bắt",
-     '    cat_di = _duong_chua_dung("hub-truoc-rollback", ".db")\n',
+     '    cat_di = _duong_chua_dung("hub-truoc-rollback", ".db", luc)\n',
      '    cat_di = os.path.join(THU_MUC_SAO_LUU,\n'
      '                          "hub-truoc-rollback-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".db")\n'),
 
@@ -354,6 +167,21 @@ TIEM_LOI = (
      '            "integrity": "ok"}\n'
      '    if not os.path.exists(duong):\n'
      '        raise SystemExit("[migrate] TỪ CHỐI: không thấy tệp %s" % duong)\n'),
+
+    # G22 — D5 KHÔNG gỡ một chốt kỹ thuật nào: nó DỰNG LẠI ĐÚNG CHÍNH SÁCH CŨ (chưa khai ⇒ coi
+    # kho là SQLite) ở chỗ chốt (4b). Đây là phép tiêm quan trọng nhất của lượt này, vì nó là
+    # ĐỐI CHỨNG ÂM cho kết luận "S8 đã đóng": nới lại chính sách mà `S8` vẫn XANH thì `S8` không
+    # canh gì cả, và mọi dòng "đã đóng" ở trên là rỗng. Nó phải bắt được Ở HAI VẾ (`do2b` và
+    # `do1b`) — nhưng nhãn dưới đây CHỈ ghi mã kịch bản: `chay_do.py` tách mã từ nhãn này bằng
+    # `split("và")`, nên mọi chữ giải thích thêm ở đây sẽ bị đọc thành một MÃ KỊCH BẢN KHÔNG TỒN
+    # TẠI và lượt đo sẽ chạy 0 ca (đã xảy ra đúng như thế ở lượt chạy đầu của G22 — xem
+    # `chay_do.py`, chốt chống nhãn không phân tích được).
+    ("D5 — nới lại CHÍNH SÁCH CŨ: chưa khai ⇒ coi kho là SQLite rồi đi tiếp (đúng khoảng hở "
+     "`do2b`)",
+     "PHẢI bị S8 bắt",
+     '    if kho is None:\n        _tu_choi_chua_khai(nguon)\n',
+     '    if kho is None:\n'
+     '        kho = KHO_SQLITE  # D5: chưa khai ⇒ COI LÀ SQLITE (chính sách cũ, đã bị bỏ)\n'),
 )
 
 # Vế thứ hai của D4 nằm ở chỗ KHÁC (tham số của lời gọi trong `khoi_phuc`), nên phải là một phép
@@ -364,22 +192,83 @@ D4_VE_HAI = (
      'bat_buoc_dau_kiem=False)'),
 )
 
+# Đổi QUYẾT ĐỊNH SẢN PHẨM. G22: chỗ này TRƯỚC ĐÂY là biến thể `chinh_sach_tu_choi` — nó đổi
+# `CHINH_SACH_CHUA_KHAI` từ `"sqlite"` sang `"tu_choi"` để ĐO cái giá của phương án từ chối.
+# Phương án đó NAY LÀ MẶC ĐỊNH của tệp thật, nên biến thể đó không còn gì để đổi — và nó được
+# THAY bằng phép tiêm `D5` ở trên, tức vế NGƯỢC LẠI: nới lại chính sách cũ và đòi `S8` bắt được.
+# Đây là phép thay có răng, còn biến thể cũ chỉ là một lượt đo (nó không chứng minh được gì về
+# việc bộ đo có phân biệt được hay không).
+BIEN_THE_CHINH_SACH = ()
 
-def dung_ban_va(text=None):
-    """Chèn thân hàm mới vào trước khối `__main__`. TỪ CHỐI nếu không thấy mốc chèn."""
+
+# ============================================================================
+# ĐỌC + XÁC NHẬN TỆP THẬT
+# ============================================================================
+def _doc(duong):
+    with open(duong, encoding="utf-8") as f:
+        return f.read()
+
+
+def xac_nhan(text=None):
+    """TỪ CHỐI chạy tiếp nếu `text` không phải một bản vá ĐẦY ĐỦ. Trả `text`.
+
+    Ba vế, cả ba đều bắt buộc:
+      1. mọi mảnh của `MANH_VA` có mặt ĐÚNG MỘT lần;
+      2. mọi mảnh của `MANH_GOC_PHAI_VANG` VẮNG mặt;
+      3. mọi mốc mà bốn phép tiêm cần để thay có mặt ĐÚNG MỘT lần — thiếu một mốc là phép tiêm
+         đó sẽ "trượt", và một phép tiêm trượt cho ra ĐỎ GIẢ ở chỗ khác.
+    """
     if text is None:
-        with open(MIGRATE_GOC, encoding="utf-8") as f:
-            text = f.read()
-    if MOC_CHEN not in text:
-        raise AssertionError("KHÔNG thấy mốc chèn %r trong %s — bản dựng TỪ CHỐI chạy tiếp, "
-                             "vì 'vá trượt mà vẫn xanh' là kiểu hỏng tệ nhất."
-                             % (MOC_CHEN.strip(), MIGRATE_GOC))
-    if text.count(MOC_CHEN) != 1:
-        raise AssertionError("mốc chèn xuất hiện %d lần — không rõ chèn vào đâu"
-                             % text.count(MOC_CHEN))
-    return text.replace(MOC_CHEN, THAN_MOI + MOC_CHEN)
+        text = _doc(MIGRATE_THAT)
+    for mo_ta, manh in MANH_VA:
+        n = text.count(manh)
+        if n != 1:
+            raise AssertionError("BẢN VÁ KHÔNG ĐẦY ĐỦ trong %s: mảnh %r (%s) xuất hiện %d lần "
+                                 "(cần đúng 1). Lượt đo TỪ CHỐI chạy — 'vá trượt mà vẫn xanh' "
+                                 "là kiểu hỏng tệ nhất." % (MIGRATE_THAT, manh[:60], mo_ta, n))
+    for mo_ta, manh in MANH_GOC_PHAI_VANG:
+        if manh in text:
+            raise AssertionError("BẢN VÁ CHƯA THAY THẾ HÀNH VI CŨ trong %s: còn mảnh %r (%s). "
+                                 "Đây đúng là một đường fail-open đã đo được."
+                                 % (MIGRATE_THAT, manh[:60], mo_ta))
+    for nhan, _phai_bat, cu, _moi in TIEM_LOI:
+        n = text.count(cu)
+        if n != 1:
+            raise AssertionError("MỐC TIÊM LỆCH (%s): đoạn cần thay xuất hiện %d lần (cần đúng "
+                                 "1) — phép tiêm sẽ trượt" % (nhan, n))
+    for _nhan, cu, _moi in D4_VE_HAI:
+        if text.count(cu) != 1:
+            raise AssertionError("MỐC TIÊM LỆCH (D4 vế hai): %r xuất hiện %d lần"
+                                 % (cu, text.count(cu)))
+    return text
 
 
+def doc_that():
+    """NỘI DUNG `app/migrate.py` — đã qua `xac_nhan()`. Đây là thứ mọi lượt đo dùng."""
+    return xac_nhan(_doc(MIGRATE_THAT))
+
+
+def doc_nguyenban():
+    """NỘI DUNG bản ĐÓNG BĂNG trước khi vá. Dùng cho lượt "TRƯỚC"."""
+    import hashlib
+    t = _doc(MIGRATE_NGUYENBAN)
+    if "def _kiem_cau_truc" in t or "def _duong_chua_dung" in t:
+        raise AssertionError("%s đã bị vá — nó phải là bản NGUYÊN BẢN, không được chứa mã của "
+                             "bản vá, nếu không lượt 'TRƯỚC' sẽ đo nhầm chính bản vá."
+                             % MIGRATE_NGUYENBAN)
+    bam = hashlib.md5(t.encode("utf-8")).hexdigest()
+    if bam != MD5_NGUYENBAN:
+        raise AssertionError(
+            "BẢN ĐÓNG BĂNG ĐÃ ĐỔI: md5 = %s, bản đã ĐO lượt 'TRƯỚC' là %s.\n"
+            "  Con số 1/10 FAIL_CLOSED của lượt TRƯỚC chỉ có nghĩa với ĐÚNG tệp đã sinh ra nó.\n"
+            "  Nếu thật sự muốn đổi bản đóng băng thì phải ĐO LẠI lượt TRƯỚC rồi cập nhật cả hai."
+            % (bam, MD5_NGUYENBAN))
+    return t
+
+
+# ============================================================================
+# TIÊM LỖI + ĐỔI CHÍNH SÁCH
+# ============================================================================
 def tiem_loi(text, chon=None):
     """Tiêm lại các lỗi fail-open vào bản ĐÃ VÁ. Mỗi phép thay phải KHỚP, không thì NÉM.
 
@@ -402,6 +291,26 @@ def tiem_loi(text, chon=None):
             raise AssertionError("TIÊM LỖI TRƯỢT (D4 vế hai): không thấy %r" % cu)
         ra = ra.replace(cu, moi, 1)
     return ra
+
+
+def doi_chinh_sach(text, ten="chinh_sach_tu_choi"):
+    """GIỮ LẠI để ai đó gọi tới không nổ, nhưng G22 đã bỏ hết biến thể chính sách.
+
+    Chính sách "chưa khai ⇒ TỪ CHỐI" nay là MẶC ĐỊNH của tệp thật, nên không còn biến thể nào để
+    đổi. Vế đối chứng thay thế là phép tiêm `D5` (`tiem_loi`), tức nới lại chính sách cũ và đòi
+    `S8` bắt được — mạnh hơn: nó chứng minh bộ đo PHÂN BIỆT ĐƯỢC, không chỉ đo một lần.
+    """
+    for nhan, cu, moi in BIEN_THE_CHINH_SACH:
+        if nhan.split(" ")[0] != ten:
+            continue
+        if text.count(cu) != 1:
+            raise AssertionError("BIẾN THỂ CHÍNH SÁCH TRƯỢT (%s): %r xuất hiện %d lần"
+                                 % (nhan, cu, text.count(cu)))
+        ra = text.replace(cu, moi, 1)
+        return ra
+    raise AssertionError(
+        "KHÔNG CÒN BIẾN THỂ CHÍNH SÁCH NÀO TÊN %r (G22): chính sách 'chưa khai ⇒ TỪ CHỐI' đã là "
+        "mặc định của tệp thật. Vế đối chứng tương ứng là phép tiêm D5 — xem `TIEM_LOI`." % ten)
 
 
 def phai_bat(nhan_tiem):
@@ -436,22 +345,47 @@ def dung_thu_muc_app(dich, migrate_text):
     return dich
 
 
-def dung_bien_the(nen, chi_tiem=None):
-    """Dựng các `app/` ứng viên trong `nen`. Trả {nhãn: đường dẫn}.
+def dung_bien_the(nen, chi_tiem=None, chi_chinh_sach=None):
+    """Dựng các `app/` ứng viên trong `nen`. Trả `{nhãn: đường dẫn}`.
 
-      `goc`     — mã nguyên bản;
-      `ban_va`  — bản vá đề xuất;
-      `tiem_d1`…`tiem_d4` — bản vá bị gỡ ĐÚNG MỘT chốt; mỗi cái có kịch bản PHẢI bắt được nó
-                  (`ban_va.phai_bat("D1")` nói ra kịch bản nào).
+      `goc`     — `migrate_nguyenban.py` (TRƯỚC khi vá, đóng băng);
+      `ban_va`  — **CHÍNH `app/migrate.py`**, nguyên văn (đã qua `xac_nhan()`);
+      `tiem_d1`…`tiem_d5` — tệp THẬT bị gỡ ĐÚNG MỘT chốt (D5: nới lại chính sách cũ); mỗi cái
+                  có kịch bản PHẢI bắt được nó (`ban_va.phai_bat("D1")` nói ra kịch bản nào).
+
+    `chi_chinh_sach` GIỮ LẠI trong chữ ký cho mã cũ gọi tới, nhưng G22 đã bỏ hết biến thể chính
+    sách: chính sách "chưa khai ⇒ TỪ CHỐI" nay là mặc định của tệp thật, và vế đối chứng của nó
+    là phép tiêm `D5`.
     """
-    with open(MIGRATE_GOC, encoding="utf-8") as f:
-        goc = f.read()
-    ban_va = dung_ban_va(goc)
-    ra = {"goc": dung_thu_muc_app(os.path.join(nen, "app-goc"), goc),
-          "ban_va": dung_thu_muc_app(os.path.join(nen, "app-ban-va"), ban_va)}
-    for nhan in ("D1", "D2", "D3", "D4"):
+    that = doc_that()
+    ra = {"goc": dung_thu_muc_app(os.path.join(nen, "app-goc"), doc_nguyenban()),
+          "ban_va": dung_thu_muc_app(os.path.join(nen, "app-ban-va"), that)}
+    for nhan in ("D1", "D2", "D3", "D4", "D5"):
         if chi_tiem is not None and nhan not in chi_tiem:
             continue
         ra["tiem_" + nhan.lower()] = dung_thu_muc_app(
-            os.path.join(nen, "app-tiem-" + nhan.lower()), tiem_loi(ban_va, chon=(nhan,)))
+            os.path.join(nen, "app-tiem-" + nhan.lower()), tiem_loi(that, chon=(nhan,)))
     return ra
+
+
+def tom_tat():
+    """Số đo để in ra ở báo cáo: tệp thật, bản đóng băng, các mảnh đã kiểm."""
+    import hashlib
+    def _h(p):
+        return hashlib.sha256(open(p, "rb").read()).hexdigest()[:16]
+    that = doc_that()
+    return {
+        "migrate_that": {"duong": MIGRATE_THAT, "so_dong": that.count("\n") + 1, "sha256_16": _h(MIGRATE_THAT)},
+        "migrate_nguyenban": {"duong": MIGRATE_NGUYENBAN,
+                              "so_dong": _doc(MIGRATE_NGUYENBAN).count("\n") + 1,
+                              "sha256_16": _h(MIGRATE_NGUYENBAN)},
+        "so_manh_va_da_kiem": len(MANH_VA),
+        "so_manh_goc_phai_vang_da_kiem": len(MANH_GOC_PHAI_VANG),
+        "so_phep_tiem": len(TIEM_LOI),
+        "phai_bat": {nhan.split(" ")[0]: phai for nhan, phai, _c, _m in TIEM_LOI},
+    }
+
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(tom_tat(), ensure_ascii=False, indent=2))

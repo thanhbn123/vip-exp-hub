@@ -1,0 +1,225 @@
+{
+ "ban_ghi": {
+  "S6b": {
+   "ma": "S6b",
+   "ten": "6b. HẾT ĐĨA GIỮA ĐƯỜNG khi KHÔI PHỤC",
+   "bat_buoc": "rc != 0 · thông báo nói ra chỗ hỏng · CSDL ĐÍCH không bị để lại nửa vời",
+   "ap_dung_mau": true,
+   "rc": 1,
+   "thong_bao": "LUC-DUOC-NHAN True\n[migrate] KHÔI PHỤC HỎNG: [Errno 27] File too large: '/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-8jxk0nl5/A/sao-luu/hub-truoc-migrate-20261016-225700.db' -> '/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-8jxk0nl5/B/hub.db'\n          CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn).\n          Bản cất trước khi khôi phục: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-8jxk0nl5/B/sao-luu/hub-truoc-rollback-20261016-225700.db",
+   "dong_bao_hong": "CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn).",
+   "co_dong_bao_hong": true,
+   "la_traceback_tho": false,
+   "c_dat": false,
+   "c_lech": [
+    "integrity_check = None (khác 'ok')",
+    "CSDL đích KHÔNG ĐỌC ĐƯỢC: DatabaseError: database disk image is malformed",
+    "integrity_check 'ok' -> None",
+    "phien_ban    0 -> None",
+    "so_bang      20 -> None",
+    "tong_tien_toan_kho 1298000 -> 0",
+    "bam_toan_kho '9ed8acc637acb9d47c674853f9f081720de8fdc01652f5ac75ba801a1bf23493' -> None",
+    "so_byte      200704 -> 280576",
+    "loi          None -> 'DatabaseError: database disk image is malformed'",
+    "BẢNG audit              có -> MẤT",
+    "BẢNG carrier_accounts   có -> MẤT",
+    "BẢNG carrier_providers  có -> MẤT",
+    "BẢNG don_hang           có -> MẤT",
+    "BẢNG don_lich_su        có -> MẤT",
+    "BẢNG goi_dich_vu        có -> MẤT",
+    "BẢNG import_batch       có -> MẤT",
+    "BẢNG import_dong        có -> MẤT",
+    "BẢNG khach_hang         có -> MẤT",
+    "BẢNG permissions        có -> MẤT",
+    "BẢNG reset_tokens       có -> MẤT",
+    "BẢNG role_permissions   có -> MẤT",
+    "BẢNG roles              có -> MẤT",
+    "BẢNG schema_version     có -> MẤT",
+    "BẢNG sessions           có -> MẤT",
+    "BẢNG tenant_memberships có -> MẤT",
+    "BẢNG tenants            có -> MẤT",
+    "BẢNG usage_thang        có -> MẤT",
+    "BẢNG users              có -> MẤT",
+    "BẢNG wh_su_kien         có -> MẤT"
+   ],
+   "csdl_dich_truoc": {
+    "ton_tai": true,
+    "so_byte": 200704,
+    "so_bang": 20,
+    "phien_ban": 0,
+    "integrity": "ok",
+    "tong_tien": 1298000,
+    "bam": "9ed8acc637acb9d4",
+    "loi": null
+   },
+   "csdl_dich_sau": {
+    "ton_tai": true,
+    "so_byte": 280576,
+    "so_bang": null,
+    "phien_ban": null,
+    "integrity": null,
+    "tong_tien": 0,
+    "bam": "None",
+    "loi": "DatabaseError: database disk image is malformed"
+   },
+   "chup_day_du": {
+    "truoc": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-8jxk0nl5/B/hub.db",
+     "ton_tai": true,
+     "so_byte": 200704,
+     "sha256_tep": "26aab6b63fb655454a80b2f61091688170a683b23c5f186ac720aa5283d7bd3f",
+     "bang": {
+      "audit": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 0,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 0,
+       "tien": {
+        "cod": 0,
+        "gia_tri_khai": 0,
+        "phi_van_chuyen": 0
+       }
+      },
+      "don_lich_su": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "import_batch": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 0,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 0,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 0,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tenant_memberships": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 0,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "users": {
+       "dong": 0,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 0,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 1298000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 0,
+     "bam_toan_kho": "9ed8acc637acb9d47c674853f9f081720de8fdc01652f5ac75ba801a1bf23493",
+     "so_bang": 20
+    },
+    "sau": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-8jxk0nl5/B/hub.db",
+     "ton_tai": true,
+     "so_byte": 280576,
+     "sha256_tep": "e4b9a3f5dd64e009be955eb7e0b8814426b906e7967cf95e3da5455b9a926b30",
+     "bang": {},
+     "tong_tien_toan_kho": 0,
+     "loi": "DatabaseError: database disk image is malformed"
+    }
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "rc_sao_luu": 0,
+    "rc_mo_csdl_dich": 0,
+    "loi_mo_csdl_dich": "",
+    "out_mo_csdl_dich": "ok",
+    "ban_sao": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-8jxk0nl5/A/sao-luu/hub-truoc-migrate-20261016-225700.db",
+    "co_ban_sao": 561152,
+    "co_csdl_dich": 200704,
+    "gioi_han_ghi": 280576,
+    "tien_quyet_dat": true,
+    "vi_tri_gioi_han": "co(đích)=200704 < giới hạn=280576 < co(bản sao lưu)=561152 ⇒ rơi vào LẦN CHÉP THỨ HAI",
+    "so_bang_nguon": 51,
+    "tong_tien_nguon": 34336000,
+    "ban_cat_de_lai": [
+     "hub-truoc-rollback-20261016-225700.db",
+     "hub-truoc-rollback-20261016-225700.db-shm",
+     "hub-truoc-rollback-20261016-225700.db-wal"
+    ],
+    "chup_ban_cat": {
+     "hub-truoc-rollback-20261016-225700.db": {
+      "so_byte": 200704,
+      "so_bang": 20,
+      "integrity": "ok",
+      "loi": null
+     },
+     "hub-truoc-rollback-20261016-225700.db-shm": {
+      "so_byte": 32768,
+      "so_bang": null,
+      "integrity": null,
+      "loi": "DatabaseError: file is not a database"
+     },
+     "hub-truoc-rollback-20261016-225700.db-wal": {
+      "so_byte": 0,
+      "so_bang": 0,
+      "integrity": "ok",
+      "loi": null
+     }
+    },
+    "so_bang_csdl_dich_truoc": 20,
+    "tong_tien_csdl_dich_truoc": 1298000
+   }
+  }
+ },
+ "bo_qua": {},
+ "app": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d1",
+ "thu_tu": [
+  "S6b"
+ ]
+}

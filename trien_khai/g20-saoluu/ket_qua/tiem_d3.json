@@ -1,0 +1,50 @@
+{
+ "ban_ghi": {
+  "S5": {
+   "ma": "S5",
+   "ten": "5. KHÔI PHỤC BẢN SCHEMA THẤP HƠN (v6 đè lên v9)",
+   "bat_buoc": "rc != 0 (TỪ CHỐI) · thông báo nêu hai phiên bản · schema KHÔNG tụt im lặng",
+   "ap_dung_mau": true,
+   "rc": 0,
+   "thong_bao": "lders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-kga8bln5/C/sao-luu/hub-truoc-migrate-20261016-225702.db (kiểm cấu trúc + dấu kiểm TRƯỚC khi đè). Bản trước khi khôi phục cất ở /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-kga8bln5/A/sao-luu/hub-truoc-rollback-20261016-225703.db",
+   "dong_bao_hong": "lders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-kga8bln5/C/sao-luu/hub-truoc-migrate-20261016-225702.db (kiểm cấu trúc + dấu kiểm TRƯỚC khi đè). Bản trước khi khôi phục cất ở /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-kga8bln5/A/sao-luu/hub-truoc-rollback-20261016-225703.db",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": false,
+   "c_lech": [
+    "phiên bản 9 → 6",
+    "số bảng 51 → 20",
+    "tổng tiền 34336000 → 1298000"
+   ],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "rc_dung_v6": 0,
+    "phien_ban_v6": 6,
+    "so_bang_v6": 20,
+    "phien_ban_v9_truoc": 9,
+    "so_bang_v9_truoc": 51,
+    "phien_ban_sau_khoi_phuc": 6,
+    "so_bang_sau": 20,
+    "tong_tien_v6": 1298000,
+    "tong_tien_v9_truoc": 34336000,
+    "rc_ghi_tren_v6": 0,
+    "rc_nang_lai": 0,
+    "nguon_ve_c": "`chup_sau` của kịch bản có phiên bản + số bảng + tổng tiền; so với `so_bang_v9_truoc`/`tong_tien_v9_truoc` đo trước khi đè."
+   }
+  }
+ },
+ "bo_qua": {},
+ "app": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d3",
+ "thu_tu": [
+  "S5"
+ ]
+}

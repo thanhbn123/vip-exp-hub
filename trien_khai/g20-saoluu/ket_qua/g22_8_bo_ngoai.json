@@ -1,0 +1,192 @@
+{
+ "thu_giao_dich.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": true,
+   "dong_cuoi": "          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0."
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": 17,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK"
+  }
+ },
+ "thu_han_muc_nguyen_tu.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": true,
+   "dong_cuoi": "          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0."
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": 5,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK"
+  }
+ },
+ "dong_thoi/do_dong_thoi.py": {
+  "co__main__": false,
+  "chua_khai": {
+   "rc": 0,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": ""
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": ""
+  }
+ },
+ "thu_qa_g18.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": 46,
+   "so_skip": 1,
+   "so_fail": 23,
+   "tu_choi_vi_chua_khai": true,
+   "dong_cuoi": "FAILED (failures=11, errors=12, skipped=1)"
+  },
+  "khai_sqlite": {
+   "rc": 1,
+   "so_ca": 46,
+   "so_skip": 1,
+   "so_fail": 3,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "FAILED (failures=3, skipped=1)"
+  }
+ },
+ "thu_header_bao_mat.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": true,
+   "dong_cuoi": "          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0."
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": 8,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK"
+  }
+ },
+ "thu_qa_g19.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 0,
+   "so_ca": 0,
+   "so_skip": 1,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK (skipped=1)"
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": 0,
+   "so_skip": 1,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK (skipped=1)"
+  }
+ },
+ "thu_g17.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 2,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "/Library/Developer/CommandLineTools/usr/bin/python3: can't open file '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app/thu/thu_g17.py': [Errn"
+  },
+  "khai_sqlite": {
+   "rc": 2,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "/Library/Developer/CommandLineTools/usr/bin/python3: can't open file '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app/thu/thu_g17.py': [Errn"
+  }
+ },
+ "thu_g17_baomat.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": true,
+   "dong_cuoi": "          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0."
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": 31,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK"
+  }
+ },
+ "thu_migrate_dong_thoi.py": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": 8,
+   "so_skip": 0,
+   "so_fail": 2,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "FAILED (failures=2)"
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": 8,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "OK"
+  }
+ },
+ "dien_tap_khoi_phuc.sh": {
+  "co__main__": true,
+  "chua_khai": {
+   "rc": 1,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": true,
+   "dong_cuoi": "          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0."
+  },
+  "khai_sqlite": {
+   "rc": 0,
+   "so_ca": null,
+   "so_skip": 0,
+   "so_fail": null,
+   "tu_choi_vi_chua_khai": false,
+   "dong_cuoi": "=============================================================="
+  }
+ }
+}

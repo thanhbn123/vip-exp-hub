@@ -1,0 +1,148 @@
+==============================================================
+ DIEN TAP KHOI PHUC — VIP Express Hub G11
+ Nen tam : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu
+ Luc     : 2026-10-16 16:48:53+0700
+ Luu y   : passphrase o day la passphrase DIEN TAP, sinh tai cho, khong phai cua anh Thanh.
+==============================================================
+
+--- B1. Dung CSDL + schema + du lieu mau ---
+    [migrate] Bước đã làm: carrier_providers; AES-256-GCM: 0 credentials + 0 webhook secret; key_id (v3) khóa 'goc': 0 credentials + 0 webhook secret trên 0 tài khoản hãng; trang_thai import_batch: đổi 0 dòng sang bộ chuẩn; don_hang +14 cột (G04: duyệt/từ chối/địa chỉ hành chính/mã đối chiếu); bảng MỚI don_mat_hang (tiền là số nguyên ĐỒNG, khối lượng là GRAM — cấm float); wh_su_kien +9 cột (G06: mã gốc hãng, độ tin cậy ánh xạ, cần soát, mốc hãng); bảng MỚI han_muc_nhap_thang (bộ đếm hạn mức nhập, sống qua restart); G07 tài chính + đối soát: +33 đối tượng (ds_anh_xa_cot, ds_chenh_lech, ds_dong, ds_dot…); G08 gói dịch vụ + mức dùng: +19 đối tượng (bo_dem_dung, dang_ky, dang_ky_lich_su, du_thao_hoa_don…); G09 harness hãng: +4 đối tượng (g09_harness_ca, g09_harness_lan_chay, ix_g09_lan_chay_hang, sqlite_autoindex_g09_harness_ca_1…); G10 công việc AI: +8 đối tượng (ai_job, ai_su_kien, ix_aijob_batch, ix_aijob_tenant…); G11 quan sát: +3 đối tượng (ix_quan_sat_loai, ix_quan_sat_luc, quan_sat_su_kien…); G19 giới hạn tần suất (kho trong CSDL): +4 đối tượng (gioi_han_chan, gioi_han_luot, ix_gh_luot, sqlite_autoindex_gioi_han_chan_1)
+    [migrate] Số dòng sau: {'tenants': 0, 'users': 0, 'khach_hang': 0, 'carrier_accounts': 0, 'don_hang': 0, 'don_lich_su': 0, 'wh_su_kien': 0, 'import_batch': 0, 'import_dong': 0, 'audit': 0}  → bảo toàn ĐẠT
+    [migrate] Xong, phiên bản 9. Rollback nếu cần: python3 app/migrate.py --rollback /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/sao-luu/hub-truoc-migrate-20261016-164853.db
+
+--- B2. Them credentials DA MA HOA (de kiem thuc su giai ma duoc sau khoi phuc) ---
+    da ghi 1 ban ghi: credentials + webhook secret, ca hai DA MA HOA (tenant 1)
+
+--- B3. SO DO TRUOC: so dong tung bang + integrity_check ---
+    duong dan        : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/hub.db
+    so byte          : 544768
+    sha256           : c863be1f2bdabd99...35e0578f
+    schema           : v9
+    integrity_check  : ok
+    foreign_key_check: 0 vi pham
+    journal_mode     : wal
+    so bang          : 51
+    tong dong        : 135
+    bang co du lieu  : 12/51
+      audit                        1
+      carrier_accounts             5
+      carrier_providers            2
+      goi_dich_vu                  3
+      khach_hang                   2
+      permissions                  28
+      role_permissions             68
+      roles                        6
+      schema_version               1
+      tenant_memberships           8
+      tenants                      2
+      users                        9
+
+--- B4. Sao luu CSDL (API backup cua SQLite, nhat quan ca khi co WAL) ---
+    ban sao CSDL : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/sao-luu/hub-truoc-migrate-20261016-164854.db
+    kich thuoc   : 544768 byte
+
+--- B5. Sao luu KHOA (goi .vipkb ma hoa doc lap bang passphrase) ---
+    {
+      "duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/veh-dientap.o16717/khoa-dien-tap.vipkb",
+      "so_byte": 1961,
+      "tao_luc": "2026-10-16 16:48:54+0700",
+      "so_khoa": 1,
+      "khoa_hien_hanh": "goc",
+      "so_ban_ma": 5,
+      "co_khoa_cu": true,
+      "key_id": [
+        "goc"
+      ],
+      "quyen": "0o600"
+    }
+--- B5b. KIEM goi TRUOC khi tin no (§12.1: kiem cong cu truoc khi dung) ---
+    {
+      "dat": true,
+      "loi": [],
+      "so_khoa": 1,
+      "key_id": [
+        "goc"
+      ],
+      "khoa_hien_hanh": "goc",
+      "co_khoa_cu": true,
+      "so_ban_ma": 5,
+      "tao_luc": "2026-10-16 16:48:54+0700",
+      "so_tenant": 2,
+      "key_id_thieu": []
+    }
+
+--- B6. Sao luu CAU HINH ---
+    ma bam cau hinh : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/cau-hinh/bam.txt (5 dong)
+    ten bien (KHONG gia tri): VIP_HUB_BACKUP_PASSPHRASE VIP_HUB_DATA 
+
+--- B7. GIA LAP THAM HOA: xoa CSDL va toan bo khoa ---
+    con lai trong thu muc du lieu: sao-luu TAI-KHOAN-DEMO.md 
+    (phai KHONG con hub.db va khong con thu muc khoa)
+
+--- B8. KHOI PHUC CSDL ---
+    da chep /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/sao-luu/hub-truoc-migrate-20261016-164854.db -> hub.db
+
+--- B9. KHOI PHUC KHOA tu goi ---
+    {
+      "thu_muc_dich": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/veh-dientap.o16717/du-lieu/khoa",
+      "da_ghi": [
+        "goc"
+      ],
+      "bo_qua": [],
+      "loi": [],
+      "con_tro_hien_hanh": "goc",
+      "duong_khoa_cu": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/veh-dientap.o16717/du-lieu/khoa/khoa-noi-bo.key",
+      "so_ban_ma_trong_goi": 5,
+      "tao_luc_goi": "2026-10-16 16:48:54+0700",
+      "dat": true
+    }
+
+--- B10. SO DO SAU + so sanh ---
+    duong dan        : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/hub.db
+    so byte          : 544768
+    sha256           : 425e5c72852f4415...9e5eb986
+    schema           : v9
+    integrity_check  : ok
+    foreign_key_check: 0 vi pham
+    journal_mode     : wal
+    so bang          : 51
+    tong dong        : 136
+    bang co du lieu  : 12/51
+      audit                        2
+      carrier_accounts             5
+      carrier_providers            2
+      goi_dich_vu                  3
+      khach_hang                   2
+      permissions                  28
+      role_permissions             68
+      roles                        6
+      schema_version               1
+      tenant_memberships           8
+      tenants                      2
+      users                        9
+
+--- SO SANH TRUOC / SAU ---
+  integrity_check : truoc=ok | sau=ok
+  tong dong       : truoc=135 | sau=136
+  so bang         : truoc=51 | sau=51
+  sha256 CSDL     : KHAC  (khac la binh thuong: backup/restore khong giu nguyen byte vi WAL)
+  LECH DA KHAI TRUOC: bang audit: truoc=1 sau=2 (delta +1) — sao_luu_khoa.khoi_phuc() tu ghi 1 dong audit — hanh vi dung
+  KET LUAN: KHOP tung bang (1 lech da khai truoc va khop con so).
+  PHAM VI cau ket luan nay: khop ve SO DONG tung bang + integrity_check + so bang +
+  phien ban schema. NGOAI pham vi: tinh DUNG cua NOI DUNG tung dong (mot bang bi ghi
+  trang van integrity_check=ok), va kha nang GIAI MA credentials — do rieng o B11.
+
+--- B11. GIAI MA LAI credentials (phep do THAT su quan trong) ---
+    giai ma DAT — credentials VA webhook secret khop nguyen van (gia tri KHONG in ra)
+
+--- B12. DIEN TAP LUI (rollback) ---
+    da them tenant 'SAU-BACKUP' (ton tai SAU moc backup)
+    [migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/sao-luu/hub-truoc-migrate-20261016-164854.db (kiểm cấu trúc + dấu kiểm TRƯỚC khi đè). Bản trước khi khôi phục cất ở /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/du-lieu/sao-luu/hub-truoc-rollback-20261016-164855.db
+    lui DAT — dong tao sau moc backup da mat dung nhu mong doi
+
+==============================================================
+ DIEN TAP XONG. So do: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/truoc.json va /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//veh-dientap.o16717/sau.json
+ LUU Y PHAM VI: luot nay chay tren MAY DUNG, tren du lieu THU, bang passphrase DIEN TAP.
+ No KHONG thay cho mot luot khoi phuc that tren may chu SACH bang passphrase THAT
+ (blocker B-2 cua du an van con nguyen).
+==============================================================

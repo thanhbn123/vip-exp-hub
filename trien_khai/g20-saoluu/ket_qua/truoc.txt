@@ -1,0 +1,140 @@
+========================================================================================================
+ G21 / AG-02 — FAIL-CLOSED CỦA SAO LƯU → KHÔI PHỤC
+ app/ đang đo : /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app
+========================================================================================================
+MÃ    KỊCH BẢN                                           RC     PHÁN QUYẾT   CSDL ĐÍCH SAU
+S1    1. SAO LƯU BỊ CẮT GIỮA ĐƯỜNG (5 cách cắt)          0      FAIL_OPEN    (kịch bản này không chụp CSDL đích)
+S2    2. TỆP SAO LƯU BỊ SỬA 1 BYTE (5 chỗ)               0      FAIL_OPEN    (kịch bản này không chụp CSDL đích)
+S3    3. TỆP SAO LƯU RỖNG 0 BYTE                         0      FAIL_OPEN    0 byte · 0 bảng · integrity ok · 0 đồng
+S4    4. KHÔI PHỤC ĐÈ LÊN CSDL ĐÃ CÓ DỮ LIỆU             0      FAIL_OPEN    (kịch bản này không chụp CSDL đích)
+S5    5. KHÔI PHỤC BẢN SCHEMA THẤP HƠN (v6 đè lên v9)    0      FAIL_OPEN    (kịch bản này không chụp CSDL đích)
+S6a   6a. HẾT ĐĨA GIỮA ĐƯỜNG khi SAO LƯU                 1      FAIL_OPEN    561152 byte · 51 bảng · integrity ok · 34336000 đồng
+S6b   6b. HẾT ĐĨA GIỮA ĐƯỜNG khi KHÔI PHỤC               1      FAIL_OPEN    280576 byte · KHÔNG ĐỌC ĐƯỢC: DatabaseError: database disk image is ma
+S7    7. KHÔI PHỤC NHẦM TỆP KHÔNG PHẢI SQLITE (bản dump  0      FAIL_OPEN    (kịch bản này không chụp CSDL đích)
+S8    8. POSTGRESQL: `sao_luu()` có phải đường lùi THẬT  0      FAIL_OPEN    (kịch bản này không chụp CSDL đích)
+DC    ĐC. ĐỐI CHỨNG ĐƯỜNG — sao lưu rồi khôi phục lại ch 0      FAIL_CLOSED  561152 byte · 51 bảng · integrity ok · 34336000 đồng
+--------------------------------------------------------------------------------------------------------
+ CHI TIẾT TỪNG VẾ: (a) mã thoát · (b) thông báo · (c) CSDL đích
+
+[S1] 1. SAO LƯU BỊ CẮT GIỮA ĐƯỜNG (5 cách cắt)
+    bắt buộc     : mọi tệp dở LÀM KHÁC BẢN GỐC phải bị `khoi_phuc()` TỪ CHỐI · lượt cắt vì hết chỗ ghi phải rc != 0
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | 
+    (c) đích     : {"ton_tai": false}
+        lệch     : a-het-cho-ghi: đích nhận tệp dở → 0 bảng (gốc 51) · 0 đồng (gốc 34336000) · integrity=ok
+        lệch     : b-bi-giet-40%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        lệch     : b-bi-giet-70%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        lệch     : b-bi-giet-90%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        lệch     : c-cat-cut-40%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN tệp dở LÀM KHÁC BẢN GỐC: a-het-cho-ghi: đích nhận tệp dở → 0 bảng (gốc 51) · 0 đồng (gốc 34336000) · integrity=ok
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN tệp dở LÀM KHÁC BẢN GỐC: b-bi-giet-40%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN tệp dở LÀM KHÁC BẢN GỐC: b-bi-giet-70%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN tệp dở LÀM KHÁC BẢN GỐC: b-bi-giet-90%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN tệp dở LÀM KHÁC BẢN GỐC: c-cat-cut-40%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+        LỖI      : (c) CSDL nhận tệp dở KHÔNG khớp bản gốc: a-het-cho-ghi: đích nhận tệp dở → 0 bảng (gốc 51) · 0 đồng (gốc 34336000) · integrity=ok; b-bi-giet-40%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed; b-bi-giet-70%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed; b-bi-giet-90%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed; c-cat-cut-40%: đích nhận tệp dở → None bảng (gốc 51) · 0 đồng (gốc 34336000) · DatabaseError: database disk image is malformed
+
+[S2] 2. TỆP SAO LƯU BỊ SỬA 1 BYTE (5 chỗ)
+    bắt buộc     : mọi bản sửa LÀM KHÁC BẢN GỐC phải bị `khoi_phuc()` TỪ CHỐI · đối chứng đường tệp KHÔNG sửa ĐẠT
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | 
+    (c) đích     : {"ton_tai": false}
+        lệch     : e-trang-dung: đích nhận bản sửa → băm khớp gốc=False · 2 lệch · row 2 missing from index sqlite_autoindex_don_hang_1
+        lệch     : d-byte0: đích nhận bản sửa → băm khớp gốc=False · 57 lệch · DatabaseError: file is not a database
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN bản sửa LÀM KHÁC BẢN GỐC: e-trang-dung: đích nhận bản sửa → băm khớp gốc=False · 2 lệch · row 2 missing from index sqlite_autoindex_don_hang_1
+        LỖI      : (a)+(c) `khoi_phuc()` NHẬN bản sửa LÀM KHÁC BẢN GỐC: d-byte0: đích nhận bản sửa → băm khớp gốc=False · 57 lệch · DatabaseError: file is not a database
+        LỖI      : (c) đích nhận bản sửa KHÔNG khớp bản gốc: e-trang-dung: đích nhận bản sửa → băm khớp gốc=False · 2 lệch · row 2 missing from index sqlite_autoindex_don_hang_1; d-byte0: đích nhận bản sửa → băm khớp gốc=False · 57 lệch · DatabaseError: file is not a database
+
+[S3] 3. TỆP SAO LƯU RỖNG 0 BYTE
+    bắt buộc     : rc != 0 · thông báo nói ra tệp rỗng · CSDL đích KHÔNG bị thay bằng CSDL rỗng
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | [migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-ikxq910s/ban-sao-luu-0-byte.db. Bản trước khi khôi phục cất
+    (c) đích     : {"ton_tai": true, "so_byte": 0, "so_bang": 0, "phien_ban": "loi: no such table: schema_version", "integrity": "ok", "tong_tien": 0, "bam": "e3b0c44298
+        lệch     : phien_ban    9 -> 'loi: no such table: schema_version'
+        lệch     : so_bang      51 -> 0
+        lệch     : tong_tien_toan_kho 34336000 -> 0
+        lệch     : bam_toan_kho '04bc5a27a261686448a34d40bd5664d40eafa9d64e35b5f094e08c537802b4e5' -> 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+        lệch     : so_byte      561152 -> 0
+        lệch     : BẢNG ai_job             có -> MẤT
+        lệch     : BẢNG ai_su_kien         có -> MẤT
+        lệch     : BẢNG audit              có -> MẤT
+        LỖI      : (a) mã thoát = 0 — hệ NHẬN lượt hỏng và đi tiếp
+        LỖI      : (b) không có dòng thông báo nào nói ra chỗ hỏng; dòng cuối: '[migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-ikxq910s/ban-sao-luu-0-byte.db. Bản trước khi khôi phục cất ở /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-ikxq910s/A/sao-luu/hub-truoc-rollback-20261016-144527.db'
+        LỖI      : (c) CSDL ĐÍCH BỊ ĐỂ LẠI NỬA VỜI: phien_ban    9 -> 'loi: no such table: schema_version'; so_bang      51 -> 0; tong_tien_toan_kho 34336000 -> 0; bam_toan_kho '04bc5a27a261686448a34d40bd5664d40eafa9d64e35b5f094e08c537802b4e5' -> 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; so_byte      561152 -> 0; BẢNG ai_job             có -> MẤT; BẢNG ai_su_kien         có -> MẤT; BẢNG audit              có -> MẤT; BẢNG bo_dem_dung        có -> MẤT; BẢNG carrier_accounts   có -> MẤT; BẢNG carrier_providers  có -> MẤT; BẢNG dang_ky            có -> MẤT; BẢNG dang_ky_lich_su    có -> MẤT; BẢNG don_hang           có -> MẤT; BẢNG don_lich_su        có -> MẤT; BẢNG don_mat_hang       có -> MẤT; BẢNG ds_anh_xa_cot      có -> MẤT; BẢNG ds_chenh_lech      có -> MẤT; BẢNG ds_dong            có -> MẤT; BẢNG ds_dot             có -> MẤT; BẢNG du_thao_hoa_don    có -> MẤT; BẢNG g09_harness_ca     có -> MẤT; BẢNG g09_harness_lan_chay có -> MẤT; BẢNG gioi_han_chan      có -> MẤT; BẢNG gioi_han_luot      có -> MẤT; BẢNG goi_dich_vu        có -> MẤT; BẢNG goi_phien_ban      có -> MẤT; BẢNG han_muc_nhap_thang có -> MẤT; BẢNG han_muc_rieng      có -> MẤT; BẢNG import_batch       có -> MẤT; BẢNG import_dong        có -> MẤT; BẢNG khach_hang         có -> MẤT; BẢNG ky_tinh_phi        có -> MẤT; BẢNG nhat_ky_tinh_phi   có -> MẤT; BẢNG permissions        có -> MẤT; BẢNG quan_sat_su_kien   có -> MẤT; BẢNG reset_tokens       có -> MẤT; BẢNG role_permissions   có -> MẤT; BẢNG roles              có -> MẤT; BẢNG schema_version     có -> MẤT; BẢNG sessions           có -> MẤT; BẢNG su_kien_dung       có -> MẤT; BẢNG tc_but_toan        có -> MẤT; BẢNG tc_cod             có -> MẤT; BẢNG tc_cod_chuyen      có -> MẤT; BẢNG tc_cong_no         có -> MẤT; BẢNG tc_dieu_chinh      có -> MẤT; BẢNG tc_dot_tt          có -> MẤT; BẢNG tc_dot_tt_dong     có -> MẤT; BẢNG tc_nhat_ky         có -> MẤT; BẢNG tc_phi             có -> MẤT; BẢNG tenant_memberships có -> MẤT; BẢNG tenants            có -> MẤT; BẢNG usage_thang        có -> MẤT; BẢNG users              có -> MẤT; BẢNG wh_su_kien         có -> MẤT
+        LỖI      : (a) `khoi_phuc()` NHẬN tệp 0 byte (rc=0) — CSDL đích bị thay bằng một CSDL RỖNG HỢP LỆ
+
+[S4] 4. KHÔI PHỤC ĐÈ LÊN CSDL ĐÃ CÓ DỮ LIỆU
+    bắt buộc     : dữ liệu TRƯỚC khi đè phải CÒN CỨU ĐƯỢC · ba lượt cùng một giây KHÔNG xoá nhau
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | 
+    (c) đích     : {"ton_tai": false}
+        LỖI      : (c) KHÔNG bản cất nào giữ được dữ liệu lúc chụp: 1 bản cất, băm dữ liệu lúc chụp 2212076042eb2283, băm các bản cất {'hub-truoc-rollback-20261016-144528.db': '20149668e6df'}
+        LỖI      : (c) 3 lượt khôi phục trong cùng một giây chỉ để lại 1 bản cất — tên đặt theo GIÂY nên lượt sau ĐÈ IM LẶNG lượt trước
+
+[S5] 5. KHÔI PHỤC BẢN SCHEMA THẤP HƠN (v6 đè lên v9)
+    bắt buộc     : rc != 0 (TỪ CHỐI) · thông báo nêu hai phiên bản · schema KHÔNG tụt im lặng
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | [migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-lk2gpw88/C/sao-luu/hub-truoc-migrate-20261016-144528.db. Bản t
+    (c) đích     : {"ton_tai": false}
+        lệch     : phiên bản 9 → 6
+        lệch     : số bảng 51 → 20
+        lệch     : tổng tiền 34336000 → 1298000
+        LỖI      : (a) mã thoát = 0 — hệ NHẬN lượt hỏng và đi tiếp
+        LỖI      : (b) không có dòng thông báo nào nói ra chỗ hỏng; dòng cuối: '[migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-lk2gpw88/C/sao-luu/hub-truoc-migrate-20261016-144528.db. Bản trước khi khôi phục cất ở /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-schemav6-lk2gpw88/A/sao-luu/hub-truoc-rollback-20261016-144529.db'
+        LỖI      : (c) CSDL ĐÍCH BỊ ĐỂ LẠI NỬA VỜI: phiên bản 9 → 6; số bảng 51 → 20; tổng tiền 34336000 → 1298000
+        LỖI      : (c) schema đã TỤT: v9 → v6 · 51 bảng → 20 bảng · tổng tiền 34336000 → 1298000 (mất 33038000 đồng)
+        LỖI      : (c) sau khi tụt schema, hệ VẪN CHẠY được (rc=0) trên schema cũ — không một lời cảnh báo
+
+[S6a] 6a. HẾT ĐĨA GIỮA ĐƯỜNG khi SAO LƯU
+    bắt buộc     : rc != 0 · thông báo nói ra chỗ hỏng · CSDL NGUỒN nguyên · KHÔNG để lại tệp dở mang tên bản sao lưu
+    (a) rc       : 1
+    (b) thông báo: có=True · traceback trần=True | sqlite3.OperationalError: disk I/O error
+    (c) đích     : {"ton_tai": true, "so_byte": 561152, "so_bang": 51, "phien_ban": 9, "integrity": "ok", "tong_tien": 34336000, "bam": "d684a0045f387ab9", "loi": null}
+        LỖI      : (c) để lại 1 tệp dở trong `sao-luu/` và KHÔNG dọn: ['hub-truoc-migrate-20261016-144530-1.db']
+
+[S6b] 6b. HẾT ĐĨA GIỮA ĐƯỜNG khi KHÔI PHỤC
+    bắt buộc     : rc != 0 · thông báo nói ra chỗ hỏng · CSDL ĐÍCH không bị để lại nửa vời
+    (a) rc       : 1
+    (b) thông báo: có=True · traceback trần=True | OSError: [Errno 27] File too large: '/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-gto0n67a/A/sao-luu/hub-truoc-migrate-20261016-
+    (c) đích     : {"ton_tai": true, "so_byte": 280576, "so_bang": null, "phien_ban": null, "integrity": null, "tong_tien": 0, "bam": "None", "loi": "DatabaseError: data
+        lệch     : integrity_check = None (khác 'ok')
+        lệch     : CSDL đích KHÔNG ĐỌC ĐƯỢC: DatabaseError: database disk image is malformed
+        lệch     : integrity_check 'ok' -> None
+        lệch     : phien_ban    0 -> None
+        lệch     : so_bang      20 -> None
+        lệch     : tong_tien_toan_kho 1298000 -> 0
+        lệch     : bam_toan_kho '9ed8acc637acb9d47c674853f9f081720de8fdc01652f5ac75ba801a1bf23493' -> None
+        lệch     : so_byte      200704 -> 280576
+        LỖI      : (c) CSDL ĐÍCH BỊ ĐỂ LẠI NỬA VỜI: integrity_check = None (khác 'ok'); CSDL đích KHÔNG ĐỌC ĐƯỢC: DatabaseError: database disk image is malformed; integrity_check 'ok' -> None; phien_ban    0 -> None; so_bang      20 -> None; tong_tien_toan_kho 1298000 -> 0; bam_toan_kho '9ed8acc637acb9d47c674853f9f081720de8fdc01652f5ac75ba801a1bf23493' -> None; so_byte      200704 -> 280576; loi          None -> 'DatabaseError: database disk image is malformed'; BẢNG audit              có -> MẤT; BẢNG carrier_accounts   có -> MẤT; BẢNG carrier_providers  có -> MẤT; BẢNG don_hang           có -> MẤT; BẢNG don_lich_su        có -> MẤT; BẢNG goi_dich_vu        có -> MẤT; BẢNG import_batch       có -> MẤT; BẢNG import_dong        có -> MẤT; BẢNG khach_hang         có -> MẤT; BẢNG permissions        có -> MẤT; BẢNG reset_tokens       có -> MẤT; BẢNG role_permissions   có -> MẤT; BẢNG roles              có -> MẤT; BẢNG schema_version     có -> MẤT; BẢNG sessions           có -> MẤT; BẢNG tenant_memberships có -> MẤT; BẢNG tenants            có -> MẤT; BẢNG usage_thang        có -> MẤT; BẢNG users              có -> MẤT; BẢNG wh_su_kien         có -> MẤT
+
+[S7] 7. KHÔI PHỤC NHẦM TỆP KHÔNG PHẢI SQLITE (bản dump PostgreSQL)
+    bắt buộc     : rc != 0 (TỪ CHỐI) · thông báo nói tệp không phải SQLite · CSDL đích nguyên vẹn
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | [migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-nhamdump-mw5w9amp/sao_luu_pg.dump. Bản trước khi khôi phục cất ở /var/f
+    (c) đích     : {"ton_tai": false}
+        lệch     : CSDL đích không đọc được: DatabaseError: file is not a database
+        lệch     : số bảng đọc được = None
+        lệch     : số byte 561152 → 65544
+        LỖI      : (a) mã thoát = 0 — hệ NHẬN lượt hỏng và đi tiếp
+        LỖI      : (b) không có dòng thông báo nào nói ra chỗ hỏng; dòng cuối: '[migrate] Đã khôi phục từ /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-nhamdump-mw5w9amp/sao_luu_pg.dump. Bản trước khi khôi phục cất ở /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-nhamdump-mw5w9amp/A/sao-luu/hub-truoc-rollback-20261016-144531.db'
+        LỖI      : (c) CSDL ĐÍCH BỊ ĐỂ LẠI NỬA VỜI: CSDL đích không đọc được: DatabaseError: file is not a database; số bảng đọc được = None; số byte 561152 → 65544
+        LỖI      : (a) `khoi_phuc()` NHẬN một tệp KHÔNG PHẢI SQLite (rc=0) và làm chết CSDL đang chạy
+        LỖI      : (c) CSDL đích KHÔNG ĐỌC ĐƯỢC sau lượt nạp nhầm: DatabaseError: file is not a database
+
+[S8] 8. POSTGRESQL: `sao_luu()` có phải đường lùi THẬT không (P-G15-02)
+    bắt buộc     : `sao_luu()` không được thoát 0 với một bản sao KHÔNG chứa dữ liệu đang chạy
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | 
+    (c) đích     : {"ton_tai": false}
+        LỖI      : (c) kho là PostgreSQL, `hub.db` KHÔNG tồn tại: `sao_luu()` thoát 0 và trả một tệp 4096 byte / 0 BẢNG / integrity='ok' — trong khi PostgreSQL đang giữ 6 dòng và 9324000 đồng. ĐƯỜNG LÙI GIẢ, và IM LẶNG
+        LỖI      : (c) kho là PostgreSQL nhưng `hub.db` CŨ còn sót: `sao_luu()` trả một bản sao TRÔNG HỢP LỆ (51 bảng, 34336000 đồng) mà KHÔNG chứa một dòng nào của dữ liệu đang chạy (9324000 đồng ở PostgreSQL)
+        LỖI      : (a) `khoi_phuc()` NHẬN một bản `pg_dump -Fc` THẬT và làm chết CSDL SQLite đang chạy
+
+[DC] ĐC. ĐỐI CHỨNG ĐƯỜNG — sao lưu rồi khôi phục lại chính CSDL gốc
+    bắt buộc     : rc == 0 · CSDL gốc Y NGUYÊN từng bảng (số dòng + tổng tiền) · dữ liệu tạo sau mốc sao lưu mất hết
+    (a) rc       : 0
+    (b) thông báo: có=False · traceback trần=False | 
+    (c) đích     : {"ton_tai": true, "so_byte": 561152, "so_bang": 51, "phien_ban": 9, "integrity": "ok", "tong_tien": 34336000, "bam": "270969aea98489fa", "loi": null}
+
+========================================================================================================
+ KẾT LUẬN: 1/10 kịch bản FAIL_CLOSED · 9 FAIL_OPEN
+========================================================================================================

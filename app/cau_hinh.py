@@ -8,6 +8,34 @@ DUONG_DAN_CSDL = os.path.join(THU_MUC_DU_LIEU, "hub.db")
 DUONG_DAN_KHOA = os.path.join(THU_MUC_DU_LIEU, "khoa-noi-bo.key")  # khóa mã hóa credentials, 0600, ngoài git
 CONG_MAC_DINH = int(os.environ.get("VIP_HUB_PORT", "8897"))
 
+
+# ============================================================================
+# G22 — KHO ĐANG CHẠY (S8 / P-G15-02): KHAI BÁO, KHÔNG ĐOÁN
+# ============================================================================
+# Vì sao phải là một KHAI BÁO chứ không phải một phép đo: `app/csdl.py` thuần SQLite (không có
+# nhánh PostgreSQL), nên hệ KHÔNG có cách nào tự biết dữ liệu nghiệp vụ đang nằm ở đâu. Mọi phép
+# suy ra từ mtime / kích thước / tên tệp đều là ĐOÁN, và nó sẽ im lặng đúng vào lúc cần nhất:
+# một `hub.db` CŨ còn sót lại trông y hệt một `hub.db` đang phục vụ (P-G15-02 `do2b`).
+KHO_SQLITE = "sqlite"
+KHO_POSTGRESQL = "postgresql"
+KHO_DANG_CHAY_HOP_LE = (KHO_SQLITE, KHO_POSTGRESQL)
+BIEN_KHAI_KHO = "VIP_KHO_DANG_CHAY"
+
+# MẶC ĐỊNH AN TOÀN: **CHƯA KHAI ⇒ TỪ CHỐI**. `None` nghĩa là chưa ai khai, và `sao_luu()` TỪ
+# CHỐI chứ không đoán — một bản sao lưu không chứa dữ liệu đang phục vụ là ĐƯỜNG LÙI GIẢ, và
+# đường lùi giả chỉ lộ ra khi đã quá muộn.
+#
+# KHAI Ở ĐÂU: sửa thẳng dòng dưới (chỗ chính thức), hoặc đặt biến môi trường
+# `VIP_KHO_DANG_CHAY=sqlite|postgresql` cho tiến trình chạy `migrate`. Khai SAI CHÍNH TẢ không
+# được coi là "chưa khai": `migrate._chuan_hoa_kho()` TỪ CHỐI kèm nguyên văn giá trị sai — coi
+# nó là chưa khai là âm thầm đưa hệ về đúng chỗ đang muốn tránh.
+#
+# CÁI GIÁ CỦA MẶC ĐỊNH NÀY (đo, không đoán — docs/G22_SAOLUU.md §4): `migrate.chay()` trên một
+# thư mục dữ liệu MỚI CÓ gọi `sao_luu()`, và 8 bộ thử NGOÀI vùng được ghi của AG-02 gọi
+# `migrate.chay()` mà không khai kho ⇒ chúng TỪ CHỐI cho tới khi mỗi bộ khai một dòng. Đây là
+# LỰA CHỌN CỤC BỘ ĐÃ ĐƯỢC UỶ QUYỀN của AG-02 (sửa local), KHÔNG phải quyết định thay Owner.
+KHO_DANG_CHAY = (os.environ.get(BIEN_KHAI_KHO) or "").strip().lower() or None
+
 PHIEN_SONG_GIO = 12            # phiên đăng nhập sống 12 giờ
 KHOA_SAU_SO_LAN_SAI = 5        # sai mật khẩu 5 lần liên tiếp → khóa TẠM
 # Khóa TẠM, không khóa vĩnh viễn: khóa vĩnh viễn bằng mật khẩu sai là đường cho người lạ

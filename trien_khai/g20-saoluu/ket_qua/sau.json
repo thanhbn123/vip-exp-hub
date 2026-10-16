@@ -1,0 +1,2496 @@
+{
+ "ban_ghi": {
+  "S1": {
+   "ma": "S1",
+   "ten": "1. SAO LƯU BỊ CẮT GIỮA ĐƯỜNG (5 cách cắt)",
+   "bat_buoc": "mọi tệp dở LÀM KHÁC BẢN GỐC phải bị `khoi_phuc()` TỪ CHỐI · lượt cắt vì hết chỗ ghi phải rc != 0",
+   "ap_dung_mau": false,
+   "rc": 0,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "cac_cach_cat": [
+     {
+      "cach": "a-het-cho-ghi",
+      "rc_luot_cat": 1,
+      "co_tep_de": null,
+      "khoi_phuc_NHAN": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "[migrate] TỪ CHỐI: không thấy tệp",
+      "integrity_tep_de": null,
+      "so_bang_tep_de": null,
+      "csdl_sau_so_bang": null,
+      "csdl_sau_tong_tien": null,
+      "csdl_sau_loi": null
+     },
+     {
+      "cach": "b-bi-giet-40%",
+      "rc_luot_cat": null,
+      "co_tep_de": 32919552,
+      "khoi_phuc_NHAN": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "[migrate] TỪ CHỐI: không thấy tệp /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-catgiua-dtw2h87s/A/sao-luu/hub-truoc-migrate-20261016-225647.db.dang-ghi",
+      "integrity_tep_de": null,
+      "so_bang_tep_de": null,
+      "csdl_sau_so_bang": null,
+      "csdl_sau_tong_tien": null,
+      "csdl_sau_loi": null
+     },
+     {
+      "cach": "b-bi-giet-70%",
+      "rc_luot_cat": null,
+      "co_tep_de": 80863232,
+      "khoi_phuc_NHAN": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "rity_check` (đã đo).\n          Nếu đã biết rõ tệp này: gọi `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`\n          hoặc chạy `python3 app/migrate.py --rollback <tệp> --toi-da-biet-chua-kiem-duoc`.",
+      "integrity_tep_de": "ok",
+      "so_bang_tep_de": 51,
+      "csdl_sau_so_bang": null,
+      "csdl_sau_tong_tien": null,
+      "csdl_sau_loi": null
+     },
+     {
+      "cach": "b-bi-giet-90%",
+      "rc_luot_cat": null,
+      "co_tep_de": 73224192,
+      "khoi_phuc_NHAN": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": " TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-catgiua-dtw2h87s/A/sao-luu/hub-truoc-migrate-20261016-225648.db.dang-ghi KHÔNG ĐỌC ĐƯỢC như CSDL SQLite: database disk image is malformed",
+      "integrity_tep_de": null,
+      "so_bang_tep_de": null,
+      "csdl_sau_so_bang": null,
+      "csdl_sau_tong_tien": null,
+      "csdl_sau_loi": null
+     },
+     {
+      "cach": "c-cat-cut-40%",
+      "rc_luot_cat": null,
+      "co_tep_de": 32345292,
+      "khoi_phuc_NHAN": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-catgiua-dtw2h87s/ban-cat-cut.db KHÔNG ĐỌC ĐƯỢC như CSDL SQLite: database disk image is malformed",
+      "integrity_tep_de": null,
+      "so_bang_tep_de": null,
+      "csdl_sau_so_bang": null,
+      "csdl_sau_tong_tien": null,
+      "csdl_sau_loi": null
+     }
+    ],
+    "so_cach_bi_NHAN": 0,
+    "so_cach_tep_de_that_su_cut": 4,
+    "so_luot_cat_khong_de_lai_tep": 1,
+    "cat_hong_that": [],
+    "so_cat_hong_that": 0,
+    "cat_vo_hai": [],
+    "so_cat_vo_hai": 0,
+    "doi_chung_duong": {
+     "rc_khoi_phuc": 0,
+     "so_lech": 0,
+     "tong_tien": 34336000
+    },
+    "doi_chung_duong_dat": true,
+    "so_bang_goc": 51,
+    "tong_tien_goc": 34336000,
+    "nguon_ve_c": "từng cách cắt có `csdl_sau` (số bảng + tổng tiền) do chính kịch bản AG-04 đo; đối chiếu với `so_bang_goc`/`tong_tien_goc`.",
+    "ghi_chu": "phép so ở đây là số bảng + tổng tiền toàn kho, KHÔNG phải từng bảng: kịch bản AG-04 không giữ phép chụp đầy đủ của CSDL đích. Nói ra để không ai đọc thành 'đã so từng bảng'."
+   }
+  },
+  "S2": {
+   "ma": "S2",
+   "ten": "2. TỆP SAO LƯU BỊ SỬA 1 BYTE (5 chỗ)",
+   "bat_buoc": "mọi bản sửa LÀM KHÁC BẢN GỐC phải bị `khoi_phuc()` TỪ CHỐI · đối chứng đường tệp KHÔNG sửa ĐẠT",
+   "ap_dung_mau": false,
+   "rc": 0,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "cac_lan_sua": [
+     {
+      "nhan": "e-trang-dung",
+      "vi_tri": 138836,
+      "sqlite_tu_bao": "row 2 missing from index sqlite_autoindex_don_hang_1",
+      "bam_khop_goc": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "_fys65vflj24_rjw9x_w0000gn/T/g20-suabyte-lrvr2s8v/A/sao-luu/hub-truoc-migrate-20261016-225651-1.db.e-trang-dung hỏng cấu trúc — integrity_check = 'row 2 missing from index sqlite_autoindex_don_hang_1'",
+      "so_lech": 57,
+      "integrity": null,
+      "loi": null
+     },
+     {
+      "nhan": "a-25%",
+      "vi_tri": 140288,
+      "sqlite_tu_bao": "ok",
+      "bam_khop_goc": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "rity_check` (đã đo).\n          Nếu đã biết rõ tệp này: gọi `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`\n          hoặc chạy `python3 app/migrate.py --rollback <tệp> --toi-da-biet-chua-kiem-duoc`.",
+      "so_lech": 57,
+      "integrity": null,
+      "loi": null
+     },
+     {
+      "nhan": "b-50%",
+      "vi_tri": 280576,
+      "sqlite_tu_bao": "ok",
+      "bam_khop_goc": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "rity_check` (đã đo).\n          Nếu đã biết rõ tệp này: gọi `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`\n          hoặc chạy `python3 app/migrate.py --rollback <tệp> --toi-da-biet-chua-kiem-duoc`.",
+      "so_lech": 57,
+      "integrity": null,
+      "loi": null
+     },
+     {
+      "nhan": "c-75%",
+      "vi_tri": 420864,
+      "sqlite_tu_bao": "ok",
+      "bam_khop_goc": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": "rity_check` (đã đo).\n          Nếu đã biết rõ tệp này: gọi `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`\n          hoặc chạy `python3 app/migrate.py --rollback <tệp> --toi-da-biet-chua-kiem-duoc`.",
+      "so_lech": 57,
+      "integrity": null,
+      "loi": null
+     },
+     {
+      "nhan": "d-byte0",
+      "vi_tri": 0,
+      "sqlite_tu_bao": "NGOAI-LE DatabaseError: file is not a database",
+      "bam_khop_goc": false,
+      "rc_khoi_phuc": 1,
+      "err_khoi_phuc": " TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-suabyte-lrvr2s8v/A/sao-luu/hub-truoc-migrate-20261016-225651-1.db.d-byte0 KHÔNG PHẢI CSDL SQLite (16 byte đầu: b'\\x00QLite format 3\\x00')",
+      "so_lech": 57,
+      "integrity": null,
+      "loi": null
+     }
+    ],
+    "so_lan_khoi_phuc_NHAN_tat_ca": 0,
+    "so_lan_sua": 5,
+    "sua_hong_that": [],
+    "so_sua_hong_that": 0,
+    "sua_vo_hai": [],
+    "so_sua_vo_hai": 0,
+    "doi_chung_duong": {
+     "rc_khoi_phuc": 0,
+     "so_lech": 0,
+     "lech": []
+    },
+    "doi_chung_duong_dat": true,
+    "nguon_ve_c": "từng bản sửa có `bam_khop_goc` + `so_lech` (so TỪNG BẢNG cả số dòng lẫn tổng tiền) do chính kịch bản AG-04 đo.",
+    "ghi_chu": "cùng lý do như S1: `khoi_phuc()` NHẬN bản đã sửa MÀ DỮ LIỆU KHÁC nghĩa là CSDL đích bị thay bằng chính bản đó."
+   }
+  },
+  "S3": {
+   "ma": "S3",
+   "ten": "3. TỆP SAO LƯU RỖNG 0 BYTE",
+   "bat_buoc": "rc != 0 · thông báo nói ra tệp rỗng · CSDL đích KHÔNG bị thay bằng CSDL rỗng",
+   "ap_dung_mau": true,
+   "rc": 1,
+   "thong_bao": "LUC-DUOC-NHAN True[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-tmpifg3d/ban-sao-luu-0-byte.db RỖNG (0 byte) — không có gì để dùng",
+   "dong_bao_hong": "[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-tmpifg3d/ban-sao-luu-0-byte.db RỖNG (0 byte) — không có gì để dùng",
+   "co_dong_bao_hong": true,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": true,
+    "so_byte": 561152,
+    "so_bang": 51,
+    "phien_ban": 9,
+    "integrity": "ok",
+    "tong_tien": 34336000,
+    "bam": "e4c124efdd4bb68a",
+    "loi": null
+   },
+   "csdl_dich_sau": {
+    "ton_tai": true,
+    "so_byte": 561152,
+    "so_bang": 51,
+    "phien_ban": 9,
+    "integrity": "ok",
+    "tong_tien": 34336000,
+    "bam": "e4c124efdd4bb68a",
+    "loi": null
+   },
+   "chup_day_du": {
+    "truoc": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-tmpifg3d/A/hub.db",
+     "ton_tai": true,
+     "so_byte": 561152,
+     "sha256_tep": "159dcbd994de83c94ca749737d1c5d8a996ad235a816e21d53b6c1a363bf7d0e",
+     "bang": {
+      "ai_job": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ai_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "audit": {
+       "dong": 4,
+       "tien": {}
+      },
+      "bo_dem_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 5,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky_lich_su": {
+       "dong": 2,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 15,
+       "tien": {
+        "cod": 3180000,
+        "gia_tri_khai": 6360000,
+        "phi_van_chuyen": 330000
+       }
+      },
+      "don_lich_su": {
+       "dong": 30,
+       "tien": {}
+      },
+      "don_mat_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_anh_xa_cot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_chenh_lech": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_dong": {
+       "dong": 15,
+       "tien": {
+        "phi_hang_bao": 330000
+       }
+      },
+      "ds_dot": {
+       "dong": 3,
+       "tien": {}
+      },
+      "du_thao_hoa_don": {
+       "dong": 2,
+       "tien": {
+        "tien_goi_dong": 598000,
+        "tien_vuot_dong": 0
+       }
+      },
+      "g09_harness_ca": {
+       "dong": 0,
+       "tien": {}
+      },
+      "g09_harness_lan_chay": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_chan": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_luot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "goi_phien_ban": {
+       "dong": 4,
+       "tien": {
+        "gia_thang_dong": 2597000
+       }
+      },
+      "han_muc_nhap_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "han_muc_rieng": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_batch": {
+       "dong": 1,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 3,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 6,
+       "tien": {}
+      },
+      "ky_tinh_phi": {
+       "dong": 2,
+       "tien": {}
+      },
+      "nhat_ky_tinh_phi": {
+       "dong": 5,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 28,
+       "tien": {}
+      },
+      "quan_sat_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 68,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 6,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 1,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "su_kien_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tc_but_toan": {
+       "dong": 57,
+       "tien": {
+        "so_tien_dong": 8177000
+       }
+      },
+      "tc_cod": {
+       "dong": 15,
+       "tien": {
+        "so_tien_du_kien": 3180000,
+        "so_tien_hang_bao": 1272000,
+        "so_tien_doi_soat": 1272000,
+        "so_tien_da_tt": 212000
+       }
+      },
+      "tc_cod_chuyen": {
+       "dong": 12,
+       "tien": {}
+      },
+      "tc_cong_no": {
+       "dong": 10,
+       "tien": {
+        "so_du_dong": 4567000
+       }
+      },
+      "tc_dieu_chinh": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": -3000
+       }
+      },
+      "tc_dot_tt": {
+       "dong": 3,
+       "tien": {
+        "so_tien_hang_bao": 424000
+       }
+      },
+      "tc_dot_tt_dong": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": 212000
+       }
+      },
+      "tc_nhat_ky": {
+       "dong": 24,
+       "tien": {}
+      },
+      "tc_phi": {
+       "dong": 15,
+       "tien": {
+        "so_tien_dong": 330000
+       }
+      },
+      "tenant_memberships": {
+       "dong": 3,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 3,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 3,
+       "tien": {}
+      },
+      "users": {
+       "dong": 4,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 10,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 34336000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 9,
+     "bam_toan_kho": "e4c124efdd4bb68adc7471e433b889728b7712bc26a51c0ac0dd96902e396b1f",
+     "so_bang": 51
+    },
+    "sau": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-tmpifg3d/A/hub.db",
+     "ton_tai": true,
+     "so_byte": 561152,
+     "sha256_tep": "159dcbd994de83c94ca749737d1c5d8a996ad235a816e21d53b6c1a363bf7d0e",
+     "bang": {
+      "ai_job": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ai_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "audit": {
+       "dong": 4,
+       "tien": {}
+      },
+      "bo_dem_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 5,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky_lich_su": {
+       "dong": 2,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 15,
+       "tien": {
+        "cod": 3180000,
+        "gia_tri_khai": 6360000,
+        "phi_van_chuyen": 330000
+       }
+      },
+      "don_lich_su": {
+       "dong": 30,
+       "tien": {}
+      },
+      "don_mat_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_anh_xa_cot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_chenh_lech": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_dong": {
+       "dong": 15,
+       "tien": {
+        "phi_hang_bao": 330000
+       }
+      },
+      "ds_dot": {
+       "dong": 3,
+       "tien": {}
+      },
+      "du_thao_hoa_don": {
+       "dong": 2,
+       "tien": {
+        "tien_goi_dong": 598000,
+        "tien_vuot_dong": 0
+       }
+      },
+      "g09_harness_ca": {
+       "dong": 0,
+       "tien": {}
+      },
+      "g09_harness_lan_chay": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_chan": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_luot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "goi_phien_ban": {
+       "dong": 4,
+       "tien": {
+        "gia_thang_dong": 2597000
+       }
+      },
+      "han_muc_nhap_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "han_muc_rieng": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_batch": {
+       "dong": 1,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 3,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 6,
+       "tien": {}
+      },
+      "ky_tinh_phi": {
+       "dong": 2,
+       "tien": {}
+      },
+      "nhat_ky_tinh_phi": {
+       "dong": 5,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 28,
+       "tien": {}
+      },
+      "quan_sat_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 68,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 6,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 1,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "su_kien_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tc_but_toan": {
+       "dong": 57,
+       "tien": {
+        "so_tien_dong": 8177000
+       }
+      },
+      "tc_cod": {
+       "dong": 15,
+       "tien": {
+        "so_tien_du_kien": 3180000,
+        "so_tien_hang_bao": 1272000,
+        "so_tien_doi_soat": 1272000,
+        "so_tien_da_tt": 212000
+       }
+      },
+      "tc_cod_chuyen": {
+       "dong": 12,
+       "tien": {}
+      },
+      "tc_cong_no": {
+       "dong": 10,
+       "tien": {
+        "so_du_dong": 4567000
+       }
+      },
+      "tc_dieu_chinh": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": -3000
+       }
+      },
+      "tc_dot_tt": {
+       "dong": 3,
+       "tien": {
+        "so_tien_hang_bao": 424000
+       }
+      },
+      "tc_dot_tt_dong": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": 212000
+       }
+      },
+      "tc_nhat_ky": {
+       "dong": 24,
+       "tien": {}
+      },
+      "tc_phi": {
+       "dong": 15,
+       "tien": {
+        "so_tien_dong": 330000
+       }
+      },
+      "tenant_memberships": {
+       "dong": 3,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 3,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 3,
+       "tien": {}
+      },
+      "users": {
+       "dong": 4,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 10,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 34336000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 9,
+     "bam_toan_kho": "e4c124efdd4bb68adc7471e433b889728b7712bc26a51c0ac0dd96902e396b1f",
+     "so_bang": 51
+    }
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "loi_gieo": "",
+    "so_byte_tep_rong": 0,
+    "integrity_tep_rong": "ok",
+    "so_bang_tep_rong": 0,
+    "khoi_phuc_NHAN_tep_rong": false,
+    "so_bang_goc": 51,
+    "tong_tien_goc": 34336000
+   }
+  },
+  "S4": {
+   "ma": "S4",
+   "ten": "4. KHÔI PHỤC ĐÈ LÊN CSDL ĐÃ CÓ DỮ LIỆU",
+   "bat_buoc": "dữ liệu TRƯỚC khi đè phải CÒN CỨU ĐƯỢC · ba lượt CÙNG MỘT MỐC THỜI GIAN (mốc TRUYỀN VÀO, không đọc đồng hồ) KHÔNG xoá nhau",
+   "ap_dung_mau": false,
+   "rc": 0,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": false,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "rc_sao_luu": 0,
+    "rc_them": 0,
+    "rc_kp1": 0,
+    "rc_kp2": 0,
+    "rc_kp3": 0,
+    "luc": "20261016-120000",
+    "cung_mot_moc": true,
+    "nhan_luc": true,
+    "so_ban_cat_sau_1_lan": 1,
+    "so_ban_cat_sau_3_lan": 3,
+    "ban_cat": [
+     "hub-truoc-rollback-20261016-120000-1.db",
+     "hub-truoc-rollback-20261016-120000-2.db",
+     "hub-truoc-rollback-20261016-120000.db"
+    ],
+    "bam_ban_cat_sau_1_lan": "661d0696c2d2942b7c543d76c39699f08226c7ad35d05470e966561c9488116e",
+    "bam_ban_cat_sau_3_lan": "661d0696c2d2942b7c543d76c39699f08226c7ad35d05470e966561c9488116e",
+    "bam_du_lieu_luc_chup_day": "661d0696c2d2942b7c543d76c39699f08226c7ad35d05470e966561c9488116e",
+    "ban_cat_con_giu_duoc_du_lieu_goc": true,
+    "ban_cat_khop_du_lieu_luc_chup": true,
+    "bam_moi_ban_cat_cuoi": {
+     "hub-truoc-rollback-20261016-120000-1.db": "1e06f9b01d129a8e3ed4e7adc8d1b684d51c8bb81b8df67d24ec9d26f57a5ed7",
+     "hub-truoc-rollback-20261016-120000-2.db": "1e06f9b01d129a8e3ed4e7adc8d1b684d51c8bb81b8df67d24ec9d26f57a5ed7",
+     "hub-truoc-rollback-20261016-120000.db": "661d0696c2d2942b7c543d76c39699f08226c7ad35d05470e966561c9488116e"
+    },
+    "so_ban_cat_giu_du_lieu_goc": 1,
+    "ban_cat_integrity": "ok",
+    "ban_cat_so_bang": 51,
+    "lech_truoc_kp1": [],
+    "nguon_ve_c": "bất biến của S4 KHÔNG phải 'đích không đổi' (khôi phục đè thành công thì đích PHẢI đổi) mà là 'dữ liệu trước khi đè còn cứu được': so băm bản cất với băm dữ liệu lúc chụp."
+   }
+  },
+  "S5": {
+   "ma": "S5",
+   "ten": "5. KHÔI PHỤC BẢN SCHEMA THẤP HƠN (v6 đè lên v9)",
+   "bat_buoc": "rc != 0 (TỪ CHỐI) · thông báo nêu hai phiên bản · schema KHÔNG tụt im lặng",
+   "ap_dung_mau": true,
+   "rc": 1,
+   "thong_bao": "LUC-DUOC-NHAN True[migrate] TỪ CHỐI: TỤT SCHEMA. Bản sao lưu ở phiên bản **v6**, CSDL đang chạy ở **v9**.\n          Khôi phục sẽ bỏ rơi dữ liệu của 3 phiên bản migration. Đo được: v6 đè lên v9 làm CSDL còn\n          20 bảng thay vì 51 và tổng tiền rơi từ 34.336.000 xuống 1.298.000 đồng — KHÔNG một lời cảnh báo.\n          Nếu đây đúng là ý định, chạy lại với `toi_da_biet_chua_kiem_duoc=True`.",
+   "dong_bao_hong": "20 bảng thay vì 51 và tổng tiền rơi từ 34.336.000 xuống 1.298.000 đồng — KHÔNG một lời cảnh báo.",
+   "co_dong_bao_hong": true,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "rc_dung_v6": 0,
+    "phien_ban_v6": 6,
+    "so_bang_v6": 20,
+    "phien_ban_v9_truoc": 9,
+    "so_bang_v9_truoc": 51,
+    "phien_ban_sau_khoi_phuc": 9,
+    "so_bang_sau": 51,
+    "tong_tien_v6": 1298000,
+    "tong_tien_v9_truoc": 34336000,
+    "rc_ghi_tren_v6": 0,
+    "rc_nang_lai": 0,
+    "nguon_ve_c": "`chup_sau` của kịch bản có phiên bản + số bảng + tổng tiền; so với `so_bang_v9_truoc`/`tong_tien_v9_truoc` đo trước khi đè."
+   }
+  },
+  "S6a": {
+   "ma": "S6a",
+   "ten": "6a. HẾT ĐĨA GIỮA ĐƯỜNG khi SAO LƯU",
+   "bat_buoc": "rc != 0 · thông báo nói ra chỗ hỏng · CSDL NGUỒN nguyên · KHÔNG để lại tệp dở mang tên bản sao lưu",
+   "ap_dung_mau": true,
+   "rc": 1,
+   "thong_bao": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-ban-va/migrate.py\", line 379, in sao_luu\n    nguon.backup(ban)\nsqlite3.OperationalError: disk I/O error",
+   "dong_bao_hong": "sqlite3.OperationalError: disk I/O error",
+   "co_dong_bao_hong": true,
+   "la_traceback_tho": true,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": true,
+    "so_byte": 561152,
+    "so_bang": 51,
+    "phien_ban": 9,
+    "integrity": "ok",
+    "tong_tien": 34336000,
+    "bam": "2d4c16cfa910ac1a",
+    "loi": null
+   },
+   "csdl_dich_sau": {
+    "ton_tai": true,
+    "so_byte": 561152,
+    "so_bang": 51,
+    "phien_ban": 9,
+    "integrity": "ok",
+    "tong_tien": 34336000,
+    "bam": "2d4c16cfa910ac1a",
+    "loi": null
+   },
+   "chup_day_du": {
+    "truoc": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-sl-kimq0c20/A/hub.db",
+     "ton_tai": true,
+     "so_byte": 561152,
+     "sha256_tep": "f694d1a68e588ba539452b1441b9de6ca04f7b795da160fb151bdbff5b81318b",
+     "bang": {
+      "ai_job": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ai_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "audit": {
+       "dong": 4,
+       "tien": {}
+      },
+      "bo_dem_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 5,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky_lich_su": {
+       "dong": 2,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 15,
+       "tien": {
+        "cod": 3180000,
+        "gia_tri_khai": 6360000,
+        "phi_van_chuyen": 330000
+       }
+      },
+      "don_lich_su": {
+       "dong": 30,
+       "tien": {}
+      },
+      "don_mat_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_anh_xa_cot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_chenh_lech": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_dong": {
+       "dong": 15,
+       "tien": {
+        "phi_hang_bao": 330000
+       }
+      },
+      "ds_dot": {
+       "dong": 3,
+       "tien": {}
+      },
+      "du_thao_hoa_don": {
+       "dong": 2,
+       "tien": {
+        "tien_goi_dong": 598000,
+        "tien_vuot_dong": 0
+       }
+      },
+      "g09_harness_ca": {
+       "dong": 0,
+       "tien": {}
+      },
+      "g09_harness_lan_chay": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_chan": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_luot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "goi_phien_ban": {
+       "dong": 4,
+       "tien": {
+        "gia_thang_dong": 2597000
+       }
+      },
+      "han_muc_nhap_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "han_muc_rieng": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_batch": {
+       "dong": 1,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 3,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 6,
+       "tien": {}
+      },
+      "ky_tinh_phi": {
+       "dong": 2,
+       "tien": {}
+      },
+      "nhat_ky_tinh_phi": {
+       "dong": 5,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 28,
+       "tien": {}
+      },
+      "quan_sat_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 68,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 6,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 1,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "su_kien_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tc_but_toan": {
+       "dong": 57,
+       "tien": {
+        "so_tien_dong": 8177000
+       }
+      },
+      "tc_cod": {
+       "dong": 15,
+       "tien": {
+        "so_tien_du_kien": 3180000,
+        "so_tien_hang_bao": 1272000,
+        "so_tien_doi_soat": 1272000,
+        "so_tien_da_tt": 212000
+       }
+      },
+      "tc_cod_chuyen": {
+       "dong": 12,
+       "tien": {}
+      },
+      "tc_cong_no": {
+       "dong": 10,
+       "tien": {
+        "so_du_dong": 4567000
+       }
+      },
+      "tc_dieu_chinh": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": -3000
+       }
+      },
+      "tc_dot_tt": {
+       "dong": 3,
+       "tien": {
+        "so_tien_hang_bao": 424000
+       }
+      },
+      "tc_dot_tt_dong": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": 212000
+       }
+      },
+      "tc_nhat_ky": {
+       "dong": 24,
+       "tien": {}
+      },
+      "tc_phi": {
+       "dong": 15,
+       "tien": {
+        "so_tien_dong": 330000
+       }
+      },
+      "tenant_memberships": {
+       "dong": 3,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 3,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 3,
+       "tien": {}
+      },
+      "users": {
+       "dong": 4,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 10,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 34336000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 9,
+     "bam_toan_kho": "2d4c16cfa910ac1a3a0eaeba1b2980aa425b38a8985d7ad1d16df394b611483a",
+     "so_bang": 51
+    },
+    "sau": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-sl-kimq0c20/A/hub.db",
+     "ton_tai": true,
+     "so_byte": 561152,
+     "sha256_tep": "f694d1a68e588ba539452b1441b9de6ca04f7b795da160fb151bdbff5b81318b",
+     "bang": {
+      "ai_job": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ai_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "audit": {
+       "dong": 4,
+       "tien": {}
+      },
+      "bo_dem_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 5,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky_lich_su": {
+       "dong": 2,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 15,
+       "tien": {
+        "cod": 3180000,
+        "gia_tri_khai": 6360000,
+        "phi_van_chuyen": 330000
+       }
+      },
+      "don_lich_su": {
+       "dong": 30,
+       "tien": {}
+      },
+      "don_mat_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_anh_xa_cot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_chenh_lech": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_dong": {
+       "dong": 15,
+       "tien": {
+        "phi_hang_bao": 330000
+       }
+      },
+      "ds_dot": {
+       "dong": 3,
+       "tien": {}
+      },
+      "du_thao_hoa_don": {
+       "dong": 2,
+       "tien": {
+        "tien_goi_dong": 598000,
+        "tien_vuot_dong": 0
+       }
+      },
+      "g09_harness_ca": {
+       "dong": 0,
+       "tien": {}
+      },
+      "g09_harness_lan_chay": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_chan": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_luot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "goi_phien_ban": {
+       "dong": 4,
+       "tien": {
+        "gia_thang_dong": 2597000
+       }
+      },
+      "han_muc_nhap_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "han_muc_rieng": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_batch": {
+       "dong": 1,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 3,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 6,
+       "tien": {}
+      },
+      "ky_tinh_phi": {
+       "dong": 2,
+       "tien": {}
+      },
+      "nhat_ky_tinh_phi": {
+       "dong": 5,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 28,
+       "tien": {}
+      },
+      "quan_sat_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 68,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 6,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 1,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "su_kien_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tc_but_toan": {
+       "dong": 57,
+       "tien": {
+        "so_tien_dong": 8177000
+       }
+      },
+      "tc_cod": {
+       "dong": 15,
+       "tien": {
+        "so_tien_du_kien": 3180000,
+        "so_tien_hang_bao": 1272000,
+        "so_tien_doi_soat": 1272000,
+        "so_tien_da_tt": 212000
+       }
+      },
+      "tc_cod_chuyen": {
+       "dong": 12,
+       "tien": {}
+      },
+      "tc_cong_no": {
+       "dong": 10,
+       "tien": {
+        "so_du_dong": 4567000
+       }
+      },
+      "tc_dieu_chinh": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": -3000
+       }
+      },
+      "tc_dot_tt": {
+       "dong": 3,
+       "tien": {
+        "so_tien_hang_bao": 424000
+       }
+      },
+      "tc_dot_tt_dong": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": 212000
+       }
+      },
+      "tc_nhat_ky": {
+       "dong": 24,
+       "tien": {}
+      },
+      "tc_phi": {
+       "dong": 15,
+       "tien": {
+        "so_tien_dong": 330000
+       }
+      },
+      "tenant_memberships": {
+       "dong": 3,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 3,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 3,
+       "tien": {}
+      },
+      "users": {
+       "dong": 4,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 10,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 34336000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 9,
+     "bam_toan_kho": "2d4c16cfa910ac1a3a0eaeba1b2980aa425b38a8985d7ad1d16df394b611483a",
+     "so_bang": 51
+    }
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "loi_gieo": "",
+    "co_csdl_goc": 561152,
+    "gioi_han_ghi": 224460,
+    "ty_le_gioi_han": 0.4,
+    "tep_da_co_truoc": [
+     "hub-truoc-migrate-20261016-225653.db",
+     "hub-truoc-migrate-20261016-225653.db.sha256"
+    ],
+    "tep_moi_de_lai": [],
+    "so_tep_moi_de_lai": 0,
+    "ten_tep_moi_de_lai": [],
+    "tep_moi_dung_duoc": [],
+    "nguon_ve_c": "CSDL NGUỒN chụp TRƯỚC/SAU bằng `khung_do.chup` → so từng bảng (số dòng + tổng tiền). CSDL ĐÍCH ở đây chính là nguồn: một lượt sao lưu không được đụng vào nó."
+   }
+  },
+  "S6b": {
+   "ma": "S6b",
+   "ten": "6b. HẾT ĐĨA GIỮA ĐƯỜNG khi KHÔI PHỤC",
+   "bat_buoc": "rc != 0 · thông báo nói ra chỗ hỏng · CSDL ĐÍCH không bị để lại nửa vời",
+   "ap_dung_mau": true,
+   "rc": 1,
+   "thong_bao": "LUC-DUOC-NHAN True\n[migrate] KHÔI PHỤC HỎNG: [Errno 27] File too large: '/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-oyubb051/A/sao-luu/hub-truoc-migrate-20261016-225654-1.db' -> '/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-oyubb051/B/hub.db.dang-khoi-phuc-7353'\n          CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn).\n          Bản cất trước khi khôi phục: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-oyubb051/B/sao-luu/hub-truoc-rollback-20261016-225654.db",
+   "dong_bao_hong": "CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn).",
+   "co_dong_bao_hong": true,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": true,
+    "so_byte": 200704,
+    "so_bang": 20,
+    "phien_ban": 0,
+    "integrity": "ok",
+    "tong_tien": 1298000,
+    "bam": "9ed8acc637acb9d4",
+    "loi": null
+   },
+   "csdl_dich_sau": {
+    "ton_tai": true,
+    "so_byte": 200704,
+    "so_bang": 20,
+    "phien_ban": 0,
+    "integrity": "ok",
+    "tong_tien": 1298000,
+    "bam": "9ed8acc637acb9d4",
+    "loi": null
+   },
+   "chup_day_du": {
+    "truoc": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-oyubb051/B/hub.db",
+     "ton_tai": true,
+     "so_byte": 200704,
+     "sha256_tep": "fef703fb3503201f7f260c899de990879b8a76f3b4531d8c4de4047fec265469",
+     "bang": {
+      "audit": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 0,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 0,
+       "tien": {
+        "cod": 0,
+        "gia_tri_khai": 0,
+        "phi_van_chuyen": 0
+       }
+      },
+      "don_lich_su": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "import_batch": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 0,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 0,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 0,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tenant_memberships": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 0,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "users": {
+       "dong": 0,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 0,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 1298000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 0,
+     "bam_toan_kho": "9ed8acc637acb9d47c674853f9f081720de8fdc01652f5ac75ba801a1bf23493",
+     "so_bang": 20
+    },
+    "sau": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-oyubb051/B/hub.db",
+     "ton_tai": true,
+     "so_byte": 200704,
+     "sha256_tep": "fef703fb3503201f7f260c899de990879b8a76f3b4531d8c4de4047fec265469",
+     "bang": {
+      "audit": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 0,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 0,
+       "tien": {
+        "cod": 0,
+        "gia_tri_khai": 0,
+        "phi_van_chuyen": 0
+       }
+      },
+      "don_lich_su": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "import_batch": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 0,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 0,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 0,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tenant_memberships": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 0,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "users": {
+       "dong": 0,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 0,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 1298000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 0,
+     "bam_toan_kho": "9ed8acc637acb9d47c674853f9f081720de8fdc01652f5ac75ba801a1bf23493",
+     "so_bang": 20
+    }
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "rc_sao_luu": 0,
+    "rc_mo_csdl_dich": 0,
+    "loi_mo_csdl_dich": "",
+    "out_mo_csdl_dich": "ok",
+    "ban_sao": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-hetdia-kp-oyubb051/A/sao-luu/hub-truoc-migrate-20261016-225654-1.db",
+    "co_ban_sao": 561152,
+    "co_csdl_dich": 200704,
+    "gioi_han_ghi": 280576,
+    "tien_quyet_dat": true,
+    "vi_tri_gioi_han": "co(đích)=200704 < giới hạn=280576 < co(bản sao lưu)=561152 ⇒ rơi vào LẦN CHÉP THỨ HAI",
+    "so_bang_nguon": 51,
+    "tong_tien_nguon": 34336000,
+    "ban_cat_de_lai": [
+     "hub-truoc-rollback-20261016-225654.db",
+     "hub-truoc-rollback-20261016-225654.db-shm",
+     "hub-truoc-rollback-20261016-225654.db-wal"
+    ],
+    "chup_ban_cat": {
+     "hub-truoc-rollback-20261016-225654.db": {
+      "so_byte": 200704,
+      "so_bang": 20,
+      "integrity": "ok",
+      "loi": null
+     },
+     "hub-truoc-rollback-20261016-225654.db-shm": {
+      "so_byte": 32768,
+      "so_bang": null,
+      "integrity": null,
+      "loi": "DatabaseError: file is not a database"
+     },
+     "hub-truoc-rollback-20261016-225654.db-wal": {
+      "so_byte": 0,
+      "so_bang": 0,
+      "integrity": "ok",
+      "loi": null
+     }
+    },
+    "so_bang_csdl_dich_truoc": 20,
+    "tong_tien_csdl_dich_truoc": 1298000
+   }
+  },
+  "S7": {
+   "ma": "S7",
+   "ten": "7. KHÔI PHỤC NHẦM TỆP KHÔNG PHẢI SQLITE (bản dump PostgreSQL)",
+   "bat_buoc": "rc != 0 (TỪ CHỐI) · thông báo nói tệp không phải SQLite · CSDL đích nguyên vẹn",
+   "ap_dung_mau": true,
+   "rc": 1,
+   "thong_bao": "LUC-DUOC-NHAN True[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-nhamdump-1kkjabe3/sao_luu_pg.dump KHÔNG PHẢI CSDL SQLite (16 byte đầu: b'PGDMP\\x01\\x0f\\x00\\x1f\\xce\\x05H\\xd7\\xf2\\xabB')",
+   "dong_bao_hong": "[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-nhamdump-1kkjabe3/sao_luu_pg.dump KHÔNG PHẢI CSDL SQLite (16 byte đầu: b'PGDMP\\x01\\x0f\\x00\\x1f\\xce\\x05H\\xd7\\xf2\\xabB')",
+   "co_dong_bao_hong": true,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "rc_sao_luu_dung": 0,
+    "khoi_phuc_NHAN_tep_la": false,
+    "csdl_sau_khi_nham": {
+     "integrity": "ok",
+     "loi": null,
+     "so_bang": 51,
+     "so_byte": 561152
+    },
+    "loi_csdl_sau_khi_nham": null,
+    "so_byte_csdl_truoc": 561152,
+    "so_byte_csdl_sau": 561152,
+    "doi_chung_duong_dat": true,
+    "so_lech_duong_dung": 0,
+    "nguon_ve_c": "`csdl_sau_khi_nham` (integrity/loi/so_bang/so_byte) do kịch bản AG-04 đo, so với `so_byte_csdl_truoc` + `bam_truoc`."
+   }
+  },
+  "S8": {
+   "ma": "S8",
+   "ten": "8. POSTGRESQL: `sao_luu()` có phải đường lùi THẬT không (P-G15-02)",
+   "bat_buoc": "BỐN vế, mỗi vế rc != 0: do1 `hub.db` không tồn tại · do2a khai `postgresql` · do2b CHƯA KHAI ⇒ TỪ CHỐI kèm thông báo nêu chỗ khai · do3 nhầm `pg_dump -Fc` vào `khoi_phuc()`. RC ở cột bên là của vế do1; do2a=1 · do2b=1",
+   "ap_dung_mau": false,
+   "rc": 1,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": false,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "ten": "9. PostgreSQL: `sao_luu()` làm gì khi dữ liệu nằm ở PostgreSQL",
+    "cong": "55432",
+    "bo_qua": null,
+    "tu_dung_cum": true,
+    "rc_select_1": 0,
+    "ddl_so_cau": "{'so_cau': 83, 'so_bo_nguon': 6}",
+    "rc_tao_csdl": 0,
+    "rc_nap_ddl": 0,
+    "rc_gieo": 0,
+    "loi_gieo": "",
+    "pg_truoc": {
+     "csdl": "vh_g20_ag04_goc",
+     "bang": {
+      "don_hang": {
+       "dong": "6",
+       "tien": {
+        "cod": 2331000,
+        "gia_tri_khai": 4662000
+       }
+      },
+      "tc_but_toan": {
+       "dong": "6",
+       "tien": {
+        "so_tien_dong": 2331000
+       }
+      },
+      "tc_cod": {
+       "dong": "0",
+       "tien": {}
+      },
+      "tenants": {
+       "dong": "2",
+       "tien": {}
+      },
+      "users": {
+       "dong": "1",
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": "4",
+       "tien": {}
+      }
+     },
+     "tong_tien": 9324000
+    },
+    "do1_hub_db_khong_ton_tai": {
+     "rc": 1,
+     "duong": null,
+     "stderr": "lj24_rjw9x_w0000gn/T/g20-pg-w3x3ccio/D1/hub.db nên KHÔNG có gì để sao lưu.\n          (Bản cũ vẫn 'thành công' ở đây bằng cách TẠO RA một CSDL rỗng rồi sao lưu nó —\n           đó là đường lùi giả. Nếu kho đang chạy là PostgreSQL thì `sao_luu()` này không dùng được;\n           xem docs/G22_SAOLUU.md.)",
+     "khai_kho": "sqlite",
+     "TU_CHOI": true,
+     "hub_db_sinh_ra": false,
+     "co_ban_sao": null,
+     "so_bang": null,
+     "tong_tien": null,
+     "integrity": null,
+     "loi": null
+    },
+    "do1b_chua_khai_hub_db_khong_ton_tai": {
+     "rc": 1,
+     "duong": null,
+     "khai_kho": null,
+     "TU_CHOI": true,
+     "co_ban_sao": null,
+     "stderr": "  · biến môi trường VIP_KHO_DANG_CHAY=sqlite|postgresql cho tiến trình chạy `migrate`.\n          Nếu kho đang chạy là PostgreSQL: `sao_luu()` KHÔNG dùng được — sao lưu bằng\n          `pg_dump -Fc`; xem docs/G22_SAOLUU.md.\n          Nếu kho đang chạy là SQLite: khai `sqlite` rồi chạy lại. Chốt này cố ý KHÔNG có\n          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0.",
+     "bao_ro": true
+    },
+    "do2a_hub_db_cu_khai_postgresql": {
+     "rc": 1,
+     "duong": null,
+     "khai_kho": "postgresql",
+     "TU_CHOI": true,
+     "stderr": "hai ở cau_hinh.KHO_DANG_CHAY) nhưng `sao_luu()`\n          KHÔNG CÓ NHÁNH PostgreSQL — nó chỉ biết `csdl.ket_noi()` của SQLite.\n          Chạy tiếp thì nó tạo ra một tệp SQLite KHÔNG chứa một dòng nào của dữ\n          liệu đang phục vụ: một ĐƯỜNG LÙI GIẢ, và im lặng. Đo được trên cụm\n          PostgreSQL riêng: 4.096 byte / 0 BẢNG / integrity_check = 'ok' trong khi\n          PostgreSQL giữ 6 đơn và 9.324.000 đồng (P-G15-02).\n          Sao lưu PostgreSQL bằng `pg_dump -Fc`; xem docs/G22_SAOLUU.md.",
+     "stdout": "",
+     "co_ban_sao": null,
+     "sqlite_co_du_lieu_that": {
+      "so_bang": 51,
+      "tong_tien": 34336000
+     }
+    },
+    "do2b_hub_db_cu_chua_khai": {
+     "rc_gieo_sqlite": 0,
+     "loi_gieo": "",
+     "rc": 1,
+     "khai_kho": null,
+     "co_ban_sao": null,
+     "sqlite_truoc_so_bang": 51,
+     "sqlite_truoc_tong_tien": 34336000,
+     "ban_sao_so_bang": null,
+     "ban_sao_tong_tien": null,
+     "bam_ban_sao_khop_sqlite_goc": false,
+     "stderr": "\n          bằng mtime / kích thước / tên tệp — nên hàm này KHÔNG đoán.\n          Khai MỘT trong hai:\n            · `KHO_DANG_CHAY = 'sqlite'` (hoặc 'postgresql') trong app/cau_hinh.py, hoặc\n            · biến môi trường VIP_KHO_DANG_CHAY=sqlite|postgresql cho tiến trình chạy `migrate`.\n          Nếu kho đang chạy là PostgreSQL: `sao_luu()` KHÔNG dùng được — sao lưu bằng\n          `pg_dump -Fc`; xem docs/G22_SAOLUU.md.\n          Nếu kho đang chạy là SQLite: khai `sqlite` rồi chạy lại. Chốt này cố ý KHÔNG có\n          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0.",
+     "bao_ro": true,
+     "co_hub_db_tren_dia": true
+    },
+    "do2_hub_db_co_du_lieu_sqlite_khac": {
+     "rc_gieo_sqlite": 0,
+     "loi_gieo": "",
+     "rc": 1,
+     "khai_kho": null,
+     "co_ban_sao": null,
+     "sqlite_truoc_so_bang": 51,
+     "sqlite_truoc_tong_tien": 34336000,
+     "ban_sao_so_bang": null,
+     "ban_sao_tong_tien": null,
+     "bam_ban_sao_khop_sqlite_goc": false,
+     "stderr": "\n          bằng mtime / kích thước / tên tệp — nên hàm này KHÔNG đoán.\n          Khai MỘT trong hai:\n            · `KHO_DANG_CHAY = 'sqlite'` (hoặc 'postgresql') trong app/cau_hinh.py, hoặc\n            · biến môi trường VIP_KHO_DANG_CHAY=sqlite|postgresql cho tiến trình chạy `migrate`.\n          Nếu kho đang chạy là PostgreSQL: `sao_luu()` KHÔNG dùng được — sao lưu bằng\n          `pg_dump -Fc`; xem docs/G22_SAOLUU.md.\n          Nếu kho đang chạy là SQLite: khai `sqlite` rồi chạy lại. Chốt này cố ý KHÔNG có\n          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0.",
+     "bao_ro": true,
+     "co_hub_db_tren_dia": true
+    },
+    "pg_dump": {
+     "rc": 0,
+     "co_byte": 124700,
+     "stderr": ""
+    },
+    "do3_khoi_phuc_tu_pg_dump": {
+     "rc_gieo_sqlite": 0,
+     "rc_khoi_phuc": 1,
+     "err": "[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-pg-w3x3ccio/pg-that.dump KHÔNG PHẢI CSDL SQLite (16 byte đầu: b'PGDMP\\x01\\x0f\\x00\\x04\\x08\\x01\\x01\\x009\\x00\\x00')",
+     "out": "LUC-DUOC-NHAN True",
+     "khoi_phuc_NHAN": false,
+     "csdl_sau_so_byte": 561152,
+     "csdl_sau_loi": null,
+     "csdl_sau_so_bang": 51,
+     "sqlite_truoc_tong_tien": 34336000
+    },
+    "doi_chung_duong_sqlite_co_du_lieu": {
+     "rc_gieo": 0,
+     "rc": 0,
+     "so_bang": 51,
+     "tong_tien": 34336000,
+     "bam_khop_goc": true
+    },
+    "ket_luan": {
+     "do1_nem_loi_chi_tiet": true,
+     "do1_im_lang_bao_thanh_cong": false,
+     "do1_ban_sao_chua_du_lieu_pg": true,
+     "do1b_chua_khai_thi_TU_CHOI": true,
+     "do2a_khai_postgresql_thi_TU_CHOI": true,
+     "do2b_chua_khai_thi_TU_CHOI_va_bao_ro": true,
+     "du_lieu_pg_that": {
+      "dong_don_hang": "6",
+      "dong_tc_but_toan": "6",
+      "tong_tien": 9324000
+     }
+    },
+    "van_tay_cum_5432": {
+     "truoc": {
+      "cong": "5432",
+      "may_chu": "localhost",
+      "truy_cap_duoc": true,
+      "pid": "58873",
+      "data_directory": "/opt/homebrew/var/postgresql@16",
+      "postmaster_bat_dau": "2026-10-09 10:24:22.104803+07",
+      "phien_ban_may_chu": "16.15 (Homebrew)",
+      "danh_sach_csdl": [
+       "postgres",
+       "template0",
+       "template1",
+       "vip_customs",
+       "vip_customs_g16",
+       "vip_customs_test"
+      ],
+      "so_csdl": 6,
+      "nghe_tcp": [
+       "58873"
+      ],
+      "ghi_chu": ""
+     },
+     "sau": {
+      "cong": "5432",
+      "may_chu": "localhost",
+      "truy_cap_duoc": true,
+      "pid": "58873",
+      "data_directory": "/opt/homebrew/var/postgresql@16",
+      "postmaster_bat_dau": "2026-10-09 10:24:22.104803+07",
+      "phien_ban_may_chu": "16.15 (Homebrew)",
+      "danh_sach_csdl": [
+       "postgres",
+       "template0",
+       "template1",
+       "vip_customs",
+       "vip_customs_g16",
+       "vip_customs_test"
+      ],
+      "so_csdl": 6,
+      "nghe_tcp": [
+       "58873"
+      ],
+      "ghi_chu": ""
+     }
+    },
+    "van_tay_5432_khong_doi": true,
+    "van_tay_5432_lech": [],
+    "dat": true
+   }
+  },
+  "DC": {
+   "ma": "DC",
+   "ten": "ĐC. ĐỐI CHỨNG ĐƯỜNG — sao lưu rồi khôi phục lại chính CSDL gốc",
+   "bat_buoc": "rc == 0 · CSDL gốc Y NGUYÊN từng bảng (số dòng + tổng tiền) · dữ liệu tạo sau mốc sao lưu mất hết",
+   "ap_dung_mau": false,
+   "rc": 0,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": true,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": true,
+    "so_byte": 561152,
+    "so_bang": 51,
+    "phien_ban": 9,
+    "integrity": "ok",
+    "tong_tien": 34336000,
+    "bam": "8a5484bf72a604c0",
+    "loi": null
+   },
+   "csdl_dich_sau": {
+    "ton_tai": true,
+    "so_byte": 561152,
+    "so_bang": 51,
+    "phien_ban": 9,
+    "integrity": "ok",
+    "tong_tien": 34336000,
+    "bam": "8a5484bf72a604c0",
+    "loi": null
+   },
+   "chup_day_du": {
+    "truoc": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-doichung-urdh4dsr/A/hub.db",
+     "ton_tai": true,
+     "so_byte": 561152,
+     "sha256_tep": "b216076bc5544c1f2487ac185cb19d178df494db2eefdc973e4d0211b1335de9",
+     "bang": {
+      "ai_job": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ai_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "audit": {
+       "dong": 4,
+       "tien": {}
+      },
+      "bo_dem_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 5,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky_lich_su": {
+       "dong": 2,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 15,
+       "tien": {
+        "cod": 3180000,
+        "gia_tri_khai": 6360000,
+        "phi_van_chuyen": 330000
+       }
+      },
+      "don_lich_su": {
+       "dong": 30,
+       "tien": {}
+      },
+      "don_mat_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_anh_xa_cot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_chenh_lech": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_dong": {
+       "dong": 15,
+       "tien": {
+        "phi_hang_bao": 330000
+       }
+      },
+      "ds_dot": {
+       "dong": 3,
+       "tien": {}
+      },
+      "du_thao_hoa_don": {
+       "dong": 2,
+       "tien": {
+        "tien_goi_dong": 598000,
+        "tien_vuot_dong": 0
+       }
+      },
+      "g09_harness_ca": {
+       "dong": 0,
+       "tien": {}
+      },
+      "g09_harness_lan_chay": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_chan": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_luot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "goi_phien_ban": {
+       "dong": 4,
+       "tien": {
+        "gia_thang_dong": 2597000
+       }
+      },
+      "han_muc_nhap_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "han_muc_rieng": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_batch": {
+       "dong": 1,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 3,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 6,
+       "tien": {}
+      },
+      "ky_tinh_phi": {
+       "dong": 2,
+       "tien": {}
+      },
+      "nhat_ky_tinh_phi": {
+       "dong": 5,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 28,
+       "tien": {}
+      },
+      "quan_sat_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 68,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 6,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 1,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "su_kien_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tc_but_toan": {
+       "dong": 57,
+       "tien": {
+        "so_tien_dong": 8177000
+       }
+      },
+      "tc_cod": {
+       "dong": 15,
+       "tien": {
+        "so_tien_du_kien": 3180000,
+        "so_tien_hang_bao": 1272000,
+        "so_tien_doi_soat": 1272000,
+        "so_tien_da_tt": 212000
+       }
+      },
+      "tc_cod_chuyen": {
+       "dong": 12,
+       "tien": {}
+      },
+      "tc_cong_no": {
+       "dong": 10,
+       "tien": {
+        "so_du_dong": 4567000
+       }
+      },
+      "tc_dieu_chinh": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": -3000
+       }
+      },
+      "tc_dot_tt": {
+       "dong": 3,
+       "tien": {
+        "so_tien_hang_bao": 424000
+       }
+      },
+      "tc_dot_tt_dong": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": 212000
+       }
+      },
+      "tc_nhat_ky": {
+       "dong": 24,
+       "tien": {}
+      },
+      "tc_phi": {
+       "dong": 15,
+       "tien": {
+        "so_tien_dong": 330000
+       }
+      },
+      "tenant_memberships": {
+       "dong": 3,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 3,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 3,
+       "tien": {}
+      },
+      "users": {
+       "dong": 4,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 10,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 34336000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 9,
+     "bam_toan_kho": "8a5484bf72a604c0d889a856ac1dca6b78d71688cd7d3b8aece590f02dc84d01",
+     "so_bang": 51
+    },
+    "sau": {
+     "duong_dan": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-doichung-urdh4dsr/A/hub.db",
+     "ton_tai": true,
+     "so_byte": 561152,
+     "sha256_tep": "76c9fccb4b30c185b6653f0d38a7ee740d63c82840a43c99aed971e0a1e1c5c2",
+     "bang": {
+      "ai_job": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ai_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "audit": {
+       "dong": 4,
+       "tien": {}
+      },
+      "bo_dem_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "carrier_accounts": {
+       "dong": 5,
+       "tien": {}
+      },
+      "carrier_providers": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky": {
+       "dong": 2,
+       "tien": {}
+      },
+      "dang_ky_lich_su": {
+       "dong": 2,
+       "tien": {}
+      },
+      "don_hang": {
+       "dong": 15,
+       "tien": {
+        "cod": 3180000,
+        "gia_tri_khai": 6360000,
+        "phi_van_chuyen": 330000
+       }
+      },
+      "don_lich_su": {
+       "dong": 30,
+       "tien": {}
+      },
+      "don_mat_hang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_anh_xa_cot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_chenh_lech": {
+       "dong": 0,
+       "tien": {}
+      },
+      "ds_dong": {
+       "dong": 15,
+       "tien": {
+        "phi_hang_bao": 330000
+       }
+      },
+      "ds_dot": {
+       "dong": 3,
+       "tien": {}
+      },
+      "du_thao_hoa_don": {
+       "dong": 2,
+       "tien": {
+        "tien_goi_dong": 598000,
+        "tien_vuot_dong": 0
+       }
+      },
+      "g09_harness_ca": {
+       "dong": 0,
+       "tien": {}
+      },
+      "g09_harness_lan_chay": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_chan": {
+       "dong": 0,
+       "tien": {}
+      },
+      "gioi_han_luot": {
+       "dong": 0,
+       "tien": {}
+      },
+      "goi_dich_vu": {
+       "dong": 3,
+       "tien": {
+        "gia_thang": 1298000
+       }
+      },
+      "goi_phien_ban": {
+       "dong": 4,
+       "tien": {
+        "gia_thang_dong": 2597000
+       }
+      },
+      "han_muc_nhap_thang": {
+       "dong": 0,
+       "tien": {}
+      },
+      "han_muc_rieng": {
+       "dong": 0,
+       "tien": {}
+      },
+      "import_batch": {
+       "dong": 1,
+       "tien": {}
+      },
+      "import_dong": {
+       "dong": 3,
+       "tien": {}
+      },
+      "khach_hang": {
+       "dong": 6,
+       "tien": {}
+      },
+      "ky_tinh_phi": {
+       "dong": 2,
+       "tien": {}
+      },
+      "nhat_ky_tinh_phi": {
+       "dong": 5,
+       "tien": {}
+      },
+      "permissions": {
+       "dong": 28,
+       "tien": {}
+      },
+      "quan_sat_su_kien": {
+       "dong": 0,
+       "tien": {}
+      },
+      "reset_tokens": {
+       "dong": 0,
+       "tien": {}
+      },
+      "role_permissions": {
+       "dong": 68,
+       "tien": {}
+      },
+      "roles": {
+       "dong": 6,
+       "tien": {}
+      },
+      "schema_version": {
+       "dong": 1,
+       "tien": {}
+      },
+      "sessions": {
+       "dong": 0,
+       "tien": {}
+      },
+      "su_kien_dung": {
+       "dong": 0,
+       "tien": {}
+      },
+      "tc_but_toan": {
+       "dong": 57,
+       "tien": {
+        "so_tien_dong": 8177000
+       }
+      },
+      "tc_cod": {
+       "dong": 15,
+       "tien": {
+        "so_tien_du_kien": 3180000,
+        "so_tien_hang_bao": 1272000,
+        "so_tien_doi_soat": 1272000,
+        "so_tien_da_tt": 212000
+       }
+      },
+      "tc_cod_chuyen": {
+       "dong": 12,
+       "tien": {}
+      },
+      "tc_cong_no": {
+       "dong": 10,
+       "tien": {
+        "so_du_dong": 4567000
+       }
+      },
+      "tc_dieu_chinh": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": -3000
+       }
+      },
+      "tc_dot_tt": {
+       "dong": 3,
+       "tien": {
+        "so_tien_hang_bao": 424000
+       }
+      },
+      "tc_dot_tt_dong": {
+       "dong": 3,
+       "tien": {
+        "so_tien_dong": 212000
+       }
+      },
+      "tc_nhat_ky": {
+       "dong": 24,
+       "tien": {}
+      },
+      "tc_phi": {
+       "dong": 15,
+       "tien": {
+        "so_tien_dong": 330000
+       }
+      },
+      "tenant_memberships": {
+       "dong": 3,
+       "tien": {}
+      },
+      "tenants": {
+       "dong": 3,
+       "tien": {}
+      },
+      "usage_thang": {
+       "dong": 3,
+       "tien": {}
+      },
+      "users": {
+       "dong": 4,
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": 10,
+       "tien": {}
+      }
+     },
+     "tong_tien_toan_kho": 34336000,
+     "integrity_check": "ok",
+     "foreign_key_check": 0,
+     "phien_ban": 9,
+     "bam_toan_kho": "8a5484bf72a604c0d889a856ac1dca6b78d71688cd7d3b8aece590f02dc84d01",
+     "so_bang": 51
+    }
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "rc_sao_luu": 0,
+    "rc_them": 0,
+    "so_lech_giua": 8,
+    "vi_du_lech_giua": [
+     "tong_tien_toan_kho 34336000 -> 37333000",
+     "bam_toan_kho '8a5484bf72a604c0d889a856ac1dca6b78d71688cd7d3b8aece590f02dc84d01' -> '72639b25b737aa7297ab8bb3ec6850d25f861f4e61b040be57b7109866d09a4b'",
+     "DÒNG don_hang           15 -> 16",
+     "TIỀN don_hang           cod                3180000 -> 4179000"
+    ],
+    "so_lech_sau_khoi_phuc": 0,
+    "lech_sau_khoi_phuc": [],
+    "tenant_sau_backup_con_lai": 0,
+    "ban_truoc_khoi_phuc": [
+     "hub-truoc-rollback-20261016-225659.db",
+     "hub-truoc-rollback-20261016-225659.db-shm",
+     "hub-truoc-rollback-20261016-225659.db-wal"
+    ],
+    "so_bang_goc": 51,
+    "tong_tien_goc": 34336000,
+    "co_chup_truoc_sau": true,
+    "nguon_ve_c": "`_truoc`/`_sau` của kịch bản là hai phép chụp `khung_do` ĐẦY ĐỦ (từng bảng: số dòng + từng cột tiền) trước và sau khi khôi phục."
+   }
+  }
+ },
+ "bo_qua": {},
+ "app": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-ban-va",
+ "thu_tu": [
+  "S1",
+  "S2",
+  "S3",
+  "S4",
+  "S5",
+  "S6a",
+  "S6b",
+  "S7",
+  "S8",
+  "DC"
+ ]
+}

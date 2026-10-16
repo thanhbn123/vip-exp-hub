@@ -1,0 +1,130 @@
+test_a1_ba_lenh_deu_thanh_cong (__main__.A_VongTronTrenDuLieuThat) ... ok
+test_a2_khoi_phuc_khop_TUNG_BANG_ca_so_dong_lan_tong_tien (__main__.A_VongTronTrenDuLieuThat)
+Khẳng định trung tâm của cả wave: KHÔI PHỤC RA ĐÚNG DỮ LIỆU, không chỉ 'chạy được'. ... ok
+test_a3_phep_do_khong_rong (__main__.A_VongTronTrenDuLieuThat)
+Chốt chống phép đo RỖNG: mọi cột tiền khai báo phải KHÁC 0 ở bản gốc. ... ok
+test_a4_sao_luu_khong_lam_doi_csdl_goc (__main__.A_VongTronTrenDuLieuThat)
+Một lượt SAO LƯU không được đổi CSDL nguồn. Phép đo rẻ nhất và hay bị bỏ nhất. ... ok
+test_a5_ban_sao_luu_co_byte_va_mo_duoc (__main__.A_VongTronTrenDuLieuThat) ... ok
+test_b1_ghi_them_du_lieu_thi_phep_so_PHAI_do (__main__.B_DoiChungDuong)
+Vế (a): nếu ghi thêm 1 tenant + 1 đơn 999.000đ mà phép so vẫn im, phép so đã chết. ... ok
+test_b2_khoi_phuc_nguoc_lai_chinh_csdl_goc_ra_Y_NGUYEN (__main__.B_DoiChungDuong)
+Vế (b): khôi phục về chính CSDL gốc phải cho kết quả y nguyên từng bảng. ... ok
+test_b3_du_lieu_tao_sau_moc_sao_luu_da_mat (__main__.B_DoiChungDuong)
+Khôi phục phải THẬT SỰ lùi thời gian — nếu không thì nó không khôi phục gì cả. ... ok
+test_b4_co_cat_ban_truoc_khi_khoi_phuc (__main__.B_DoiChungDuong) ... ok
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=6 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=8 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app/thu/thu_g20_saoluu.py:164: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  cls.kq = kich_ban.ca_sao_luu_cat_giua_duong()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app/thu/thu_g20_saoluu.py:164: ResourceWarning: unclosed file <_io.TextIOWrapper name=7 encoding='UTF-8'>
+  cls.kq = kich_ban.ca_sao_luu_cat_giua_duong()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+test_c1_doi_chung_duong_tep_lanh_khoi_phuc_dat (__main__.C_SaoLuuBiCatGiuaDuong)
+Vế đối chứng: cùng đường đó, tệp LÀNH phải khôi phục khớp gốc. ... ok
+test_c2_it_nhat_ba_tep_bi_cat_that_su (__main__.C_SaoLuuBiCatGiuaDuong)
+Chốt chống phép đo rỗng: phải CÓ tệp dở thật, không phải 5 lượt cắt trượt. ... ok
+test_c3_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_tep_de (__main__.C_SaoLuuBiCatGiuaDuong)
+BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — `khoi_phuc()` phải TỪ CHỐI mọi tệp dở ... ok
+test_d1_doi_chung_duong_tep_khong_sua_thi_dat (__main__.D_SuaMotByte) ... ok
+test_d2_byte_trong_trang_dung_lam_doi_du_lieu_va_bo_do_THAY (__main__.D_SuaMotByte)
+Chốt quan trọng nhất của lớp này: có MỘT ca sửa 1 byte làm đổi dữ liệu THẬT. ... ok
+test_d3_byte_0_lam_tep_khong_con_la_sqlite (__main__.D_SuaMotByte) ... ok
+test_d4_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_ban_sua_LAM_DOI_DU_LIEU (__main__.D_SuaMotByte)
+BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — `khoi_phuc()` phải TỪ CHỐI bản sửa **LÀM ... ok
+test_e1_ba_luot_khoi_phuc_deu_thanh_cong (__main__.E_KhoiPhucDeLenCsdlDangChay) ... ok
+test_e2_ban_cat_sau_MOT_luot_chua_dung_du_lieu_vua_mat (__main__.E_KhoiPhucDeLenCsdlDangChay)
+Vế ĐỐI CHỨNG (tích cực): `khoi_phuc()` CÓ cất bản trước khi đè, và bản đó ĐÚNG. ... ok
+test_e3_BAT_BIEN_ba_luot_cung_giay_KHONG_duoc_xoa_nhau (__main__.E_KhoiPhucDeLenCsdlDangChay)
+BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — lượt khôi phục sau KHÔNG được xoá bản cất ... ok
+test_f1_dung_duoc_csdl_v6_bang_chinh_migrate (__main__.F_SchemaThapHon) ... ok
+test_f2_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_ban_schema_thap_hon (__main__.F_SchemaThapHon)
+BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — khôi phục bản schema THẤP HƠN phải TỪ CHỐI ... ok
+test_f3_doi_chung_duong_ban_sao_luu_v6_KHONG_phai_tep_hong (__main__.F_SchemaThapHon)
+ĐỐI CHỨNG ĐƯỜNG cho F2 — bản v6 bị từ chối phải là một CSDL LÀNH. ... ok
+test_f4_chot_chong_phep_do_RONG_tut_schema_phai_that (__main__.F_SchemaThapHon)
+Chốt chống phép đo RỖNG: v9 và v6 phải THẬT SỰ khác nhau về bảng và về tiền. ... ok
+test_g1_doi_chung_duong_tep_sqlite_that_thi_dat (__main__.G_NhamTepKhongPhaiSqlite) ... ok
+test_g2_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_tep_khong_phai_SQLite (__main__.G_NhamTepKhongPhaiSqlite)
+BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — phải có phép kiểm "tệp này có phải SQLite ... ok
+test_h1_csdl_khoi_phuc_khop_TUNG_BANG_va_integrity_ok (__main__.H_ThieuKhoaNoiBo)
+Vế dương: về mặt SỐ LIỆU, bản khôi phục hoàn hảo. Đó chính là chỗ nguy hiểm. ... ok
+test_h2_doi_chung_duong_ban_goc_giai_ma_DAT (__main__.H_ThieuKhoaNoiBo) ... ok
+test_h3_khoa_khong_di_kem_va_he_PHAI_TU_CHOI_duoc (__main__.H_ThieuKhoaNoiBo)
+KHOẢNG TRỐNG + ĐIỂM TỐT, khai cả hai. **Ca này KHÔNG đổi ở G21, và vì sao thì rõ:** ... ok
+test_i1_sua_TIEN_thi_phep_so_PHAI_do (__main__.I_TuKiemBoDo)
+Sửa ĐÚNG 1 đồng ở một cột tiền → phép so phải thấy lệch ở trục TIỀN. ... ok
+test_i2_xoa_DONG_thi_phep_so_PHAI_do (__main__.I_TuKiemBoDo) ... ok
+test_i3_xoa_ca_BANG_thi_phep_so_PHAI_do (__main__.I_TuKiemBoDo) ... ok
+test_i4_bam_toan_kho_bat_duoc_thay_doi_ngoai_so_dong_va_tien (__main__.I_TuKiemBoDo)
+Đổi một cột KHÔNG phải tiền: số dòng và tổng tiền y nguyên, chỉ băm đổi. ... ok
+test_i5_chot_chong_phep_do_RONG_phai_no (__main__.I_TuKiemBoDo)
+`kiem_khong_rong` phải NÉM khi một cột tiền bằng 0 ở bản gốc. ... ok
+test_i6_danh_sach_cot_tien_phai_khong_MUC (__main__.I_TuKiemBoDo)
+Chốt chống MỤC: khai một cột tiền không tồn tại thì `kiem_danh_sach` phải NÉM. ... ok
+test_i7_khung_do_khong_lam_doi_thu_dang_do (__main__.I_TuKiemBoDo)
+`chup()` chép ra vùng tạm trước khi mở. Chốt: nó KHÔNG được tạo tệp trong thư mục đo. ... ok
+ERROR
+
+======================================================================
+ERROR: setUpClass (__main__.K_PostgreSQL)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app/thu/thu_g20_saoluu.py", line 683, in setUpClass
+    kq["do1_hub_db_khong_ton_tai"]["so_bang"],
+KeyError: 'so_bang'
+
+----------------------------------------------------------------------
+Ran 35 tests in 9.125s
+
+FAILED (errors=1)
+
+        gốc : 51 bảng · tổng tiền 34336000 · băm b3a1cb5bfe272506
+        kp  : 51 bảng · tổng tiền 34336000 · băm b3a1cb5bfe272506 · integrity ok
+
+        (a) sau khi ghi thêm : 8 lệch · ví dụ ['tong_tien_toan_kho 34336000 -> 37333000', "bam_toan_kho '7f6d58c34a6893fbbcbf414e5d41d0776a83216a7167f762f586954722a4799d' -> '1f0490a535f4401e62e2472febd5621fceccb9f1d41f3018cbc6d43acc59d852'"]
+        (b) sau khôi phục    : 0 lệch · tenant tạo sau mốc còn lại: 0
+
+        a-het-cho-ghi      tệp dở None        khoi_phuc NHẬN=False CSDL sau: None
+
+        b-bi-giet-40%      tệp dở 34058240    khoi_phuc NHẬN=False CSDL sau: None
+
+        b-bi-giet-70%      tệp dở 80863232    khoi_phuc NHẬN=False CSDL sau: None
+
+        b-bi-giet-90%      tệp dở 73601024    khoi_phuc NHẬN=False CSDL sau: None
+
+        c-cat-cut-40%      tệp dở 32345292    khoi_phuc NHẬN=False CSDL sau: None
+
+        e-trang-dung  vị trí 138836   sqlite tự báo: row 2 missing from index sqlite_autoindex_do băm khớp gốc: False rc_kp=1
+
+        a-25%         vị trí 140288   sqlite tự báo: ok                                           băm khớp gốc: False rc_kp=1
+
+        b-50%         vị trí 280576   sqlite tự báo: ok                                           băm khớp gốc: False rc_kp=1
+
+        c-75%         vị trí 420864   sqlite tự báo: ok                                           băm khớp gốc: False rc_kp=1
+
+        d-byte0       vị trí 0        sqlite tự báo: NGOAI-LE DatabaseError: file is not a databa băm khớp gốc: False rc_kp=1
+
+        1 lượt khôi phục → 1 bản cất · 3 lượt cùng giây → 3 bản cất
+        bản cất còn giữ được dữ liệu vừa mất: True
+
+        v6 20 bảng / phiên bản 6  →  v9 51 bảng / phiên bản 9
+        SAU khôi phục: {'phien_ban': 9, 'so_bang': 51, 'bam': '393519033d5f24c7307003693214abc11b46dc58df0246465f4250c24410d9e8', 'integrity': 'ok', 'tong_tien': 34336000}
+        nâng lại bằng migrate.chay(): {'phien_ban': 9, 'so_bang': 51, 'tong_tien': 34336000, 'integrity': 'ok'}
+
+        CSDL sau khi nạp nhầm: {'integrity': 'ok', 'loi': None, 'so_bang': 51, 'so_byte': 561152}
+
+        gốc True · khôi phục False · giải mã ở gốc: True · ở bản khôi phục: False
+
+        cụm riêng cổng 55432 · PostgreSQL có 6 dòng don_hang · tổng tiền 9324000

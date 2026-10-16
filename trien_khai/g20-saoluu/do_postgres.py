@@ -150,13 +150,27 @@ def chay(giu_lai=False):
         # ---- ĐO 1: `sao_luu()` khi `hub.db` CHƯA HỀ TỒN TẠI ----
         # Đây là trạng thái thật của một máy chủ đã chuyển kho sang PostgreSQL: thư mục dữ
         # liệu không còn `hub.db` nữa.
+        #
+        # G22 — VẾ NÀY **KHAI RÕ `sqlite`**, và đó là chủ ý: có khai thì chốt duy nhất còn lại
+        # phải chặn là chốt (1) "không thấy CSDL ⇒ TỪ CHỐI". Trước G22 vế này để CHƯA KHAI, nên
+        # sau khi thêm chốt (4b) nó sẽ TỪ CHỐI vì lý do KHÁC và chốt (1) sẽ KHÔNG CÒN ĐƯỢC ĐO —
+        # một ca XANH vì lý do không liên quan tới thứ nó tên. Vế "chưa khai" được đo riêng ở
+        # `do1b` ngay dưới, trên CÙNG thư mục, khác đúng một biến.
         D1 = os.path.join(nen, "D1")
         os.makedirs(D1, exist_ok=True)
-        sl1 = kich_ban.sao_luu(D1)
+        sl1 = kich_ban.sao_luu(D1, khai_kho="sqlite")
         ra["do1_hub_db_khong_ton_tai"] = {
+            # HÌNH DẠNG CỐ ĐỊNH, kể cả khi TỪ CHỐI. Đo được 16/10/2026: trước khi có mấy dòng
+            # `None` này, một `sao_luu()` TỪ CHỐI làm dict THIẾU khoá `so_bang`/`integrity`, và
+            # `thu_g20_saoluu.py` lớp K — một tệp AG-02 KHÔNG được sửa — nổ `KeyError` ngay
+            # trong `setUpClass`, kéo cả 6 ca của lớp đó thành 1 lỗi. Người đọc sẽ tưởng LỚP ĐO
+            # hỏng, trong khi thứ đổi là HÀNH VI SẢN PHẨM. Bốn khoá này vắng mặt nghĩa là
+            # "KHÔNG có bản sao lưu nào để chụp" — nói ra thì hơn là để người sau đoán.
             "rc": sl1["rc"], "duong": sl1["duong"], "stderr": sl1["err"][-300:],
+            "khai_kho": sl1.get("khai_kho"), "TU_CHOI": sl1["rc"] != 0,
             "hub_db_sinh_ra": os.path.exists(os.path.join(D1, "hub.db")),
             "co_ban_sao": os.path.getsize(sl1["duong"]) if sl1["duong"] else None,
+            "so_bang": None, "tong_tien": None, "integrity": None, "loi": None,
         }
         if sl1["duong"]:
             c1 = _chup_sqlite_bang(sl1["duong"])
@@ -168,21 +182,66 @@ def chay(giu_lai=False):
                 "dong_tc_but_toan": ((c1.get("bang") or {}).get("tc_but_toan") or {}).get("dong"),
             })
 
-        # ---- ĐO 2: `sao_luu()` khi `hub.db` CÓ dữ liệu SQLite CŨ (khác dữ liệu PG) ----
+        # ---- ĐO 1b: `hub.db` KHÔNG tồn tại + deployment CHƯA KHAI ----
+        # Cùng thư mục D1, khác đúng một biến: có khai hay không. Ở đây thứ phải chặn là chốt
+        # (4b) — chưa khai thì KHÔNG có bản sao lưu nào được coi là kiểm chứng được, kể cả khi
+        # trên đĩa không có gì để sao lưu.
+        sl1b = kich_ban.sao_luu(D1, khai_kho=None)
+        ra["do1b_chua_khai_hub_db_khong_ton_tai"] = {
+            "rc": sl1b["rc"], "duong": sl1b["duong"], "khai_kho": sl1b.get("khai_kho"),
+            "TU_CHOI": sl1b["rc"] != 0,
+            "co_ban_sao": os.path.getsize(sl1b["duong"]) if sl1b["duong"] else None,
+            "stderr": sl1b["err"][-400:],
+            "bao_ro": bool("CHƯA KHAI" in sl1b["err"].upper() and "KHO_DANG_CHAY" in sl1b["err"]),
+        }
+
+        # ---- ĐO 2a: `hub.db` CŨ còn sót + deployment ĐÃ KHAI `postgresql` ----
+        # Đây là vế đo CƠ CHẾ chốt (4): khai rồi thì `sao_luu()` PHẢI TỪ CHỐI. Cố ý chạy
+        # TRƯỚC 2b trên cùng một thư mục dữ liệu để hai vế chỉ khác nhau ĐÚNG một biến.
         D2 = os.path.join(nen, "D2")
         os.makedirs(D2, exist_ok=True)
         rc_gieo2, _, err_gieo2 = kich_ban.gieo(D2)
         truoc2 = khung_do.chup(kich_ban.db(D2))
-        sl2 = kich_ban.sao_luu(D2)
-        c2 = _chup_sqlite_bang(sl2["duong"]) if sl2["duong"] else {}
-        ra["do2_hub_db_co_du_lieu_sqlite_khac"] = {
+        sl2a = kich_ban.sao_luu(D2, khai_kho="postgresql")
+        ra["do2a_hub_db_cu_khai_postgresql"] = {
+            "rc": sl2a["rc"], "duong": sl2a["duong"], "khai_kho": sl2a.get("khai_kho"),
+            "TU_CHOI": sl2a["rc"] != 0,
+            "stderr": sl2a["err"][-500:], "stdout": sl2a["out"][-200:],
+            "co_ban_sao": os.path.getsize(sl2a["duong"]) if sl2a["duong"] else None,
+            "sqlite_co_du_lieu_that": {"so_bang": truoc2.get("so_bang"),
+                                       "tong_tien": truoc2.get("tong_tien_toan_kho")},
+        }
+
+        # ---- ĐO 2b: Y HỆT 2a nhưng CHƯA KHAI — vế đã ĐÓNG ở G22 ----
+        # Cùng thư mục, cùng `hub.db` cũ, cùng dữ liệu PostgreSQL. Khác đúng một biến: có khai
+        # hay không. G22: chưa khai ⇒ `_tu_choi_chua_khai()` ⇒ rc != 0. Vế này ĐO HAI THỨ, và
+        # thiếu vế nào cũng không kết luận được:
+        #   (a) `rc != 0` — không còn đường lùi giả;
+        #   (b) thông báo NÓI RA việc thiếu khai báo và TÊN chỗ khai. Một `rc != 0` im lặng vẫn
+        #       bắt người trực đi đoán, nên nó KHÔNG được tính là đạt (`bao_ro`).
+        sl2b = kich_ban.sao_luu(D2, khai_kho=None)
+        c2 = _chup_sqlite_bang(sl2b["duong"]) if sl2b["duong"] else {}
+        ra["do2b_hub_db_cu_chua_khai"] = {
             "rc_gieo_sqlite": rc_gieo2, "loi_gieo": err_gieo2[-200:],
-            "rc": sl2["rc"], "co_ban_sao": os.path.getsize(sl2["duong"]) if sl2["duong"] else None,
+            "rc": sl2b["rc"], "khai_kho": sl2b.get("khai_kho"),
+            "co_ban_sao": os.path.getsize(sl2b["duong"]) if sl2b["duong"] else None,
             "sqlite_truoc_so_bang": truoc2.get("so_bang"),
             "sqlite_truoc_tong_tien": truoc2.get("tong_tien_toan_kho"),
             "ban_sao_so_bang": c2.get("so_bang"), "ban_sao_tong_tien": c2.get("tong_tien_toan_kho"),
             "bam_ban_sao_khop_sqlite_goc": c2.get("bam_toan_kho") == truoc2.get("bam_toan_kho"),
+            # VẾ (b): thông báo phải nêu việc CHƯA KHAI và TÊN chỗ khai. Hai chuỗi này là hai
+            # thứ người trực cần: "thiếu gì" và "khai ở đâu".
+            "stderr": sl2b["err"][-600:],
+            "bao_ro": bool("CHƯA KHAI" in sl2b["err"].upper()
+                           and "KHO_DANG_CHAY" in sl2b["err"]),
+            "co_hub_db_tren_dia": os.path.exists(kich_ban.db(D2)),
         }
+
+        # TÊN CŨ, GIỮ LẠI ĐỂ KHÔNG PHÁ BỘ THỬ CỦA AG-04. `thu_g20_saoluu.py` (tệp AG-02 KHÔNG
+        # được sửa) đọc thẳng khoá `do2_hub_db_co_du_lieu_sqlite_khac`; đổi tên khoá mà không có
+        # bí danh thì nó nổ `KeyError` và người đọc tưởng LỚP ĐO hỏng, trong khi thứ đổi là
+        # khoá của kết quả. Bí danh trỏ vào vế CHƯA KHAI (`do2b`) — đúng vế mà tên cũ mô tả.
+        ra["do2_hub_db_co_du_lieu_sqlite_khac"] = ra["do2b_hub_db_cu_chua_khai"]
 
         # ---- ĐO 3: `khoi_phuc()` với một tệp `pg_dump -Fc` THẬT ----
         # Đây là nhầm lẫn vận hành thật: cùng thư mục có hai loại tệp sao lưu, gõ nhầm một cái.
@@ -207,14 +266,19 @@ def chay(giu_lai=False):
         }
 
         # ---- ĐỐI CHỨNG ĐƯỜNG ----
-        # Cùng hàm `sao_luu()`, nhưng kho là SQLite CÓ dữ liệu: bản sao phải chứa dữ liệu thật.
-        # Có vế này thì kết luận mới là "hàm không có nhánh PostgreSQL", KHÔNG phải
-        # "hàm hỏng" — hai câu đó khác nhau và chỉ phép đo này phân biệt được.
+        # Cùng hàm `sao_luu()`, nhưng kho là SQLite CÓ dữ liệu VÀ ĐÃ KHAI `sqlite`: bản sao phải
+        # chứa dữ liệu thật. Có vế này thì kết luận mới là "hàm không có nhánh PostgreSQL",
+        # KHÔNG phải "hàm hỏng" — hai câu đó khác nhau và chỉ phép đo này phân biệt được.
+        #
+        # G22 — VẾ NÀY **PHẢI KHAI `sqlite`**: nó là ĐỐI CHỨNG ĐƯƠNG, nên nó phải chạy trên
+        # đường LÀNH trọn vẹn (kho SQLite thật + khai đúng). Để chưa khai thì nó TỪ CHỐI và
+        # `test_k6` của bộ thử AG-04 (`thu_g20_saoluu.py` — tệp AG-02 KHÔNG được sửa) sẽ đỏ vì
+        # lý do không liên quan tới thứ nó đo.
         D4 = os.path.join(nen, "D4")
         os.makedirs(D4, exist_ok=True)
         rc_gieo4, _, _ = kich_ban.gieo(D4)
         truoc4 = khung_do.chup(kich_ban.db(D4))
-        sl4 = kich_ban.sao_luu(D4)
+        sl4 = kich_ban.sao_luu(D4, khai_kho="sqlite")
         c4 = _chup_sqlite_bang(sl4["duong"]) if sl4["duong"] else {}
         ra["doi_chung_duong_sqlite_co_du_lieu"] = {
             "rc_gieo": rc_gieo4, "rc": sl4["rc"],
@@ -222,14 +286,22 @@ def chay(giu_lai=False):
             "bam_khop_goc": c4.get("bam_toan_kho") == truoc4.get("bam_toan_kho"),
         }
 
-        # ---- Kết luận ba khả năng ----
+        # ---- Kết luận — NĂM vế, không gộp ----
         d1 = ra["do1_hub_db_khong_ton_tai"]
-        d2 = ra["do2_hub_db_co_du_lieu_sqlite_khac"]
+        d1b = ra["do1b_chua_khai_hub_db_khong_ton_tai"]
+        d2a = ra["do2a_hub_db_cu_khai_postgresql"]
+        d2b = ra["do2b_hub_db_cu_chua_khai"]
         ra["ket_luan"] = {
-            "nem_loi_chi_tiet": d1["rc"] != 0,
-            "im_lang_bao_thanh_cong": d1["rc"] == 0,
-            "ban_sao_chua_du_lieu_pg": (
+            "do1_nem_loi_chi_tiet": d1["rc"] != 0,
+            "do1_im_lang_bao_thanh_cong": d1["rc"] == 0,
+            "do1_ban_sao_chua_du_lieu_pg": (
                 d1.get("dong_don_hang") in (0, None) and d1.get("dong_tc_but_toan") in (0, None)),
+            "do1b_chua_khai_thi_TU_CHOI": d1b["rc"] != 0,
+            "do2a_khai_postgresql_thi_TU_CHOI": d2a["rc"] != 0,
+            # G22: vế này ĐỔI TÊN và ĐỔI DẤU. Trước G22 nó là `do2b_chua_khai_thi_con_ho` và
+            # ĐẠT khi khoảng hở TỒN TẠI (rc == 0 + bản sao khớp tệp SQLite cũ). Nay nó ĐẠT khi
+            # khoảng hở ĐÃ ĐÓNG: rc != 0 VÀ thông báo nói rõ thiếu khai báo.
+            "do2b_chua_khai_thi_TU_CHOI_va_bao_ro": bool(d2b["rc"] != 0 and d2b.get("bao_ro")),
             "du_lieu_pg_that": {"dong_don_hang": pg_truoc["bang"]["don_hang"]["dong"],
                                 "dong_tc_but_toan": pg_truoc["bang"]["tc_but_toan"]["dong"],
                                 "tong_tien": pg_truoc["tong_tien"]},

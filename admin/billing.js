@@ -170,31 +170,49 @@
      AG-00 là người cắm route (SHARED_CONTRACTS §22). Bảng này khớp bảng route trong
      `docs/G08_FINAL_REPORT.md`.
 
-     ⚠️ G19 · AG-05 — ĐÍNH CHÍNH 16/10/2026, ĐO BẰNG HTTP THẬT (không đọc mã rồi đoán):
-     NĂM đường đầu của `API_CHO_BACKEND` KHÔNG PHẢI "chờ backend" — chúng SAI ĐƯỜNG. Đo trên
-     nền cô lập, tài khoản `shopa-owner`:
-         GET /api/v2/billing/goi      → HTTP 404      GET /api/v2/billing/canh-bao → HTTP 404
-         GET /api/v2/billing/dang-ky  → HTTP 404      GET /api/v2/billing/lich-su  → HTTP 404
-         GET /api/v2/billing/muc-dung → HTTP 404
-     Chức năng ấy ĐÃ CÓ, nằm ở đường khác: `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage`,
-     `/api/v2/usage/bao-cao`, `/api/v2/usage/su-kien`. Sáu màn đọc của module này (G19 · AG-05)
-     vì thế gọi ĐƯỜNG THẬT và ghi rõ ngay trên màn rằng bảng dưới đây sai đường.
-     GIỮ NGUYÊN nội dung bảng (không sửa dữ liệu) vì `trangThaiRoute()` đang đếm theo nó và
-     làn khác có thể đang đọc; việc SỬA bảng là việc của AG-00 — kèm một ca thử kiểu
-     `app/thu/thu_tai_chinh.py::test_j4` đang canh `finance.js` mà `billing.js` CHƯA có
-     (đo: `grep -rn "billing.js" app/thu/*.py` → 0 dòng). Xem `docs/G19_MAN_MA.md` §5. */
+     ✅ G20 · AG-02 — SỬA BẢNG 17/10/2026, ĐO BẰNG HTTP THẬT (không đọc mã rồi đoán).
+     Bảng này TỪNG SAI ĐƯỜNG ở năm dòng, và AG-05 (G19) đã đo ra nhưng cố ý KHÔNG sửa, vì
+     `billing.js` không nằm trong phạm vi được cấp của làn ấy — và vì sửa một bảng KHÔNG AI
+     CANH chính là cách tạo ra một chỗ hỏng im lặng mới. G20 sửa bảng VÀ thêm ca canh.
+
+     ĐO LẠI trên nền cô lập, cổng bind 127.0.0.1, KHÔNG gọi ra hãng (`/tmp/ag02/do_duong.py`):
+
+       NĂM DÒNG SAI ĐƯỜNG (cả năm đều 404)          →  ĐƯỜNG THẬT (đều 200)
+       GET /api/v2/billing/goi      → HTTP 404         GET /api/v2/goi
+       GET /api/v2/billing/dang-ky  → HTTP 404         GET /api/v2/dang-ky
+       GET /api/v2/billing/muc-dung → HTTP 404         GET /api/v2/usage
+       GET /api/v2/billing/canh-bao → HTTP 404         GET /api/v2/usage/bao-cao
+       GET /api/v2/billing/lich-su  → HTTP 404         GET /api/v2/usage/su-kien
+
+       DÒNG THỨ SÁU cũng nói dối, theo chiều NGƯỢC LẠI — ca canh mới bắt được, AG-05 chưa nêu:
+       GET /api/v2/billing/du-thao  → HTTP **200**     (ĐÃ cắm từ trước, mà vẫn khai CHỜ BACKEND)
+       Màn `du-thao` của `admin.js` đã đọc chính đường ấy và ghi trên màn "Đường ĐỌC thì có".
+       Một đường đã chạy nằm trong bảng CHỜ là nhãn nói dối — chuyển sang ĐANG DÙNG.
+
+     SÁU đường còn lại GIỮ NGUYÊN trong bảng chờ, và đo lại vẫn đúng là CHƯA CẮM (đo bằng tài
+     khoản NỀN TẢNG `platform-owner`: `/api/v2/platform/**` có cổng riêng ở `server.py:566`
+     trả 403 cho người không phải nhân sự nền tảng TRƯỚC khi tới bảng route — đo bằng
+     `shopa-owner` thì 403 ấy KHÔNG nói gì về việc đường có được cắm hay không, và dễ bị đọc
+     nhầm thành "đã cắm"). Kết quả: `POST /api/v2/billing/du-thao` 404 · `POST /api/v2/billing/usage`
+     404 · `POST /api/v2/platform/goi/phien-ban` 404 · `POST /api/v2/platform/tenants/{id}/doi-goi`
+     404 · `POST /api/v2/platform/tenants/{id}/tam-ngung` 404.
+
+     CA CANH: `thu_giao_dien/08_bang_duong_billing.spec.js` — đọc thẳng `app/server.py`, đối
+     chiếu HAI CHIỀU (chờ-mà-đã-cắm, và dùng-mà-không-có), kèm ca TỰ KIỂM chứng minh bộ đo
+     ấy ĐỎ ĐƯỢC. Đây là bản tương đương `app/thu/thu_tai_chinh.py::test_j4` đang canh
+     `finance.js`; `finance.js` có ca ấy, `billing.js` trước G20 KHÔNG có. */
   const API_DANG_DUNG = [
     ["GET", "/api/v2/billing", "gói + usage hiện tại (đã có từ đợt trước)"],
+    ["GET", "/api/v2/goi", "danh sách gói + phiên bản mới nhất — màn `goi` đọc đường này"],
+    ["GET", "/api/v2/dang-ky", "đăng ký của tenant đang đăng nhập — màn `dang-ky`"],
+    ["GET", "/api/v2/usage", "trang_thai_han_muc(tenant, ky) — màn `muc-dung` và `canh-bao`"],
+    ["GET", "/api/v2/usage/bao-cao", "báo cáo mức dùng đầy đủ của một kỳ"],
+    ["GET", "/api/v2/usage/su-kien", "sự kiện dùng trong kỳ — màn `lich-su`"],
+    ["GET", "/api/v2/billing/du-thao", "dự thảo hoá đơn của một kỳ — màn `du-thao`"],
   ];
   const API_CHO_BACKEND = [
-    ["GET", "/api/v2/billing/goi", "danh sách gói + phiên bản mới nhất", "CHỜ BACKEND"],
-    ["GET", "/api/v2/billing/dang-ky", "đăng ký của tenant đang đăng nhập", "CHỜ BACKEND"],
-    ["GET", "/api/v2/billing/muc-dung", "trang_thai_han_muc(tenant, ky)", "CHỜ BACKEND"],
-    ["GET", "/api/v2/billing/canh-bao", "canh_bao_sap_het", "CHỜ BACKEND"],
-    ["GET", "/api/v2/billing/lich-su", "lịch sử đổi gói + nhật ký tính phí", "CHỜ BACKEND"],
-    ["GET", "/api/v2/billing/du-thao", "dự thảo hoá đơn của một kỳ", "CHỜ BACKEND"],
-    ["POST", "/api/v2/billing/du-thao", "lập dự thảo (idempotent theo kỳ)", "CHỜ BACKEND"],
-    ["POST", "/api/v2/billing/usage", "ghi sự kiện dùng (cần idem_key)", "CHỜ BACKEND"],
+    ["POST", "/api/v2/billing/du-thao", "lập dự thảo (idempotent theo kỳ) — cần quyền tenant.billing.lap_du_thao (V-13909)", "CHỜ BACKEND"],
+    ["POST", "/api/v2/billing/usage", "ghi sự kiện dùng (cần idem_key) — chưa có đường HTTP nào ghi sự kiện", "CHỜ BACKEND"],
     ["POST", "/api/v2/platform/goi/phien-ban", "phát hành phiên bản gói", "CHỜ BACKEND"],
     ["POST", "/api/v2/platform/tenants/{id}/doi-goi", "nâng/hạ gói", "CHỜ BACKEND"],
     ["POST", "/api/v2/platform/tenants/{id}/tam-ngung", "tạm ngưng / mở lại", "CHỜ BACKEND"],

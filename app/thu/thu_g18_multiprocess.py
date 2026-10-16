@@ -556,9 +556,18 @@ def p1_tran_tan_suat():
     print("  `X-RateLimit-Limit`), không chép từ tài liệu; lượt đọc dùng máy chủ RIÊNG.")
     ket_qua = {}
     for N in (1, 2, 4, 8):
+        # VÁ G19 (AG-00): PHÉP DÒ phải dùng nền RIÊNG.
+        #
+        # `doc_tran_khai_bao()` TIÊU HẾT trần trên nền nó chạy. Bản trước dùng CHUNG nền với phép
+        # đo thật — điều đó vô hại chừng nào bộ đếm còn nằm trong BỘ NHỚ: tiến trình dò chết là
+        # mang bộ đếm theo. G19/AG-02 chuyển kho đếm vào CSDL nên phần trần đã tiêu SỐNG LÂU, và
+        # phép đo thật bắt đầu với trần đã cạn.
+        # ĐO ĐƯỢC trước khi vá: `khai báo 20 ⇒ 0 lượt qua`, `Retry-After=300` (cửa sổ chưa hết).
+        nen_do = nen_tam("tran%d-do" % N)
+        dung_nen(nen_do)
+        khai_bao, dem_do, ma_do, hdr_do = doc_tran_khai_bao(nen_do)
         nen = nen_tam("tran%d" % N)
         dung_nen(nen)
-        khai_bao, dem_do, ma_do, hdr_do = doc_tran_khai_bao(nen)
         if N == 1:
             # PHÉP TỰ KIỂM ĐẦU TIÊN: máy chủ NÓI trần bao nhiêu thì phải CHẶN ở đúng đó.
             ket("P1.0", "Máy chủ tự nói trần và tự chặn ở đúng đó (máy chủ dùng một lần)",
@@ -580,8 +589,15 @@ def p1_tran_tan_suat():
         try:
             # (2) Đo LẦN LƯỢT VÒNG TRÒN: từng bản tự chặn ở đâu.
             dem_tt, chi_tiet = bom_tuan_tu(sv, toi_da_moi_ban=khai_bao + 3)
-            # (3) Đo ĐỒNG THỜI THẬT trên BỘ MÁY CHỦ MỚI (ngân sách của bộ cũ đã tiêu hết).
-            sv2 = [mo_may_chu(nen, tien_to="tran%d-dt" % N) for _ in range(N)]
+            # (3) Đo ĐỒNG THỜI THẬT trên BỘ MÁY CHỦ MỚI — VÀ NỀN MỚI.
+            # VÁ G19 (AG-00): bản trước dựng máy chủ mới nhưng GIỮ NGUYÊN `nen`, kèm chú thích
+            # "ngân sách của bộ cũ đã tiêu hết". Chú thích đó đúng với bộ đếm TRONG BỘ NHỚ: máy
+            # chủ mới = bộ đếm mới. G19/AG-02 chuyển kho đếm vào CSDL nên máy chủ mới trên CÙNG
+            # một CSDL vẫn thấy trần ĐÃ CẠN — đo được: `20 (tuần tự) và 0 (đồng thời)`.
+            # Nền riêng cho pha đồng thời là điều kiện để hai phép đo còn ĐỘC LẬP nhau.
+            nen_dt = nen_tam("tran%d-dt" % N)
+            dung_nen(nen_dt)
+            sv2 = [mo_may_chu(nen_dt, tien_to="tran%d-dt" % N) for _ in range(N)]
             kq_dt = bom_dong_thoi(sv2, so_luot_moi_ban=khai_bao + 5)
             dem_dt = [0] * N
             for r in kq_dt:
@@ -639,18 +655,25 @@ def p1_tran_tan_suat():
                 "sai." % (k["khai_bao"], k["dem_tuan_tu"][0], k["dem_dong_thoi"][0],
                           (chan or [{}])[0].get("chieu"), (chan or [{}])[0].get("retry_after"),
                           (chan or [{}])[0].get("gioi_han")))
-        # ---- KHẲNG ĐỊNH: N tiến trình ⇒ trần nhân N.
-        dung_tuan_tu = all(x == k["khai_bao"] for x in k["dem_tuan_tu"]) \
-            and sum(k["dem_tuan_tu"]) == N * k["khai_bao"] and all(da_chan)
-        dung_dong_thoi = all(x == k["khai_bao"] for x in k["dem_dong_thoi"]) \
-            and sum(k["dem_dong_thoi"]) == N * k["khai_bao"]
+        # ---- KHẲNG ĐỊNH (G19/AG-02): N tiến trình DÙNG CHUNG một CSDL ⇒ trần KHÔNG NHÂN.
+        #
+        # BẢN TRƯỚC khẳng định `sum(...) == N * khai_bao` — tức trần NHÂN theo số bản, và còn đòi
+        # MỖI bản đạt đủ trần khai báo. **Đó là khẳng định CHÍNH LỖ HỒNG B-G11-10.** AG-02 đã đóng
+        # ở G19: kho đếm chuyển vào CSDL, trần nằm trong chính câu ghi, cả lượt kiểm trong MỘT
+        # giao dịch `BEGIN IMMEDIATE` — nên N tiến trình chia nhau MỘT ngân sách.
+        #
+        # Khẳng định ĐÚNG nay: TỔNG qua N bản = ĐÚNG trần khai báo, và mọi bản đều kết thúc 429.
+        # GIỮ NGUYÊN ĐỘ RĂNG: nếu ai quay lại kho bộ nhớ một tiến trình thì tổng thành N×trần và
+        # ca này ĐỎ lại.
+        dung_tuan_tu = sum(k["dem_tuan_tu"]) == k["khai_bao"] and all(da_chan)
+        dung_dong_thoi = sum(k["dem_dong_thoi"]) == k["khai_bao"]
         if N > 1:
-            ket("P1.%d" % N, "N=%d tiến trình CÙNG một CSDL, cùng IP: trần thực = %d×%d = %d"
-                % (N, N, k["khai_bao"], N * k["khai_bao"]),
+            ket("P1.%d" % N, "N=%d tiến trình CÙNG một CSDL, cùng IP: trần DÙNG CHUNG = %d "
+                "(KHÔNG nhân thành %d)" % (N, k["khai_bao"], N * k["khai_bao"]),
                 DAT if (dung_tuan_tu and dung_dong_thoi) else HONG,
-                "tuần tự: %s (tổng %d, mỗi bản đều kết thúc bằng 429: %s) · đồng thời: %s "
-                "(tổng %d) · khai báo %d. Mỗi bản có ngân sách RIÊNG đúng bằng khai báo ⇒ trần "
-                "thực nhân theo số bản, KHÔNG phải chia sẻ."
+                "tuần tự: %s (tổng %d, mọi bản đều kết thúc bằng 429: %s) · đồng thời: %s "
+                "(tổng %d) · khai báo %d cho CẢ CỤM. Ngân sách là MỘT, chia nhau ⇒ trần dùng "
+                "chung, KHÔNG nhân theo số bản."
                 % (k["dem_tuan_tu"], sum(k["dem_tuan_tu"]), da_chan, k["dem_dong_thoi"],
                    sum(k["dem_dong_thoi"]), k["khai_bao"]))
         # ---- Bằng chứng ĐỒNG THỜI: N tiến trình thật đã phục vụ chồng nhau.
@@ -678,9 +701,11 @@ def p1_tran_tan_suat():
         ket("P1.%d-rieng" % N, "N=%d bản, MỖI BẢN MỘT CSDL RIÊNG: trần vẫn nhân (%d)"
             % (N, sum(dem)),
             DAT if (sum(dem) == N * khai_bao and all(da_chan)) else HONG,
-            "%s ⇒ tổng %d, khai báo %d/bản, mỗi bản kết thúc bằng 429: %s. Việc nhân KHÔNG phải "
-            "vì CSDL tách rời: ở P1.2–P1.8 các bản DÙNG CHUNG một CSDL và trần vẫn nhân — thủ "
-            "phạm là bộ đếm trong BỘ NHỚ." % (dem, sum(dem), khai_bao, da_chan))
+            "%s ⇒ tổng %d, khai báo %d/bản, mỗi bản kết thúc bằng 429: %s. ĐÂY LÀ CHỖ DUY NHẤT "
+            "trần còn nhân, và nhân là ĐÚNG: mỗi bản một CSDL RIÊNG thì mỗi kho đếm độc lập — "
+            "không có gì để chia sẻ. Ở P1.2–P1.8 các bản DÙNG CHUNG một CSDL và trần KHÔNG nhân "
+            "(G19/AG-02 đã chuyển kho đếm vào CSDL)."
+            % (dem, sum(dem), khai_bao, da_chan))
     finally:
         for s in sv:
             tat_tien_trinh(s["p"])

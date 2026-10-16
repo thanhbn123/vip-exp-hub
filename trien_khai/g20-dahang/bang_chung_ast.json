@@ -1,0 +1,900 @@
+{
+  "canh_lech_host_voi_adapter": [],
+  "diem_tiem": [
+    {
+      "bang": "HOST_HANG",
+      "bi_bien_doi": [],
+      "cach_dung": [
+        "', '.join(…) (đọc để in/dựng)",
+        "in / not in (kiểm thành viên)"
+      ],
+      "dong": 117,
+      "dong_bang": true,
+      "ham_doc": [
+        "host_duoc_phep",
+        "tach_url"
+      ],
+      "so_lan_gan": 1,
+      "truyen_cho_ham_noi_bo": []
+    },
+    {
+      "bang": "HOST_HANG_PRODUCTION",
+      "bi_bien_doi": [],
+      "cach_dung": [
+        "Tuple"
+      ],
+      "dong": 116,
+      "dong_bang": true,
+      "ham_doc": [],
+      "so_lan_gan": 1,
+      "truyen_cho_ham_noi_bo": []
+    },
+    {
+      "bang": "HOST_HANG_SANDBOX",
+      "bi_bien_doi": [],
+      "cach_dung": [
+        "Tuple"
+      ],
+      "dong": 115,
+      "dong_bang": true,
+      "ham_doc": [],
+      "so_lan_gan": 1,
+      "truyen_cho_ham_noi_bo": []
+    },
+    {
+      "bang": "TRUONG_CREDENTIAL",
+      "bi_bien_doi": [],
+      "cach_dung": [
+        "in / not in (kiểm thành viên)",
+        "phép nối (dựng bảng mới, không sửa bảng cũ)"
+      ],
+      "dong": 138,
+      "dong_bang": true,
+      "ham_doc": [
+        "_dang_che",
+        "_gia_tri_trong_json"
+      ],
+      "so_lan_gan": 1,
+      "truyen_cho_ham_noi_bo": []
+    },
+    {
+      "bang": "TRUONG_CREDENTIAL_PHAN_HOI",
+      "bi_bien_doi": [],
+      "cach_dung": [
+        "in / not in (kiểm thành viên)",
+        "sorted(…) (đọc để in/dựng)"
+      ],
+      "dong": 159,
+      "dong_bang": true,
+      "ham_doc": [
+        "_gia_tri_bi_mat_trong_json",
+        "_gia_tri_bi_mat_tu_phan_hoi"
+      ],
+      "so_lan_gan": 1,
+      "truyen_cho_ham_noi_bo": []
+    },
+    {
+      "bang": "_MAU_CAP_TEN_BI_MAT",
+      "bi_bien_doi": [],
+      "cach_dung": [
+        "Attribute"
+      ],
+      "dong": 169,
+      "dong_bang": true,
+      "ham_doc": [
+        "_gia_tri_bi_mat_trong_vb"
+      ],
+      "so_lan_gan": 1,
+      "truyen_cho_ham_noi_bo": []
+    }
+  ],
+  "duong_adapter": "/Users/viporder/orca/workspaces/vip-express-hub/g20-ag06-dahang/app/adapter_jt.py",
+  "duong_http": "/Users/viporder/orca/workspaces/vip-express-hub/g20-ag06-dahang/app/http_jt.py",
+  "ham": {
+    "TraLoiHTTP": {
+      "dong": 206,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "vai_tro": "CHUNG"
+    },
+    "_bien_the": {
+      "dong": 378,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "s"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_che_chuoi": {
+      "dong": 444,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "chuoi",
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_cho_theo_retry_after": {
+      "dong": 979,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "headers_tra_loi",
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_chuan_bi_headers": {
+      "dong": 776,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "CONTENT_TYPE_FORM",
+        "KET_CUC_KHONG_GUI_DI"
+      ],
+      "tham_so": [
+        "headers"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_dang_che": {
+      "dong": 354,
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL"
+      ],
+      "hang_doc": [
+        "DAI_TOI_THIEU_DE_CHE",
+        "TRUONG_CREDENTIAL"
+      ],
+      "tham_so": [
+        "ten",
+        "gia_tri"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    },
+    "_doan_chua_bi_mat": {
+      "dong": 600,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "DAI_TOI_THIEU_DE_CHE"
+      ],
+      "tham_so": [
+        "doan",
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_doc_retry_after": {
+      "dong": 955,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "gia_tri"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_dong": {
+      "dong": 867,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "ket_noi"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_duong_dan_da_che": {
+      "dong": 620,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "url",
+        "headers",
+        "than"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_escape_json": {
+      "dong": 366,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "s"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_gia_tri_bi_mat_trong_json": {
+      "dong": 298,
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL_PHAN_HOI"
+      ],
+      "hang_doc": [
+        "TRUONG_CREDENTIAL_PHAN_HOI"
+      ],
+      "tham_so": [
+        "chuoi",
+        "ra"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    },
+    "_gia_tri_bi_mat_trong_vb": {
+      "dong": 319,
+      "hang_dac_thu": [
+        "_MAU_CAP_TEN_BI_MAT"
+      ],
+      "hang_doc": [
+        "_MAU_CAP_TEN_BI_MAT"
+      ],
+      "tham_so": [
+        "van_ban",
+        "ra"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    },
+    "_gia_tri_bi_mat_tu_phan_hoi": {
+      "dong": 335,
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL_PHAN_HOI"
+      ],
+      "hang_doc": [
+        "TRUONG_CREDENTIAL_PHAN_HOI"
+      ],
+      "tham_so": [
+        "than",
+        "headers_tra_loi"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    },
+    "_gia_tri_can_che": {
+      "dong": 532,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "headers",
+        "than_gui",
+        "url"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_gia_tri_ta_gui": {
+      "dong": 499,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "HEADER_KHONG_CHE"
+      ],
+      "tham_so": [
+        "headers",
+        "than_gui",
+        "url"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_gia_tri_trong_json": {
+      "dong": 265,
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL"
+      ],
+      "hang_doc": [
+        "DAI_TOI_THIEU_DE_CHE",
+        "TRUONG_CREDENTIAL"
+      ],
+      "tham_so": [
+        "chuoi",
+        "ra"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    },
+    "_gia_tri_tu_duong_dan": {
+      "dong": 470,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "url",
+        "moc"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_gia_tri_tu_url": {
+      "dong": 423,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "url"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_kiem_tra_het_gio": {
+      "dong": 765,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "KET_CUC_KHONG_GUI_DI"
+      ],
+      "tham_so": [
+        "timeout"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_la_doan_bi_mat": {
+      "dong": 577,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "DOAN_DUONG_DAN_DAI_TOI_THIEU",
+        "DOAN_DUONG_DAN_KHAC_NHAU_TOI_THIEU",
+        "_CHUOI_DOAN_HOP_LE"
+      ],
+      "tham_so": [
+        "doan"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_loi_cho_lai": {
+      "dong": 1000,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "KET_CUC_KHONG_GUI_DI",
+        "KET_CUC_QUA_HAN_MUC"
+      ],
+      "tham_so": [
+        "loai",
+        "ma_http",
+        "mo_ta",
+        "than",
+        "headers_tra_loi",
+        "can_che",
+        "them"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_loi_tam_thoi": {
+      "dong": 235,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "loai",
+        "thong_diep",
+        "ket_cuc",
+        "ma_http",
+        "cho_giay",
+        "**them"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_loi_tu_ngoai_le": {
+      "dong": 877,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "KET_CUC_KHONG_BIET",
+        "KET_CUC_KHONG_GUI_DI"
+      ],
+      "tham_so": [
+        "e",
+        "mo_ta",
+        "giai_doan",
+        "ma_http",
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_loi_vinh_vien": {
+      "dong": 252,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "loai",
+        "thong_diep",
+        "ket_cuc",
+        "ma_http",
+        "**them"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_ma_hoa_form": {
+      "dong": 824,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "KET_CUC_KHONG_GUI_DI"
+      ],
+      "tham_so": [
+        "body"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_mo_ket_noi": {
+      "dong": 860,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "scheme",
+        "host",
+        "cong",
+        "het_gio_ket_noi"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_mo_rong_bien_the": {
+      "dong": 415,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_mo_ta_ten": {
+      "dong": 449,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "ten"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_ten_truong_form": {
+      "dong": 668,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "than"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "_tra_loi_tu_http": {
+      "dong": 1033,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "KET_CUC_HANG_TU_CHOI",
+        "KET_CUC_KHONG_BIET"
+      ],
+      "tham_so": [
+        "ma_http",
+        "than",
+        "headers_tra_loi",
+        "mo_ta",
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "chan_moi_truong": {
+      "dong": 99,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "CHO_PHEP_MOI_TRUONG",
+        "LY_DO_CHAN_MOI_TRUONG",
+        "MOI_TRUONG"
+      ],
+      "tham_so": [
+        "moi_truong"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "che_bi_mat": {
+      "dong": 541,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "du_lieu",
+        "can_che"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "gui_form": {
+      "dong": 1086,
+      "hang_dac_thu": [],
+      "hang_doc": [
+        "HET_GIO_KET_NOI_TOI_DA",
+        "KET_CUC_KHONG_BIET"
+      ],
+      "tham_so": [
+        "url",
+        "headers",
+        "body",
+        "timeout"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "host_duoc_phep": {
+      "dong": 676,
+      "hang_dac_thu": [
+        "HOST_HANG"
+      ],
+      "hang_doc": [
+        "HOST_CUC_BO",
+        "HOST_HANG"
+      ],
+      "tham_so": [
+        "host"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    },
+    "mo_ta_yeu_cau": {
+      "dong": 652,
+      "hang_dac_thu": [],
+      "hang_doc": [],
+      "tham_so": [
+        "url",
+        "headers",
+        "than"
+      ],
+      "vai_tro": "CHUNG"
+    },
+    "tach_url": {
+      "dong": 685,
+      "hang_dac_thu": [
+        "HOST_HANG"
+      ],
+      "hang_doc": [
+        "CONG_HANG",
+        "HOST_CUC_BO",
+        "HOST_HANG",
+        "KET_CUC_KHONG_GUI_DI"
+      ],
+      "tham_so": [
+        "url"
+      ],
+      "vai_tro": "DAC_THU_JT"
+    }
+  },
+  "hang": {
+    "CHO_PHEP_MOI_TRUONG": {
+      "doc_boi": [
+        "chan_moi_truong"
+      ],
+      "dong": 90,
+      "nguon": "{MOCK: True, SANDBOX: False, PRODUCTION: False}",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "CONG_HANG": {
+      "doc_boi": [
+        "tach_url"
+      ],
+      "dong": 118,
+      "nguon": "443",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "CONTENT_TYPE_FORM": {
+      "doc_boi": [
+        "_chuan_bi_headers"
+      ],
+      "dong": 203,
+      "nguon": "\"application/x-www-form-urlencoded\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "DAI_TOI_THIEU_DE_CHE": {
+      "doc_boi": [
+        "_dang_che",
+        "_doan_chua_bi_mat",
+        "_gia_tri_trong_json"
+      ],
+      "dong": 128,
+      "nguon": "8",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "DOAN_DUONG_DAN_DAI_TOI_THIEU": {
+      "doc_boi": [
+        "_la_doan_bi_mat"
+      ],
+      "dong": 572,
+      "nguon": "20",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "DOAN_DUONG_DAN_KHAC_NHAU_TOI_THIEU": {
+      "doc_boi": [
+        "_la_doan_bi_mat"
+      ],
+      "dong": 573,
+      "nguon": "10",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "HEADER_KHONG_CHE": {
+      "doc_boi": [
+        "_gia_tri_ta_gui"
+      ],
+      "dong": 142,
+      "nguon": "(\"content-type\", \"accept\", \"accept-encoding\", \"user-agent\", \"host\", \"connection\")",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "HET_GIO_KET_NOI_TOI_DA": {
+      "doc_boi": [
+        "gui_form"
+      ],
+      "dong": 123,
+      "nguon": "5.0",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "HOST_CUC_BO": {
+      "doc_boi": [
+        "host_duoc_phep",
+        "tach_url"
+      ],
+      "dong": 119,
+      "nguon": "(\"127.0.0.1\", \"localhost\")",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "HOST_HANG": {
+      "doc_boi": [
+        "host_duoc_phep",
+        "tach_url"
+      ],
+      "dong": 117,
+      "nguon": "(HOST_HANG_SANDBOX, HOST_HANG_PRODUCTION)",
+      "phan_loai": "DAN_XUAT_TU_DAC_THU",
+      "vi_sao": [
+        "dẫn xuất: đọc HOST_HANG_PRODUCTION, HOST_HANG_SANDBOX"
+      ]
+    },
+    "HOST_HANG_PRODUCTION": {
+      "doc_boi": [],
+      "dong": 116,
+      "nguon": "\"ylopenapi.jtexpress.vn\"",
+      "phan_loai": "DAC_THU_JT",
+      "vi_sao": [
+        "tên host 'ylopenapi.jtexpress.vn'",
+        "tên hãng 'jtexpress'"
+      ]
+    },
+    "HOST_HANG_SANDBOX": {
+      "doc_boi": [],
+      "dong": 115,
+      "nguon": "\"demoopenapi.jtexpress.vn\"",
+      "phan_loai": "DAC_THU_JT",
+      "vi_sao": [
+        "tên host 'demoopenapi.jtexpress.vn'",
+        "tên hãng 'jtexpress'"
+      ]
+    },
+    "KET_CUC_HANG_TU_CHOI": {
+      "doc_boi": [
+        "_tra_loi_tu_http"
+      ],
+      "dong": 182,
+      "nguon": "\"hang-tu-choi\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "KET_CUC_KHONG_BIET": {
+      "doc_boi": [
+        "_loi_tu_ngoai_le",
+        "_tra_loi_tu_http",
+        "gui_form"
+      ],
+      "dong": 183,
+      "nguon": "\"khong-biet\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "KET_CUC_KHONG_GUI_DI": {
+      "doc_boi": [
+        "_chuan_bi_headers",
+        "_kiem_tra_het_gio",
+        "_loi_cho_lai",
+        "_loi_tu_ngoai_le",
+        "_ma_hoa_form",
+        "tach_url"
+      ],
+      "dong": 184,
+      "nguon": "\"khong-gui-di\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "KET_CUC_QUA_HAN_MUC": {
+      "doc_boi": [
+        "_loi_cho_lai"
+      ],
+      "dong": 193,
+      "nguon": "\"qua-han-muc\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "LY_DO_CHAN_MOI_TRUONG": {
+      "doc_boi": [
+        "chan_moi_truong"
+      ],
+      "dong": 91,
+      "nguon": "{     SANDBOX: (\"mã việc V-G09-01 và V-13906-05 CHƯA ĐƯỢC CẤP (SHARED_CONTRACTS §37) — \"  ",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "MOCK": {
+      "doc_boi": [],
+      "dong": 82,
+      "nguon": "\"mock\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "MOI_TRUONG": {
+      "doc_boi": [
+        "chan_moi_truong"
+      ],
+      "dong": 85,
+      "nguon": "(MOCK, SANDBOX, PRODUCTION)",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "PRODUCTION": {
+      "doc_boi": [],
+      "dong": 84,
+      "nguon": "\"production\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "SANDBOX": {
+      "doc_boi": [],
+      "dong": 83,
+      "nguon": "\"sandbox\"",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "TRUONG_CREDENTIAL": {
+      "doc_boi": [
+        "_dang_che",
+        "_gia_tri_trong_json"
+      ],
+      "dong": 138,
+      "nguon": "(\"apiaccount\", \"privatekey\", \"customercode\", \"password\")",
+      "phan_loai": "DAC_THU_JT",
+      "vi_sao": [
+        "CHÍNH LÀ bảng tên credential của hãng (4 tên, khớp 100%)",
+        "tên trường credential 'apiAccount'",
+        "tên trường credential 'customerCode'",
+        "tên trường credential 'password'",
+        "tên trường credential 'privateKey'"
+      ]
+    },
+    "TRUONG_CREDENTIAL_PHAN_HOI": {
+      "doc_boi": [
+        "_gia_tri_bi_mat_trong_json",
+        "_gia_tri_bi_mat_tu_phan_hoi"
+      ],
+      "dong": 159,
+      "nguon": "TRUONG_CREDENTIAL + (     \"authorization\", \"token\", \"access_token\", \"accesstoken\", \"refres",
+      "phan_loai": "DAN_XUAT_TU_DAC_THU",
+      "vi_sao": [
+        "dẫn xuất: đọc TRUONG_CREDENTIAL"
+      ]
+    },
+    "_CHUOI_DOAN_HOP_LE": {
+      "doc_boi": [
+        "_la_doan_bi_mat"
+      ],
+      "dong": 574,
+      "nguon": "re.compile(r\"\\A[A-Za-z0-9._~%+-]+\\Z\")",
+      "phan_loai": "CHUNG",
+      "vi_sao": [
+        "không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù"
+      ]
+    },
+    "_MAU_CAP_TEN_BI_MAT": {
+      "doc_boi": [
+        "_gia_tri_bi_mat_trong_vb"
+      ],
+      "dong": 169,
+      "nguon": "re.compile(     r\"(?i)(?<![\\w-])(\" + \"|\".join(re.escape(t) for t in                       ",
+      "phan_loai": "DAN_XUAT_TU_DAC_THU",
+      "vi_sao": [
+        "dẫn xuất: đọc TRUONG_CREDENTIAL_PHAN_HOI"
+      ]
+    }
+  },
+  "nguon_dau_hieu": {
+    "HOST_API": {
+      "production": "https://ylopenapi.jtexpress.vn",
+      "sandbox": "https://demoopenapi.jtexpress.vn"
+    },
+    "TRUONG_CREDENTIAL": [
+      "apiAccount",
+      "privateKey",
+      "customerCode",
+      "password"
+    ],
+    "duong_dan": "/Users/viporder/orca/workspaces/vip-express-hub/g20-ag06-dahang/app/adapter_jt.py"
+  },
+  "nhan_hieu_ten_hang": [
+    {
+      "dong": 108,
+      "trich": "J&T/"
+    },
+    {
+      "dong": 115,
+      "trich": "demoopenapi.jtexpress.vn"
+    },
+    {
+      "dong": 116,
+      "trich": "ylopenapi.jtexpress.vn"
+    },
+    {
+      "dong": 831,
+      "trich": "thân RỖNG — J&T luôn cần trường `bizContent`; nhiều khả năng ai đó quên dựng thân, chặn trước khi gửi"
+    }
+  ],
+  "nhanh_ma_gan_hang": [
+    {
+      "dieu_kien": "isinstance(gt, str) and gt and str(khoa).lower() in TRUONG_CREDENTIAL",
+      "dong": 285,
+      "ham": "_gia_tri_trong_json",
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL"
+      ],
+      "so_lenh_trong_nhanh": 1
+    },
+    {
+      "dieu_kien": "isinstance(gt, str) and gt\n                        and str(khoa).strip().lower()",
+      "dong": 311,
+      "ham": "_gia_tri_bi_mat_trong_json",
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL_PHAN_HOI"
+      ],
+      "so_lenh_trong_nhanh": 1
+    },
+    {
+      "dieu_kien": "str(ten).strip().lower() in TRUONG_CREDENTIAL_PHAN_HOI",
+      "dong": 343,
+      "ham": "_gia_tri_bi_mat_tu_phan_hoi",
+      "hang_dac_thu": [
+        "TRUONG_CREDENTIAL_PHAN_HOI"
+      ],
+      "so_lenh_trong_nhanh": 2
+    },
+    {
+      "dieu_kien": "host in HOST_HANG",
+      "dong": 742,
+      "ham": "tach_url",
+      "hang_dac_thu": [
+        "HOST_HANG"
+      ],
+      "so_lenh_trong_nhanh": 1
+    }
+  ],
+  "phuong_thuc_http": [
+    {
+      "co_tham_so_hoa": true,
+      "dong": 1133,
+      "phuong_thuc": "POST"
+    }
+  ],
+  "sha256_se_ghi_o_ngoai": null
+}

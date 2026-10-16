@@ -1,0 +1,152 @@
+========================================================================================================
+BẢNG 1 — CƠ CHẾ CHUNG vs ĐẶC THÙ J&T (đo bằng AST trên app/http_jt.py)
+========================================================================================================
+nguồn dấu hiệu hãng: /Users/viporder/orca/workspaces/vip-express-hub/g20-ag06-dahang/app/adapter_jt.py
+  HOST_API         = {'sandbox': 'https://demoopenapi.jtexpress.vn', 'production': 'https://ylopenapi.jtexpress.vn'}
+  TRUONG_CREDENTIAL= ['apiAccount', 'privateKey', 'customerCode', 'password']
+
+ dòng  hằng mức mô-đun                    phân loại                  vì sao
+--------------------------------------------------------------------------------------------------------
+   82  MOCK                               CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+   83  SANDBOX                            CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+   84  PRODUCTION                         CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+   85  MOI_TRUONG                         CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+   90  CHO_PHEP_MOI_TRUONG                CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+   91  LY_DO_CHAN_MOI_TRUONG              CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  115  HOST_HANG_SANDBOX                  DAC_THU_JT                 tên host 'demoopenapi.jtexpress.vn'
+  116  HOST_HANG_PRODUCTION               DAC_THU_JT                 tên host 'ylopenapi.jtexpress.vn'
+  117  HOST_HANG                          DAN_XUAT_TU_DAC_THU        dẫn xuất: đọc HOST_HANG_PRODUCTION, HOST_HANG_SANDBOX
+  118  CONG_HANG                          CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  119  HOST_CUC_BO                        CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  123  HET_GIO_KET_NOI_TOI_DA             CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  128  DAI_TOI_THIEU_DE_CHE               CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  138  TRUONG_CREDENTIAL                  DAC_THU_JT                 CHÍNH LÀ bảng tên credential của hãng (4 tên, khớp 100%)
+  142  HEADER_KHONG_CHE                   CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  159  TRUONG_CREDENTIAL_PHAN_HOI         DAN_XUAT_TU_DAC_THU        dẫn xuất: đọc TRUONG_CREDENTIAL
+  169  _MAU_CAP_TEN_BI_MAT                DAN_XUAT_TU_DAC_THU        dẫn xuất: đọc TRUONG_CREDENTIAL_PHAN_HOI
+  182  KET_CUC_HANG_TU_CHOI               CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  183  KET_CUC_KHONG_BIET                 CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  184  KET_CUC_KHONG_GUI_DI               CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  193  KET_CUC_QUA_HAN_MUC                CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  203  CONTENT_TYPE_FORM                  CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  572  DOAN_DUONG_DAN_DAI_TOI_THIEU       CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  573  DOAN_DUONG_DAN_KHAC_NHAU_TOI_THIEU CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+  574  _CHUOI_DOAN_HOP_LE                 CHUNG                      không chứa dấu hiệu thân phận hãng, và không dẫn xuất từ hằng đặc thù
+
+========================================================================================================
+BẢNG 2 — HÀM NÀO CHẠM ĐẶC THÙ J&T
+========================================================================================================
+ dòng  hàm                            vai trò      hằng đặc thù đã đọc
+--------------------------------------------------------------------------------------------------------
+   99  chan_moi_truong                CHUNG        —
+  206  TraLoiHTTP                     CHUNG        —
+  235  _loi_tam_thoi                  CHUNG        —
+  252  _loi_vinh_vien                 CHUNG        —
+  265  _gia_tri_trong_json            DAC_THU_JT   TRUONG_CREDENTIAL
+  298  _gia_tri_bi_mat_trong_json     DAC_THU_JT   TRUONG_CREDENTIAL_PHAN_HOI
+  319  _gia_tri_bi_mat_trong_vb       DAC_THU_JT   _MAU_CAP_TEN_BI_MAT
+  335  _gia_tri_bi_mat_tu_phan_hoi    DAC_THU_JT   TRUONG_CREDENTIAL_PHAN_HOI
+  354  _dang_che                      DAC_THU_JT   TRUONG_CREDENTIAL
+  366  _escape_json                   CHUNG        —
+  378  _bien_the                      CHUNG        —
+  415  _mo_rong_bien_the              CHUNG        —
+  423  _gia_tri_tu_url                CHUNG        —
+  444  _che_chuoi                     CHUNG        —
+  449  _mo_ta_ten                     CHUNG        —
+  470  _gia_tri_tu_duong_dan          CHUNG        —
+  499  _gia_tri_ta_gui                CHUNG        —
+  532  _gia_tri_can_che               CHUNG        —
+  541  che_bi_mat                     CHUNG        —
+  577  _la_doan_bi_mat                CHUNG        —
+  600  _doan_chua_bi_mat              CHUNG        —
+  620  _duong_dan_da_che              CHUNG        —
+  652  mo_ta_yeu_cau                  CHUNG        —
+  668  _ten_truong_form               CHUNG        —
+  676  host_duoc_phep                 DAC_THU_JT   HOST_HANG
+  685  tach_url                       DAC_THU_JT   HOST_HANG
+  765  _kiem_tra_het_gio              CHUNG        —
+  776  _chuan_bi_headers              CHUNG        —
+  824  _ma_hoa_form                   CHUNG        —
+  860  _mo_ket_noi                    CHUNG        —
+  867  _dong                          CHUNG        —
+  877  _loi_tu_ngoai_le               CHUNG        —
+  955  _doc_retry_after               CHUNG        —
+  979  _cho_theo_retry_after          CHUNG        —
+ 1000  _loi_cho_lai                   CHUNG        —
+ 1033  _tra_loi_tu_http               CHUNG        —
+ 1086  gui_form                       CHUNG        —
+
+========================================================================================================
+BẢNG 2b — NHÁNH MÃ BỊ RÀNG BUỘC HÃNG (đo ở CHỖ DÙNG, không gán cho hằng)
+========================================================================================================
+  dòng  285  _gia_tri_trong_json(): if isinstance(gt, str) and gt and str(khoa).lower() in TRUONG_CREDENTIAL
+            → chạm TRUONG_CREDENTIAL; 1 lệnh trong nhánh
+  dòng  311  _gia_tri_bi_mat_trong_json(): if isinstance(gt, str) and gt
+                        and str(khoa).strip().lower()
+            → chạm TRUONG_CREDENTIAL_PHAN_HOI; 1 lệnh trong nhánh
+  dòng  343  _gia_tri_bi_mat_tu_phan_hoi(): if str(ten).strip().lower() in TRUONG_CREDENTIAL_PHAN_HOI
+            → chạm TRUONG_CREDENTIAL_PHAN_HOI; 2 lệnh trong nhánh
+  dòng  742  tach_url(): if host in HOST_HANG
+            → chạm HOST_HANG; 1 lệnh trong nhánh
+
+========================================================================================================
+BẢNG 3 — ĐIỂM TIÊM: còn đường nào GHI THÊM vào bảng host / bảng tên credential không?
+========================================================================================================
+  HOST_HANG (dòng 117) — đọc bởi: host_duoc_phep, tach_url
+      số lần gán ở mức mô-đun     : 1
+      truyền cho hàm NỘI BỘ       : KHÔNG (0 lời gọi)
+      bị biến đổi tại chỗ         : KHÔNG (0 chỗ)
+      chỉ xuất hiện trong phép toán: ', '.join(…) (đọc để in/dựng), in / not in (kiểm thành viên)
+      ⇒ BẢNG ĐÓNG (không điểm tiêm): CÓ
+  HOST_HANG_PRODUCTION (dòng 116) — đọc bởi: (không hàm nào)
+      số lần gán ở mức mô-đun     : 1
+      truyền cho hàm NỘI BỘ       : KHÔNG (0 lời gọi)
+      bị biến đổi tại chỗ         : KHÔNG (0 chỗ)
+      chỉ xuất hiện trong phép toán: Tuple
+      ⇒ BẢNG ĐÓNG (không điểm tiêm): CÓ
+  HOST_HANG_SANDBOX (dòng 115) — đọc bởi: (không hàm nào)
+      số lần gán ở mức mô-đun     : 1
+      truyền cho hàm NỘI BỘ       : KHÔNG (0 lời gọi)
+      bị biến đổi tại chỗ         : KHÔNG (0 chỗ)
+      chỉ xuất hiện trong phép toán: Tuple
+      ⇒ BẢNG ĐÓNG (không điểm tiêm): CÓ
+  TRUONG_CREDENTIAL (dòng 138) — đọc bởi: _dang_che, _gia_tri_trong_json
+      số lần gán ở mức mô-đun     : 1
+      truyền cho hàm NỘI BỘ       : KHÔNG (0 lời gọi)
+      bị biến đổi tại chỗ         : KHÔNG (0 chỗ)
+      chỉ xuất hiện trong phép toán: in / not in (kiểm thành viên), phép nối (dựng bảng mới, không sửa bảng cũ)
+      ⇒ BẢNG ĐÓNG (không điểm tiêm): CÓ
+  TRUONG_CREDENTIAL_PHAN_HOI (dòng 159) — đọc bởi: _gia_tri_bi_mat_trong_json, _gia_tri_bi_mat_tu_phan_hoi
+      số lần gán ở mức mô-đun     : 1
+      truyền cho hàm NỘI BỘ       : KHÔNG (0 lời gọi)
+      bị biến đổi tại chỗ         : KHÔNG (0 chỗ)
+      chỉ xuất hiện trong phép toán: in / not in (kiểm thành viên), sorted(…) (đọc để in/dựng)
+      ⇒ BẢNG ĐÓNG (không điểm tiêm): CÓ
+  _MAU_CAP_TEN_BI_MAT (dòng 169) — đọc bởi: _gia_tri_bi_mat_trong_vb
+      số lần gán ở mức mô-đun     : 1
+      truyền cho hàm NỘI BỘ       : KHÔNG (0 lời gọi)
+      bị biến đổi tại chỗ         : KHÔNG (0 chỗ)
+      chỉ xuất hiện trong phép toán: Attribute
+      ⇒ BẢNG ĐÓNG (không điểm tiêm): CÓ
+
+  Chữ ký hàm (đọc thẳng từ AST) — hãy tự thấy chúng chỉ nhận GIÁ TRỊ, không nhận BẢNG:
+    gui_form(url, headers, body, timeout)
+    tach_url(url)
+    host_duoc_phep(host)
+    chan_moi_truong(moi_truong)
+    _ma_hoa_form(body)
+
+========================================================================================================
+BẢNG 4 — NHÃN HIỆU HÃNG LỘ TRONG THÔNG ĐIỆP (chỉ là chữ, không phải chặn kỹ thuật)
+========================================================================================================
+  dòng  108  J&T/
+  dòng  115  demoopenapi.jtexpress.vn
+  dòng  116  ylopenapi.jtexpress.vn
+  dòng  831  thân RỖNG — J&T luôn cần trường `bizContent`; nhiều khả năng ai đó quên dựng thân, chặn trước khi gửi
+
+========================================================================================================
+BẢNG 5 — PHƯƠNG THỨC HTTP VÀ KIỂU THÂN
+========================================================================================================
+  dòng 1133  .request('POST', …)
+
+[bằng chứng JSON] trien_khai/g20-dahang/bang_chung_ast.json

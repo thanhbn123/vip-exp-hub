@@ -407,7 +407,7 @@ hay bất kỳ tệp nào ngoài phạm vi được cấp.
 
 | # | Chưa đóng | Vì sao | Ai/cái gì đóng được |
 |---|---|---|---|
-| 1 | **Cổng C5 chưa tự chuyển xanh** | Cổng C5 của AG-01 khớp `thu_qa_g19*.py`; tệp của làn này là `thu_g21_gioihan.py`. **Phạm vi được cấp của tôi không gồm tệp `thu_qa_g19_tich_hop.py`** | **AG-00**: hoặc nới khuôn khớp của C5 cho `thu_g21_*.py`, hoặc thêm `app/thu/thu_qa_g19_tich_hop.py` gọi `sh trien_khai/g21-gioihan/chay.sh` |
+| 1 | **Cổng C5 chưa tự chuyển xanh** | Cổng C5 của AG-01 khớp `thu_qa_g19*.py`; tệp của làn này là `thu_g21_gioihan.py`. **Phạm vi được cấp của tôi không gồm tệp `thu_qa_g19_tich_hop.py`** | **AG-00**: hoặc nới khuôn khớp của C5 cho `thu_g21_*.py`, hoặc thêm `app/thu/thu_qa_g19_tich_hop.py` gọi `sh trien_khai/g21-gioihan/chay.sh`. **Lượt 2 đã ĐO CẢ HAI CHIỀU của lựa chọn này — xem §12.4** |
 | 2 | **Nhiều MÁY, hoặc sau bộ cân bằng tải** | Mỗi máy một CSDL ⇒ trần **VẪN NHÂN** — chính `app/gioi_han.py` dòng 42-43 tự khai. Chỗ đó cần Redis hoặc một CSDL chung | **CHƯA LÀM, CHƯA ĐO** — quyết định của anh Thành |
 | 3 | **Tấn công phân tán nhiều IP** | Ngoài phạm vi giới hạn tần suất theo IP; cần WAF/gateway | ngoài phạm vi |
 | 4 | **Tải lớn** (ngoài trần tần suất) | G18 đã đo 8 tiến trình × 400 phép; lượt này **không chạy lại** | giữ nguyên phạm vi G18 |
@@ -420,3 +420,236 @@ hay bất kỳ tệp nào ngoài phạm vi được cấp.
 Nó **không** thay thế nghiệm thu của làn G19/AG-02; nó là **cổng đối chiếu thứ hai** trên **bản
 đã gộp**. Và nó **không** phải một cổng luôn xanh: xem §3 — nó **đã đỏ** trên bản đột biến, và
 đó là điều duy nhất khiến những dòng xanh ở trên có nghĩa.
+
+---
+
+## 12. LƯỢT 2 — NỐI CỔNG VÀO BỘ CHẠY CHUNG, VÀ CHỨNG MINH CỔNG **ĐO ĐƯỢC**
+
+Lượt 1 (§1–§11) đóng **phép đo**. Lượt 2 này đóng **cái nối** — và một cái nối chỉ có nghĩa nếu
+nó **đỏ được**. *"Nối cho nó xanh"* là chưa đủ: một cổng không bao giờ đỏ thì không chứng minh gì.
+
+| | |
+|---|---|
+| **Tệp mới** | `app/thu/thu_g19_tich_hop.py` (bộ tổng hợp, 538 dòng) |
+| **Việc của nó** | gọi `sh trien_khai/g21-gioihan/chay.sh` và **trả về ĐÚNG mã thoát của runner** |
+| **Cây đo** | `HEAD = 9ded4a5cee269c02998a0d0181051e3ed1de720b` |
+| **Vùng được ghi** | `app/thu/thu_g19_tich_hop.py` · `trien_khai/g21-gioihan/*` · `docs/G21_GIOIHAN.md`. **KHÔNG** sửa `app/thu/thu_qa_g19*.py` (tệp của AG-01) |
+
+### 12.1 KHUÔN MÀ BỘ ĐẾM CỦA `chay_tat_ca.sh` NHẬN RA — BA ĐIỀU KIỆN, VÀ CÁCH TỆP NÀY KHỚP
+
+`app/thu/chay_tat_ca.sh` tự dò (`find app/thu gateway/thu -name 'thu_*.py'`) rồi phán **bằng mã
+thoát**, đòi thêm **dấu vết đã chạy** và **số ca > 0**:
+
+```sh
+if printf '%s' "$OUT" | grep -qE '^OK( |$)|ca — ĐẠT'; then CO_DAU_VET=1; else CO_DAU_VET=0; fi
+if [ "$MA" -eq 0 ] && [ "$CO_DAU_VET" = 1 ] && [ "$N" -gt 0 ]; then   # ✓
+```
+
+| Điều kiện | Tệp này thoả thế nào |
+|---|---|
+| được **tự dò** | tên khớp `thu_*.py` ⇒ `find` thấy, không cần thêm vào danh sách nào |
+| **mã thoát 0** | mã thoát của cổng = **mã thoát nguyên văn của runner**; runner thoát 0 thì cổng thoát 0 |
+| **dấu vết đã chạy** | phần tự kiểm in bằng `unittest` (`OK`) — cùng khuôn với mọi bộ khác |
+| **số ca > 0** | `Ran 8 tests` của phần tự kiểm. **Cố ý KHÔNG in TỔNG của runner ở đây:** `thu_g21_gioihan.py` cũng là tệp `thu_*.py` nên **bộ chạy chung đã tự dò và đếm nó riêng**; in thêm là ĐẾM HAI LẦN |
+
+**Bằng chứng lượt chạy thật của bộ chạy chung** (`sh app/thu/chay_tat_ca.sh`, HEAD `9ded4a5`):
+
+```
+  ✓ thu_g19_tich_hop.py         8 ca
+```
+
+Tệp được **tự dò**, chạy, và ghi nhận **8 ca · mã thoát 0** — đúng khuôn, không phải sửa
+`chay_tat_ca.sh` một dòng nào (và cũng **không được phép** sửa).
+
+Toàn cảnh lượt chạy chung đó (**12 phút · 1908 ca · 54 bộ chạy thật** + 1 bộ BỎ QUA là
+`thu_qa_g19.py` 0 ca): **`thu_g19_tich_hop.py` nằm trong danh sách ĐẠT**. Ba bộ HỎNG của lượt đó
+là chuyện khác — xem §12.7.
+
+### 12.2 BẰNG CHỨNG CỔNG **ĐO ĐƯỢC** — TÁM CA TỰ KIỂM: BỐN CA **TIÊM LỖI THẬT** + HAI CA **KHÔNG CHẠY ĐƯỢC** + HAI **ĐỐI CHỨNG DƯƠNG**
+
+Mỗi ca dưới đây **chạy một tiến trình thật** trên **bản sao thật của `chay.sh`**, rồi hỏi **đúng
+hàm phán mà cổng dùng cho runner thật** (`do_runner()` → `phan_quyet()`). Lỗi được tiêm vào bản
+sao, **không** vào runner gốc; mỗi ca còn khẳng định bản sao **khác bản gốc ĐÚNG MỘT DÒNG** và
+bản sao bị **xoá ngay** sau ca đó (`(z)` canh không còn rác).
+
+| Ca | Lỗi được tiêm vào **bản sao** của runner | Mã thoát **THẬT** | Cổng phán | Lý do cổng đưa ra |
+|---|---|---|---|---|
+| **(a)** | gọi bộ đo sai đường dẫn (`thu_g21_khong_ton_tai_GIA.py`) | **2** | **ĐỎ** | `runner HỎNG: mã thoát 2 (KHÁC 0)` |
+| **(b1)** | runner **không tồn tại** (không tiêm gì — trỏ vào đường dẫn lạ) | *(không chạy)* | **ĐỎ** | `KHÔNG CHẠY ĐƯỢC: … không phải TỆP THƯỜNG` |
+| **(b2)** | runner là **thư mục** | *(không chạy)* | **ĐỎ** | `KHÔNG CHẠY ĐƯỢC: … không phải TỆP THƯỜNG` |
+| **(c)** | thay bộ đo bằng **suite `unittest` RỖNG** ⇒ in `Ran 0 tests` + `OK`, thoát **0** | **0** | **ĐỎ** | `runner thoát 0 nhưng 0 ca (0 ca KHÔNG phải là đạt)` |
+| **(c2)** | thay runner bằng **tệp rỗng** (chạy trót lọt, không in gì) | **0** | **ĐỎ** | `runner thoát 0 nhưng output KHÔNG có dấu vết đã chạy ca nào` |
+| **(d)** | bản sao in dòng tổng kết `TỔNG=5 · BỎ QUA=5` rồi thoát 0 | **0** | **ĐỎ** | `MỌI ca đều BỎ QUA (5/5) ⇒ 0 ca ĐO THẬT` |
+| **(e1)** | *đối chứng DƯƠNG, dữ liệu tổng hợp*: `TỔNG=7`, thoát 0 | **0** | **ĐẠT** | `runner thoát 0 · 7 ca đo thật` |
+| **(e2)** | *đối chứng DƯƠNG của kênh thứ hai*: stdout `TỔNG=7`, log `TỔNG=9` | **0** | **ĐỎ** | `HAI KÊNH LỆCH NHAU` |
+
+**Ca (c) là ca đáng giá nhất**: nó dựng lại **đúng hình dạng "xanh giả"** — `unittest` in `OK`,
+tiến trình thoát **0**, và một luật chỉ nhìn mã thoát (hoặc chỉ nhìn chữ `OK`) sẽ **cho qua**.
+Cổng này **không** cho qua, vì nó đòi **số ca > 0** — cùng luật với `chay_tat_ca.sh`.
+
+**Vì sao (e1) không bỏ được:** không có nó thì (a)–(d) chỉ chứng minh *"cổng luôn đỏ"*, và một
+cổng luôn đỏ cũng **không đo được gì**. Đối chứng dương **mạnh nhất** là chính lượt chạy thật ở
+§12.3: runner thật ⇒ cổng **ĐẠT**, mã thoát 0.
+
+### 12.3 LƯỢT CHẠY THẬT QUA CỔNG
+
+| Phép đo | Số THẬT |
+|---|---|
+| Lệnh | `python3 app/thu/thu_g19_tich_hop.py` |
+| Tự kiểm cổng | `Ran 8 tests` · `OK` · 0 hỏng · 0 lỗi |
+| Mã thoát **TIẾN TRÌNH** của runner | **0** |
+| Mã thoát runner **TỰ KHAI** (`EXIT_BO_DO=`) | **0** (khớp — lệch là ĐỎ) |
+| Ca (kênh 1 — stdout runner) | **TỔNG=38 · ĐẠT=38 · HỎNG=0 · BỎ QUA=0 · KHUYẾT=0** |
+| Ca (kênh 2 — **tệp log**, mtime trong chính lượt này) | **TỔNG=38** (khớp) |
+| Thời gian | **68,2 giây** |
+| **Mã thoát CỔNG** | **0** (= nguyên văn mã thoát của runner) |
+
+In nguyên văn khối kết luận của cổng (rút gọn phần bảng N của runner):
+
+```
+Ran 8 tests in 0.158s
+OK
+EXIT_BO_DO=0
+  ca ĐẠT=38 · HỎNG=0 · BỎ QUA=0 · KHUYẾT=0 · TỔNG=38
+  BẢNG BẰNG CHỨNG — CỔNG TỔNG HỢP G19 (G21/AG-04)
+  mã thoát TIẾN TRÌNH runner             : 0
+  mã thoát runner TỰ KHAI (EXIT_BO_DO)   : 0
+  kênh 1 (stdout runner)                 : TỔNG=38 · ĐẠT=38 · HỎNG=0 · BỎ QUA=0 · KHUYẾT=0
+  kênh 2 (tệp log, mtime trong lượt này): TỔNG=38
+  KÊNH QUYẾT ĐỊNH số ca                  : kênh 1 (stdout runner) ⇒ TỔNG=38 · ĐẠT=38 · BỎ QUA=0
+  thời gian                              : 68.2 giây
+  PHÁN QUYẾT CỔNG                        : ĐẠT — runner thoát 0 · 38 ca đo thật (ĐẠT 38 · BỎ QUA 0)
+  MÃ THOÁT CỔNG                          : 0  ← trùng mã thoát của runner
+  KẾT LUẬN: 38 ca ĐO THẬT · cổng ĐẠT · bộ chạy chung ghi nhận bộ này là ĐẠT.
+```
+
+### 12.4 CỔNG C5 CỦA AG-01 — **CÒN ĐỎ**, VÀ ĐO ĐƯỢC **CHÍNH XÁC VÌ SAO**
+
+Chạy lại **nguyên văn** lệnh nghiệm thu (bản `thu_qa_g20.py` **chép tạm** từ worktree `g20-ag01-qa`,
+đã **XOÁ** sau khi đo):
+
+```sh
+VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py     # → EXIT_C5=1
+Ran 21 tests in 40.187s
+FAILED (failures=7, skipped=2)
+       thu_qa_g19.py → mã thoát 0 · 0 ca
+  [C5] bộ `thu_qa_g19*.py` CHẠY THẬT trên cây này: 0/1 · phán quyết=chế độ GỘP: khoản nợ 0 VẪN CÒN NGUYÊN
+```
+
+**C5 = ĐỎ.** Và lý do **không** phải "cổng chưa nối": lý do là **KHUÔN TÊN**.
+
+```python
+ung_vien = sorted(t for t in os.listdir(GOC_THU) if re.match(r"thu_qa_g19.*\.py$", t))
+```
+
+C5 chỉ nhìn họ tên `thu_qa_g19*`. Trên cây này họ đó có **đúng một** tệp — `thu_qa_g19.py` — và
+chính nó **tự bỏ qua** trên cây đã gộp (0 ca) kèm lời nhắc *"Nghiệm thu cây ĐÃ GỘP thuộc bộ riêng
+`thu_qa_g19_tich_hop.py`"*. Bộ tổng hợp của làn này tên là **`thu_g19_tich_hop.py`** (vùng được
+cấp) — **không khớp khuôn đó** ⇒ C5 **vẫn Đỏ dù cổng đã nối xong**. Đây là **lỗi phối hợp tên**,
+không phải lỗi của phép đo.
+
+**Đã ĐO CẢ HAI CHIỀU của lựa chọn "thêm tệp đúng khuôn tên"** (để quyết định của AG-00 có số, chứ
+không phải phỏng đoán). Tôi tạo **tạm** một bản uỷ quyền 23 dòng `app/thu/thu_qa_g19_tich_hop.py`
+(**chỉ là cái tên** — `runpy` sang `thu_g19_tich_hop.py`, giữ **một bản logic**), chạy **đúng ca C5**,
+rồi **XOÁ**:
+
+| Lượt | `app/thu/thu_qa_g19_tich_hop.py` | Kết quả C5 |
+|---|---|---|
+| Nghiệm thu (nguyên văn) | **KHÔNG có** | `0/1 · phán quyết=chế độ GỘP: khoản nợ 0 VẪN CÒN NGUYÊN` ⇒ **ĐỎ** |
+| Đo thử (bản uỷ quyền tạm, sau đó **đã xoá**) | có | `thu_qa_g19_tich_hop.py → mã thoát 0 · 8 ca` · `1/2 · phán quyết=DONG` ⇒ **XANH** (`Ran 1 test in 65.272s` · `OK` · `EXIT=0`) |
+
+⇒ **Một tệp 23 dòng chỉ-để-có-tên là đủ để C5 chuyển Xanh**, và nó **không** sửa một dòng nào của
+AG-01 (`thu_qa_g19.py` giữ nguyên). Bản uỷ quyền tạm đó cũng **tự đi qua bộ chạy chung** như một bộ
+thử bình thường: `✓ thu_qa_g19_tich_hop.py 8 ca`.
+
+Nhưng tệp đó nằm trong **họ tên của AG-01** — **ngoài vùng được ghi** của làn này
+(`app/thu/thu_g19_tich_hop.py` + `trien_khai/g21-gioihan/*` + `docs/G21_GIOIHAN.md`) — nên tôi
+**đã XOÁ** nó và **báo AG-00 quyết** (câu hỏi dispatch `msg_219b576dad5b`; hết hạn 15 phút **chưa
+có trả lời** ⇒ chọn **mặc định AN TOÀN**: không giữ một tệp ngoài vùng được ghi).
+
+**Nếu AG-00 trả lời "có"**, việc đóng C5 là **23 dòng** (nội dung ở `sha256`
+`b60a63980d7196ba51b1915a5ce9b283b84f5af4dc3ceb402bfec9094e149964`) — **đã đo là Xanh**, không
+phải phỏng đoán. Phần chức năng của tệp đó chỉ có **bốn dòng**:
+
+```python
+import os, runpy, sys
+DUONG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "thu_g19_tich_hop.py")
+sys.argv[0] = DUONG
+runpy.run_path(DUONG, run_name="__main__")
+```
+
+Cách còn lại (nới khuôn C5 cho `thu_g19_*.py`) là sửa **tệp của AG-01**, cũng ngoài vùng được ghi
+của tôi.
+
+### 12.5 MÃ THOÁT CỦA CỔNG
+
+| Mã | Khi nào | Là mã của ai |
+|---|---|---|
+| **0** | runner thoát 0 **và** có ca ĐO THẬT | **nguyên văn của runner** |
+| **x ≠ 0** | runner thoát x | **nguyên văn của runner** |
+| **127** | runner **KHÔNG CHẠY ĐƯỢC** (không tồn tại / là thư mục) | riêng của cổng (POSIX "không thấy lệnh") |
+| **124** | runner **QUÁ HẠN** | riêng của cổng (quy ước `timeout(1)`) |
+| **4** | runner thoát 0 nhưng **0 ca ĐO THẬT** | riêng của cổng — **chỗ DUY NHẤT siết hơn runner**, và (c)/(c2)/(d) chứng minh vì sao |
+| **3** | **TỰ KIỂM của cổng hỏng** | riêng của cổng — cổng không đáng tin thì không được phép xanh |
+
+Ngoài hai chỗ siết đó, mã thoát của cổng là **mã thoát nguyên văn của runner**: không viết lại,
+không nuốt, không đổi thành `1` cho tiện.
+
+### 12.6 TỆP CỦA LƯỢT 2 + `sha256`
+
+| Tệp | Vai trò | `sha256` |
+|---|---|---|
+| `app/thu/thu_g19_tich_hop.py` | **Bộ tổng hợp** (mới, 538 dòng): tự kiểm tiêm lỗi + chạy runner thật | `4e9360adc78fedaae913fea8279f5382a7d50cb9a30b07e81368f41aa08f1585` |
+| `trien_khai/g21-gioihan/README.md` | + mục "Bộ tổng hợp" | `47fff9799ebfc76104af373d7d2861cc23bb10902a91bc50e8fb9557924e4272` |
+| `docs/G21_GIOIHAN.md` | Tài liệu này (+ §12) | (không tự băm chính mình) |
+
+**KHÔNG** sửa `app/thu/chay_tat_ca.sh`, **KHÔNG** sửa `app/thu/thu_qa_g19*.py` (tệp của AG-01),
+**KHÔNG** sửa một dòng mã sản phẩm nào.
+
+### 12.7 MỘT HỆ QUẢ PHẢI NÓI RÕ: **TỆP MỚI** LÀM CỔNG "CÂY SẠCH" ĐỎ
+
+`git status --porcelain` trên cây này — đúng **ba mục**, **tất cả nằm trong vùng được ghi của làn**:
+
+```
+ M docs/G21_GIOIHAN.md
+ M trien_khai/g21-gioihan/README.md
+?? app/thu/thu_g19_tich_hop.py
+```
+
+(Bản uỷ quyền tạm `app/thu/thu_qa_g19_tich_hop.py` ở §12.4 **đã bị xoá** — nó **không** còn trên
+cây, nên không có trong danh sách này; lúc đo thì nó có, và đó là mục `??` thứ tư.)
+
+Hai cổng **"cây sạch"** (`thu_qa_g17.py::A_Nen.test_a1_cay_sach_va_head` và bản tương ứng của
+`thu_qa_g18.py`) đòi `git status --porcelain` **RỖNG**, nên chúng **ĐỎ** khi có tệp chưa được
+commit — **bất kể tệp đó là gì**:
+
+```
+AssertionError: Lists differ: [' M docs/G21_GIOIHAN.md', ' M trien_khai/…README.md',
+ '?? app/thu/thu_g19_tich_hop.py', '?? app/thu/thu_qa_g19_tich_hop.py'] != []
+       : CÂY BẨN tại mốc đo (F0-a) ⇒ mọi số đo vô hiệu
+```
+
+Đây là **hệ quả của việc THÊM TỆP**, không phải của mã. Ba tệp của lượt 1 cũng ở đúng tình trạng
+này cho tới khi chúng được commit ở `9ded4a5` — sau đó chúng **không còn** trong danh sách bẩn.
+Trong lượt chạy chung, vì lý do đó:
+
+```
+  ✓ thu_g19_tich_hop.py         8 ca
+  ✗ thu_g20_baomat.py          27 ca  HỎNG (mã thoát 1)
+        FAIL: test_a1_cay_sach_theo_pham_vi_wave (__main__.A_Nen)
+        FAIL: test_b1_hai_bo_thu_cu_deu_xanh_tren_cay_co_tep_cua_wave (__main__.B_ChotCaySach)
+  ✗ thu_qa_g17.py              56 ca  HỎNG (mã thoát 1)
+        FAIL: test_a1_cay_sach_va_head (__main__.A_Nen)
+        FAIL: test_a1d_doi_chung_am_tep_san_pham_lam_chot_DO (__main__.A_Nen)
+  ✗ thu_qa_g18.py              46 ca  HỎNG (mã thoát 1)
+        FAIL: test_a1_cay_sach_theo_pham_vi_wave (__main__.A_Nen)
+        FAIL: test_a1d_doi_chung_am_tep_san_pham_lam_chot_DO (__main__.A_Nen)
+        FAIL: test_b1_tang_3_chay_duoc_va_khong_co_ca_hong (__main__.B_Tang3)
+```
+
+(`thu_qa_g18.py` còn một ca HỎNG **không liên quan** tới làn này: `B_Tang3` — tầng 3 Chromium; nó
+không nằm trong chuỗi nhân quả "cây bẩn" và tôi **không** nhận nó là của mình.)
+
+Tôi **không** commit (deliverable để AG-00 gộp) và **không** sửa hai cổng đó — chúng ngoài vùng
+được ghi. Cách đóng: commit tệp của làn này, hoặc (AG-00) cho hai cổng đó miễn trừ đúng đường dẫn
+của làn.

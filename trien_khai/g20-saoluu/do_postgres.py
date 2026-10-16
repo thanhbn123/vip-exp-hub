@@ -31,7 +31,8 @@ import tempfile
 DAY = os.path.dirname(os.path.abspath(__file__))
 GOC = os.path.dirname(os.path.dirname(DAY))
 sys.path.insert(0, DAY)
-sys.path.insert(0, os.path.join(GOC, "app"))
+APP = os.environ.get("G21_APP_DIR") or os.path.join(GOC, "app")
+sys.path.insert(0, APP)
 sys.path.insert(0, os.path.join(GOC, "app", "thu"))
 sys.path.insert(0, os.path.join(GOC, "trien_khai", "postgres"))
 

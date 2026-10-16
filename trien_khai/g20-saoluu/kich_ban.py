@@ -31,6 +31,11 @@ import khung_do  # noqa: E402
 PY = sys.executable or "python3"
 VUNG_CAM = os.path.expanduser("~/Projects/vip-express-hub")
 
+# Thư mục `app/` cấp cho MỌI tiến trình con. `G21_APP_DIR` cho phép chạy CÙNG bộ kịch bản này
+# trên một `migrate.py` ỨNG VIÊN (bản đã vá, hoặc bản bị tiêm lỗi) mà KHÔNG sửa cây thật —
+# xem `trien_khai/g20-saoluu/fail_closed.py` và `app/thu/thu_g21_saoluu.py`.
+APP = os.environ.get("G21_APP_DIR") or os.path.join(GOC, "app")
+
 
 # --------------------------------------------------------------------- hạ tầng chạy con
 def chot_an_toan(duong):
@@ -71,10 +76,10 @@ def gieo(data_dir, timeout=900):
 
 
 _MA_SAO_LUU = ("import sys; sys.path.insert(0, %r); import migrate; print(migrate.sao_luu())"
-               % os.path.join(GOC, "app"))
+               % APP)
 _MA_KHOI_PHUC = ("import os, sys; sys.path.insert(0, %r); import migrate;"
                  " migrate.khoi_phuc(os.environ['G20_SAO_LUU'])"
-                 % os.path.join(GOC, "app"))
+                 % APP)
 
 
 def sao_luu(data_dir):
@@ -196,7 +201,7 @@ def ca_doi_chung_duong():
             " (tid,'SAU-BACKUP-001','a','0','x','b','0','y','h',100,999000,999000,u,"
             " '2026-10-16T00:00:00+07:00','2026-10-16T00:00:00+07:00'));"
             " tai_chinh.ghi_but_toan(tid,'cod_du_kien',999000,'he_thong','don sau moc backup',"
-            " tao_boi=u); print('them-xong')" % os.path.join(GOC, "app"), A)
+            " tao_boi=u); print('them-xong')" % APP, A)
         giua = khung_do.chup(db(A))
         lech_giua = khung_do.so_sanh(truoc, giua)          # (a) phép so PHẢI đỏ
         kp = khoi_phuc(A, sl["duong"] or "")
@@ -242,7 +247,7 @@ try:
 except BaseException as e:
     print('NGOAI-LE: %%s: %%s' %% (type(e).__name__, e))
     raise
-""" % os.path.join(GOC, "app")
+""" % APP
 
 _MA_PHINH = """import os, sys
 sys.path.insert(0, %r)
@@ -257,7 +262,7 @@ for i in range(n):
                ('phinh-%%d' %% i, os.urandom(200000), '{}'))
 kn.commit()
 print('phinh-xong', kn.execute('SELECT COUNT(*) FROM wh_su_kien').fetchone()[0])
-""" % os.path.join(GOC, "app")
+""" % APP
 
 
 _MA_SAO_LUU_CHAM = """import sys, time
@@ -267,7 +272,7 @@ print('BAT-DAU', flush=True)
 p = migrate.sao_luu()
 print('XONG', p, flush=True)
 time.sleep(30)
-""" % os.path.join(GOC, "app")
+""" % APP
 
 
 def _tep_moi_sau(thu_muc, truoc):
@@ -324,25 +329,52 @@ def ca_sao_luu_cat_giua_duong():
                     "tep_de_duong": p_a})
 
         # ---------------- (b) bị giết giữa lúc ghi ----------------
-        # Giết ở ~40% thời gian sao lưu trọn vẹn: đủ muộn để tệp đã sinh và đã có trang,
-        # đủ sớm để chưa ghi xong.
+        # ====== VÌ SAO GIẾT THEO **KÍCH THƯỚC**, KHÔNG THEO **THỜI GIAN** ======
+        # Bản G20 ngủ `giay_tron * f` rồi giết, với `giay_tron` đo được từ MỘT lượt sao lưu
+        # trọn vẹn TRƯỚC ĐÓ. Đo lại 16/10/2026 thấy nó KHÔNG TẤT ĐỊNH: lượt đo đầu chịu chi phí
+        # khởi động tiến trình + đệm đĩa, các lượt sau nhanh hơn hẳn, nên ngủ `0.4 * giay_tron`
+        # có thể đã MUỘN hơn lúc ghi xong — cả ba lượt giết cho ra tệp ĐỦ BYTE, chốt chống
+        # phép-đo-rỗng `so_cach_tep_de_that_su_cut >= 3` báo **2** và cả kịch bản đỏ vì một lý do
+        # không liên quan gì tới sản phẩm.
+        # Nay: GIỠ TỚI KHI TỆP ĐỦ LỚN rồi mới giết. Cùng một mốc kích thước trên mọi máy, mọi
+        # tốc độ đĩa. Lượt nào giết quá muộn (tệp đã đủ byte) được đánh dấu `cat_truot` và
+        # KHÔNG tính là tệp dở — khai ra, không giấu.
         import signal
         import subprocess as sp
-        for do_tre in (giay_tron * 0.4, giay_tron * 0.7, giay_tron * 0.9):
+        for ti_le in (0.4, 0.7, 0.9):
             co_b = set(_ds_truc_tiep(thu_muc_sao_luu(A)))
             pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
                           env=moi_truong(A), stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-            time.sleep(max(0.02, do_tre))
-            da_chet = pr.poll() is None
-            if da_chet:
+            moc = max(4096, int(co_tron * ti_le))
+            t0, da_giet, co_luc_giet = time.time(), False, 0
+            while time.time() - t0 < max(10.0, giay_tron * 20):
+                moi = _tep_moi_sau(thu_muc_sao_luu(A), co_b)
+                if moi:
+                    try:
+                        co_luc_giet = os.path.getsize(
+                            os.path.join(thu_muc_sao_luu(A), moi[0]))
+                    except OSError:
+                        co_luc_giet = 0
+                    if co_luc_giet >= moc:
+                        break
+                if pr.poll() is not None:
+                    break
+                time.sleep(0.002)
+            if pr.poll() is None:
                 pr.send_signal(signal.SIGKILL)
+                da_giet = True
             pr.wait()
             moi_b = _tep_moi_sau(thu_muc_sao_luu(A), co_b)
             p_b = os.path.join(thu_muc_sao_luu(A), moi_b[0]) if moi_b else None
-            ket.append({"cach": "b-bi-giet-%.0f%%" % (do_tre / giay_tron * 100.0),
-                        "do_tre_giay": round(do_tre, 3), "con_song_luc_giet": da_chet,
+            co_b_that = os.path.getsize(p_b) if p_b else None
+            ket.append({"cach": "b-bi-giet-%.0f%%" % (ti_le * 100.0),
+                        "moc_giet_byte": moc, "co_luc_giet": co_luc_giet,
+                        "giay_cho": round(time.time() - t0, 3),
+                        "con_song_luc_giet": da_giet,
                         "ma_thoat": pr.returncode, "tep_de": moi_b,
-                        "co_tep_de": os.path.getsize(p_b) if p_b else None,
+                        "co_tep_de": co_b_that,
+                        # Giết quá muộn ⇒ tệp đã ghi xong ⇒ ĐÂY KHÔNG PHẢI ca hỏng.
+                        "cat_truot": co_b_that is not None and co_b_that >= co_tron,
                         "tep_de_duong": p_b})
 
         # ---------------- (c) tệp cắt cụt sau khi ghi xong ----------------
@@ -367,6 +399,8 @@ def ca_sao_luu_cat_giua_duong():
             k["csdl_sau"] = {"so_byte": sau.get("so_byte"), "so_bang": sau.get("so_bang"),
                              "integrity": sau.get("integrity_check"), "loi": sau.get("loi"),
                              "tong_tien": sau.get("tong_tien_toan_kho")}
+            k["cut_that"] = (k["co_tep_de"] is None or k["co_tep_de"] < co_tron
+                             or (k.get("chup_tep_de") or {}).get("integrity_check") != "ok")
 
         # -------- ĐỐI CHỨNG ĐƯỜNG: tệp TRỌN VẸN phải khôi phục ĐẠT và khớp gốc --------
         Bc = n.duong("B-tron")
@@ -383,7 +417,16 @@ def ca_sao_luu_cat_giua_duong():
             "so_bang_goc": truoc.get("so_bang"), "tong_tien_goc": truoc.get("tong_tien_toan_kho"),
             "cac_cach_cat": ket,
             "so_cach_bi_NHAN": sum(1 for k in ket if k["khoi_phuc_NHAN"]),
-            "so_cach_tep_de_that_su_cut": sum(1 for k in ket if k["co_tep_de"] < co_tron),
+            # ====== ĐẾM "LƯỢT CẮT THẬT SỰ" — VÀ VÌ SAO PHẢI ĐẾM CẢ LƯỢT KHÔNG ĐỂ LẠI TỆP ======
+            # Đo được 16/10/2026: trên một bản vá fail-closed, lượt cắt vì hết chỗ ghi DỌN tệp
+            # tạm nên `co_tep_de` là `None`. Nếu chỉ đếm `co_tep_de < co_tron` thì chốt chống
+            # phép-đo-rỗng (cần >= 3) báo "kịch bản không chạy" — một ĐỎ GIẢ, và nó trừng phạt
+            # đúng cái hành vi tốt lên. Nên `cut_that` = lượt cắt KHÔNG sinh ra một bản sao lưu
+            # TRỌN VẸN: hoặc không để lại tệp nào, hoặc để lại tệp ngắn hơn / đọc không được.
+            "so_cach_tep_de_that_su_cut": sum(
+                1 for k in ket if k["co_tep_de"] is None or k["co_tep_de"] < co_tron),
+            "so_luot_cat_khong_de_lai_tep": sum(1 for k in ket if k["co_tep_de"] is None),
+            "so_luot_cat_truot": sum(1 for k in ket if k.get("cat_truot")),
             "doi_chung_duong": {"rc_khoi_phuc": kp_c2["rc"], "so_lech": len(lech_c2),
                                 "tong_tien": chup_c2.get("tong_tien_toan_kho")},
             "doi_chung_duong_dat": kp_c2["rc"] == 0 and not lech_c2,
@@ -392,7 +435,8 @@ def ca_sao_luu_cat_giua_duong():
             # khôi phục khớp gốc. Hai lượt SIGKILL ở 70%/90% ra tệp ĐỦ BYTE là chuyện bình
             # thường — giết quá muộn — nên chúng KHÔNG vào điều kiện đạt; khai ra, không giấu.
             "dat": (rc_gieo == 0 and rc_phinh == 0 and len(ket) == 5
-                    and sum(1 for k in ket if k["co_tep_de"] < co_tron) >= 3
+                    and sum(1 for k in ket if k["co_tep_de"] is None
+                            or k["co_tep_de"] < co_tron) >= 3
                     and kp_c2["rc"] == 0 and not lech_c2),
         }
 
@@ -537,14 +581,17 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
             "import sys; sys.path.insert(0, %r); import csdl, tai_chinh; csdl.mo();"
             " csdl.ghi(\"INSERT INTO tenants (code,ten,goi_id,tao_luc) VALUES (?,?,?,?)\","
             " ('moi-hon','Tenant MOI HON ban sao luu','free','2026-10-16T00:00:00+07:00'));"
-            " print('ok')" % os.path.join(GOC, "app"), A)
+            " print('ok')" % APP, A)
         day = khung_do.chup(db(A))
         truoc_kp = liet_ke_sao_luu(A)
 
         kp1 = khoi_phuc(A, sl["duong"])
         sau1 = khung_do.chup(db(A))
         giua = liet_ke_sao_luu(A)
-        ban_cat = [f for f in giua if "rollback" in f]
+        # CHỈ đếm tệp `.db`. Đo được 16/10/2026: một bản vá fail-closed cất bản hiện tại KÈM
+        # `-wal`/`-shm` của nó, nên bộ lọc `"rollback" in f` đếm luôn hai tệp phụ và trả về 3
+        # thay vì 1 — một ĐỎ GIẢ do chính phép đếm, không phải do sản phẩm.
+        ban_cat = [f for f in giua if "rollback" in f and f.endswith(".db")]
         # (b) bản cất có mở được và có đúng dữ liệu vừa mất không?
         noi_dung_ban_cat = None
         if ban_cat:
@@ -563,13 +610,25 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
         kp2 = khoi_phuc(A, sl["duong"])
         kp3 = khoi_phuc(A, sl["duong"])
         cuoi = liet_ke_sao_luu(A)
-        ban_cat_cuoi = [f for f in cuoi if "rollback" in f]
+        ban_cat_cuoi = [f for f in cuoi if "rollback" in f and f.endswith(".db")]
         # Câu hỏi quyết định: bản cất của lượt ĐẦU (thứ duy nhất chứa dữ liệu vừa mất) còn
         # nguyên không, hay đã bị lượt SAU ghi đè im lặng?
         bam_cat_cuoi = None
         if ban_cat_cuoi:
             bam_cat_cuoi = khung_do.chup(
                 os.path.join(thu_muc_sao_luu(A), sorted(ban_cat_cuoi)[-1])).get("bam_toan_kho")
+        # ====== VÌ SAO PHẢI BĂM **MỌI** BẢN CẤT, KHÔNG CHỈ BẢN CUỐI ======
+        # Đo được 16/10/2026: sau khi `khoi_phuc()` được vá cho tên-bản-cất-không-đè, ba lượt
+        # khôi phục để lại BA tệp `hub-truc-rollback-*`. Bản GIỮ DỮ LIỆU VỪA MẤT là bản của
+        # lượt ĐẦU; `sorted(...)[-1]` lại chọn bản của lượt CUỐI. Nếu chỉ băm bản cuối thì một
+        # bản vá ĐÚNG vẫn bị đọc thành "bản cất đã bị ghi đè" — một cái ĐỎ GIẢ. Nên phải hỏi
+        # đúng câu hỏi vận hành: CÒN ÍT NHẤT MỘT bản cất giữ được dữ liệu lúc chụp hay không.
+        bam_moi_ban_cat_cuoi = {}
+        for _f in ban_cat_cuoi:
+            bam_moi_ban_cat_cuoi[_f] = khung_do.chup(
+                os.path.join(thu_muc_sao_luu(A), _f)).get("bam_toan_kho")
+        so_ban_cat_giu_du_lieu_goc = sum(
+            1 for _b in bam_moi_ban_cat_cuoi.values() if _b == day.get("bam_toan_kho"))
         return {
             "ten": "5. KHÔI PHỤC ĐÈ lên CSDL đã có dữ liệu — bản cất có an toàn không",
             "rc_gieo": rc_gieo, "rc_sao_luu": sl["rc"], "rc_them": rc_them,
@@ -582,6 +641,8 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
             "noi_dung_ban_cat": noi_dung_ban_cat,
             "bam_ban_cat_sau_1_lan": bam_cat_1,
             "bam_ban_cat_sau_3_lan": bam_cat_cuoi,
+            "bam_moi_ban_cat_cuoi": bam_moi_ban_cat_cuoi,
+            "so_ban_cat_giu_du_lieu_goc": so_ban_cat_giu_du_lieu_goc,
             "bam_du_lieu_luc_chup_day": day.get("bam_toan_kho"),
             "ban_cat_con_giu_duoc_du_lieu_goc": bam_cat_cuoi == day.get("bam_toan_kho"),
             "lech_truoc_kp1": khung_do.so_sanh(truoc, sau1),
@@ -607,7 +668,7 @@ kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_c
 kn.execute('COMMIT')
 kn.close()
 print('phien-ban:', csdl.phien_ban_hien_tai())
-""" % os.path.join(GOC, "app")
+""" % APP
 
 
 def ca_khoi_phuc_schema_thap_hon():
@@ -628,7 +689,7 @@ def ca_khoi_phuc_schema_thap_hon():
             "import sys; sys.path.insert(0, %r); import csdl; csdl.mo();"
             " csdl.ghi(\"INSERT INTO tenants (code,ten,goi_id,tao_luc) VALUES (?,?,?,?)\","
             " ('v6-a','Tenant tren schema v6','free','2026-10-16T00:00:00+07:00'));"
-            " print('seed-v6-ok')" % os.path.join(GOC, "app"), C)
+            " print('seed-v6-ok')" % APP, C)
         sl_v6 = sao_luu(C)
         chup_v6 = khung_do.chup(db(C))
 
@@ -650,7 +711,7 @@ def ca_khoi_phuc_schema_thap_hon():
             "import sys; sys.path.insert(0, %r); import csdl; csdl.mo();"
             " print('cot:', [r[1] for r in csdl.mo().execute('PRAGMA table_info(don_hang)')]);"
             " print('phien-ban-nhin-tu-ma:', csdl.phien_ban_hien_tai())"
-            % os.path.join(GOC, "app"), A)
+            % APP, A)
         # ĐƯỜNG RA: sau khi tụt về v6, `migrate.chay()` có nâng lại được lên v9 không, và dữ
         # liệu của bản v6 có sống sót qua lượt nâng đó không. Đây là câu hỏi tiếp theo người
         # trực sẽ hỏi ngay; đo luôn thì báo cáo mới nói được "tụt rồi thì làm gì".
@@ -658,7 +719,7 @@ def ca_khoi_phuc_schema_thap_hon():
             "import sys; sys.path.insert(0, %r); import csdl, migrate;"
             " kq = migrate.chay(im_lang=True); csdl.dong();"
             " import json; print(json.dumps(kq, ensure_ascii=False, default=str))"
-            % os.path.join(GOC, "app"), A)
+            % APP, A)
         sau_nang = khung_do.chup(db(A))
         return {
             "ten": "6. KHÔI PHỤC bản sao lưu SCHEMA THẤP HƠN (v6 đè lên v9)",
@@ -666,9 +727,19 @@ def ca_khoi_phuc_schema_thap_hon():
             "rc_seed_v6": rc_seed6, "out_seed6": out_seed6.strip()[-120:], "loi_seed6": err_seed6[-300:],
             "rc_sao_luu_v6": sl_v6["rc"], "ban_sao_luu_v6": sl_v6["duong"],
             "phien_ban_v6": chup_v6.get("phien_ban"), "so_bang_v6": chup_v6.get("so_bang"),
+            # `integrity` + số bảng của CHÍNH bản sao lưu v6. Cần để phân biệt hai câu rất khác
+            # nhau: "bị từ chối vì TỤT PHIÊN BẢN" và "bị từ chối vì TỆP HỎNG". Thiếu nó thì một
+            # lời từ chối ĐÚNG vẫn có thể bị đọc thành một lời từ chối SAI.
+            "integrity_ban_sao_luu_v6": khung_do.integrity_cua_tep(sl_v6["duong"])
+            if sl_v6["duong"] else None,
+            "so_bang_ban_sao_luu_v6": khung_do.chup(sl_v6["duong"]).get("so_bang")
+            if sl_v6["duong"] else None,
             "rc_gieo_v9": rc_gieo, "phien_ban_v9_truoc": truoc.get("phien_ban"),
             "so_bang_v9_truoc": truoc.get("so_bang"),
             "rc_khoi_phuc": kp["rc"], "out_khoi_phuc": kp["out"][-300:],
+            # STDERR là chỗ `SystemExit` in thông báo TỪ CHỐI. Thiếu nó thì một bản vá
+            # fail-closed (từ chối ĐÚNG cách) trông y hệt một lượt im lặng — đo sai.
+            "err_khoi_phuc": kp["err"][-500:],
             "phien_ban_sau_khoi_phuc": pb_sau, "chup_sau": {
                 "phien_ban": sau.get("phien_ban"), "so_bang": sau.get("so_bang"),
                 "bam": sau.get("bam_toan_kho"), "integrity": sau.get("integrity_check"),
@@ -765,7 +836,7 @@ try:
     print("WH-DAT", len(w))
 except Exception as e:
     print("WH-HONG", type(e).__name__, str(e)[:200])
-""" % os.path.join(GOC, "app")
+""" % APP
 
 
 def ca_khoa_khong_di_kem():

@@ -16,12 +16,26 @@ KHÔNG ĐO: `pg_dump`/`pg_restore` (đã có `app/thu/thu_postgres.py` lớp K) 
 ====== BA LOẠI KHẲNG ĐỊNH TRONG TỆP NÀY, ĐỪNG LẪN ======
 1. **BẮT BUỘC ĐÚNG** — đường lành phải khôi phục ra đúng dữ liệu, đối chứng đường phải làm
    ĐỎ được phép so. Đỏ ở đây là HỎNG THẬT.
-2. **ĐẶC TẢ HÀNH VI ĐÃ ĐO** (characterization) — ghi lại hành vi HIỆN TẠI của `khoi_phuc()`
-   ở các đường hỏng, kèm nhãn `ĐỘC HẠI ĐÃ BIẾT`. Đỏ ở đây nghĩa là HÀNH VI ĐÃ ĐỔI: nếu anh
-   vừa vá `khoi_phuc()`, hãy cập nhật ca này VÀ `docs/G20_BACKUP_RESTORE.md`. Đó là mục đích
-   của chúng — một khuyết điểm không có ca thử thì lần sau không ai biết nó còn hay mất.
+2. **BẤT BIẾN FAIL-CLOSED** — các đường hỏng phải DỪNG LẠI và BÁO RÕ, và CSDL ĐÍCH không được
+   để lại nửa vời. Đỏ ở đây nghĩa là SẢN PHẨM CHƯA FAIL-CLOSED ⇒ phải sửa `app/migrate.py`.
+   Xem `docs/G21_BACKUP_RESTORE.md`.
 3. **TỰ KIỂM BỎ ĐỒ** (`I_TuKiemBoDo`) — chứng minh phép so LÀM ĐỎ ĐƯỢC. Thiếu lớp này thì một
    `so_sanh()` luôn trả `[]` cũng "đạt" hết mọi ca ở trên.
+
+====== LỊCH SỬ CỦA TÁM CA `ĐỘC HẠI ĐÃ BIẾT` — ĐỌC TRƯỚC KHI "SỬA LẠI CHO XANH" ======
+Lượt G20 (AG-04) viết tám ca mang nhãn `ĐỘC HẠI ĐÃ BIẾT` để **GHI LẠI** hành vi fail-open hiện
+có, kèm câu "nếu ca này đỏ thì hành vi đã đổi". Chúng khẳng định ĐÚNG cái sai:
+`assertEqual(khoi_phuc_NHAN_tat_ca, 5)` đòi 5/5 tệp hỏng PHẢI được nhận thì ca mới xanh.
+
+Hệ quả đo được: bộ 41 ca **XANH**, mã thoát **0** — trong khi nghiệm thu G20 của AG-01 kết luận
+**FAILED**, và chính `docs/QA_G20.md` §4.1 gọi bộ đỏ duy nhất là một lỗ hổng sản phẩm. Một bộ
+thử canh hành vi fail-open thì không canh bất biến nào cả, và màu xanh của nó là màu xanh GIẢ.
+
+**AG-02 (G21) đã VIẾT LẠI tám ca đó theo BẤT BIẾN ĐÚNG.** Chúng giờ ĐỎ trên cây này, và ĐỎ là
+TÌNH TRẠNG ĐÚNG: lỗi nằm ở `app/migrate.py` — tệp của AG-00, ngoài vùng được ghi của AG-02.
+Bản vá đã viết và đã đo (`trien_khai/g20-saoluu/ban_va.py`; xem `docs/G21_BACKUP_RESTORE.md`).
+
+**KHÔNG nới điều kiện cho tám ca này xanh.** Nới ra là quay lại đúng thứ đã làm G20 FAILED.
 
 ====== MÔI TRƯỜNG ======
 Mọi lượt đo chạy trong thư mục TẠM, qua tiến trình con với `VIP_HUB_DATA` riêng.
@@ -169,24 +183,36 @@ class C_SaoLuuBiCatGiuaDuong(unittest.TestCase):
         self.assertGreaterEqual(self.kq["so_cach_tep_de_that_su_cut"], 3,
                                 "không tạo được tệp dở nào — kịch bản cắt không chạy")
 
-    def test_c3_DOC_HAI_DA_BIET_khoi_phuc_nhan_tep_de_khong_kiem_gi(self):
-        """ĐỘC HẠI ĐÃ BIẾT — `khoi_phuc()` nhận MỌI tệp dở, kể cả tệp 0 byte.
+    def test_c3_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_tep_de(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — `khoi_phuc()` phải TỪ CHỐI mọi tệp dở
+        **LÀM KHÁC BẢN GỐC**.
 
-        Đo 16/10/2026: cả 5 lượt cắt đều được `khoi_phuc()` NHẬN với mã thoát 0.
-        Tệp 0 byte (hết chỗ ghi) đặc biệt nguy: `PRAGMA integrity_check` trả **"ok"** cho nó —
-        vì tệp SQLite dài 0 byte LÀ một CSDL rỗng HỢP LỆ. Nghĩa là một bước "kiểm tra bản sao
-        lưu bằng integrity_check" cũng KHÔNG bắt được ca này; chỉ kiểm SỐ BYTE / SỐ BẢNG mới bắt.
+        Ca này PIN: nhận một tệp dở KHÔNG phải tính năng. Đo 16/10/2026 trên mã chưa vá: cả 5
+        lượt cắt đều được NHẬN với mã thoát 0 — trong đó lượt hết-chỗ-ghi để lại tệp **0 byte**,
+        và tệp 0 byte LÀ một CSDL rỗng HỢP LỆ (`integrity_check` trả **"ok"**), nên CSDL đích
+        bị thay bằng một CSDL RỖNG mà không một lời báo: 51 bảng → **0 bảng**, 34.336.000 đồng
+        → **0 đồng**.
 
-        Nếu ca này đỏ: hành vi `khoi_phuc()` ĐÃ ĐỔI. Cập nhật ca + `docs/G20_BACKUP_RESTORE.md`.
+        KHÔNG đếm những lượt cắt để lại tệp ĐỦ BYTE: đo được một lượt `SIGKILL` ở 90% thời gian
+        vẫn cho ra bản sao lưu trọn vẹn (51 bảng, đủ tiền). Nhận nó là ĐÚNG. Đếm nó là thổi
+        phồng con số và làm mất lòng tin vào cả bảng.
         """
-        self.assertEqual(self.kq["so_cach_bi_NHAN"], len(self.kq["cac_cach_cat"]),
-                         "khoi_phuc() đã BẮT ĐẦU từ chối tệp dở — hành vi đã đổi, cập nhật tài liệu")
-        teo = [c for c in self.kq["cac_cach_cat"] if c["co_tep_de"] == 0]
-        self.assertTrue(teo, "không còn ca tệp 0 byte — kịch bản hết chỗ ghi không chạy")
-        self.assertEqual(teo[0]["csdl_sau"]["integrity"], "ok",
-                         "tệp 0 byte không còn qua integrity_check — cập nhật nhận định")
-        self.assertEqual(teo[0]["csdl_sau"]["so_bang"], 0,
-                         "CSDL sau khi khôi phục từ tệp 0 byte KHÔNG rỗng — đo lại")
+        hong = [c for c in self.kq["cac_cach_cat"]
+                if c["khoi_phuc_NHAN"] and (
+                    (c.get("csdl_sau") or {}).get("loi")
+                    or (c.get("csdl_sau") or {}).get("so_bang") != self.kq["so_bang_goc"]
+                    or (c.get("csdl_sau") or {}).get("tong_tien") != self.kq["tong_tien_goc"])]
+        self.assertEqual(
+            hong, [],
+            "`khoi_phuc()` NHẬN tệp dở LÀM KHÁC BẢN GỐC ở: %s — CSDL đích bị thay bằng tệp dở. "
+            "Sửa `app/migrate.py` (tệp của AG-00), KHÔNG nới ca này."
+            % [c["cach"] for c in hong])
+        self.assertGreaterEqual(self.kq["so_cach_tep_de_that_su_cut"], 3,
+                                "phép đo RỖNG: không tạo được tệp dở thật nào")
+        a = [c for c in self.kq["cac_cach_cat"] if c["cach"] == "a-het-cho-ghi"]
+        self.assertTrue(a, "kịch bản hết-chỗ-ghi KHÔNG CHẠY — phép đo thiếu một vế")
+        self.assertNotEqual(a[0]["rc_luot_cat"], 0,
+                            "`sao_luu()` hết chỗ ghi mà vẫn thoát 0")
 
 
 # ============================================================================
@@ -230,16 +256,36 @@ class D_SuaMotByte(unittest.TestCase):
                       "sửa byte 0 không còn làm hỏng phần đầu tệp — đo lại")
         self.assertIsNone(c["integrity"])
 
-    def test_d4_DOC_HAI_DA_BIET_khoi_phuc_nhan_ca_5_ban_da_sua(self):
-        """ĐỘC HẠI ĐÃ BIẾT — `khoi_phuc()` không kiểm tệp trước khi đè lên CSDL đang chạy.
+    def test_d4_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_ban_sua_LAM_DOI_DU_LIEU(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — `khoi_phuc()` phải TỪ CHỐI bản sửa **LÀM
+        ĐỔI DỮ LIỆU**, và phải có ĐỐI CHỨNG ĐƯỜNG cho bản KHÔNG sửa.
 
-        Đo 16/10/2026: 5/5 bản bị sửa được NHẬN với mã thoát 0, kể cả bản mà CHÍNH SQLite đã
-        báo `file is not a database` và bản mà SQLite báo `row 2 missing from index …`.
-        `khoi_phuc()` chỉ `shutil.copy2` — không `integrity_check`, không kiểm số bảng, không
-        kiểm phần đầu tệp. Nếu ca này đỏ: hành vi ĐÃ ĐỔI, cập nhật ca + tài liệu.
+        Ca này PIN: một chốt kiểm chứng chỉ có răng khi nó bắt được thay đổi DỮ LIỆU, không
+        phải khi nó đếm số tệp bị nhận. Đo 16/10/2026: 5/5 bản bị sửa được NHẬN với mã thoát 0,
+        kể cả bản mà CHÍNH SQLite báo `file is not a database`; CSDL đích bị thay bằng chính
+        bản hỏng đó.
+
+        KHÔNG đếm ba chỗ lật byte vào vùng trang TRỐNG (25/50/75%): đo được dữ liệu KHÔNG đổi
+        (`bam_khop_goc = True`, `so_lech = 0`, `integrity = ok`) nên nhận chúng là ĐÚNG.
         """
-        self.assertEqual(self.kq["so_lan_khoi_phuc_NHAN_tat_ca"], len(self.kq["cac_lan_sua"]),
-                         "khoi_phuc() đã bắt đầu từ chối tệp bị sửa — hành vi đã đổi")
+        hong = [c for c in self.kq["cac_lan_sua"]
+                if c["rc_khoi_phuc"] == 0 and (
+                    (not c.get("bam_khop_goc")) or c.get("so_lech") or c.get("loi")
+                    or c.get("integrity") != "ok")]
+        self.assertEqual(
+            hong, [],
+            "`khoi_phuc()` NHẬN bản sửa LÀM KHÁC BẢN GỐC ở: %s — CSDL đích bị thay bằng bản "
+            "hỏng. Sửa `app/migrate.py` (tệp của AG-00), KHÔNG nới ca này."
+            % [c["nhan"] for c in hong])
+        self.assertEqual(len(self.kq["cac_lan_sua"]), 5, "phép đo RỖNG: thiếu chỗ sửa")
+        # ĐỐI CHỨNG ĐƯỜNG: bản KHÔNG sửa phải khôi phục ĐẠT. Thiếu vế này thì "từ chối bản sửa"
+        # có thể chỉ là hệ quả của một `khoi_phuc()` hỏng với MỌI tệp — hai kết luận khác hẳn nhau.
+        self.assertTrue(self.kq["doi_chung_duong_dat"],
+                        "ĐỐI CHỨNG ĐƯỜNG HỎNG: bản KHÔNG sửa mà khôi phục cũng lệch: %s"
+                        % (self.kq["doi_chung_duong"],))
+        # Chốt chống MỤC: phép đo phải THẬT SỰ tạo ra được ít nhất một bản sửa có hại.
+        co_hai = [c for c in self.kq["cac_lan_sua"] if c.get("bam_khop_goc") is False]
+        self.assertTrue(co_hai, "không bản sửa nào làm đổi dữ liệu — kịch bản không chạy")
 
 
 # ============================================================================
@@ -268,24 +314,31 @@ class E_KhoiPhucDeLenCsdlDangChay(unittest.TestCase):
                         "bản cất KHÔNG khớp dữ liệu lúc chụp: %s" % (self.kq["noi_dung_ban_cat"],))
         self.assertEqual(self.kq["noi_dung_ban_cat"]["integrity"], "ok")
 
-    def test_e3_DOC_HAI_DA_BIET_ba_luot_cung_giay_ghi_de_mat_ban_cat_duy_nhat(self):
-        """ĐỘC HẠI ĐÃ BIẾT — tên bản cất đặt theo GIÂY, lượt sau GHI ĐÈ IM LẶNG lượt trước.
+    def test_e3_BAT_BIEN_ba_luot_cung_giay_KHONG_duoc_xoa_nhau(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — lượt khôi phục sau KHÔNG được xoá bản cất
+        của lượt trước.
 
-        Đo 16/10/2026: ba lượt `khoi_phuc()` liên tiếp trong cùng một giây để lại **1** tệp
-        `hub-truoc-rollback-*.db`, và băm của nó KHÁC băm dữ liệu vừa bị đè — tức bản cất của
-        lượt ĐẦU (thứ duy nhất chứa dữ liệu thật) đã bị lượt SAU xoá mất.
+        Ca này PIN: bản cất trước khi đè là thứ DUY NHẤT giữ dữ liệu vừa mất, nên tên nó không
+        được đặt theo GIÂY. Đo 16/10/2026 trên mã chưa vá: ba lượt `khoi_phuc()` liên tiếp trong
+        cùng một giây để lại **1** tệp `hub-truoc-rollback-*.db`, và băm của nó KHÁC băm dữ liệu
+        vừa bị đè — tức bản cất của lượt ĐẦU (thứ duy nhất chứa dữ liệu thật) đã bị lượt SAU xoá.
 
-        Đây ĐÚNG khuôn lỗi mà `sao_luu()` đã bị bắt và đã sửa (nó thêm hậu tố `-1`, `-2`):
-        cùng một tệp `app/migrate.py`, một hàm đã vá, một hàm chưa. Nếu ca này đỏ: ai đó đã vá
-        `khoi_phuc()` — cập nhật ca + `docs/G20_BACKUP_RESTORE.md`, và gỡ mục khỏi báo cáo.
+        Đây ĐÚNG khuôn lỗi mà `sao_luu()` đã bị bắt và đã sửa (nó thêm hậu số `-1`, `-2`):
+        cùng một tệp `app/migrate.py`, một hàm đã vá, một hàm chưa.
         """
-        self.assertEqual(self.kq["so_ban_cat_sau_1_lan"], 1)
-        self.assertEqual(self.kq["so_ban_cat_sau_3_lan"], 1,
-                         "số bản cất đã tăng — hành vi đã đổi, cập nhật tài liệu")
-        self.assertFalse(self.kq["ban_cat_con_giu_duoc_du_lieu_goc"],
-                         "bản cất vẫn giữ được dữ liệu gốc — hành vi đã đổi")
-        self.assertNotEqual(self.kq["bam_ban_cat_sau_1_lan"], self.kq["bam_ban_cat_sau_3_lan"],
-                            "băm không đổi — bản cất không bị ghi đè, đo lại")
+        self.assertEqual(self.kq["so_ban_cat_sau_1_lan"], 1,
+                         "sau MỘT lượt khôi phục phải có ĐÚNG 1 bản cất")
+        self.assertGreaterEqual(
+            self.kq["so_ban_cat_sau_3_lan"], 3,
+            "ba lượt khôi phục chỉ để lại %s bản cất — lượt sau ĐÈ IM LẶNG lượt trước. Sửa "
+            "`app/migrate.py` (tệp của AG-00), KHÔNG nới ca này."
+            % self.kq["so_ban_cat_sau_3_lan"])
+        self.assertGreaterEqual(
+            self.kq["so_ban_cat_giu_du_lieu_goc"], 1,
+            "KHÔNG bản cất nào giữ được dữ liệu vừa bị đè — không có đường lùi thật")
+        # ĐỐI CHỨNG ĐƯỜNG: chính bản cất của lượt ĐẦU phải mở được và khớp dữ liệu lúc chụp.
+        self.assertEqual(self.kq["noi_dung_ban_cat"]["integrity"], "ok",
+                         "bản cất không mở được")
 
 
 # ============================================================================
@@ -310,42 +363,65 @@ class F_SchemaThapHon(unittest.TestCase):
         self.assertEqual(self.kq["phien_ban_v6"], 6)
         self.assertGreater(self.kq["so_bang_v6"], 15)
 
-    def test_f2_khoi_phuc_v6_de_len_v9_ra_DUNG_csdl_v6(self):
-        """Về mặt CƠ HỌC thì khôi phục đúng: CSDL sau = nguyên bản sao lưu v6."""
-        self.assertEqual(self.kq["rc_khoi_phuc"], 0)
-        self.assertTrue(self.kq["khoi_phuc_ra_dung_v6"], "CSDL sau khác bản sao lưu v6")
+    def test_f2_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_ban_schema_thap_hon(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — khôi phục bản schema THẤP HƠN phải TỪ CHỐI
+        và phải NÓI RA hai phiên bản, KHÔNG được để schema tụt im lặng.
 
-    def test_f3_DOC_HAI_DA_BIET_tut_schema_IM_LANG(self):
-        """ĐỘC HẠI ĐÃ BIẾT — khôi phục bản cũ làm TỤT schema mà không một lời báo.
+        Ca này PIN: TỤT SCHEMA là hỏng. Đo 16/10/2026 trên mã chưa vá: v6 đè lên v9 với mã thoát
+        **0**, thông báo duy nhất là "Đã khôi phục từ …". CSDL còn **20 bảng** thay vì 51 —
+        **31 bảng** và toàn bộ dữ liệu của chúng biến mất, tổng tiền rơi từ 34.336.000 xuống
+        1.298.000 đồng. Sau đó hệ VẪN CHẠY (rc 0) trên schema cũ.
 
-        Đo 16/10/2026: đưa bản sao lưu v6 cho `khoi_phuc()` đang chạy trên CSDL v9 → mã thoát 0,
-        thông báo duy nhất là "Đã khôi phục từ …". Không so phiên bản, không cảnh báo. CSDL
-        còn **20 bảng** thay vì 51 — 31 bảng và toàn bộ dữ liệu của chúng biến mất, im lặng.
-        Sau đó hệ VẪN CHẠY (rc 0) trên schema cũ.
-
-        Nếu ca này đỏ: `khoi_phuc()` đã bắt đầu kiểm phiên bản — cập nhật ca + tài liệu.
+        KHÔNG hạ cổng xuống cho vừa: `v6` là một bản sao lưu HỢP LỆ và migrate dựng lại được nó.
+        Một lời từ chối ở đây là từ chối vì PHIÊN BẢN, không phải vì tệp hỏng.
         """
-        self.assertEqual(self.kq["phien_ban_sau_khoi_phuc"], 6,
-                         "phiên bản sau khôi phục khác 6 — hành vi đã đổi")
-        self.assertEqual(self.kq["chup_sau"]["so_bang"], self.kq["so_bang_v6"],
-                         "số bảng sau khôi phục khác bản v6 — đo lại")
-        self.assertLess(self.kq["chup_sau"]["so_bang"], self.kq["so_bang_v9_truoc"],
-                        "không mất bảng nào — kịch bản tụt schema không chạy")
-        self.assertEqual(self.kq["rc_ghi_tren_v6"], 0,
-                         "hệ đã từ chối chạy trên schema cũ — hành vi đã đổi")
+        self.assertNotEqual(self.kq["rc_khoi_phuc"], 0,
+                            "`khoi_phuc()` NHẬN bản schema v%s đè lên v%s với mã thoát 0 — schema "
+                            "tụt im lặng: %s bảng → %s bảng, tổng tiền %s → %s. Sửa "
+                            "`app/migrate.py` (tệp của AG-00), KHÔNG nới ca này."
+                            % (self.kq["phien_ban_v6"], self.kq["phien_ban_v9_truoc"],
+                               self.kq["so_bang_v9_truoc"], self.kq["chup_sau"]["so_bang"],
+                               self.kq["tong_tien_v9_truoc"], self.kq["tong_tien_v6"]))
+        self.assertEqual(self.kq["phien_ban_sau_khoi_phuc"], self.kq["phien_ban_v9_truoc"],
+                         "CSDL đích đã TỤT phiên bản: v%s → v%s"
+                         % (self.kq["phien_ban_v9_truoc"], self.kq["phien_ban_sau_khoi_phuc"]))
+        self.assertEqual(self.kq["chup_sau"]["so_bang"], self.kq["so_bang_v9_truoc"],
+                         "số bảng của CSDL đích đã đổi")
+        self.assertEqual(self.kq["chup_sau"]["tong_tien"], self.kq["tong_tien_v9_truoc"],
+                         "tổng tiền của CSDL đích đã đổi")
+        # Vế (b): lời từ chối phải NÓI RA hai phiên bản. Thông báo `SystemExit` đi ra STDERR.
+        tb = (self.kq.get("err_khoi_phuc") or "") + (self.kq.get("out_khoi_phuc") or "")
+        self.assertTrue(tb.strip(), "bị từ chối nhưng KHÔNG in thông báo nào")
+        self.assertIn(str(self.kq["phien_ban_v6"]), tb,
+                      "thông báo từ chối không nêu phiên bản bản sao lưu (v%s): %s"
+                      % (self.kq["phien_ban_v6"], tb[-300:]))
 
-    def test_f4_nang_lai_duoc_nhung_DU_LIEU_MOI_da_mat(self):
-        """Đường ra: cấu trúc nâng lại được, DỮ LIỆU thì không. Phải nói rõ cả hai vế."""
-        self.assertEqual(self.kq["rc_nang_lai"], 0, "migrate.chay() hỏng: " + self.kq["loi_nang_lai"][-200:])
-        self.assertEqual(self.kq["chup_sau_khi_nang"]["phien_ban"], 9)
-        self.assertEqual(self.kq["chup_sau_khi_nang"]["integrity"], "ok")
-        # Nâng cấp giữ NGUYÊN dữ liệu của bản v6 (đó là điều migration phải làm)…
-        self.assertEqual(self.kq["chup_sau_khi_nang"]["tong_tien"], self.kq["tong_tien_v6"],
-                         "nâng lại làm ĐỔI tổng tiền của dữ liệu v6 — migration không bảo toàn")
-        # …và KHÔNG lấy lại được dữ liệu đã mất khi khôi phục bản cũ. Đây là vế đắt giá nhất:
-        # cấu trúc thì cứu được, DỮ LIỆU thì không.
-        self.assertLess(self.kq["tong_tien_v6"], self.kq["tong_tien_v9_truoc"],
-                        "bản v6 không ít tiền hơn bản v9 — kịch bản không chạy")
+    def test_f3_doi_chung_duong_ban_sao_luu_v6_KHONG_phai_tep_hong(self):
+        """ĐỐI CHỨNG ĐƯỜNG cho F2 — bản v6 bị từ chối phải là một CSDL LÀNH.
+
+        Thiếu vế này thì "bị từ chối" có thể chỉ là hệ quả của một tệp v6 hỏng, và kết luận rút
+        ra sẽ SAI: "từ chối vì tệp hỏng" khác hẳn "từ chối vì tụt phiên bản". Hai câu đó chỉ
+        phân biệt được bằng chính số đo này.
+        """
+        self.assertEqual(self.kq["integrity_ban_sao_luu_v6"], "ok",
+                         "bản sao lưu v6 KHÔNG qua integrity_check — đối chứng đường hỏng")
+        self.assertGreaterEqual(self.kq["so_bang_ban_sao_luu_v6"] or 0, 15,
+                                "bản sao lưu v6 quá ít bảng — nhìn nhầm tệp")
+        self.assertEqual(self.kq["rc_dung_v6"], 0, "dựng v6 hỏng: " + self.kq["loi_v6"][-200:])
+
+    def test_f4_chot_chong_phep_do_RONG_tut_schema_phai_that(self):
+        """Chốt chống phép đo RỖNG: v9 và v6 phải THẬT SỰ khác nhau về bảng và về tiền.
+
+        Không có ca này thì một kịch bản "dựng v6 hỏng, v6 hoá ra bằng v9" vẫn cho ra mọi dòng
+        ở F2/F3 màu xanh, và cả lớp F không đo gì.
+        """
+        self.assertGreater(self.kq["so_bang_v9_truoc"], self.kq["so_bang_v6"],
+                           "v9 không nhiều bảng hơn v6 — kịch bản tụt schema không chạy")
+        self.assertGreater(self.kq["tong_tien_v9_truoc"], self.kq["tong_tien_v6"],
+                           "v9 không nhiều tiền hơn v6 — kịch bản không chạy")
+        self.assertGreater(self.kq["tong_tien_v6"], 0, "v6 rỗng tiền — phép so TIỀN vô nghĩa")
+        self.assertEqual(self.kq["rc_ghi_tren_v6"], 0,
+                         "hệ không chạy được trên v6 — không đo được vế 'hệ vẫn chạy'")
 
 
 # ============================================================================
@@ -365,18 +441,28 @@ class G_NhamTepKhongPhaiSqlite(unittest.TestCase):
         self.assertTrue(self.kq["doi_chung_duong_dat"],
                         "đối chứng đường hỏng: %s" % (self.kq["lech_duong_dung"],))
 
-    def test_g2_DOC_HAI_DA_BIET_khoi_phuc_nhan_tep_la_va_lam_chet_csdl(self):
-        """ĐỘC HẠI ĐÃ BIẾT — không có phép kiểm "tệp này có phải SQLite không".
+    def test_g2_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_tep_khong_phai_SQLite(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — phải có phép kiểm "tệp này có phải SQLite
+        không" TRƯỚC khi đụng CSDL đang chạy.
 
-        Đo 16/10/2026: một tệp mang magic `PGDMP` được `khoi_phuc()` NHẬN (rc 0), và CSDL đang
-        chạy trở thành một khối 65.544 byte mà SQLite trả `file is not a database`. Không một
-        lời cảnh báo. Nếu ca này đỏ: hành vi đã đổi, cập nhật ca + tài liệu.
+        Ca này PIN: không kiểm định dạng tệp là hỏng. Đo 16/10/2026: một tệp mang magic `PGDMP`
+        được `khoi_phuc()` NHẬN (rc 0), và CSDL đang chạy trở thành một khối 65.544 byte mà
+        SQLite trả `file is not a database`. Không một lời cảnh báo. Vế ĐỐI CHỨNG ĐƯỜNG nằm
+        ngay trên: cùng lệnh đó, một bản sao lưu SQLite THẬT thì khôi phục ĐẠT.
         """
-        self.assertTrue(self.kq["khoi_phuc_NHAN_tep_la"], "khoi_phuc() đã từ chối tệp lạ — đổi rồi")
-        self.assertIn("not a database", str(self.kq["csdl_sau_khi_nham"].get("loi")),
-                      "CSDL sau khi nạp nhầm vẫn đọc được — đo lại")
-        self.assertLess(self.kq["so_byte_csdl_sau"], self.kq["so_byte_csdl_truoc"],
-                        "CSDL sau khi nạp nhầm không nhỏ hơn bản gốc")
+        self.assertNotEqual(
+            self.kq["rc_khoi_phuc_nham"], 0,
+            "`khoi_phuc()` NHẬN một tệp KHÔNG PHẢI SQLite với mã thoát 0 và làm chết CSDL đang "
+            "chạy (%s byte, %s). Sửa `app/migrate.py` (tệp của AG-00), KHÔNG nới ca này."
+            % (self.kq["so_byte_csdl_sau"], self.kq["csdl_sau_khi_nham"].get("loi")))
+        self.assertEqual(self.kq["csdl_sau_khi_nham"].get("loi"), None,
+                         "CSDL đích KHÔNG ĐỌC ĐƯỢC sau lượt nạp nhầm: %s"
+                         % (self.kq["csdl_sau_khi_nham"],))
+        self.assertEqual(self.kq["so_byte_csdl_sau"], self.kq["so_byte_csdl_truoc"],
+                         "số byte CSDL đích đã đổi — nó đã bị ghi đè")
+        self.assertTrue(self.kq["doi_chung_duong_dat"],
+                        "ĐỐI CHỨNG ĐƯỜNG HỎNG: bản sao lưu SQLite THẬT mà khôi phục cũng lệch: %s"
+                        % (self.kq["lech_duong_dung"],))
 
 
 # ============================================================================
@@ -406,17 +492,23 @@ class H_ThieuKhoaNoiBo(unittest.TestCase):
         self.assertTrue(self.kq["goc_giai_ma_dat"],
                         "bản gốc giải mã KHÔNG được: %s" % (self.kq["out_giai_ma_o_goc"],))
 
-    def test_h3_DOC_HAI_DA_BIET_khoa_khong_di_kem_nhung_he_TU_CHOI_duoc(self):
-        """KHOẢNG TRỐNG + ĐIỂM TỐT, khai cả hai.
+    def test_h3_khoa_khong_di_kem_va_he_PHAI_TU_CHOI_duoc(self):
+        """KHOẢNG TRỐNG + ĐIỂM TỐT, khai cả hai. **Ca này KHÔNG đổi ở G21, và vì sao thì rõ:**
 
-        KHOẢNG TRỐNG: `khoi_phuc()` báo thành công trong khi bản khôi phục KHÔNG dùng được cho
-        lời gọi hãng nào — khóa không đi kèm và không có gì nhắc. Người trực phải tự biết rằng
-        còn một quy trình thứ hai (`app/sao_luu_khoa.py`, `trien_khai/sao_luu_ngoai/`).
+        KHOẢNG TRỐNG (còn nguyên): `khoi_phuc()` báo thành công trong khi bản khôi phục KHÔNG
+        dùng được cho lời gọi hãng nào — khóa mã hoá credentials nằm ở tệp KHÁC
+        (`cau_hinh.DUONG_DAN_KHOA`) và `sao_luu()` chỉ sao lưu `hub.db`. Người trực phải tự biết
+        rằng còn một quy trình thứ hai (`app/sao_luu_khoa.py`, `trien_khai/sao_luu_ngoai/`).
 
-        ĐIỂM TỐT (đo được, không suy đoán): hệ KHÔNG tự sinh khóa mới rồi giải mã ra rác. Nó
-        NÉM `LoiKhoa` với thông báo nói thẳng phải làm gì: "Khôi phục khóa từ bản sao lưu, đừng
-        sinh khóa mới." Đây là kiểu hỏng ỒN ÀO — đúng loại hỏng nên có. Nếu vế này đỏ, tức hệ
-        đã bắt đầu im lặng, đó là ĐI LÙI.
+        Vì sao KHÔNG gộp nó vào bất biến fail-closed của G21: "khôi phục CSDL" và "khôi phục
+        khóa" là HAI quy trình có ranh giới rõ ràng, và bản vá G21 (`ban_va.py`) cố ý không mở
+        rộng phạm vi sang tệp khóa — mở rộng là một quyết định sản phẩm, không phải một bản vá.
+        Nói ra ở đây để nó không bị đọc thành "đã đóng".
+
+        ĐIỂM TỐT (đo được, không suy đoán): hệ KHÔNG tự sinh khóa mới rồi giải mã ra rác. Nó NÉM
+        `LoiKhoa` với thông báo nói thẳng phải làm gì: "Khôi phục khóa từ bản sao lưu, đừng sinh
+        khóa mới." Đây là kiểu hỏng ỒN ÀO — đúng loại hỏng nên có. Nếu vế này đỏ, tức hệ đã bắt
+        đầu im lặng, đó là ĐI LÙI.
         """
         self.assertFalse(self.kq["co_khoa_o_ban_khoi_phuc"],
                          "khóa CÓ đi kèm bản khôi phục — hành vi đã đổi, cập nhật tài liệu")
@@ -605,61 +697,68 @@ class K_PostgreSQL(unittest.TestCase):
         self.assertEqual(int(b["tc_but_toan"]["dong"]), 6)
         self.assertGreater(self.kq["pg_truoc"]["tong_tien"], 0)
 
-    def test_k3_DOC_HAI_DA_BIET_sao_luu_IM_LANG_bao_thanh_cong_khi_kho_la_PostgreSQL(self):
-        """ĐỘC HẠI ĐÃ BIẾT (P-G15-02) — `sao_luu()` báo thành công với một ĐƯỜNG LÙI GIẢ.
+    def test_k3_BAT_BIEN_sao_luu_PHAI_TU_CHOI_khi_kho_la_PostgreSQL(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — P-G15-02: `sao_luu()` KHÔNG được báo thành
+        công với một ĐƯỜNG LÙI GIẢ.
 
+        Ca này PIN: một bản sao lưu không chứa dữ liệu đang chạy là hỏng, dù nó "trông hợp lệ".
         Đo 16/10/2026 trên cụm riêng: `hub.db` không tồn tại (đúng trạng thái máy chủ đã chuyển
         kho sang PostgreSQL) → `sao_luu()` **KHÔNG ném lỗi**, mã thoát 0, sinh ra một tệp
-        **4.096 byte, 0 BẢNG**, và `PRAGMA integrity_check` trả `"ok"`. Trong khi PostgreSQL
-        đang giữ 6 đơn + 6 bút toán + 9.324.000 đồng — KHÔNG một byte nào của số đó nằm trong
-        "bản sao lưu".
+        **4.096 byte, 0 BẢNG**, `PRAGMA integrity_check` trả `"ok"` — trong khi PostgreSQL đang
+        giữ 6 đơn + 6 bút toán + 9.324.000 đồng. KHÔNG một byte nào của số đó nằm trong "bản sao
+        lưu". Đây là dạng hỏng tệ nhất: không ném lỗi, không làm đúng, mà IM LẶNG.
 
-        Đây là dạng hỏng tệ nhất trong ba dạng: không phải ném lỗi (người trực biết ngay),
-        không phải làm đúng (không thể — `csdl` không có nhánh PostgreSQL), mà là IM LẶNG.
         Chốt `so_byte <= 0` của `sao_luu()` KHÔNG cứu được: 4.096 byte > 0.
-
-        Nếu ca này đỏ: `sao_luu()` đã bắt đầu ném lỗi hoặc kiểm kho — cập nhật ca + tài liệu.
         """
         d1 = self.kq["do1_hub_db_khong_ton_tai"]
-        self.assertEqual(d1["rc"], 0, "sao_luu() đã ném lỗi trên PostgreSQL — hành vi đã đổi")
-        self.assertEqual(d1["stderr"], "", "sao_luu() đã in cảnh báo — hành vi đã đổi")
-        self.assertGreater(d1["co_ban_sao"] or 0, 0, "bản sao lưu 0 byte — chốt cũ đã bắt được")
-        self.assertEqual(d1["so_bang"], 0, "bản sao lưu có bảng — hành vi đã đổi")
-        self.assertEqual(d1["integrity"], "ok",
-                         "integrity_check không còn 'ok' cho CSDL rỗng — đo lại")
-        self.assertFalse(d1["co_bang_don_hang"], "bản sao lưu có bảng don_hang??")
+        self.assertNotEqual(
+            d1["rc"], 0,
+            "kho là PostgreSQL (không có hub.db) mà `sao_luu()` thoát 0 và trả một tệp %s byte / "
+            "%s BẢNG trong khi PostgreSQL giữ %s dòng và %s đồng — ĐƯỜNG LÙI GIẢ, im lặng. Sửa "
+            "`app/migrate.py` (tệp của AG-00), KHÔNG nới ca này."
+            % (d1.get("co_ban_sao"), d1.get("so_bang"),
+               self.kq["pg_truoc"]["bang"]["don_hang"]["dong"], self.kq["pg_truoc"]["tong_tien"]))
 
-    def test_k4_DOC_HAI_DA_BIET_hub_db_cu_thi_ban_sao_luu_chang_lien_quan_du_lieu_that(self):
-        """ĐỘC HẠI ĐÃ BIẾT — dạng hỏng thứ hai, khó thấy hơn dạng rỗng.
+    def test_k4_BAT_BIEN_hub_db_CU_khong_duoc_coi_la_du_lieu_dang_chay(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — dạng hỏng thứ hai, khó thấy hơn dạng rỗng.
 
-        `hub.db` còn sót lại từ trước (dữ liệu SQLite CŨ, không còn là dữ liệu đang chạy):
-        `sao_luu()` trả một bản sao **trông hoàn toàn hợp lệ** — 51 bảng, 31.141.000 đồng,
-        băm khớp đúng tệp SQLite đó. Người trực thấy một tệp sao lưu "đầy đủ" và tin nó. Nhưng
-        nó không chứa một dòng nào của dữ liệu PostgreSQL đang chạy.
+        Ca này PIN: một `hub.db` còn sót từ trước (dữ liệu SQLite CŨ, không còn là dữ liệu đang
+        chạy) KHÔNG được coi là kho đang chạy. Đo 16/10/2026: `sao_luu()` trả một bản sao **trông
+        hoàn toàn hợp lệ** — 51 bảng, 34.336.000 đồng, băm khớp đúng tệp SQLite đó. Người trực
+        thấy một tệp sao lưu "đầy đủ" và tin nó. Nhưng nó không chứa một dòng nào của dữ liệu
+        PostgreSQL đang chạy.
 
-        Không có phép kiểm nào trong hệ phân biệt được hai thứ này — vì không có chỗ nào hỏi
-        "kho đang chạy là kho nào".
+        ĐÂY LÀ KHOẢNG TRỐNG **CÒN HỞ** — bản vá G21 (`ban_va.py`) KHÔNG đóng được nó, và nói
+        thẳng vì sao: hệ KHÔNG có khái niệm "kho đang chạy là kho nào", nên không có gì để đối
+        chiếu; bịa một phép đoán (mtime, kích thước) là vi phạm nguyên tắc "không đoán". Muốn
+        đóng thì cần một QUYẾT ĐỊNH SẢN PHẨM: một cờ cấu hình nói rõ kho đang chạy. Xem
+        `docs/G21_BACKUP_RESTORE.md` §CÒN HỞ.
         """
         d2 = self.kq["do2_hub_db_co_du_lieu_sqlite_khac"]
-        self.assertEqual(d2["rc"], 0)
-        self.assertTrue(d2["bam_ban_sao_khop_sqlite_goc"],
-                        "bản sao không khớp tệp SQLite nguồn — đo lại")
-        self.assertEqual(d2["ban_sao_so_bang"], d2["sqlite_truoc_so_bang"])
-        self.assertNotEqual(d2["ban_sao_tong_tien"], self.kq["pg_truoc"]["tong_tien"],
-                            "tổng tiền bản sao TRÙNG tổng tiền PostgreSQL — kịch bản không chạy")
+        hong = (d2["rc"] == 0 and d2["bam_ban_sao_khop_sqlite_goc"]
+                and d2["ban_sao_tong_tien"] != self.kq["pg_truoc"]["tong_tien"])
+        self.assertFalse(
+            hong,
+            "`sao_luu()` trả một bản sao TRÔNG HỢP LỆ (%s bảng, %s đồng) mà KHÔNG chứa một dòng "
+            "nào của dữ liệu đang chạy (%s đồng ở PostgreSQL) — CÒN HỞ, cần cờ cấu hình 'kho "
+            "đang chạy'. Xem docs/G21_BACKUP_RESTORE.md §CÒN HỞ."
+            % (d2["ban_sao_so_bang"], d2["ban_sao_tong_tien"], self.kq["pg_truoc"]["tong_tien"]))
 
-    def test_k5_DOC_HAI_DA_BIET_khoi_phuc_nhan_tep_pg_dump_that(self):
-        """ĐỘC HẠI ĐÃ BIẾT — bản `pg_dump -Fc` THẬT (không phải tệp giả) đưa cho `khoi_phuc()`.
+    def test_k5_BAT_BIEN_khoi_phuc_PHAI_TU_CHOI_ban_pg_dump_that(self):
+        """BẤT BIẾN FAIL-CLOSED (AG-02 viết lại) — một bản `pg_dump -Fc` THẬT (không phải tệp
+        giả) đưa cho `khoi_phuc()`.
 
-        Đo 16/10/2026: 124.700 byte, `pg_dump` trả mã thoát 0, `khoi_phuc()` NHẬN với mã thoát 0,
-        CSDL SQLite đang chạy biến thành chính tệp dump đó → `file is not a database`.
+        Ca này PIN: cùng một lỗi với `G2`, đo trên tệp THẬT thay vì tệp giả — để không ai nói
+        "chỉ là kịch bản dựng tay". Đo 16/10/2026: 124.700 byte, `pg_dump` trả mã thoát 0,
+        `khoi_phuc()` NHẬN với mã thoát 0, CSDL SQLite đang chạy biến thành chính tệp dump đó.
         """
         d3 = self.kq["do3_khoi_phuc_tu_pg_dump"]
         self.assertEqual(self.kq["pg_dump"]["rc"], 0, "pg_dump hỏng")
         self.assertGreater(self.kq["pg_dump"]["co_byte"], 0)
-        self.assertTrue(d3["khoi_phuc_NHAN"], "khoi_phuc() đã từ chối tệp pg_dump — hành vi đã đổi")
-        self.assertIn("not a database", str(d3["csdl_sau_loi"]),
-                      "CSDL sau khi nạp dump PostgreSQL vẫn đọc được — đo lại")
+        self.assertNotEqual(d3["rc_khoi_phuc"], 0,
+                            "`khoi_phuc()` NHẬN một bản `pg_dump -Fc` THẬT với mã thoát 0 và làm "
+                            "chết CSDL SQLite đang chạy (%s). Sửa `app/migrate.py` (tệp của "
+                            "AG-00), KHÔNG nới ca này." % (d3.get("csdl_sau_loi"),))
 
     def test_k6_doi_chung_duong_cung_ham_voi_kho_SQLITE_thi_ban_sao_co_du_lieu(self):
         """Vế đối chứng quyết định cách đọc kết quả: CÙNG hàm, kho SQLite có dữ liệu → ĐÚNG.

@@ -6,11 +6,13 @@
 `thu_giao_dien/06_ban_phim.spec.js`, `docs/G21_BANPHIM_E2E.md` (mới). **Hai tệp mã bị sửa, không
 tệp nào khác.**
 
-**Lệnh duy nhất dựng lại toàn bộ số trong tài liệu này:**
+**Lệnh duy nhất dựng lại toàn bộ số trong tài liệu này** — **số hiện hành là của LƯỢT GỘP
+AG-02, xem §12**: cả tầng 3 **65 ca**, cổng C2 **8 ca**. Mục §1–§11 là **lượt gốc** (51 ca,
+C2 = 7 ca) và được **giữ nguyên làm lịch sử**, không sửa lại số cũ:
 
 ```sh
-sh thu_giao_dien/chay.sh                       # cả tầng 3, 51 ca
-sh thu_giao_dien/chay.sh 06_ban_phim.spec.js    # cổng C2, 7 ca
+sh thu_giao_dien/chay.sh                       # cả tầng 3, 65 ca (§12)
+sh thu_giao_dien/chay.sh 06_ban_phim.spec.js    # cổng C2, 8 ca (§12)
 ```
 
 ---
@@ -434,4 +436,171 @@ commit**. `git status --porcelain` trên worktree này:
 
 ```
 AG-06 (G21) BAN PHIM TRONG MAN + E2E: loi di tat WCAG 2.4.1, bit diem dung khuat cua vung cuon
+```
+
+---
+
+## 12. LƯỢT GỘP AG-02 (DISPATCH MỚI) — 65 CA, C2 = 8 CA
+
+Mục §1–§11 ở trên là **lượt gốc** (51 ca · C2 = 7 ca) và được **giữ nguyên làm lịch sử**. Mục này
+ghi **lượt gộp**: đưa 4 tệp spec của AG-02 (`g20-ag02-frontend`) vào cây này.
+
+### 12.1 DỌN TIẾN TRÌNH MỒ CÔI — pid 41082, và **không có gì để giết**
+
+AG-04 báo một tiến trình mồ côi: `app/server.py` pid **41082** trên `127.0.0.1:19449`, nghi thuộc
+worktree này. **Đã kiểm chứng TRƯỚC, và KHÔNG gửi một lệnh `kill` nào** — vì nó không còn tồn tại:
+
+| Phép kiểm | Lệnh | Kết quả |
+|---|---|---|
+| Tiến trình còn sống? | `kill -0 41082` | **`No such process` (ESRCH)** — hai lượt, cách nhau nhiều phút |
+| Cổng còn ai nghe? | `lsof -nP -iTCP:19449 -sTCP:LISTEN` | **0 dòng** |
+| Cổng còn ai nghe? (chéo) | `netstat -an -p tcp \| grep -c 19449` | **0** |
+| Cổng còn trả lời? | `curl -m 3 http://127.0.0.1:19449/` | **`code=000`** |
+| Có tiến trình nào của cây này? | `pgrep -fl g21-ag06-e2e` | **rỗng (`rc=1`)** |
+| `cwd` của MỌI `app/server.py` đang sống | `lsof -a -p <pid> -d cwd -Fn` | chỉ `g21-ag04-gioihan` và `g21-ag05-chotcay` — **không có cây này** |
+
+**Công cụ quan sát đã được chứng minh là KHÔNG bị chặn im lặng** — đây là phần quan trọng nhất của
+bảng trên: cùng lúc ấy `lsof -nP -iTCP -sTCP:LISTEN` liệt kê được **20+** tiến trình/cổng thật của
+máy (rapportd, ControlCenter, FinderSync, node, Python…) và `netstat` thấy `127.0.0.1:52868` /
+`52891`. Nên "0 dòng cho 19449" là **kết quả đo**, không phải lỗi quyền bị đọc thành "sạch".
+
+⇒ **Chủ sở hữu của 41082 không thể xác minh** vì PID đã biến mất trước lượt kiểm tra này. Dải cổng
+`19449` **nằm trong dải `18000–19999`** mà `chay.sh` dùng để chọn cổng, nên nhiều khả năng nó
+**chính là** một `app/server.py` của lượt chạy trước bị mồ côi. Nhưng "nhiều khả năng" **không
+phải** xác minh, nên không có lệnh đóng nào được gửi — đúng luật *xác minh TRƯỚC khi đóng*, và
+đúng bài học `pkill` theo khuôn đã giết nhầm tiến trình của người khác.
+
+### 12.2 GIA CỐ PHẦN DỌN CỦA `chay.sh` — CHỐNG MỒ CÔI TÁI DIỄN
+
+Đây là **nguyên nhân gốc** khả dĩ của một tiến trình mồ côi: bản cũ `kill "$PID"; sleep 1` **tin**
+là đã chết mà không hề kiểm, và `trap` **không bắt `HUP`** nên đóng terminal là mất luôn đường
+dọn. Đã sửa **chỉ phần dọn tiến trình** (đúng vùng được ghi):
+
+| Trước | Sau |
+|---|---|
+| `sleep 1` rồi tin là đã chết | chờ tới **5 giây**, `kill -0` sau mỗi 0,2s, thoát vòng khi chết **THẬT** |
+| không có bước mạnh tay | còn sống ⇒ **XÁC MINH `ps -o comm=` vẫn là Python** rồi mới `kill -9`; tên khác thì **KHÔNG đóng**, chỉ cảnh báo (đề phòng PID được cấp lại) |
+| im lặng nếu vẫn còn sống | in `CẢNH BÁO: pid … VẪN SỐNG sau khi dọn` ra `stderr` |
+| `trap don_dep EXIT INT TERM` | thêm **`HUP`**; `INT/TERM/HUP` đi qua `exit` để trap `EXIT` dọn |
+| — | **KHÔNG** `pkill` / **KHÔNG** khớp mẫu tên ở bất kỳ đâu (giữ nguyên luật §16.7) |
+
+Kiểm chứng sau khi sửa: `sh -n thu_giao_dien/chay.sh` **OK** ·
+`sh thu_giao_dien/chay.sh 06_ban_phim.spec.js -g "05 —"` → **1 passed, mã thoát 0** · sau lượt
+chạy: **0** `app/server.py` thuộc cây này · **0** thư mục nền tạm còn lại.
+
+### 12.3 GỘP 4 TỆP SPEC CỦA AG-02 → 65 CA
+
+| Tệp | Nguồn | Trước | Sau | Cách gộp |
+|---|---|---|---|---|
+| `08_bang_duong_billing.spec.js` | AG-02 | không có | **3 ca** | chép nguyên bản (sha `f1546ad5…` khớp nguồn) |
+| `09_man_ag05.spec.js` | AG-02 | không có | **5 ca** | chép nguyên bản (sha `81212608…` khớp nguồn) |
+| `10_trang_tinh_du_lieu.spec.js` | AG-02 | không có | **5 ca** | chép nguyên bản (sha `94859a07…` khớp nguồn) |
+| `06_ban_phim.spec.js` | AG-02 | **7 ca** | **8 ca** | thêm ca `04b` — xem §12.4 |
+| `tien_ich.js` · `chuan_bi.py` · thân `chay.sh` | AG-02 | — | — | **giống hệt từng byte** ⇒ không phải gộp |
+
+`3 + 5 + 5 + 1 = 14` ca mới; `51 + 14 = 65`. **Không ca nào bị xoá.**
+
+### 12.4 C2 TỪ 7 LÊN 8 — ĐÚNG DÒNG DANH TÍNH, VÀ MỘT CHỖ **PHẢI VIẾT LẠI**
+
+Ca mới **`04b`** nằm **trong `06_ban_phim.spec.js`** — tệp **chính là cổng C2** — và nó đo bằng
+**Tab thật** (`vetTab`/`vetTabTrongMan` + `document.activeElement`), **không** đo bằng thuộc tính.
+⇒ **Nó THUỘC C2**, không phải ca khác bị đếm nhầm. Bộ ba C2 đọc được là **`(8, 0, 0)`**, và chạy
+riêng cổng C2 ra **`8 passed`, mã thoát 0**.
+
+**Bảng "ca nào thuộc C2" — đủ 8, không thừa không thiếu.** C2 là **cổng bàn phím**, chạy bằng
+`sh thu_giao_dien/chay.sh 06_ban_phim.spec.js`; một ca thuộc C2 khi và chỉ khi nó **đo bằng bàn
+phím thật** (`document.activeElement` sau từng lượt `Tab`/`Enter` thật), chứ không đọc thuộc tính:
+
+| # | Ca (dòng trong `06_ban_phim.spec.js`) | Đo bằng gì | Thuộc C2 |
+|---|---|---|---|
+| 1 | `01` — Tab đi hết menu theo ĐÚNG thứ tự, rồi tới Đăng xuất (115) | `vetTab` + `activeElement` | ✓ |
+| 2 | `02` — Tab tới mục menu rồi Enter: màn ĐỔI THẬT (145) | `Tab` + `Enter` thật | ✓ |
+| 3 | `03` — mỗi điểm dừng Tab đều có dấu hiệu tiêu điểm nhìn thấy được (175) | `getComputedStyle(outline)` của phần tử đang giữ tiêu điểm | ✓ |
+| 4 | `04` — Tab vào được điều khiển TRONG màn, không chỉ quanh menu (215) | `vetTabTrongMan` + `inert` | ✓ |
+| 5 | **`04b`** — TỰ KIỂM: điều khiển trong màn mất tiêu điểm ⇒ phép đếm của ca 04 ĐỎ (325) | `vetTabTrongMan` + gỡ `tabindex`/`disabled` | ✓ **(mới)** |
+| 6 | `05` — Đăng xuất bấm được bằng bàn phím (374) | `focus()` + `Enter` thật | ✓ |
+| 7 | `06` — TỰ KIỂM: gỡ `ban_phim.js` ⇒ Tab/Enter hỏng (390) | chặn `ban_phim.js` rồi đo lại `Tab` | ✓ |
+| 8 | `07` — bố cục hẹp: thanh bên ĐÓNG/MỞ và thứ tự Tab (454) | `Tab` thật ở 375px | ✓ |
+
+Ba tệp mới `08`/`09`/`10` **KHÔNG** thuộc C2 — chúng canh **bảng khai đường billing**, **20 màn
+AG-05**, và **nguồn dữ liệu của `pages/*.html`**; chúng vào tầng 3 chung (65 ca) chứ không vào cổng
+C2 (8 ca). Đó là lý do hai con số **65** và **8** cùng tồn tại và không mâu thuẫn.
+
+**Nhưng nó KHÔNG được gộp nguyên bản — và đây là chỗ phải đọc kỹ.** Bản AG-02 tự kiểm phép đếm
+`/^input|^select|^textarea|^button/` — **phép đếm THEO TÊN THẺ của ca 04 BẢN CŨ**, đúng thứ mà ca
+04 ở đây đã **thay thế** bằng `vetTabTrongMan()` (`closest("#man")`) vì nó đếm thiếu `<a href>` và
+vùng cuộn (xem khối chú thích đầu ca 04). Gộp nguyên bản thì `04b` sẽ tự kiểm **một phép đếm không
+còn tồn tại ở đâu trong bộ** — một **ca giả**: xanh vĩnh viễn mà không canh gì. Nên ca được viết
+lại về **đúng phép đếm đang chạy** (vế (b) của ca 04), **giữ nguyên tên, mục đích, vị trí**; khối
+chú thích trong tệp ghi rõ việc này để lượt sau không "sửa lại cho giống bản gốc".
+
+**Đối chứng âm — đo thật, `-g "04b"`, mã thoát 0:**
+
+```
+[đo] tự kiểm (a) nguyên vẹn: 13 điểm dừng là điều khiển TRONG màn
+[đo] tự kiểm (b) gỡ tiêu điểm của 24 điều khiển trong #man
+[đo] tự kiểm (c) sau khi gỡ: 1 điểm dừng là điều khiển trong màn (24 điều khiển VẪN CÓ MẶT trong DOM)
+```
+
+Đọc ba dòng ấy: **13 → 1** điểm dừng, trong khi **24 phần tử vẫn còn nguyên trong DOM**. Nếu phép
+đếm chỉ đếm sự **có mặt** thì nó vẫn ra 13 ⇒ ca 04 **ĐỎ**. Đó là bằng chứng ca `04b` **đo được**,
+không phải ca trang trí. `04b` khác ca 04 vế (d) ở **cơ chế gỡ** — `tabindex="-1"` + `disabled`
+cho **từng phần tử**, so với `inert` trên **cả `#man`** — nên hai đường độc lập, không phải bản sao.
+
+### 12.5 KẾT QUẢ CHẠY TRỌN BỘ — **65 ca, và MỘT ca hỏng vì một tệp NGOÀI vùng được ghi**
+
+```sh
+sh thu_giao_dien/chay.sh
+# → === EXIT CODE THẬT = 1
+#   1 failed · 2 did not run · 62 passed (2.0m)
+#   failed: thu_giao_dien/08_bang_duong_billing.spec.js:114 · ca 01
+```
+
+**Nguyên nhân gốc — đo được, không phải suy đoán:** ca 01 của AG-02 đối chiếu bảng khai trong
+`admin/billing.js` với `app/server.py` ở **cả hai chiều**, và nó báo:
+
+```
+Error: billing.js khai CHỜ BACKEND cho đường ĐÃ CẮM
++ "GET /api/v2/billing/du-thao — ĐÃ cắm trong server.py mà vẫn khai CHỜ BACKEND"
+```
+
+Đối chiếu hai cây: `app/server.py` **GIỐNG HỆT** (sha `31521ab8…` ở cả hai), còn `admin/billing.js`
+**KHÁC** — AG-02 **đã sửa tệp ấy** (sha `00e8d4cd…`, cây này còn bản G19 `abf62f42…`).
+
+**Phép đo quyết định, làm TẠI CHỖ và có hoàn tác:** tạm hoán `admin/billing.js` của AG-02 vào cây
+này, chạy riêng ca 08 → **`3 passed`, mã thoát 0**; rồi **khôi phục ngay** và **xác minh bằng sha**
+(`abf62f421f7c9606bc8d8ac2f4b15c1a49730412a24539cb8aca5a75d3f88505` trước **và** sau — khớp).
+⇒ Cây này **không** giữ thay đổi nào của `admin/billing.js`; con số `3 passed` chỉ là **phép đo**.
+
+**Việc còn lại, và vì sao AG-06 không tự làm:** `admin/billing.js` **KHÔNG nằm trong vùng được ghi**
+của lượt này (`admin/ban_phim.js` · `admin/admin.js` · `thu_giao_dien/*.spec.js` ·
+`thu_giao_dien/chay.sh` · `app/thu/thu_g21_e2e.py` · `docs/G21_BANPHIM_E2E.md`). Đã **hỏi
+coordinator** và **không tự vượt**. Hai đường đóng, chọn một:
+
+1. **Cho phép gộp `admin/billing.js` của AG-02** vào cây này ⇒ chạy lại `sh thu_giao_dien/chay.sh`
+   ⇒ kỳ vọng **65 passed, mã thoát 0** (đã đo được đúng bằng phép hoán đổi ở trên).
+2. **AG-00 gộp hộ** `admin/billing.js` rồi AG-06 chạy lại.
+
+Cho tới lúc ấy, con số trung thực của lượt này là **`62 đạt · 1 hỏng · 2 không chạy`** — **không**
+phải 65 đạt. Hai ca "không chạy" là **hệ quả của `serial`** trong `08`: ca 01 hỏng nên ca 02 và 03
+của **cùng tệp ấy** bị chặn — đúng cái bẫy đã ghi ở §1 (một ca hỏng **che** các ca sau).
+
+### 12.6 TRẠNG THÁI CÂY SAU LƯỢT GỘP
+
+```
+HEAD = 0d55255   (AG-00 đã commit hộ 3 tệp của lượt gốc)
+
+ M thu_giao_dien/06_ban_phim.spec.js      ← thêm ca 04b
+ M thu_giao_dien/chay.sh                  ← gia cố phần dọn tiến trình (§12.2)
+?? thu_giao_dien/08_bang_duong_billing.spec.js
+?? thu_giao_dien/09_man_ag05.spec.js
+?? thu_giao_dien/10_trang_tinh_du_lieu.spec.js
+```
+
+`app/server.py`, `admin/billing.js`, `admin/admin.js`, `admin/ban_phim.js` **không đổi** trong lượt
+này (phép hoán ở §12.5 đã được hoàn tác và xác minh bằng sha). **AG-00 cần commit hộ 5 tệp trên**
+— sandbox vẫn chặn ghi `.git`, AG-06 **không tự vượt**. Thông điệp commit đề nghị:
+
+```
+AG-06 (G21) GOP AG-02: 65 ca (C2 = 8, ca 04b tu kiem), gia co don tien trinh chay.sh
 ```

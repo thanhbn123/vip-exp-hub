@@ -1297,9 +1297,9 @@ Secret: ${T(kq.webhook_secret_mot_lan)}</pre>`,
         <ul>
           <li>Gói hiện tại + mức dùng: <code>GET /api/v2/billing</code>.</li>
           <li>Danh mục gói: <code>GET /api/v2/goi</code> (${goi.length} gói).</li>
-          <li><b>KHÁC bảng khai của module:</b> <code>admin/billing.js</code> ghi màn này cần
-            <code>GET /api/v2/billing/goi</code> — đo ra <b>HTTP 404</b>. Đường thật là
-            <code>/api/v2/goi</code>.</li>
+          <li><b>Bảng khai của module ĐÃ KHỚP:</b> <code>admin/billing.js</code> trước G20 ghi
+            màn này cần <code>GET /api/v2/billing/goi</code> — đo ra <b>HTTP 404</b>; G20 · AG-02
+            đã sửa bảng ấy về <code>GET /api/v2/goi</code>, đúng đường màn này đang gọi.</li>
         </ul></div>
       <p style="font-size:12.5px;color:var(--chu-mo)">Usage đo từ backend. Nâng/hạ gói do quản trị nền tảng thực hiện. Thanh toán thật chưa bật.</p>`);
   },
@@ -1957,10 +1957,14 @@ function gocAnhXaCot(id, ax, kq) {
         một đường HTTP đã ĐO là có thật. Chỗ nào API không trả thì hiện "CHƯA ĐO ĐƯỢC" kèm
         lý do — KHÔNG hiện số 0 như thể đã đo, KHÔNG bịa số minh hoạ.
 
-     2. KHÔNG TỰ CHẾ ENDPOINT, VÀ KHÔNG TIN BẢNG KHAI CỦA MODULE. `admin/billing.js` khai
-        cần `/api/v2/billing/{goi,dang-ky,muc-dung,canh-bao,lich-su}` — ĐO RA CẢ NĂM ĐỀU 404.
-        Chức năng ấy nằm ở `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage/…`. Màn gọi
-        đường CÓ THẬT và ghi rõ đường nào đã dùng, để lần sau không ai đi tìm đường cũ.
+     2. KHÔNG TỰ CHẾ ENDPOINT, VÀ KHÔNG TIN BẢNG KHAI CỦA MODULE — ĐO RỒI MỚI GỌI.
+        `admin/billing.js` TỪNG khai cần `/api/v2/billing/{goi,dang-ky,muc-dung,canh-bao,lich-su}`
+        và ĐO RA CẢ NĂM ĐỀU 404; chức năng ấy nằm ở `/api/v2/goi`, `/api/v2/dang-ky`,
+        `/api/v2/usage/…`. G20 · AG-02 đã SỬA bảng ấy về đúng đường, nên các màn dưới đây
+        KHÔNG còn "khác bảng khai" nữa — nhưng LUẬT THÌ GIỮ NGUYÊN: màn vẫn gọi đường đã ĐO
+        là có thật, và vẫn ghi rõ đường nào đã dùng. Bảng khai của module là một LỜI KHAI,
+        không phải một phép đo; nó chỉ đáng tin ở lượt này vì có ca
+        `thu_giao_dien/08_bang_duong_billing.spec.js` canh nó và canh được cả chiều ngược.
 
      3. QUYẾT ĐỊNH Ở MODULE, HTML Ở ĐÂY. Nhãn, màu, cách gom nhóm, câu cảnh báo đều hỏi
         `window.VIPFINANCE` / `VIPBILLING` / `VIPAI` / `VIPHEALTH`; tệp này chỉ dựng DOM.
@@ -2231,9 +2235,12 @@ async function manCongNo(ve) {
 }
 
 /* ======================= NHÓM GÓI & TÍNH PHÍ — 7 màn =======================
-   SÁU TRONG BẢY màn gọi đường KHÁC bảng khai của `admin/billing.js`: bảng ấy trỏ
-   `/api/v2/billing/{goi,dang-ky,muc-dung,canh-bao,lich-su}` và ĐO RA CẢ NĂM ĐỀU 404. Chức
-   năng thật nằm ở `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage…`. Xem §2 báo cáo. */
+   G19 · AG-05 ghi ở đây: "SÁU TRONG BẢY màn gọi đường KHÁC bảng khai của `admin/billing.js`"
+   — bảng ấy khi đó trỏ `/api/v2/billing/{goi,dang-ky,muc-dung,canh-bao,lich-su}` và ĐO RA CẢ
+   NĂM ĐỀU 404; chức năng thật nằm ở `/api/v2/goi`, `/api/v2/dang-ky`, `/api/v2/usage…`.
+   G20 · AG-02 đã SỬA bảng khai ấy về đúng sáu đường, nên câu "khác bảng khai" nay KHÔNG còn
+   đúng nữa và đã được gỡ khỏi từng màn. Các màn vẫn gọi đúng những đường cũ — bản sửa chỉ
+   đổi LỜI KHAI, không đổi lời gọi, nên không có hành vi nào của màn thay đổi theo. */
 
 const MAN_GOI = {
   async "dang-ky"() {
@@ -2263,7 +2270,7 @@ const MAN_GOI = {
           phải thiếu đường). G19 chưa vẽ nút đổi gói — xem §5 báo cáo.</p></div></div>
       ${hopNguon([`Đường đọc: <code>GET /api/v2/dang-ky</code>.`,
         "Trạng thái và loại sự kiện lấy từ <code>admin/billing.js → TT_DANG_KY / LOAI_LICH_SU</code>.",
-        "<b>KHÁC bảng khai của module:</b> <code>admin/billing.js</code> ghi cần <code>GET /api/v2/billing/dang-ky</code> — đo ra HTTP 404."])}`);
+        "<b>Bảng khai của module ĐÃ KHỚP:</b> trước G20 <code>admin/billing.js</code> ghi cần <code>GET /api/v2/billing/dang-ky</code> — đo ra HTTP 404; G20 · AG-02 đã sửa về <code>GET /api/v2/dang-ky</code>, đúng đường màn này đang gọi."])}`);
   },
 
   async "muc-dung"() {
@@ -2293,7 +2300,7 @@ const MAN_GOI = {
           thì không ai biết tin bên nào.</p></div></div>
       ${hopNguon([`Đường đọc: <code>GET /api/v2/usage</code> (khoá <code>trang_thai</code> là payload <code>usage.trang_thai_han_muc</code>).`,
         "Bảng do <code>admin/billing.js → dungBangMucDung()</code> dựng — giao diện không tự tính tỷ lệ.",
-        "<b>KHÁC bảng khai của module:</b> module ghi cần <code>GET /api/v2/billing/muc-dung</code> — đo ra HTTP 404."])}`);
+        "<b>Bảng khai của module ĐÃ KHỚP:</b> trước G20 module ghi cần <code>GET /api/v2/billing/muc-dung</code> — đo ra HTTP 404; G20 · AG-02 đã sửa về <code>GET /api/v2/usage</code>, đúng đường màn này đang gọi."])}`);
   },
 
   async "canh-bao"() {

@@ -24,7 +24,10 @@ import os
 import sys
 
 GOC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(GOC, "app"))
+# `G21_APP_DIR`: chạy CÙNG bộ gieo này trên một `app/` ỨNG VIÊN (bản vá / bản bị tiêm lỗi).
+# Mặc định là `app/` của chính cây này. Xem `trien_khai/g20-saoluu/fail_closed.py`.
+APP = os.environ.get("G21_APP_DIR") or os.path.join(GOC, "app")
+sys.path.insert(0, APP)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 VUNG_CAM = os.path.expanduser("~/Projects/vip-express-hub")

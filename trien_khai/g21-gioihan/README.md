@@ -31,6 +31,33 @@ Chạy thẳng bộ đo cũng được (cùng mã thoát):
 python3 app/thu/thu_g21_gioihan.py     # 0 = mọi ca ĐẠT · 1 = có ca HỎNG/KHUYẾT · 9 = chốt an toàn
 ```
 
+## Bộ tổng hợp — nối phép đo vào bộ chạy chung, và TỰ CHỨNG MINH nó đo được
+
+Một phép đo **không tự vào bảng tổng kết**: `app/thu/chay_tat_ca.sh` chỉ ghi nhận một bộ thử khi
+bộ đó thoát 0, **có dấu vết đã chạy ca** (`^OK` hoặc `ca — ĐẠT`) và **đếm được số ca > 0**.
+`app/thu/thu_g19_tich_hop.py` là bộ tổng hợp làm việc đó: nó gọi runner này và **trả về ĐÚNG mã
+thoát của runner** (chỉ siết thêm ở đúng một chỗ: runner thoát 0 mà **0 ca đo thật** thì cổng ĐỎ,
+vì đó là xanh giả).
+
+```sh
+python3 app/thu/thu_g19_tich_hop.py
+# PHẦN 1/2: tự kiểm cổng — TIÊM LỖI THẬT vào bản sao của runner (a/b/c/d + hai đối chứng dương)
+# PHẦN 2/2: chạy runner thật, in bảng bằng chứng hai kênh, thoát bằng mã thoát của runner
+```
+
+Bốn ca tiêm lỗi (mã thoát in ra là mã thoát **thật** của tiến trình):
+
+| Ca | Lỗi được tiêm vào **bản sao** của `chay.sh` | Cổng phải ra |
+|---|---|---|
+| (a) | bộ đo bị gọi sai đường dẫn ⇒ runner thoát **2** | ĐỎ |
+| (b) | runner **không tồn tại** / là thư mục | ĐỎ + nói rõ "KHÔNG CHẠY ĐƯỢC" |
+| (c) | suite `unittest` **RỖNG** ⇒ `Ran 0 tests` + `OK`, thoát **0** | ĐỎ (0 ca không phải là đạt) |
+| (d) | thoát 0 nhưng **mọi ca BỎ QUA** (`TỔNG=5`) | ĐỎ (0 ca ĐO THẬT) |
+
+Bản sao nằm **cùng thư mục** với runner (khác thư mục thì `dirname $0/../..` trỏ sai gốc cây ⇒ nó
+hỏng vì đường dẫn chứ không phải vì lỗi được tiêm), bị xoá ngay sau mỗi ca, và mỗi ca còn khẳng
+định bản sao **khác bản gốc ĐÚNG MỘT DÒNG**. Chi tiết + bằng chứng: `docs/G21_GIOIHAN.md` §12.
+
 ## Ba chốt an toàn (đo lại bằng máy, không nói suông)
 
 | Chốt | Cách bộ đo tự kiểm |
@@ -70,3 +97,46 @@ hoặc sau bộ cân bằng tải (mỗi máy một CSDL ⇒ trần **vẫn** nh
 tự khai điều này; chỗ đó cần Redis hoặc một CSDL chung) · tấn công phân tán nhiều IP · tải lớn ·
 PostgreSQL/Redis. Bộ đo **không sửa một dòng mã sản phẩm nào**; bản đột biến ở `A5` sống trong thư
 mục tạm và bị xoá khi kết thúc.
+
+---
+
+# G22 / AG-04 — ĐIỂM VƯỚNG **TÊN TỆP** CỦA CỔNG C5/G7
+
+Cùng một làn, lượt tiếp theo. Lượt G21 để lại một điểm vướng **ownership** chưa gỡ: cổng `C5`
+(`app/thu/thu_qa_g20.py`, AG-01) và `G7` (`app/thu/thu_qa_g21.py`) **đếm theo KHUÔN TÊN**
+`re.match(r"thu_qa_g19.*\.py$", os.listdir(app/thu))`. Bộ tổng hợp thật của làn này tên
+`app/thu/thu_g19_tich_hop.py` nên **không bao giờ** lọt vào danh sách đó ⇒ C5 đo `0/1` dù bộ tổng
+hợp chạy thật và xanh. Đây là **lỗi đặt tên**, không phải lỗi sản phẩm.
+
+Lượt này AG-00 cấp tường minh `app/thu/thu_qa_g19_tich_hop.py` cho AG-04 — một **bản uỷ quyền
+MỎNG**: nó chạy bộ gốc và trả về **ĐÚNG mã thoát** của bộ gốc, **không** chứa bản logic thứ hai.
+
+## Chạy
+
+```sh
+sh trien_khai/g21-gioihan/chay_g22.sh      # log ra ${TMPDIR}/veh_g22_ag04/, in mã thoát trước mọi pipe
+python3 app/thu/thu_g22_gioihan.py         # 0 = ĐẠT · 1 = có HỎNG/KHUYẾT · 9 = chốt an toàn
+```
+
+## Cổng này đo gì
+
+| Mã | Việc |
+|---|---|
+| `B0` | **CHỐT AN TOÀN**: không push / không tunnel / không mở `CHO_PHEP_LIVE` / không chạm `:5432`; `VIP_THU_POSTGRES` bị GỠ khỏi tiến trình con (D-8) |
+| `B1` | **BỘ ĐẾM THẬT CỦA C5/G7** — đọc từ mã nguồn AG-01 rồi chạy trên `app/thu` thật |
+| `B2` | **CHIỀU XANH** — gọi **CHÍNH** phương thức C5 ⇒ phải ra `1/2 · DONG` |
+| `B3` | **CHIỀU ĐỎ** — tiêm lỗi **một dòng** vào BẢN SAO của bản uỷ quyền, đo **qua chính C5** |
+| `B4` | **LỖ HỔNG ĐO ĐƯỢC** của C5: bỏ qua ở mức PHƯƠNG THỨC ⇒ C5 vẫn XANH dù 0 ca chạy (`N-G22-01`) |
+| `B5` | **KHUÔN BÁO CÁO** — bộ đếm lấy dòng `Ran N` CUỐI; đo bằng một cái bẫy + đối chứng dương |
+| `B6` | **SỔ ĐỐI CHỨNG** + tổng kết (mọi nhóm ÂM phải có DƯƠNG) |
+
+## Kết quả lượt này
+
+`ca ĐẠT=15 · HỎNG=0 · BỎ QUA=0 · KHUYẾT=1 · TỔNG=16` · **exit 1** — chỗ KHUYẾT là **lỗ hổng của
+C5** (`N-G22-01`), không phải của bản uỷ quyền. Chi tiết + bản vá đề xuất: `docs/G22_GIOIHAN.md`.
+
+## Phạm vi — nói rõ cái NẰM NGOÀI
+
+Cổng này **không mở socket nào**: nó chỉ ĐỌC tệp và chạy tiến trình con cục bộ. Hai tệp được mượn
+tạm (`app/thu/thu_qa_g20.py` chép từ worktree AG-01, và bản sao tiêm lỗi của bản uỷ quyền) đều
+được **trả lại / xoá** trong `finally` + `atexit`, kèm đối chiếu **sha256**.

@@ -359,6 +359,163 @@ def _gia_tri_bi_mat_tu_phan_hoi(than, headers_tra_loi):
     return _mo_rong_bien_the(ra)
 
 
+# ---- G22 cổng `G5`: credential NGẮN của hãng KHÁC J&T -------------------------------------------
+# LỖ HỔNG ĐO ĐƯỢC (đo lại ngày 16/10/2026, `thu_g22_bimat.D3*`): hai tầng che ở trên đều KHÔNG nhận
+# ra một credential NGẮN nằm dưới một TÊN **không thuộc** danh sách nào:
+#
+#     header  x-mau-khoa-bi-mat: A1b2C   (5 ký tự)  →  hãng echo lại  →  RÒ
+#     header  maTaiKhoanGia:     A1b2C   (5 ký tự)  →  hãng echo lại  →  RÒ
+#
+# Vì sao KHÔNG vá bằng cách mở rộng danh sách tên: tầng theo TÊN chỉ đúng với những tên ĐÃ BIẾT.
+# Hợp đồng của hãng thứ hai CHƯA CÓ (`R-6`, chưa cấp), nên mọi danh sách ta viết hôm nay đều là
+# danh sách của J&T đội lốt — và một danh sách dài hơn vẫn là một danh sách. Cùng lý do, KHÔNG vá
+# bằng luật HÌNH DẠNG giá trị (`A1b2C` trông giống khoá là chuyện của mẫu thử, không phải bất biến:
+# `VH12` cũng "trông giống" và nó là mã vận đơn).
+#
+# BẤT BIẾN ĐÚNG — **ECHO THEO TÊN**: *một trường trong PHẢN HỒI mang ĐÚNG cái TÊN mà TA ĐÃ GỬI ĐI,
+# với ĐÚNG giá trị ta đã gửi dưới tên đó, là một bản ECHO của yêu cầu TA — không phải dữ liệu độc
+# lập của hãng. Yêu cầu của ta có thể mang credential ở BẤT KỲ tên nào, nên giá trị echo ấy bị che
+# BẤT KỂ ĐỘ DÀI.*
+#
+# Ba tính chất làm luật này an toàn:
+#   · KHÔNG cần danh sách tên nào ⇒ không phụ thuộc hãng nào (đúng yêu cầu `G5`).
+#   · Cặp (TÊN khớp + GIÁ TRỊ khớp) là bằng chứng, không phải phỏng đoán: chỉ những giá trị TA THẬT
+#     SỰ gửi mới vào được tập che, nên nó KHÔNG che bừa dữ liệu của hãng (`ma_van_don: JT123` vẫn
+#     nguyên văn — xem đối chứng đường `D3c`).
+#   · Nó chỉ MỞ RỘNG tập che ở mặt PHẢN HỒI. `_gia_tri_can_che` (tập giá trị ta gửi đi) KHÔNG đổi,
+#     nên mọi ca canh ngưỡng/đối chứng đường hiện có vẫn đo đúng thứ chúng đang đo.
+#
+# BIÊN GIỚI CÒN LẠI, ghim rõ chứ không giấu (`thu_g22_bimat.D3d`): một giá trị NGẮN bị hãng echo
+# lại **KHÔNG kèm tên** (nằm trần trong câu chữ của hãng) thì vẫn không có gì để nhận diện — che
+# mọi chuỗi ngắn là che luôn `2`, `200`, `-`, và phá sạch thông điệp chẩn đoán. Giá trị DÀI ở dạng
+# trần thì đã được tầng theo ĐỘ DÀI bắt từ trước.
+def _ghi_cap(ra, ten, gia_tri):
+    """Ghi một cặp (TÊN, giá_trị) vào sổ `tên → {giá trị}`. Bỏ tên rỗng và giá trị rỗng."""
+    if not isinstance(ten, str) or not isinstance(gia_tri, str) or not gia_tri:
+        return
+    k = ten.strip().lower()
+    if k:
+        ra.setdefault(k, set()).add(gia_tri)
+
+
+def _ghi_cap_trong_json(chuoi, ra):
+    """Ghi mọi cặp (khoá, giá trị chuỗi) trong một JSON lồng — gồm cả JSON nằm TRONG giá trị."""
+    try:
+        cay = json.loads(chuoi)
+    except Exception:
+        return
+    hang_doi = [cay]
+    while hang_doi:
+        n = hang_doi.pop()
+        if isinstance(n, dict):
+            for khoa, gt in n.items():
+                if isinstance(gt, str):
+                    _ghi_cap(ra, str(khoa), gt)
+                hang_doi.append(gt)
+        elif isinstance(n, (list, tuple)):
+            hang_doi.extend(n)
+
+
+def _ten_ta_gui(headers, than_gui, url=None):
+    """→ `{tên (chữ thường): {những giá trị TA ĐÃ GỬI dưới tên đó}}` — nguyên liệu của luật ECHO.
+
+    Bốn nguồn, đúng bốn nguồn mà `_gia_tri_ta_gui` đọc: header · thân form · JSON lồng trong cả
+    hai · QUERY của URL. ĐƯỜNG DẪN không có ở đây vì một đoạn đường dẫn KHÔNG có TÊN — chỗ đó đã
+    có luật riêng (`_duong_dan_da_che`).
+
+    Header giao thức (`HEADER_KHONG_CHE`) bị loại: `Content-Type: application/x-www-form-urlencoded`
+    là hằng số giao thức, hãng nào cũng echo, che nó không thêm an toàn mà làm log khó đọc.
+    """
+    ra = {}
+    for ten, gt in (headers or {}).items():
+        if str(ten).strip().lower() in HEADER_KHONG_CHE:
+            continue
+        s = str(gt)
+        _ghi_cap(ra, str(ten), s)
+        _ghi_cap_trong_json(s, ra)
+    try:
+        for ten, gt in parse_qsl(than_gui.decode("utf-8"), keep_blank_values=True):
+            _ghi_cap(ra, ten, gt)
+            _ghi_cap_trong_json(gt, ra)
+    except Exception:                                                # noqa: BLE001
+        pass
+    if url:
+        try:
+            for ten, gt in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+                _ghi_cap(ra, ten, gt)
+                _ghi_cap_trong_json(gt, ra)
+        except Exception:                                            # noqa: BLE001
+            pass
+    return ra
+
+
+def _mau_echo_theo_ten(ten_ta_gui):
+    """Mẫu `tên=giá_trị` / `tên: giá_trị` dựng ĐỘNG từ chính những tên ta đã gửi.
+
+    Dựng động chứ không dùng danh sách tĩnh: một danh sách tĩnh ở đây lại đúng là lỗi `G5` vừa vá
+    (tầng nhận diện chỉ đúng với tên đã biết). Số tên là số trường của MỘT yêu cầu (vài ba tên), nên
+    chi phí biên dịch mẫu là nhiễu so với một lượt đi-về mạng.
+    """
+    ten = sorted(ten_ta_gui, key=len, reverse=True)
+    if not ten:
+        return None
+    return re.compile(
+        r"(?i)(?<![\w-])(" + "|".join(re.escape(t) for t in ten) + r")"
+        r"(?![\w-])\s*[\"']?\s*[:=]\s*[\"']?([^\"'\s&,;<>)\]}\\{]{1,4096})")
+
+
+def _echo_theo_ten_trong_json(van_ban, ten_ta_gui, ra):
+    """Khoá JSON TRÙNG tên ta đã gửi ⇒ giá trị của nó phải là giá trị ta đã gửi ⇒ che."""
+    try:
+        cay = json.loads(van_ban)
+    except Exception:                                                # noqa: BLE001
+        return
+    hang_doi = [cay]
+    while hang_doi:
+        n = hang_doi.pop()
+        if isinstance(n, dict):
+            for khoa, gt in n.items():
+                vs = ten_ta_gui.get(str(khoa).strip().lower())
+                if vs and isinstance(gt, str) and gt in vs:
+                    ra.add(gt)
+                hang_doi.append(gt)
+        elif isinstance(n, (list, tuple)):
+            hang_doi.extend(n)
+
+
+def _echo_theo_ten_trong_vb(van_ban, ten_ta_gui, ra):
+    """Cùng luật, cho thân KHÔNG phải JSON (trang lỗi HTML, văn bản thuần, form echo lại)."""
+    mau = _mau_echo_theo_ten(ten_ta_gui)
+    if mau is None:
+        return
+    for m in mau.finditer(van_ban):
+        gt = m.group(2)
+        vs = ten_ta_gui.get(m.group(1).strip().lower())
+        if gt and vs and gt in vs:
+            ra.add(gt)
+
+
+def _gia_tri_echo_theo_ten(than, headers_tra_loi, ten_ta_gui):
+    """→ tập giá trị PHẢI CHE vì phản hồi ECHO LẠI một trường ta đã gửi (tên khớp + giá trị khớp).
+
+    Không có `ten_ta_gui` (người gọi cũ, hoặc hàm được gọi trực tiếp trong bộ thử) ⇒ tập RỖNG: luật
+    này chỉ THÊM, không bao giờ là đường duy nhất nhận diện bí mật của hãng.
+    """
+    if not ten_ta_gui:
+        return set()
+    ra = set()
+    for ten, gt in (headers_tra_loi or ()):
+        s = str(gt)
+        vs = ten_ta_gui.get(str(ten).strip().lower())
+        if vs and s in vs:
+            ra.add(s)
+    if than:
+        van_ban = than.decode("utf-8", "replace")
+        _echo_theo_ten_trong_json(van_ban, ten_ta_gui, ra)
+        _echo_theo_ten_trong_vb(van_ban, ten_ta_gui, ra)
+    return _mo_rong_bien_the(ra)
+
+
 def _dang_che(ten, gia_tri):
     """Hai mức: TÊN thuộc credential ⇒ che BẤT KỂ độ dài; tên khác ⇒ chỉ che khi đủ dài.
 
@@ -1077,14 +1234,22 @@ def _loi_cho_lai(loai, ma_http, mo_ta, than, headers_tra_loi, can_che, them):
         retry_after_bi_cat=bi_cat, **them)
 
 
-def _tra_loi_tu_http(ma_http, than, headers_tra_loi, mo_ta, can_che):
+def _tra_loi_tu_http(ma_http, than, headers_tra_loi, mo_ta, can_che, ten_ta_gui=None):
     """Phân loại theo mã HTTP. CHỈ 2xx mới trả `TraLoiHTTP`; mọi mã khác NÉM, không bao giờ trả.
 
     G18: trước khi che, tập che được MỞ RỘNG bằng `_gia_tri_bi_mat_tu_phan_hoi` — bí mật của CHÍNH
     HÃNG (lỗ hổng (a)). Thứ tự có ý nghĩa: phải nhận diện trên thân/header THÔ, rồi mới che, vì
     sau khi che thì không còn gì để nhận diện.
+
+    G22 (`G5`): mở rộng THÊM một lần nữa bằng `_gia_tri_echo_theo_ten` — trường phản hồi trùng TÊN
+    và trùng GIÁ TRỊ với một trường ta đã gửi, tức bản echo của yêu cầu ta, bị che bất kể độ dài.
+    Hai lần mở rộng là HAI luật khác nhau (bí mật của hãng · bản echo của ta) nên vẫn tách hàm:
+    bộ thử G18 đột biến đúng `_gia_tri_bi_mat_tu_phan_hoi` và nó phải giữ nguyên chữ ký hai tham số.
+
+    `ten_ta_gui=None` (mặc định) giữ nguyên hành vi cũ cho mọi người gọi trực tiếp.
     """
     can_che = can_che | _gia_tri_bi_mat_tu_phan_hoi(than, headers_tra_loi)
+    can_che = can_che | _gia_tri_echo_theo_ten(than, headers_tra_loi, ten_ta_gui)
     if 200 <= ma_http <= 299:
         da_che = {ten: che_bi_mat(str(gt).encode("utf-8", "replace"), can_che).decode(
             "utf-8", "replace") for ten, gt in headers_tra_loi}
@@ -1158,6 +1323,9 @@ def gui_form(url, headers, body, *, timeout):
     headers_gui = _chuan_bi_headers(headers)
     than_gui = _ma_hoa_form(body)
     can_che = _gia_tri_can_che(headers_gui, than_gui, url)
+    # G22 (`G5`): sổ TÊN→GIÁ TRỊ ta đã gửi, để mặt phản hồi nhận ra bản ECHO của chính yêu cầu này
+    # mà không cần danh sách tên credential nào — xem `_gia_tri_echo_theo_ten`.
+    ten_ta_gui = _ten_ta_gui(headers_gui, than_gui, url)
     # `mo_ta` KHÔNG đi qua phép che `che_bi_mat`, và đó là chủ ý: nó chỉ nêu TÊN (header, trường
     # form) và ĐƯỜNG DẪN, không nêu query. Che nó bằng `che_bi_mat` sẽ làm hỏng chính ca tự kiểm
     # `test_g3` — ca đó đột biến hàm dựng mô tả để in giá trị header ra và đòi ca rò rỉ phải ĐỎ.
@@ -1199,4 +1367,4 @@ def gui_form(url, headers, body, *, timeout):
         # Không thể tới đây: `read()` là bước cuối. Giữ lại như một chốt chặn chống sửa sai về sau.
         raise _loi_vinh_vien("loi-khong-ro", f"{mo_ta} — luồng gửi kết thúc ở giai đoạn lạ",
                              KET_CUC_KHONG_BIET, ma_http)
-    return _tra_loi_tu_http(ma_http, than, headers_tra_loi, mo_ta, can_che)
+    return _tra_loi_tu_http(ma_http, than, headers_tra_loi, mo_ta, can_che, ten_ta_gui)

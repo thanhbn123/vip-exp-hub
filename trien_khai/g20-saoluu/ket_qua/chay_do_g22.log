@@ -1,0 +1,49 @@
+[B0] rc=0   cú pháp 9 tệp
+[B1] rc=0   tự xác nhận bản vá ĐÃ ÁP đủ mảnh + mốc tiêm còn nguyên
+      migrate.py THẬT: 1010 dòng · sha256[:16]=aad036c4a98e653c
+      bản ĐÓNG BĂNG   : 626 dòng · sha256[:16]=ece17dd9653067d8
+      biến thể: ['ban_va', 'goc', 'tiem_d1', 'tiem_d2', 'tiem_d3', 'tiem_d4', 'tiem_d5']
+[B2] rc=1   10 kịch bản trên goc (/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-goc)
+      B2/goc: 1/10 FAIL_CLOSED · còn ĐỎ: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6a', 'S6b', 'S7', 'S8'] · bỏ qua: (không)
+[B3] rc=0   10 kịch bản trên ban_va (/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-ban-va)
+      B3/ban_va: 10/10 FAIL_CLOSED · còn ĐỎ: (không) · bỏ qua: (không)
+[B4.D1] rc=0   tiêm D1 ⇒ S6b PHẢI đỏ
+      B4.D1: 0/1 FAIL_CLOSED · còn ĐỎ: ['S6b'] · bỏ qua: (không)
+[B4.D2] rc=0   tiêm D2 ⇒ S4 PHẢI đỏ
+      B4.D2: 0/1 FAIL_CLOSED · còn ĐỎ: ['S4'] · bỏ qua: (không)
+[B4.D3] rc=0   tiêm D3 ⇒ S5 PHẢI đỏ
+      B4.D3: 0/1 FAIL_CLOSED · còn ĐỎ: ['S5'] · bỏ qua: (không)
+[B4.D4] rc=0   tiêm D4 ⇒ S3 và S7 PHẢI đỏ
+      B4.D4: 0/2 FAIL_CLOSED · còn ĐỎ: ['S3', 'S7'] · bỏ qua: (không)
+[B4.D5] rc=0   tiêm D5 ⇒ S8 PHẢI đỏ
+      B4.D5: 0/1 FAIL_CLOSED · còn ĐỎ: ['S8'] · bỏ qua: (không)
+[B5.E3-rieng-1] rc=0   E3 chạy RIÊNG, lượt 1
+[B5.E3-rieng-2] rc=0   E3 chạy RIÊNG, lượt 2
+[B5.E3-rieng-3] rc=0   E3 chạy RIÊNG, lượt 3
+[B6] rc=0   bộ thử fail-closed (vào lượt hồi quy chung)
+[B7] rc=0   bộ thử AG-04 (G20) trên tệp ĐÃ VÁ — CHẠY CHUNG
+[B9] rc=0   bộ thử G22 (kho đang chạy + đồng hồ là đầu vào)
+[B8.TRƯỚC] rc=0   bảng từng bảng (TRƯỚC) → bang_tung_bang_trước.md
+[B8.SAU] rc=0   bảng từng bảng (SAU) → bang_tung_bang_sau.md
+
+====================================================================================================
+BƯỚC    RC     SỐ CA  SKIP   GHI CHÚ
+B0      0      9      0      cú pháp 9 tệp
+B1      0      None   None   tự xác nhận bản vá ĐÃ ÁP đủ mảnh + mốc tiêm còn nguyên
+B2      1      10     0      10 kịch bản trên goc (/var/folders/v1/443y_fys65vflj24_rjw
+B3      0      10     0      10 kịch bản trên ban_va (/var/folders/v1/443y_fys65vflj24_
+B4.D1   0      1      0      tiêm D1 ⇒ S6b PHẢI đỏ
+B4.D2   0      1      0      tiêm D2 ⇒ S4 PHẢI đỏ
+B4.D3   0      1      0      tiêm D3 ⇒ S5 PHẢI đỏ
+B4.D4   0      2      0      tiêm D4 ⇒ S3 và S7 PHẢI đỏ
+B4.D5   0      1      0      tiêm D5 ⇒ S8 PHẢI đỏ
+B5.E3-rieng-1 0      3      0      E3 chạy RIÊNG, lượt 1
+B5.E3-rieng-2 0      3      0      E3 chạy RIÊNG, lượt 2
+B5.E3-rieng-3 0      3      0      E3 chạy RIÊNG, lượt 3
+B6      0      23     0      bộ thử fail-closed (vào lượt hồi quy chung)
+B7      0      41     0      bộ thử AG-04 (G20) trên tệp ĐÃ VÁ — CHẠY CHUNG
+B9      0      14     0      bộ thử G22 (kho đang chạy + đồng hồ là đầu vào)
+B8.TRƯỚC 0      None   None   bảng từng bảng (TRƯỚC) → bang_tung_bang_trước.md
+B8.SAU  0      None   None   bảng từng bảng (SAU) → bang_tung_bang_sau.md
+====================================================================================================
+KẾT LUẬN: mọi bước đạt; E3 riêng/chung đều [3] bản cất

@@ -190,6 +190,12 @@ def _ghi(ma, ten, bat_buoc, rc, out, err, c_dat, c_lech, bang_chung,
         "c_lech": list(c_lech or []),
         "csdl_dich_truoc": _tom_tat_chup(chup_truoc),
         "csdl_dich_sau": _tom_tat_chup(chup_sau),
+        # PHÉP CHỤP ĐẦY ĐỦ, TỪNG BẢNG (số dòng + từng cột tiền), khi kịch bản có giữ nó.
+        # `csdl_dich_truoc/sau` ở trên là bản TÓM TẮT — chỉ tổng. Bảng bằng chứng yêu cầu
+        # "số dòng/tổng tiền TỪNG BẢNG", và bản tóm tắt KHÔNG dựng lại được từ đó: nếu chỉ giữ
+        # tổng thì người kiểm chứng phải TIN, chứ không TRA được. Nặng hơn một chút, đổi lại
+        # mọi khẳng định "Y NGUYÊN từng bảng" đều có số để đối chiếu.
+        "chup_day_du": {"truoc": chup_truoc, "sau": chup_sau},
         "bang_chung": bang_chung,
     }
 
@@ -271,11 +277,29 @@ def phan_quyet(bg):
     elif ma == "S4":
         # Khôi phục ĐÈ lên CSDL đã có dữ liệu. Bất biến KHÔNG phải "đích không đổi" (đè thành
         # công thì đích PHẢI đổi) mà là: dữ liệu TRƯỚC khi đè CÒN CỨU ĐƯỢC, và ba lượt trong
-        # cùng một giây KHÔNG được xoá nhau.
+        # cùng một MỐC THỜI GIAN KHÔNG được xoá nhau.
         #
         # Câu hỏi đặt trên **MỌI** bản cất, không phải bản cuối theo thứ tự chữ cái: bản giữ dữ
         # liệu vừa mất là bản của lượt ĐẦU. Chỉ hỏi bản cuối là biến một bản vá ĐÚNG thành ĐỎ
         # GIẢ — xem khối chú thích trong `kich_ban.ca_khoi_phuc_de_len_csdl_dang_chay`.
+        #
+        # G22 — CHỐT CHỐNG "ĐO TRƯỢT CHỖ" (chạy TRƯỚC mọi phán quyết khác): ba lượt phải THẬT SỰ
+        # cùng một mốc. Đo được 16/10/2026: ca này từng đọc đồng hồ hệ thống, nên ba lượt có thể
+        # rơi vào hai-ba giây khác nhau; khi đó tên khác nhau, phép đếm ">= 3" XANH, mà ĐƯỜNG ĐÈ
+        # thì CHƯA HỀ được chạm tới ⇒ ca XANH trên một sản phẩm còn lỗi. Kết quả phụ thuộc tốc độ
+        # máy (chạy riêng một kiểu, chạy chung một kiểu). Nay mốc được TRUYỀN VÀO, và vế này bắt
+        # buộc điều đó phải quan sát được.
+        if not bc.get("nhan_luc"):
+            loi.append("PHÉP ĐO KHÔNG DỰNG ĐƯỢC: `khoi_phuc()` của bản đang đo KHÔNG nhận tham số "
+                       "mốc thời gian (`luc=`) ⇒ ba lượt đọc đồng hồ ngầm, và mọi kết luận về "
+                       "'ba lượt cùng một mốc' ở đây là RỖNG. Đây đúng là khiếm khuyết của "
+                       "VIỆC 2, và nó phải đọc ra thành 'không dựng được phép đo', không phải "
+                       "thành một dòng ĐẠT")
+        if not bc.get("cung_mot_moc"):
+            loi.append("PHÉP ĐO KHÔNG DỰNG ĐƯỢC: ba lượt khôi phục KHÔNG cùng một mốc thời gian "
+                       "(mốc truyền vào %r, các bản cất %s) — đường ĐÈ chưa được chạm tới, mọi "
+                       "kết luận dưới đây là RỖNG"
+                       % (bc.get("luc"), bc.get("ban_cat")))
         if not bc.get("so_ban_cat_giu_du_lieu_goc"):
             loi.append("(c) KHÔNG bản cất nào giữ được dữ liệu lúc chụp: %s bản cất, băm dữ "
                        "liệu lúc chụp %s, băm các bản cất %s"
@@ -326,29 +350,63 @@ def phan_quyet(bg):
                        % bc["loi_csdl_sau_khi_nham"])
 
     elif ma == "S8":
-        # PostgreSQL: `sao_luu()` KHÔNG được BÁO THÀNH CÔNG với một đường lùi không chứa dữ liệu
-        # đang chạy. Đây là khoảng trống P-G15-02.
+        # PostgreSQL: `sao_luu()` KHÔNG được BÁO THÀNH CÔNG với một đường lùi không chứa dữ
+        # liệu đang chạy (P-G15-02). BỐN vế, đo RIÊNG từng vế, KHÔNG gộp:
+        #   do1  — `hub.db` KHÔNG tồn tại.                          đóng được KHÔNG cần khai.
+        #   do2a — `hub.db` CŨ còn sót + deployment ĐÃ KHAI `postgresql`.   cơ chế chốt (4).
+        #   do2b — Y HỆT do2a nhưng CHƯA KHAI.        ⇒ ĐÃ ĐÓNG bằng chốt (4b): chưa khai ⇒ TỪ CHỐI.
+        #   do3  — `pg_dump -Fc` đưa nhầm vào `khoi_phuc()`.        đóng được KHÔNG cần khai.
+        #
+        # VÌ SAO `do2b` NẰM TRONG PHÁN QUYẾT: bỏ nó ra thì `S8` báo FAIL_CLOSED trong khi một
+        # deployment QUÊN KHAI vẫn nhận đúng cái đường lùi giả mà P-G15-02 tố cáo — tức bộ đo tự
+        # tô xanh đúng chỗ nó được viết ra để soi.
+        #
+        # G22 — HAI VẾ CHO `do2b`, KHÔNG NỚI VẾ NÀO: (a) `rc != 0`, và (b) thông báo phải NÓI RA
+        # là thiếu khai báo. Vế (b) không phải văn phong: một `SystemExit` không nói gì (hoặc nói
+        # sai chỗ) để người trực đoán, và "im lặng + rc != 0" vẫn là một lượt hỏng không chẩn
+        # đoán được. Phép tiêm `D5` trong `ban_va.py` kiểm đúng vế (a); `test_c2` của
+        # `thu_g21_saoluu.py` tiêm đúng vế (b) trên bản ghi TỔNG HỢP.
         d1 = bc.get("do1_hub_db_khong_ton_tai") or {}
-        d2 = bc.get("do2_hub_db_co_du_lieu_sqlite_khac") or {}
+        d1b = bc.get("do1b_chua_khai_hub_db_khong_ton_tai") or {}
+        d2a = bc.get("do2a_hub_db_cu_khai_postgresql") or {}
+        d2b = bc.get("do2b_hub_db_cu_chua_khai") or {}
         d3 = bc.get("do3_khoi_phuc_tu_pg_dump") or {}
         pg = bc.get("pg_truoc") or {}
         pg_tien = pg.get("tong_tien")
         pg_dong = (pg.get("bang") or {}).get("don_hang", {}).get("dong")
         if d1.get("rc") == 0 and not (d1.get("so_bang") or 0):
-            loi.append("(c) kho là PostgreSQL, `hub.db` KHÔNG tồn tại: `sao_luu()` thoát 0 và "
-                       "trả một tệp %s byte / %s BẢNG / integrity=%r — trong khi PostgreSQL "
+            loi.append("(c) [do1] kho là PostgreSQL, `hub.db` KHÔNG tồn tại: `sao_luu()` thoát 0 "
+                       "và trả một tệp %s byte / %s BẢNG / integrity=%r — trong khi PostgreSQL "
                        "đang giữ %s dòng và %s đồng. ĐƯỜNG LÙI GIẢ, và IM LẶNG"
                        % (d1.get("co_ban_sao"), d1.get("so_bang"), d1.get("integrity"),
                           pg_dong, pg_tien))
-        if d2.get("rc") == 0 and d2.get("bam_ban_sao_khop_sqlite_goc") \
-                and d2.get("ban_sao_tong_tien") != pg_tien:
-            loi.append("(c) kho là PostgreSQL nhưng `hub.db` CŨ còn sót: `sao_luu()` trả một bản "
-                       "sao TRÔNG HỢP LỆ (%s bảng, %s đồng) mà KHÔNG chứa một dòng nào của dữ "
-                       "liệu đang chạy (%s đồng ở PostgreSQL)"
-                       % (d2.get("ban_sao_so_bang"), d2.get("ban_sao_tong_tien"), pg_tien))
+        if d1b.get("rc") == 0:
+            loi.append("(a) [do1b] CHƯA KHAI kho đang chạy + trên đĩa KHÔNG có `hub.db`: "
+                       "`sao_luu()` vẫn thoát 0 (trả %s byte) — chốt (4b) không chặn được nhánh "
+                       "chưa khai" % (d1b.get("co_ban_sao"),))
+        elif not d1b.get("bao_ro"):
+            loi.append("(b) [do1b] TỪ CHỐI nhưng KHÔNG NÓI RA vì sao (thiếu khai báo): %r"
+                       % (d1b.get("stderr"),))
+        if d2a.get("rc") == 0:
+            loi.append("(a) [do2a] deployment ĐÃ KHAI `postgresql` mà `sao_luu()` vẫn thoát 0 "
+                       "(trả %s byte) — chốt (4) KHÔNG có răng: khai rồi mà hàm vẫn đưa ra "
+                       "một đường lùi không chứa dữ liệu đang chạy" % (d2a.get("co_ban_sao"),))
+        if d2b.get("rc") == 0:
+            loi.append("(a)+(c) [do2b] CHƯA KHAI kho đang chạy: `hub.db` CŨ còn sót nên "
+                       "`sao_luu()` vẫn thoát 0 và trả một bản sao TRÔNG HỢP LỆ (%s bảng, %s "
+                       "đồng, băm khớp tệp SQLite cũ = %s) mà KHÔNG chứa một dòng nào của dữ "
+                       "liệu đang chạy (%s đồng ở PostgreSQL). Chốt (4b) phải TỪ CHỐI khi chưa "
+                       "khai — xem docs/G22_SAOLUU.md §3"
+                       % (d2b.get("ban_sao_so_bang"), d2b.get("ban_sao_tong_tien"),
+                          d2b.get("bam_ban_sao_khop_sqlite_goc"), pg_tien))
+        elif not d2b.get("bao_ro"):
+            loi.append("(b) [do2b] TỪ CHỐI nhưng KHÔNG NÓI RA vì sao: một mã thoát khác 0 mà "
+                       "người trực không đọc được chỗ thiếu thì vẫn phải đi đoán. Thông báo phải "
+                       "nêu việc CHƯA KHAI kho đang chạy và tên chỗ khai; đo được: %r"
+                       % (d2b.get("stderr"),))
         if d3.get("khoi_phuc_NHAN"):
-            loi.append("(a) `khoi_phuc()` NHẬN một bản `pg_dump -Fc` THẬT và làm chết CSDL "
-                       "SQLite đang chạy")
+            loi.append("(a) [do3] `khoi_phuc()` NHẬN một bản `pg_dump -Fc` THẬT và làm chết "
+                       "CSDL SQLite đang chạy")
 
     elif ma == "DC":
         # ĐỐI CHỨNG ĐƯỜNG: đường LÀNH phải ĐẠT. Một bộ đo chỉ biết nói ĐỎ thì vô dụng.
@@ -535,10 +593,20 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
     kq = kich_ban.ca_khoi_phuc_de_len_csdl_dang_chay()
     nc = kq.get("noi_dung_ban_cat") or {}
     return _ghi("S4", "4. KHÔI PHỤC ĐÈ LÊN CSDL ĐÃ CÓ DỮ LIỆU",
-                "dữ liệu TRƯỚC khi đè phải CÒN CỨU ĐƯỢC · ba lượt cùng một giây KHÔNG xoá nhau",
+                "dữ liệu TRƯỚC khi đè phải CÒN CỨU ĐƯỢC · ba lượt CÙNG MỘT MỐC THỜI GIAN "
+                "(mốc TRUYỀN VÀO, không đọc đồng hồ) KHÔNG xoá nhau",
                 kq["rc_kp1"], "", "", None, [],
                 {"rc_gieo": kq["rc_gieo"], "rc_sao_luu": kq["rc_sao_luu"], "rc_them": kq["rc_them"],
                  "rc_kp1": kq["rc_kp1"], "rc_kp2": kq["rc_kp2"], "rc_kp3": kq["rc_kp3"],
+                 # G22: mốc thời gian là ĐẦU VÀO của phép đo, và `cung_mot_moc` chứng minh ba
+                 # lượt THẬT SỰ rơi vào mốc đó. Thiếu nó thì phép đếm có thể XANH vì ba lượt rơi
+                 # vào ba giây khác nhau — tức đường ĐÈ chưa hề được chạm tới.
+                 "luc": kq.get("luc"), "cung_mot_moc": kq.get("cung_mot_moc"),
+                 # `nhan_luc` là vế chống ĐỎ-GIẢ ngược lại: `False` nghĩa là hàm đang đo KHÔNG
+                 # nhận tham số mốc (bản đóng băng trước khi vá), nên `rc != 0` của ba lượt là do
+                 # TypeError chứ không phải do sản phẩm từ chối. Không có vế này thì cột "TRƯỚC"
+                 # XANH LÊN vì một lý do không liên quan (đo được: 4/10 thay vì 1/10).
+                 "nhan_luc": kq.get("nhan_luc"),
                  "so_ban_cat_sau_1_lan": kq["so_ban_cat_sau_1_lan"],
                  "so_ban_cat_sau_3_lan": kq["so_ban_cat_sau_3_lan"],
                  "ban_cat": kq["ban_cat"],
@@ -743,8 +811,13 @@ def ca_postgresql():
     if kq.get("bo_qua"):
         raise RuntimeError("BỎ QUA kịch bản PostgreSQL — %s" % kq["bo_qua"])
     d1 = kq.get("do1_hub_db_khong_ton_tai") or {}
+    d2a = kq.get("do2a_hub_db_cu_khai_postgresql") or {}
+    d2b = kq.get("do2b_hub_db_cu_chua_khai") or {}
     return _ghi("S8", "8. POSTGRESQL: `sao_luu()` có phải đường lùi THẬT không (P-G15-02)",
-                "`sao_luu()` không được thoát 0 với một bản sao KHÔNG chứa dữ liệu đang chạy",
+                "BỐN vế, mỗi vế rc != 0: do1 `hub.db` không tồn tại · do2a khai `postgresql` · "
+                "do2b CHƯA KHAI ⇒ TỪ CHỐI kèm thông báo nêu chỗ khai · do3 nhầm `pg_dump -Fc` "
+                "vào `khoi_phuc()`. RC ở cột bên là của vế do1; do2a=%s · do2b=%s"
+                % (d2a.get("rc"), d2b.get("rc")),
                 d1.get("rc"), "", "", None, [], kq)
 
 

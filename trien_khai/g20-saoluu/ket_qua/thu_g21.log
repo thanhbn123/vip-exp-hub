@@ -1,0 +1,105 @@
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=6 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=5 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/kich_ban.py:354: ResourceWarning: unclosed file <_io.TextIOWrapper name=8 encoding='UTF-8'>
+  pr = sp.Popen([PY, "-c", _MA_SAO_LUU_CHAM], cwd=GOC,
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/fail_closed.py:422: ResourceWarning: unclosed file <_io.TextIOWrapper name=4 encoding='UTF-8'>
+  kq = kich_ban.ca_sao_luu_cat_giua_duong()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/fail_closed.py:422: ResourceWarning: unclosed file <_io.TextIOWrapper name=7 encoding='UTF-8'>
+  kq = kich_ban.ca_sao_luu_cat_giua_duong()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+test_a0_bay_kich_ban_deu_chay (__main__.A_FailClosed)
+Chốt chống phép đo RỖNG: thiếu một kịch bản thì mọi dòng ĐẠT ở dưới là vô nghĩa. ... ok
+test_a1_sao_luu_bi_cat_giua_duong (__main__.A_FailClosed)
+S1 — tệp dở LÀM KHÁC BẢN GỐC phải bị `khoi_phuc()` TỪ CHỐI; lượt cắt vì hết chỗ ghi ... ok
+test_a2_tep_sao_luu_bi_sua_mot_byte (__main__.A_FailClosed)
+S2 — bản sửa LÀM KHÁC BẢN GỐC phải bị TỪ CHỐI. Ca này PIN: một chốt kiểm chứng chỉ ... ok
+test_a3_tep_sao_luu_rong_0_byte (__main__.A_FailClosed)
+S3 — tệp 0 byte. Ca này PIN: `integrity_check` trả **"ok"** cho tệp 0 byte (nó là ... ok
+test_a4_khoi_phuc_de_len_csdl_dang_chay (__main__.A_FailClosed)
+S4 — khôi phục ĐÈ lên CSDL đã có dữ liệu. Ca này PIN: bất biến KHÔNG phải "đích ... ok
+test_a5_khoi_phuc_ban_schema_thap_hon (__main__.A_FailClosed)
+S5 — v6 đè lên v9. Ca này PIN: TỤT SCHEMA là hỏng, phải TỪ CHỐI và phải nói ra hai ... ok
+test_a6_het_dia_khi_sao_luu (__main__.A_FailClosed)
+S6a — hết đĩa giữa lúc `sao_luu()`. Ca này PIN: mã thoát khác 0 LÀ CHƯA ĐỦ; không ... ok
+test_a7_het_dia_khi_khoi_phuc (__main__.A_FailClosed)
+S6b — hết đĩa giữa lúc `khoi_phuc()` đang chép lên CSDL đang chạy. CA NẶNG NHẤT. ... ok
+test_a8_khoi_phuc_nham_tep_khong_phai_sqlite (__main__.A_FailClosed)
+S7 — nạp nhầm một tệp `pg_dump` vào `khoi_phuc()`. Ca này PIN: phải có phép kiểm ... ok
+test_a9_postgresql_sao_luu_khong_duoc_bao_thanh_cong (__main__.A_FailClosed)
+S8 (P-G15-02) — kho là PostgreSQL. BỐN vế, và vế `do2b` **VẪN HỞ**. ... ok
+test_b1_sao_luu_roi_khoi_phuc_nguoc_lai_chinh_csdl_goc_y_nguyen (__main__.B_DoiChungDuong)
+sao lưu → ghi thêm dữ liệu → khôi phục về chính CSDL gốc → phải Y NGUYÊN TỪNG BẢNG. ... ok
+test_b2_phep_so_LAM_DO_DUOC (__main__.B_DoiChungDuong)
+Chốt chống phép so CHẾT: ghi thêm tenant + đơn 999.000đ mà phép so vẫn im thì mọi ... ok
+test_b3_phep_do_khong_rong (__main__.B_DoiChungDuong)
+Chốt chống phép đo RỖNG: CSDL gốc phải CÓ dữ liệu thì "khôi phục khớp" mới có nghĩa. ... ok
+test_c0_ban_va_DA_AP_vao_tep_that (__main__.C_TuKiemBoDo)
+CHỐT CHỐNG "ĐO NHẦM TỆP": `app/migrate.py` phải ĐÚNG LÀ bản vá đầy đủ. ... ok
+test_c1_tiem_tong_hop_moi_kich_ban_phai_bat_duoc_FAIL_OPEN (__main__.C_TuKiemBoDo)
+Với MỌI mã kịch bản: một bản ghi cố tình fail-open PHẢI bị `phan_quyet()` tố cáo. ... ok
+test_c2_tiem_tong_hop_bat_duoc_loi_O_NHANH_RIENG (__main__.C_TuKiemBoDo)
+Mỗi nhánh bất biến riêng phải có răng: gỡ đúng MỘT trường ⇒ phải có lỗi ở nhánh đó. ... ok
+test_c3_ma_kich_ban_la_thi_KHONG_duoc_tinh_la_DAT (__main__.C_TuKiemBoDo)
+Chốt chống MỞ RỘNG ÂM THẦM: thêm mã kịch bản mới mà quên bất biến ⇒ phải ĐỎ. ... ok
+test_c4_ban_va_lam_moi_kich_ban_chuyen_sang_FAIL_CLOSED (__main__.C_TuKiemBoDo)
+Chạy ĐÚNG bộ đo này trên `migrate.py` **THẬT ĐÃ VÁ** ⇒ mọi kịch bản FAIL_CLOSED. ... ok
+test_c5_tiem_D1_bat_duoc_bo_tep_tam (__main__.C_TuKiemBoDo)
+Gỡ chốt "ghi qua tệp tạm rồi `os.replace`" ⇒ `S6b` PHẢI bắt được. ... ok
+test_c6_tiem_D2_bat_duoc_ten_ban_cat_de (__main__.C_TuKiemBoDo)
+Gỡ chốt "tên bản cất không bao giờ đè" ⇒ `S4` PHẢI bắt được. ... ok
+test_c7_tiem_D3_bat_duoc_chot_tut_schema (__main__.C_TuKiemBoDo)
+Gỡ chốt "TỪ CHỐI khi bản sao lưu ở schema thấp hơn" ⇒ `S5` PHẢI bắt được. ... ok
+test_c8_tiem_D4_bat_duoc_bo_kiem_chung (__main__.C_TuKiemBoDo)
+Gỡ MỌI phép kiểm chứng bản sao lưu ⇒ `S3` và `S7` PHẢI bắt được. ... ok
+test_c9_chinh_sach_tu_choi_dong_NOT_S8_nhung_phai_tra_gia (__main__.C_TuKiemBoDo)
+ĐO cái giá của quyết định sản phẩm còn lại, thay vì tranh luận về nó. ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 20.776s
+
+OK
+
+        [S1] 1. SAO LƯU BỊ CẮT GIỮA ĐƯỜNG (5 cách cắt)            rc=0   FAIL_CLOSED
+             (b) (không có) | traceback trần=False
+
+        [S2] 2. TỆP SAO LƯU BỊ SỬA 1 BYTE (5 chỗ)                 rc=0   FAIL_CLOSED
+             (b) (không có) | traceback trần=False
+
+        [S3] 3. TỆP SAO LƯU RỖNG 0 BYTE                           rc=1   FAIL_CLOSED
+             (b) [migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-g21-teprong-6m9irbql/ban-sao-luu-0-byte.db RỖNG  | traceback trần=False
+
+        [S4] 4. KHÔI PHỤC ĐÈ LÊN CSDL ĐÃ CÓ DỮ LIỆU               rc=0   FAIL_CLOSED
+             (b) (không có) | traceback trần=False
+
+        [S5] 5. KHÔI PHỤC BẢN SCHEMA THẤP HƠN (v6 đè lên v9)      rc=1   FAIL_CLOSED
+             (b) 20 bảng thay vì 51 và tổng tiền rơi từ 34.336.000 xuống 1.298.000 đồng — KHÔNG một lời cảnh báo. | traceback trần=False
+
+        [S6a] 6a. HẾT ĐĨA GIỮA ĐƯỜNG khi SAO LƯU                   rc=1   FAIL_CLOSED
+             (b) sqlite3.OperationalError: disk I/O error | traceback trần=True
+
+        [S6b] 6b. HẾT ĐĨA GIỮA ĐƯỜNG khi KHÔI PHỤC                 rc=1   FAIL_CLOSED
+             (b) CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn). | traceback trần=False
+
+        [S7] 7. KHÔI PHỤC NHẦM TỆP KHÔNG PHẢI SQLITE (bản dump Po rc=1   FAIL_CLOSED
+             (b) [migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-nhamdump-pmy_dlzq/sao_luu_pg.dump KHÔNG PHẢI CSD | traceback trần=False
+
+        [S8] 8. POSTGRESQL: `sao_luu()` có phải đường lùi THẬT kh rc=1   FAIL_OPEN
+             (b) (không có) | traceback trần=False
+
+        [DC] ĐC. ĐỐI CHỨNG ĐƯỜNG — sao lưu rồi khôi phục lại chín rc=0   FAIL_CLOSED
+             (b) (không có) | traceback trần=False
+
+        app/ đang đo: /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/app
+
+        biến thể: ['ban_va', 'chinh_sach_tu_choi', 'goc', 'tiem_d1', 'tiem_d2', 'tiem_d3', 'tiem_d4']
+
+        TỔNG trên tệp THẬT ĐÃ VÁ: 9/10 FAIL_CLOSED · còn lại: ['S8']

@@ -1,0 +1,229 @@
+{
+ "ban_ghi": {
+  "S8": {
+   "ma": "S8",
+   "ten": "8. POSTGRESQL: `sao_luu()` có phải đường lùi THẬT không (P-G15-02)",
+   "bat_buoc": "BỐN vế, mỗi vế rc != 0: do1 `hub.db` không tồn tại · do2a khai `postgresql` · do2b CHƯA KHAI ⇒ TỪ CHỐI kèm thông báo nêu chỗ khai · do3 nhầm `pg_dump -Fc` vào `khoi_phuc()`. RC ở cột bên là của vế do1; do2a=1 · do2b=0",
+   "ap_dung_mau": false,
+   "rc": 1,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": false,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "ten": "9. PostgreSQL: `sao_luu()` làm gì khi dữ liệu nằm ở PostgreSQL",
+    "cong": "55432",
+    "bo_qua": null,
+    "tu_dung_cum": true,
+    "rc_select_1": 0,
+    "ddl_so_cau": "{'so_cau': 83, 'so_bo_nguon': 6}",
+    "rc_tao_csdl": 0,
+    "rc_nap_ddl": 0,
+    "rc_gieo": 0,
+    "loi_gieo": "",
+    "pg_truoc": {
+     "csdl": "vh_g20_ag04_goc",
+     "bang": {
+      "don_hang": {
+       "dong": "6",
+       "tien": {
+        "cod": 2331000,
+        "gia_tri_khai": 4662000
+       }
+      },
+      "tc_but_toan": {
+       "dong": "6",
+       "tien": {
+        "so_tien_dong": 2331000
+       }
+      },
+      "tc_cod": {
+       "dong": "0",
+       "tien": {}
+      },
+      "tenants": {
+       "dong": "2",
+       "tien": {}
+      },
+      "users": {
+       "dong": "1",
+       "tien": {}
+      },
+      "wh_su_kien": {
+       "dong": "4",
+       "tien": {}
+      }
+     },
+     "tong_tien": 9324000
+    },
+    "do1_hub_db_khong_ton_tai": {
+     "rc": 1,
+     "duong": null,
+     "stderr": "lj24_rjw9x_w0000gn/T/g20-pg-wtcsq_bc/D1/hub.db nên KHÔNG có gì để sao lưu.\n          (Bản cũ vẫn 'thành công' ở đây bằng cách TẠO RA một CSDL rỗng rồi sao lưu nó —\n           đó là đường lùi giả. Nếu kho đang chạy là PostgreSQL thì `sao_luu()` này không dùng được;\n           xem docs/G22_SAOLUU.md.)",
+     "khai_kho": "sqlite",
+     "TU_CHOI": true,
+     "hub_db_sinh_ra": false,
+     "co_ban_sao": null,
+     "so_bang": null,
+     "tong_tien": null,
+     "integrity": null,
+     "loi": null
+    },
+    "do1b_chua_khai_hub_db_khong_ton_tai": {
+     "rc": 1,
+     "duong": null,
+     "khai_kho": null,
+     "TU_CHOI": true,
+     "co_ban_sao": null,
+     "stderr": "[migrate] TỪ CHỐI: không thấy CSDL tại /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-pg-wtcsq_bc/D1/hub.db nên KHÔNG có gì để sao lưu.\n          (Bản cũ vẫn 'thành công' ở đây bằng cách TẠO RA một CSDL rỗng rồi sao lưu nó —\n           đó là đường lùi giả. Nếu kho đang chạy là PostgreSQL thì `sao_luu()` này không dùng được;\n           xem docs/G22_SAOLUU.md.)",
+     "bao_ro": false
+    },
+    "do2a_hub_db_cu_khai_postgresql": {
+     "rc": 1,
+     "duong": null,
+     "khai_kho": "postgresql",
+     "TU_CHOI": true,
+     "stderr": "hai ở cau_hinh.KHO_DANG_CHAY) nhưng `sao_luu()`\n          KHÔNG CÓ NHÁNH PostgreSQL — nó chỉ biết `csdl.ket_noi()` của SQLite.\n          Chạy tiếp thì nó tạo ra một tệp SQLite KHÔNG chứa một dòng nào của dữ\n          liệu đang phục vụ: một ĐƯỜNG LÙI GIẢ, và im lặng. Đo được trên cụm\n          PostgreSQL riêng: 4.096 byte / 0 BẢNG / integrity_check = 'ok' trong khi\n          PostgreSQL giữ 6 đơn và 9.324.000 đồng (P-G15-02).\n          Sao lưu PostgreSQL bằng `pg_dump -Fc`; xem docs/G22_SAOLUU.md.",
+     "stdout": "",
+     "co_ban_sao": null,
+     "sqlite_co_du_lieu_that": {
+      "so_bang": 51,
+      "tong_tien": 34336000
+     }
+    },
+    "do2b_hub_db_cu_chua_khai": {
+     "rc_gieo_sqlite": 0,
+     "loi_gieo": "",
+     "rc": 0,
+     "khai_kho": null,
+     "co_ban_sao": 561152,
+     "sqlite_truoc_so_bang": 51,
+     "sqlite_truoc_tong_tien": 34336000,
+     "ban_sao_so_bang": 51,
+     "ban_sao_tong_tien": 34336000,
+     "bam_ban_sao_khop_sqlite_goc": true,
+     "stderr": "",
+     "bao_ro": false,
+     "co_hub_db_tren_dia": true
+    },
+    "do2_hub_db_co_du_lieu_sqlite_khac": {
+     "rc_gieo_sqlite": 0,
+     "loi_gieo": "",
+     "rc": 0,
+     "khai_kho": null,
+     "co_ban_sao": 561152,
+     "sqlite_truoc_so_bang": 51,
+     "sqlite_truoc_tong_tien": 34336000,
+     "ban_sao_so_bang": 51,
+     "ban_sao_tong_tien": 34336000,
+     "bam_ban_sao_khop_sqlite_goc": true,
+     "stderr": "",
+     "bao_ro": false,
+     "co_hub_db_tren_dia": true
+    },
+    "pg_dump": {
+     "rc": 0,
+     "co_byte": 124700,
+     "stderr": ""
+    },
+    "do3_khoi_phuc_tu_pg_dump": {
+     "rc_gieo_sqlite": 0,
+     "rc_khoi_phuc": 1,
+     "err": "[migrate] TỪ CHỐI: /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g20-pg-wtcsq_bc/pg-that.dump KHÔNG PHẢI CSDL SQLite (16 byte đầu: b'PGDMP\\x01\\x0f\\x00\\x04\\x08\\x01\\x01\\x00\\t\\x00\\x00')",
+     "out": "LUC-DUOC-NHAN True",
+     "khoi_phuc_NHAN": false,
+     "csdl_sau_so_byte": 561152,
+     "csdl_sau_loi": null,
+     "csdl_sau_so_bang": 51,
+     "sqlite_truoc_tong_tien": 34336000
+    },
+    "doi_chung_duong_sqlite_co_du_lieu": {
+     "rc_gieo": 0,
+     "rc": 0,
+     "so_bang": 51,
+     "tong_tien": 34336000,
+     "bam_khop_goc": true
+    },
+    "ket_luan": {
+     "do1_nem_loi_chi_tiet": true,
+     "do1_im_lang_bao_thanh_cong": false,
+     "do1_ban_sao_chua_du_lieu_pg": true,
+     "do1b_chua_khai_thi_TU_CHOI": true,
+     "do2a_khai_postgresql_thi_TU_CHOI": true,
+     "do2b_chua_khai_thi_TU_CHOI_va_bao_ro": false,
+     "du_lieu_pg_that": {
+      "dong_don_hang": "6",
+      "dong_tc_but_toan": "6",
+      "tong_tien": 9324000
+     }
+    },
+    "van_tay_cum_5432": {
+     "truoc": {
+      "cong": "5432",
+      "may_chu": "localhost",
+      "truy_cap_duoc": true,
+      "pid": "58873",
+      "data_directory": "/opt/homebrew/var/postgresql@16",
+      "postmaster_bat_dau": "2026-10-09 10:24:22.104803+07",
+      "phien_ban_may_chu": "16.15 (Homebrew)",
+      "danh_sach_csdl": [
+       "postgres",
+       "template0",
+       "template1",
+       "vip_customs",
+       "vip_customs_g16",
+       "vip_customs_test"
+      ],
+      "so_csdl": 6,
+      "nghe_tcp": [
+       "58873"
+      ],
+      "ghi_chu": ""
+     },
+     "sau": {
+      "cong": "5432",
+      "may_chu": "localhost",
+      "truy_cap_duoc": true,
+      "pid": "58873",
+      "data_directory": "/opt/homebrew/var/postgresql@16",
+      "postmaster_bat_dau": "2026-10-09 10:24:22.104803+07",
+      "phien_ban_may_chu": "16.15 (Homebrew)",
+      "danh_sach_csdl": [
+       "postgres",
+       "template0",
+       "template1",
+       "vip_customs",
+       "vip_customs_g16",
+       "vip_customs_test"
+      ],
+      "so_csdl": 6,
+      "nghe_tcp": [
+       "58873"
+      ],
+      "ghi_chu": ""
+     }
+    },
+    "van_tay_5432_khong_doi": true,
+    "van_tay_5432_lech": [],
+    "dat": true
+   }
+  }
+ },
+ "bo_qua": {},
+ "app": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d5",
+ "thu_tu": [
+  "S8"
+ ]
+}

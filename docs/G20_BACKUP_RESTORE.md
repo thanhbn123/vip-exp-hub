@@ -37,8 +37,35 @@ python3 app/thu/thu_g20_saoluu.py                # bộ thử tự động (vào
 |---|---|---|---|
 | B1 | `python3 -c "ast.parse(...)"` trên 6 tệp | **0** | — |
 | B2 | `python3 trien_khai/g20-saoluu/do_vong_tron.py` | **0** | 8/8 kịch bản đo được |
-| B3 | `python3 app/thu/thu_g20_saoluu.py` | **0** | **Ran 41 tests · OK · 0 skip** |
+| B3 | `python3 app/thu/thu_g20_saoluu.py` | **0** | **Ran 41 tests · OK · 0 skip** ← **MÀU XANH GIẢ, xem CẢNH BÁO dưới** |
 | B4 | `python3 trien_khai/g20-saoluu/do_postgres.py` | **0** | 1 cụm riêng, 3 phép đo |
+
+> ### ⚠ CẢNH BÁO (AG-02 / G21 bổ sung 16/10/2026, 15:12) — DÒNG `Ran 41 tests · OK` Ở TRÊN LÀ **MÀU XANH GIẢ**
+>
+> Con số **41 ca · OK · 0 skip** đó **KHÔNG** chứng minh sao lưu/khôi phục đúng. Nó chỉ chứng
+> minh bộ thử **đang canh ĐÚNG hành vi sai**: **8 ca** mang nhãn `ĐỘC HẠI ĐÃ BIẾT` khẳng định
+> ĐÚNG cái sai — ví dụ `assertEqual(khoi_phuc_NHAN_tat_ca, 5)` nghĩa là *"5/5 tệp sao lưu hỏng
+> PHẢI được `khoi_phuc()` nhận thì ca này mới xanh"*. Bộ thử xanh trong khi `sao_luu()` trả một
+> tệp **4.096 byte / 0 BẢNG** cho một kho PostgreSQL đang giữ **6 đơn + 9.324.000 đồng**.
+>
+> **Đã bị thay bằng gì — đo lại, không suy đoán:**
+>
+> | Mốc | `python3 app/thu/thu_g20_saoluu.py` | Vì sao |
+> |---|---|---|
+> | Bản gốc (số ở trên) | `Ran 41 tests · OK · 0 skip` · **rc 0** | 8 ca pin hành vi fail-open ⇒ **xanh giả** |
+> | AG-02 lượt 1 (G21, bản vá chưa áp) | `Ran 41 tests · FAILED (failures=8)` · **rc 1** | 8 ca đó viết lại theo bất biến fail-closed ⇒ **đỏ thật** |
+> | **AG-02 lượt 2 (bản vá ĐÃ ÁP)** | **`Ran 41 tests · FAILED (failures=1)` · rc 1** | 7/8 ca đã xanh vì hành vi nay ĐÚNG; **còn đúng MỘT ca đỏ**: `test_k4_BAT_BIEN_hub_db_CU_khong_duoc_coi_la_du_lieu_dang_chay` |
+>
+> Ca đỏ còn lại **không phải lỗi mới**: nó là **cái PIN của khoảng hở đã nêu tên** — `hub.db`
+> CŨ còn sót trong khi kho đang chạy là PostgreSQL, và hệ chưa có cờ cấu hình *"kho đang chạy"*
+> để từ chối. Chính ca đó in ra: *"CÒN HỞ, cần cờ cấu hình 'kho đang chạy'"*. Xem
+> `docs/G21_BACKUP_RESTORE.md` §8 mục 1. **KHÔNG xoá hay nới ca này**: nó là một trong hai vế
+> nhìn thấy khoảng hở đó (vế kia là `test_a9` của `thu_g21_saoluu.py`).
+>
+> Nội dung **đo lường** của tài liệu này (§2–§8) vẫn đúng nguyên: nó mô tả **hành vi của bản
+> gốc**, và bản gốc vẫn nằm nguyên ở `trien_khai/g20-saoluu/migrate_nguyenban.py` (md5
+> `611182a621fd279c3816d5fc5d2785e3`) để đo lại được. Chỉ **dòng mã thoát** ở trên là đã lệch.
+
 
 `chay_do.sh` lấy mã thoát **TRƯỚC** mọi ống dẫn (`MA=$?` rồi mới in) — `lệnh | tee` trả mã thoát của `tee`, không phải của `lệnh` (`docs/QA_G18.md`, N-01).
 

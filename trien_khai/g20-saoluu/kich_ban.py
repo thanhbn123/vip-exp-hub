@@ -36,6 +36,14 @@ VUNG_CAM = os.path.expanduser("~/Projects/vip-express-hub")
 # xem `trien_khai/g20-saoluu/fail_closed.py` và `app/thu/thu_g21_saoluu.py`.
 APP = os.environ.get("G21_APP_DIR") or os.path.join(GOC, "app")
 
+# --------------------------------------------------------------------- G22: khai kho
+# Tên biến và hai giá trị hợp lệ, GIỮ KHỚP với `app/cau_hinh.py` (chỗ chính thức của khai báo).
+# Chép ở đây chứ không `import cau_hinh`: mô-đun này còn phải chạy được trên một `app/` ỨNG VIÊN
+# (`G21_APP_DIR`) và trên bản ĐÓNG BĂNG `migrate_nguyenban.py`, những bản chưa có hằng đó.
+BIEN_KHAI_KHO = "VIP_KHO_DANG_CHAY"
+KHAI_SQLITE = "sqlite"
+KHAI_POSTGRESQL = "postgresql"
+
 
 # --------------------------------------------------------------------- hạ tầng chạy con
 def chot_an_toan(duong):
@@ -48,24 +56,44 @@ def chot_an_toan(duong):
     return d
 
 
-def moi_truong(data_dir, **them):
+def moi_truong(data_dir, khai_kho=KHAI_SQLITE, **them):
+    """Môi trường cho tiến trình con. `khai_kho` = giá trị của `VIP_KHO_DANG_CHAY`.
+
+    BA KHẢ NĂNG, và chúng KHÁC NHAU (G22 — chưa khai ⇒ TỪ CHỐI):
+      * `KHAI_SQLITE` / `KHAI_POSTGRESQL` — KHAI RÕ. Đây là mặc định, và mặc định đó là ĐÚNG:
+        mọi kịch bản trong tệp này chạy trên một kho SQLite THẬT (chúng dựng `hub.db` rồi gieo dữ
+        liệu vào đó), nên khai `sqlite` là khai ĐÚNG THỨ NÓ LÀ — không phải một cách lách chốt.
+      * `None` — CHƯA KHAI, có ý thức. Chỉ dùng cho những vế ĐO chính cái nhánh "chưa khai"
+        (`do1`, `do2b`). Không có nó thì nhánh đó không bao giờ được đo.
+
+    Và nó LUÔN `pop` giá trị thừa hưởng từ môi trường: một `VIP_KHO_DANG_CHAY` lọt vào từ shell
+    sẽ khiến nhánh "chưa khai" không bao giờ chạy, mà lượt đo vẫn in ra một con số trông như thật.
+    """
     e = dict(os.environ)
+    e.pop(BIEN_KHAI_KHO, None)
+    if khai_kho is not None:
+        e[BIEN_KHAI_KHO] = khai_kho
     e["VIP_HUB_DATA"] = data_dir
     e.pop("VIP_HUB_RESET_TOKEN", None)
     e.update(them)
     return e
 
 
-def chay_con(ma, data_dir, timeout=900, env_them=None, stdin=None):
+def chay_con(ma, data_dir, timeout=900, env_them=None, stdin=None, khai_kho=KHAI_SQLITE):
     """Chạy một đoạn mã trong TIẾN TRÌNH RIÊNG với `VIP_HUB_DATA` riêng.
 
     Tiến trình riêng là BẮT BUỘC, không phải cho gọn: `cau_hinh` đọc `VIP_HUB_DATA` MỘT LẦN
     lúc nạp mô-đun, nên trong cùng tiến trình thì lượt đo thứ hai vẫn dùng đường dẫn của lượt
     đầu — và mọi phép so sau đó chỉ đang so một CSDL với chính nó.
+
+    `khai_kho` đi qua ĐÂY chứ không lặng lẽ lấy mặc định của `moi_truong`: đo được 16/10/2026 —
+    một lượt gọi `chay_con(..., env_them={})` với ý định "CHƯA KHAI" vẫn nhận `sqlite` từ mặc
+    định của `moi_truong`, nên nhánh "chưa khai" KHÔNG BAO GIỜ được đo mà bảng bằng chứng vẫn in
+    ra một con số trông như thật. Mặc định phải đi qua tham số, không đi qua đường ngầm.
     """
     p = subprocess.run([PY, "-c", ma], capture_output=True, text=True, cwd=GOC,
-                       env=moi_truong(data_dir, **(env_them or {})), timeout=timeout,
-                       input=stdin)
+                       env=moi_truong(data_dir, khai_kho=khai_kho, **(env_them or {})),
+                       timeout=timeout, input=stdin)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -77,20 +105,62 @@ def gieo(data_dir, timeout=900):
 
 _MA_SAO_LUU = ("import sys; sys.path.insert(0, %r); import migrate; print(migrate.sao_luu())"
                % APP)
-_MA_KHOI_PHUC = ("import os, sys; sys.path.insert(0, %r); import migrate;"
-                 " migrate.khoi_phuc(os.environ['G20_SAO_LUU'])"
-                 % APP)
+# `G20_LUC` là KÊNH CHỞ CỦA BỘ ĐO, KHÔNG phải một công tắc của sản phẩm: `migrate.khoi_phuc()`
+# chỉ nhận mốc thời gian qua THAM SỐ `luc=`. Không đặt biến này thì `luc=None` ⇒ hàm đọc đồng hồ
+# hệ thống, đúng đường chạy thật. Có đặt thì mốc được TRUYỀN VÀO, và ca đo không còn phụ thuộc
+# đồng hồ (G22 — xem `ca_khoi_phuc_de_len_csdl_dang_chay`).
+#
+# ====== VÌ SAO PHẢI DÒ XEM HÀM CÓ NHẬN `luc` KHÔNG, VÀ VÌ SAO PHẢI IN RA ======
+# Bộ đo chạy trên BA loại `migrate.py`: tệp THẬT, tệp THẬT bị tiêm lỗi, và bản ĐÓNG BĂNG trước khi
+# vá (`migrate_nguyenban.py` — bản đó KHÔNG có tham số `luc`). Gọi thẳng `khoi_phuc(path, luc=…)`
+# trên bản đóng băng thì nó nổ `TypeError: unexpected keyword argument 'luc'`, và một vụ nổ như
+# thế lại cho `rc != 0` — tức nó được tính là "TỪ CHỐI ĐẠT" ở mọi kịch bản mong đợi từ chối.
+# Đo được 16/10/2026: lượt chạy đầu của G22 cho cột TRƯỚC **4/10 FAIL_CLOSED** trong khi bảng của
+# lượt trước là **1/10** — bốn ca XANH lên vì lý do KHÔNG LIÊN QUAN tới thứ chúng đo.
+# Nên: dò chữ ký, truyền `luc` khi hàm nhận, và IN RA đã truyền được hay chưa. Vế in ra đó được
+# `kich_ban.khoi_phuc()` đọc thành `nhan_luc`, và `fail_closed.phan_quyet` (S4) ĐÒI nó phải True
+# trên tệp đang đo — nếu không thì kết luận là "PHÉP ĐO KHÔNG DỰNG ĐƯỢC", chứ không phải ĐẠT.
+_MA_KHOI_PHUC = (
+    "import os, sys, inspect; sys.path.insert(0, %r); import migrate;"
+    " _f = migrate.khoi_phuc;"
+    " _co = 'luc' in inspect.getfullargspec(_f).args;"
+    " print('LUC-DUOC-NHAN', _co);"
+    " _f(os.environ['G20_SAO_LUU'], **({'luc': os.environ.get('G20_LUC') or None} if _co else {}))"
+    % APP)
 
 
-def sao_luu(data_dir):
-    rc, out, err = chay_con(_MA_SAO_LUU, data_dir)
+def sao_luu(data_dir, khai_kho=KHAI_SQLITE):
+    """`khai_kho` = giá trị của `VIP_KHO_DANG_CHAY` cho tiến trình con.
+
+    MẶC ĐỊNH LÀ `sqlite` (KHAI RÕ), không phải "chưa khai": mọi vế trong tệp này chạy trên một
+    kho SQLite thật, nên phải khai đúng thứ nó là. Vế nào muốn ĐO nhánh "chưa khai" thì truyền
+    `khai_kho=None` — và chỉ có ba vế như thế (`do1`, `do2a` là khai `postgresql`, `do2b`).
+
+    Vì sao phải nói ra: trước G22, mặc định là "chưa khai" và giá trị `sqlite` được SUY RA từ một
+    chính sách trong mã sản phẩm. Chính sách đó đã bị bỏ (nó là khoảng hở `do2b`), nên bộ đo phải
+    KHAI thay vì dựa vào một mặc định — nếu không, mọi kịch bản ở đây TỪ CHỐI vì lý do không liên
+    quan gì tới thứ chúng đang đo.
+    """
+    env = {} if khai_kho is None else {BIEN_KHAI_KHO: khai_kho}
+    rc, out, err = chay_con(_MA_SAO_LUU, data_dir, env_them=env, khai_kho=khai_kho)
     duong = out.strip().splitlines()[-1] if out.strip() else None
-    return {"rc": rc, "duong": duong, "out": out.strip(), "err": err.strip()}
+    return {"rc": rc, "duong": duong, "out": out.strip(), "err": err.strip(),
+            "khai_kho": khai_kho}
 
 
-def khoi_phuc(data_dir, duong_backup):
-    rc, out, err = chay_con(_MA_KHOI_PHUC, data_dir, env_them={"G20_SAO_LUU": duong_backup})
-    return {"rc": rc, "out": out.strip(), "err": err.strip()}
+def khoi_phuc(data_dir, duong_backup, luc=None):
+    """`luc` = MỐC THỜI GIAN truyền cho `migrate.khoi_phuc(luc=...)`. `None` ⇒ đồng hồ hệ thống.
+
+    Trả thêm `nhan_luc`: hàm ĐANG ĐO có thật sự nhận tham số `luc` không (dò chữ ký trong tiến
+    trình con, xem `_MA_KHOI_PHUC`). `False` nghĩa là mốc KHÔNG được truyền và ca đo về mốc không
+    dựng được trên bản đó — người đọc phải thấy điều đó, chứ không phải một dòng ĐẠT.
+    """
+    env_them = {"G20_SAO_LUU": duong_backup}
+    if luc is not None:
+        env_them["G20_LUC"] = str(luc)
+    rc, out, err = chay_con(_MA_KHOI_PHUC, data_dir, env_them=env_them)
+    return {"rc": rc, "out": out.strip(), "err": err.strip(), "luc": luc,
+            "nhan_luc": "LUC-DUOC-NHAN True" in out}
 
 
 def db(data_dir):
@@ -559,16 +629,36 @@ def ca_sua_mot_byte():
 # ============================================================================
 # KỊCH BẢN 5 — KHÔI PHỤC VÀO CSDL ĐÃ CÓ DỮ LIỆU
 # ============================================================================
-def ca_khoi_phuc_de_len_csdl_dang_chay():
+# MỐC THỜI GIAN CỐ ĐỊNH cho ba lượt khôi phục liên tiếp: chúng PHẢI rơi vào ĐÚNG mốc này, để
+# đường ĐÈ được chạm tới một cách CHẮC CHẮN thay vì tuỳ tốc độ máy. Đây là ĐẦU VÀO của phép đo,
+# nên nó nằm ở đây và được TRUYỀN XUỐNG — không phải một giá trị đọc ngầm ở dưới sâu.
+LUC_BA_LUOT = "20261016-120000"
+
+
+def ca_khoi_phuc_de_len_csdl_dang_chay(luc=LUC_BA_LUOT):
     """Khôi phục ĐÈ lên một CSDL đang có dữ liệu MỚI HƠN bản sao lưu.
 
     Ba câu hỏi, cả ba đều là câu hỏi vận hành:
       (a) dữ liệu mới hơn có mất không (phải mất — đó là ý nghĩa của khôi phục) và có ĐƯỢC
           CẤT đi không (bản `hub-truoc-rollback-*.db`)?
       (b) bản cất đó có MỞ ĐƯỢC và có đúng dữ liệu vừa mất không?
-      (c) hai lượt khôi phục trong CÙNG MỘT GIÂY thì còn mấy bản cất? Tên bản cất đặt theo
-          GIÂY (`%Y%m%d-%H%M%S`) — đúng khuôn mà `sao_luu()` đã bị bắt lỗi và đã sửa; ở
-          `khoi_phuc()` chưa ai đo.
+      (c) ba lượt khôi phục trong CÙNG MỘT MỐC THỜI GIAN thì còn mấy bản cất? Tên bản cất đặt
+          theo mốc (`%Y%m%d-%H%M%S`) — đúng khuôn mà `sao_luu()` đã bị bắt lỗi và đã sửa.
+
+    ====== G22: MỐC THỜI GIAN LÀ ĐẦU VÀO, KHÔNG PHẢI THỨ ĐỌC NGẦM ======
+    `luc` (mặc định `LUC_BA_LUOT`, một mốc CỐ ĐỊNH) được TRUYỀN XUỐNG `migrate.khoi_phuc(luc=...)`
+    cho CẢ BA lượt. Trước đây ba lượt đọc `datetime.now()` ở dưới sâu trong `migrate`, nên chúng
+    có thể rơi vào hai giây khác nhau — và khi đó:
+      * tên ba bản cất KHÁC NHAU vì lý do thời gian, nên phép đếm ">= 3" XANH **mà đường ĐÈ chưa
+        hề được chạm tới** ⇒ ca đo XANH trên một sản phẩm còn lỗi (ĐỎ GIẢ ngược: XANH GIẢ);
+      * kết quả của ca phụ thuộc TỐC ĐỘ MÁY: chạy riêng một kiểu, chạy chung một kiểu.
+    Truyền mốc vào làm ca TẤT ĐỊNH và làm nó LUÔN chạm vào đường ĐÈ. Trường `cung_mot_moc` dưới
+    đây GHI LẠI rằng điều đó đã thật sự xảy ra (ba tên cùng mang một mốc) — thiếu nó thì một lượt
+    đo "trượt chỗ" vẫn cho ra một con số trông như thật, và `fail_closed.phan_quyet` tố cáo
+    "PHÉP ĐO KHÔNG DỰNG ĐƯỢC" thay vì cho ĐẠT.
+
+    KHÔNG có `retry` ở đây, và không được thêm: chạy lại cho tới khi XANH là che mất đúng thứ ca
+    này sinh ra để đo.
     """
     import sqlite3
     with Nen("delencsdl") as n:
@@ -585,7 +675,7 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
         day = khung_do.chup(db(A))
         truoc_kp = liet_ke_sao_luu(A)
 
-        kp1 = khoi_phuc(A, sl["duong"])
+        kp1 = khoi_phuc(A, sl["duong"], luc=luc)
         sau1 = khung_do.chup(db(A))
         giua = liet_ke_sao_luu(A)
         # CHỈ đếm tệp `.db`. Đo được 16/10/2026: một bản vá fail-closed cất bản hiện tại KÈM
@@ -602,13 +692,14 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
                                 "bam": c.get("bam_toan_kho"),
                                 "khop_dung_luc_chup_day": c.get("bam_toan_kho") == day.get("bam_toan_kho")}
 
-        # (c) hai lượt khôi phục LIÊN TIẾP trong cùng một giây
+        # (c) ba lượt khôi phục LIÊN TIẾP — CÙNG MỘT MỐC (`luc`), không phải "cùng một giây nếu
+        #     máy đủ nhanh". Xem docstring: đây là chỗ ca đo từng phụ thuộc đồng hồ hệ thống.
         ban_cat_1 = sorted(ban_cat)[-1] if ban_cat else None
         bam_cat_1 = None
         if ban_cat_1:
             bam_cat_1 = khung_do.chup(os.path.join(thu_muc_sao_luu(A), ban_cat_1)).get("bam_toan_kho")
-        kp2 = khoi_phuc(A, sl["duong"])
-        kp3 = khoi_phuc(A, sl["duong"])
+        kp2 = khoi_phuc(A, sl["duong"], luc=luc)
+        kp3 = khoi_phuc(A, sl["duong"], luc=luc)
         cuoi = liet_ke_sao_luu(A)
         ban_cat_cuoi = [f for f in cuoi if "rollback" in f and f.endswith(".db")]
         # Câu hỏi quyết định: bản cất của lượt ĐẦU (thứ duy nhất chứa dữ liệu vừa mất) còn
@@ -629,11 +720,21 @@ def ca_khoi_phuc_de_len_csdl_dang_chay():
                 os.path.join(thu_muc_sao_luu(A), _f)).get("bam_toan_kho")
         so_ban_cat_giu_du_lieu_goc = sum(
             1 for _b in bam_moi_ban_cat_cuoi.values() if _b == day.get("bam_toan_kho"))
+        # CHỐT CHỐNG "ĐO TRƯỢT CHỖ": ba bản cất phải THẬT SỰ mang mốc đã truyền. Nếu sản phẩm
+        # (hoặc một bản tiêm) đọc đồng hồ hệ thống thay vì dùng `luc`, tên sẽ mang giờ chạy và
+        # chốt này báo ĐỎ ngay — thay vì để phép đếm ">= 3" XANH vì một lý do không liên quan.
+        cung_mot_moc = bool(ban_cat_cuoi) and all(
+            f.startswith("hub-truoc-rollback-" + str(luc)) for f in ban_cat_cuoi)
         return {
             "ten": "5. KHÔI PHỤC ĐÈ lên CSDL đã có dữ liệu — bản cất có an toàn không",
             "rc_gieo": rc_gieo, "rc_sao_luu": sl["rc"], "rc_them": rc_them,
             "loi_them": err_them.strip()[-300:],
             "rc_kp1": kp1["rc"], "rc_kp2": kp2["rc"], "rc_kp3": kp3["rc"],
+            "luc": luc, "cung_mot_moc": cung_mot_moc,
+            # `nhan_luc` = hàm ĐANG ĐO có nhận tham số mốc không. Trên bản ĐÓNG BĂNG thì `False`,
+            # và khi đó mọi kết luận về "ba lượt cùng một mốc" là RỖNG — `fail_closed` từ chối
+            # kết luận, thay vì để một cột XANH không nói lên điều gì.
+            "nhan_luc": bool(kp1.get("nhan_luc")),
             "sao_luu_truoc_kp": truoc_kp, "sao_luu_sau_kp1": giua, "sao_luu_sau_3_lan_kp": cuoi,
             "so_ban_cat_sau_1_lan": len(ban_cat),
             "so_ban_cat_sau_3_lan": len(ban_cat_cuoi),

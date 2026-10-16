@@ -27,19 +27,27 @@ KHẲNG ĐỊNH trên số đo đó, và mỗi khẳng định nói ra nó đòi
 Không có lớp C thì hai lớp trên không chứng minh gì: một bộ đo luôn trả ĐỎ, hoặc một bộ đo
 đọc nhầm `migrate.py`, đều cho ra cùng một bảng "FAIL_OPEN" ở lớp A.
 
-================= VÌ SAO LỚP A SẼ ĐỎ, VÀ ĐÓ LÀ KẾT QUẢ ĐÚNG =================
-Đo 16/10/2026 trên `integration/g20 @ a3400a8`: **9/10 kịch bản FAIL_OPEN**. Sửa lỗi nằm ở
-`app/migrate.py` — TỆP CỦA AG-00, ngoài vùng được ghi của làn này. Bản vá ĐÃ ĐƯỢC VIẾT VÀ ĐO
-(`trien_khai/g20-saoluu/ban_va.py`): chạy cùng bộ đo trên bản vá cho **9/10 FAIL_CLOSED**, và
-khoảng trống còn lại được nêu tên (xem `docs/G21_BACKUP_RESTORE.md`).
+================= LƯỢT NÀY (G22): HAI KHOẢNG HỞ ĐÃ ĐÓNG, VÀ CÁCH CHÚNG ĐƯỢC ĐO =================
+G21 để lại ĐÚNG MỘT khoảng trống có tên ở `S8` (`do2b` — chưa khai kho đang chạy). G22 đóng nó
+bằng chốt (4b): **chưa khai ⇒ TỪ CHỐI**, và công tắc cũ (`CHINH_SACH_CHUA_KHAI = "sqlite"`) bị
+BỎ HẲN — chính công tắc đó là khoảng hở, vì nó biến "không biết" thành "coi như SQLite" rồi trả
+mã thoát 0. Lớp A vì thế phải **10/10 XANH**, không còn ngoại lệ nào.
 
-Nên lớp A ĐỎ là TÌNH TRẠNG ĐÚNG của cây này, không phải bộ thử hỏng. **KHÔNG** nới điều kiện
-cho nó xanh: nới ra là quay lại đúng thứ đã làm G20 nghiệm thu FAILED.
+G22 cũng đóng khoảng hở thứ hai, không nằm ở sản phẩm mà ở BỘ ĐO: ca `S4` ("ba lượt khôi phục
+cùng một giây không được xoá nhau") đọc `datetime.now()` ở dưới sâu trong `migrate`, nên ba lượt
+có thể rơi vào hai-ba mốc khác nhau ⇒ phép đếm XANH mà ĐƯỜNG ĐÈ chưa hề được chạm tới, và kết
+quả phụ thuộc tốc độ máy. Nay MỐC THỜI GIAN là ĐẦU VÀO (`migrate.sao_luu(luc=)` /
+`khoi_phuc(luc=)`), bộ đo truyền một mốc CỐ ĐỊNH, và `phan_quyet` tố cáo "PHÉP ĐO KHÔNG DỰNG
+ĐƯỢC" nếu ba bản cất không cùng mang mốc đó. Xem docs/G22_SAOLUU.md §5.
+
+Muốn khẳng định "đang đo bản vá" là THẬT chứ không phải một lời hứa: `ban_va.xac_nhan()` đọc
+tệp thật và TỪ CHỐI chạy nếu thiếu bất kỳ mảnh mã nào của bản vá, hoặc nếu còn mảnh mã của
+đường fail-open cũ. `test_c0` gọi nó trước mọi lượt đo.
 
 ================= MÔI TRƯỜNG =================
 Mọi lượt đo chạy trong thư mục TẠM; `kich_ban.chot_an_toan()` TỪ CHỐI vùng dữ liệu thật.
 KHÔNG gọi mạng (lớp HTTP chỉ chạm `127.0.0.1` cổng OS cấp). Cụm PostgreSQL là cụm RIÊNG,
-TỪ CHỐI cổng 5432. `sao_luu()`/`khoi_phuc()` được ĐỌC, không được sửa.
+TỪ CHỐI cổng 5432.
 """
 import os
 import shutil
@@ -56,11 +64,14 @@ import kich_ban              # noqa: E402
 import ban_va                # noqa: E402
 
 # Nhãn cho người đọc, và kịch bản nào PHẢI bắt được lỗi tiêm nào. Khai MỘT chỗ.
+# `D5` là phép tiêm của G22: nới lại CHÍNH SÁCH CŨ (chưa khai kho đang chạy ⇒ coi là SQLite).
+# Không có nó thì kết luận "S8 đã đóng" không chứng minh được gì — xem `test_c9`.
 TIEM = {
     "D1": ("bỏ tệp tạm, chép THẲNG lên CSDL đang chạy", ("S6b",)),
     "D2": ("tên bản cất đặt theo GIÂY, cho phép đè", ("S4",)),
     "D3": ("bỏ chốt TỤT SCHEMA", ("S5",)),
     "D4": ("bỏ mọi phép kiểm chứng bản sao lưu", ("S3", "S7")),
+    "D5": ("nới lại chính sách cũ: chưa khai ⇒ coi kho là SQLite", ("S8",)),
 }
 
 
@@ -159,10 +170,45 @@ class A_FailClosed(unittest.TestCase):
         self.assertEqual(loi, [], "S7 KHÔNG fail-closed: %s" % "; ".join(loi))
 
     def test_a9_postgresql_sao_luu_khong_duoc_bao_thanh_cong(self):
-        """S8 (P-G15-02) — kho là PostgreSQL. Ca này PIN: `sao_luu()` KHÔNG được thoát 0 với
-        một bản sao không chứa một dòng nào của dữ liệu đang chạy."""
+        """S8 (P-G15-02) — kho là PostgreSQL. NĂM vế, và **cả năm đã đóng** (G22).
+
+        Ca này PIN: `sao_luu()` KHÔNG được BÁO THÀNH CÔNG với một đường lùi không chứa dữ liệu
+        đang chạy — kể cả khi deployment QUÊN KHAI kho đang chạy.
+
+        Lịch sử của ca này, giữ nguyên vì nó là một phần của phép đo (đừng đọc nó như lịch sử
+        hành chính — nó là LÝ DO của từng dòng dưới):
+          * G21 (lượt trước) — vế `do2b` **CÒN HỞ**, và ca này khẳng định ĐÚNG điều đo được:
+            S8 = FAIL_OPEN với ĐÚNG MỘT lý do, tên là `do2b`. Không nới thành "S8 phải xanh":
+            làm thế là quay lại đúng thứ đã làm nghiệm thu G20 FAILED.
+          * G22 (lượt này) — `do2b` ĐÃ ĐÓNG bằng chốt (4b): chưa khai kho đang chạy ⇒ TỪ CHỐI.
+            Nên ca được VIẾT LẠI theo bất biến ĐÚNG, và viết lại theo hướng CHẶT HƠN: bốn vế cũ
+            giữ nguyên, thêm vế thứ năm (`do1b` — chưa khai + không có `hub.db`), và mỗi vế
+            "chưa khai" còn phải NÓI RA chỗ khai (`bao_ro`) chứ không chỉ trả mã thoát khác 0.
+        """
         b, loi = self._doi("S8")
+        bc = b["bang_chung"]
         self.assertEqual(loi, [], "S8 KHÔNG fail-closed: %s" % "; ".join(loi))
+        self.assertNotEqual(bc["do1_hub_db_khong_ton_tai"].get("rc"), 0,
+                            "S8/do1: `hub.db` không tồn tại mà `sao_luu()` vẫn thoát 0")
+        self.assertNotEqual(bc["do1b_chua_khai_hub_db_khong_ton_tai"].get("rc"), 0,
+                            "S8/do1b: CHƯA KHAI kho đang chạy mà `sao_luu()` vẫn thoát 0")
+        self.assertTrue(bc["do1b_chua_khai_hub_db_khong_ton_tai"].get("bao_ro"),
+                        "S8/do1b: từ chối nhưng KHÔNG nói ra là thiếu khai báo — người trực "
+                        "vẫn phải đoán: %r" % (bc["do1b_chua_khai_hub_db_khong_ton_tai"].get("stderr"),))
+        self.assertNotEqual(bc["do2a_hub_db_cu_khai_postgresql"].get("rc"), 0,
+                            "S8/do2a: ĐÃ KHAI `postgresql` mà `sao_luu()` vẫn thoát 0")
+        self.assertNotEqual(bc["do2b_hub_db_cu_chua_khai"].get("rc"), 0,
+                            "S8/do2b: CHƯA KHAI mà `hub.db` CŨ còn sót ⇒ `sao_luu()` vẫn thoát 0 "
+                            "và trả một bản sao TRÔNG HỢP LỆ (%s bảng, %s đồng) không chứa dòng "
+                            "nào của %s đồng đang phục vụ ở PostgreSQL"
+                            % (bc["do2b_hub_db_cu_chua_khai"].get("ban_sao_so_bang"),
+                               bc["do2b_hub_db_cu_chua_khai"].get("ban_sao_tong_tien"),
+                               (bc.get("pg_truoc") or {}).get("tong_tien")))
+        self.assertTrue(bc["do2b_hub_db_cu_chua_khai"].get("bao_ro"),
+                        "S8/do2b: từ chối nhưng KHÔNG nói ra là thiếu khai báo: %r"
+                        % (bc["do2b_hub_db_cu_chua_khai"].get("stderr"),))
+        self.assertFalse(bc["do3_khoi_phuc_tu_pg_dump"].get("khoi_phuc_NHAN"),
+                         "S8/do3: `khoi_phuc()` nhận một tệp `pg_dump -Fc`")
 
 
 # ============================================================================
@@ -250,12 +296,22 @@ class C_TuKiemBoDo(unittest.TestCase):
         "S3": {"khoi_phuc_NHAN_tep_rong": False, "integrity_tep_rong": "ok",
                "so_bang_tep_rong": 0},
         "S4": {"so_ban_cat_giu_du_lieu_goc": 3, "so_ban_cat_sau_1_lan": 1,
-               "so_ban_cat_sau_3_lan": 3, "rc_kp1": 0, "rc_kp2": 0, "rc_kp3": 0},
+               "so_ban_cat_sau_3_lan": 3, "rc_kp1": 0, "rc_kp2": 0, "rc_kp3": 0,
+               # G22: mốc thời gian là ĐẦU VÀO, và ba bản cất phải cùng mang mốc đó. Thiếu
+               # khoá này thì bản ghi "đã ĐẠT" ở đây KHÔNG đạt, và `phan_quyet` tố cáo đúng —
+               # nên nó phải có mặt, không phải được miễn.
+               "cung_mot_moc": True, "nhan_luc": True, "luc": "20261016-120000",
+               "ban_cat": ["hub-truoc-rollback-20261016-120000.db"]},
         "S5": {"phien_ban_sau_khoi_phuc": 9, "phien_ban_v9_truoc": 9, "rc_ghi_tren_v6": 0},
         "S6a": {"tep_moi_dung_duoc": [], "so_tep_moi_de_lai": 0},
         "S6b": {},
         "S7": {"khoi_phuc_NHAN_tep_la": False, "loi_csdl_sau_khi_nham": None},
-        "S8": {"do1_hub_db_khong_ton_tai": {"rc": 1, "so_bang": 0}, "pg_truoc": {"tong_tien": 1}},
+        "S8": {"do1_hub_db_khong_ton_tai": {"rc": 1, "so_bang": 0},
+               "do1b_chua_khai_hub_db_khong_ton_tai": {"rc": 1, "bao_ro": True},
+               "do2a_hub_db_cu_khai_postgresql": {"rc": 1},
+               "do2b_hub_db_cu_chua_khai": {"rc": 1, "bao_ro": True},
+               "do3_khoi_phuc_tu_pg_dump": {"khoi_phuc_NHAN": False},
+               "pg_truoc": {"tong_tien": 9324000, "bang": {"don_hang": {"dong": 6}}}},
         "DC": {"so_lech_sau_khoi_phuc": 0, "so_lech_giua": 3, "tenant_sau_backup_con_lai": 0},
     }
 
@@ -329,7 +385,24 @@ class C_TuKiemBoDo(unittest.TestCase):
             ("S3", {"bang_chung": {"khoi_phuc_NHAN_tep_rong": True, "integrity_tep_rong": "ok",
                                    "so_bang_tep_rong": 0}}),
             ("S4", {"bang_chung": {"so_ban_cat_giu_du_lieu_goc": 0, "so_ban_cat_sau_1_lan": 1,
-                                   "so_ban_cat_sau_3_lan": 1, "rc_kp1": 0, "rc_kp2": 0, "rc_kp3": 0}}),
+                                   "so_ban_cat_sau_3_lan": 1, "rc_kp1": 0, "rc_kp2": 0, "rc_kp3": 0,
+                                   "cung_mot_moc": True, "nhan_luc": True, "luc": "20261016-120000",
+                                   "ban_cat": ["hub-truoc-rollback-20261016-120000.db"]}}),
+            # S4 — G22: hàm đang đo KHÔNG nhận tham số mốc (bản đóng băng). Khi đó `rc != 0` là do
+            # TypeError, và một vụ nổ như thế KHÔNG được tính là "sản phẩm đã từ chối".
+            ("S4", {"bang_chung": {"so_ban_cat_giu_du_lieu_goc": 3, "so_ban_cat_sau_1_lan": 1,
+                                   "so_ban_cat_sau_3_lan": 3, "rc_kp1": 0, "rc_kp2": 0, "rc_kp3": 0,
+                                   "cung_mot_moc": False, "nhan_luc": False,
+                                   "luc": "20261016-120000", "ban_cat": []}}),
+            # S4 — G22: ba lượt KHÔNG cùng một mốc ⇒ phép đo RỖNG. Đây là phép tiêm cho chốt
+            # mới: một bản ghi "XANH vì ba lượt rơi vào ba giây khác nhau" phải bị TỐ CÁO, chứ
+            # không được tính là ĐẠT. Thiếu vế này thì chốt mới không ai canh.
+            ("S4", {"bang_chung": {"so_ban_cat_giu_du_lieu_goc": 3, "so_ban_cat_sau_1_lan": 1,
+                                   "so_ban_cat_sau_3_lan": 3, "rc_kp1": 0, "rc_kp2": 0, "rc_kp3": 0,
+                                   "cung_mot_moc": False, "nhan_luc": True,
+                                   "luc": "20261016-120000",
+                                   "ban_cat": ["hub-truoc-rollback-20261016-120000.db",
+                                               "hub-truoc-rollback-20261016-120001.db"]}}),
             ("S5", {"bang_chung": {"phien_ban_sau_khoi_phuc": 6, "phien_ban_v9_truoc": 9,
                                    "so_bang_v9_truoc": 51, "so_bang_sau": 20,
                                    "tong_tien_v9_truoc": 34336000, "tong_tien_v6": 1298000,
@@ -338,11 +411,28 @@ class C_TuKiemBoDo(unittest.TestCase):
                                     "ten_tep_moi_de_lai": ["hub-truoc-migrate-x.db"]}}),
             ("S7", {"bang_chung": {"khoi_phuc_NHAN_tep_la": True,
                                    "loi_csdl_sau_khi_nham": "file is not a database"}}),
-            ("S8", {"bang_chung": {"do1_hub_db_khong_ton_tai": {"rc": 0, "so_bang": 0,
-                                                                "co_ban_sao": 4096,
-                                                                "integrity": "ok"},
-                                   "pg_truoc": {"tong_tien": 9324000,
-                                                "bang": {"don_hang": {"dong": 6}}}}}),
+            # S8 — `do1`: đường lùi giả cũ — `sao_luu()` thoát 0 và trả 4.096 byte / 0 BẢNG
+            ("S8", {"bang_chung": dict(self.BC_DAT["S8"], do1_hub_db_khong_ton_tai={
+                "rc": 0, "so_bang": 0, "co_ban_sao": 4096, "integrity": "ok"})}),
+            # S8 — `do2a`: deployment ĐÃ KHAI `postgresql` mà `sao_luu()` vẫn thoát 0 ⇒ chốt (4)
+            # không có răng. Thiếu phép tiêm này thì "khai cờ" là một tính năng KHÔNG AI CANH.
+            ("S8", {"bang_chung": dict(self.BC_DAT["S8"], do2a_hub_db_cu_khai_postgresql={
+                "rc": 0, "co_ban_sao": 561152})}),
+            # S8 — `do2b`: CHƯA KHAI ⇒ nhận một bản sao TRÔNG HỢP LỆ mà không chứa dòng nào của
+            # dữ liệu đang chạy. Đây là khoảng hở G21 đã nêu tên và G22 đã đóng (chốt 4b); phép
+            # tiêm dựng lại đúng hành vi cũ (rc = 0) và bộ đo PHẢI tố cáo.
+            ("S8", {"bang_chung": dict(self.BC_DAT["S8"], do2b_hub_db_cu_chua_khai={
+                "rc": 0, "bam_ban_sao_khop_sqlite_goc": True, "ban_sao_tong_tien": 34336000,
+                "ban_sao_so_bang": 51})}),
+            # S8 — `do1b`: CHƯA KHAI + không có `hub.db`. Vế này đo chốt (4b) ở nhánh "không có
+            # gì để sao lưu": nếu nó thoát 0 thì việc chưa khai vẫn đi qua được.
+            ("S8", {"bang_chung": dict(self.BC_DAT["S8"], do1b_chua_khai_hub_db_khong_ton_tai={
+                "rc": 0, "co_ban_sao": None})}),
+            # S8 — VẾ (b) CỦA `do2b`: rc != 0 NHƯNG IM LẶNG. Một mã thoát khác 0 mà không nói ra
+            # chỗ thiếu thì người trực vẫn phải đoán — nên nó KHÔNG được tính là đạt. Thiếu phép
+            # tiêm này thì vế "thông báo nói RÕ" chỉ là một câu trong tài liệu.
+            ("S8", {"bang_chung": dict(self.BC_DAT["S8"], do2b_hub_db_cu_chua_khai={
+                "rc": 1, "bao_ro": False, "stderr": ""})}),
             # DC — ĐỐI CHỨNG ĐƯỜNG: `rc` ĐẠT là 0, nên tiêm `rc = 1`
             ("DC", {"rc": 1, "bang_chung": {"so_lech_sau_khoi_phuc": 0, "so_lech_giua": 3,
                                             "tenant_sau_backup_con_lai": 0}}),
@@ -407,31 +497,68 @@ class C_TuKiemBoDo(unittest.TestCase):
                 return json.loads(d[len("__JSON__"):])
         self.fail("biến thể %s không trả JSON: %s" % (nhan, out[-400:]))
 
+    def test_c0_ban_va_DA_AP_vao_tep_that(self):
+        """CHỐT CHỐNG "ĐO NHẦM TỆP": `app/migrate.py` phải ĐÚNG LÀ bản vá đầy đủ.
+
+        `ban_va.xac_nhan()` đòi ba vế: mọi mảnh mã của bản vá có mặt ĐÚNG MỘT lần · mọi mảnh mã
+        của đường fail-open CŨ đã VẮNG · mọi mốc mà bốn phép tiêm cần đều còn nguyên. Thiếu bất
+        kỳ vế nào thì nó NÉM, và mọi lượt đo ở dưới sẽ đo một tệp KHÁC với tệp được mô tả.
+
+        Không có ca này thì "bản vá đã áp" chỉ là một câu trong tài liệu.
+        """
+        that = ban_va.doc_that()
+        self.assertIn("def _kiem_kho_truoc_khi_sao_luu()", that,
+                      "app/migrate.py thiếu chốt (4) — kho đang chạy")
+        self.assertNotIn("csdl.ket_noi(dich)", that,
+                         "app/migrate.py còn đường lùi GIẢ cũ: `csdl.ket_noi(dich)` tạo ra một "
+                         "CSDL rỗng rồi sao lưu nó")
+        nguyenban = ban_va.doc_nguyenban()
+        self.assertNotEqual(that, nguyenban,
+                            "tệp thật TRÙNG bản nguyên bản — bản vá chưa được áp")
+
     def test_c4_ban_va_lam_moi_kich_ban_chuyen_sang_FAIL_CLOSED(self):
-        """Chạy ĐÚNG bộ đo này trên `migrate.py` ĐÃ VÁ ⇒ mọi kịch bản phải FAIL_CLOSED.
+        """Chạy ĐÚNG bộ đo này trên `migrate.py` **THẬT ĐÃ VÁ** ⇒ MỌI kịch bản FAIL_CLOSED.
 
         Đây là vế chứng minh các lỗi ở lớp A **SỬA ĐƯỢC**, không phải những cái ĐỎ vĩnh viễn.
+        Và lượt này nó chạy trên TỆP THẬT (`ban_va.dung_bien_the()` chép nguyên văn
+        `app/migrate.py` vào thư mục ứng viên), không phải trên một bản dựng trong thư mục tạm.
 
-        `S8` là NGOẠI LỆ ĐÃ KHAI TÊN. Đo được: bản vá đóng được `do1` (kho là PostgreSQL, không
-        có `hub.db`) và `do3` (nạp nhầm `pg_dump`), nhưng KHÔNG đóng được `do2` — `hub.db` CŨ
-        còn sót trong khi kho đang chạy là PostgreSQL. Lý do nằm ở SẢN PHẨM, không ở bản vá: hệ
-        KHÔNG có khái niệm "kho đang chạy là kho nào" nên không có gì để đối chiếu, và bịa một
-        phép đoán (mtime, kích thước) là vi phạm nguyên tắc "không đoán". Cần một QUYẾT ĐỊNH
-        SẢN PHẨM. Nên ca này khẳng định ĐÚNG điều đo được: **S8 chỉ còn lại đúng khoảng trống
-        đã nêu tên**, không lọt thêm lỗi nào khác.
+        G21 để `S8` là NGOẠI LỆ ĐÃ KHAI TÊN (còn đúng một lý do: `do2b`). G22 đã đóng `do2b`, nên
+        ngoại lệ đó KHÔNG CÒN — và ca này vì thế được viết lại thành "10/10", KHÔNG phải thành
+        "bỏ qua S8". Bỏ qua `S8` ở đây là đúng thứ đã bị cấm ở lượt trước: làm bộ đo tự tô xanh
+        đúng chỗ nó được viết ra để soi.
         """
         kq = self._chay_bien_the("ban_va", fc.THU_TU)
         self.assertEqual(sorted(kq), sorted(fc.THU_TU), "bản vá không chạy đủ kịch bản")
-        do = {m: v["ly_do"] for m, v in kq.items()
-              if m != "S8" and v["muc"] != "FAIL_CLOSED"}
+        do = {m: v["ly_do"] for m, v in kq.items() if v["muc"] != "FAIL_CLOSED"}
         self.assertEqual(do, {}, "bản vá CHƯA đóng được: %s" % do)
-        self.assertEqual(kq["S8"]["muc"], "FAIL_OPEN",
-                         "S8 đã xanh — khoảng trống đã đóng: gỡ mục §CÒN HỞ khỏi "
-                         "docs/G21_BACKUP_RESTORE.md và cập nhật ca này")
-        self.assertTrue(kq["S8"]["ly_do"], "S8 đỏ mà không nêu lý do")
-        for x in kq["S8"]["ly_do"]:
-            self.assertIn("CŨ còn sót", x,
-                          "S8 còn lỗi KHÁC ngoài khoảng trống đã nêu tên: %s" % x)
+        self.assertEqual(kq["S8"]["ly_do"], [],
+                         "S8 còn lý do: %s" % kq["S8"]["ly_do"])
+        print("\n        TỔNG trên tệp THẬT ĐÃ VÁ: %d/%d FAIL_CLOSED · còn lại: %s"
+              % (sum(1 for v in kq.values() if v["muc"] == "FAIL_CLOSED"), len(kq),
+                 [m for m, v in kq.items() if v["muc"] != "FAIL_CLOSED"] or "(không)"))
+
+    def test_c9_noi_lai_chinh_sach_cu_thi_S8_PHAI_do(self):
+        """ĐỐI CHỨNG ÂM CHO CHÍNH KẾT LUẬN CỦA G22 — nới lại chính sách cũ thì `S8` PHẢI ĐỎ.
+
+        Lượt trước ca này ĐO một biến thể (`chinh_sach_tu_choi`) để trả lời "đổi chính sách thì
+        S8 có đóng không?". Câu đó nay đã trả lời — chính sách đó LÀ mặc định — nên câu hỏi còn
+        lại, và là câu hỏi DUY NHẤT chứng minh được kết luận "S8 đã đóng": **nới nó ra thì bộ đo
+        có ĐỎ không?** Nếu `S8` vẫn XANH khi chính sách cũ được dựng lại thì `S8` không canh gì
+        cả, và mọi dòng "đã đóng" ở `test_a9`/`test_c4` là rỗng.
+
+        Phép tiêm `D5` (`ban_va.TIEM_LOI`) thay ĐÚNG hai dòng của chốt (4b) bằng chính sách cũ
+        "chưa khai ⇒ coi kho là SQLite". Đo được: `S8` chuyển FAIL_OPEN với lý do nêu tên `do2b`
+        (và `do1b`) — tức vế này CÓ RĂNG.
+        """
+        kq = self._chay_bien_the("tiem_d5", TIEM["D5"][1])
+        self.assertEqual(kq.get("S8", {}).get("muc"), "FAIL_OPEN",
+                         "Nới lại chính sách cũ (chưa khai ⇒ coi là SQLite) mà S8 VẪN XANH: bộ đo "
+                         "không canh chốt (4b) ⇒ mọi kết luận 'do2b đã đóng' là RỖNG. lý do: %s"
+                         % kq.get("S8", {}).get("ly_do"))
+        ly_do = " ".join(kq["S8"]["ly_do"])
+        self.assertIn("do2b", ly_do,
+                      "S8 đỏ sau khi nới chính sách nhưng KHÔNG nêu tên vế `do2b`: %s" % ly_do)
 
     def test_c5_tiem_D1_bat_duoc_bo_tep_tam(self):
         """Gỡ chốt "ghi qua tệp tạm rồi `os.replace`" ⇒ `S6b` PHẢI bắt được."""

@@ -1,0 +1,223 @@
+[
+ {
+  "buoc": "B0",
+  "lenh": "python3 -c ast.parse(6 tệp)",
+  "rc": 0,
+  "ghi_chu": "cú pháp 9 tệp",
+  "so_ca": 9,
+  "so_skip": 0,
+  "tep": null
+ },
+ {
+  "buoc": "B1",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 trien_khai/g20-saoluu/ban_va.py",
+  "rc": 0,
+  "ghi_chu": "tự xác nhận bản vá ĐÃ ÁP đủ mảnh + mốc tiêm còn nguyên",
+  "so_ca": null,
+  "so_skip": null,
+  "tep": null
+ },
+ {
+  "buoc": "B2",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 trien_khai/g20-saoluu/fail_closed.py --json /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/truoc.json",
+  "rc": 1,
+  "ghi_chu": "10 kịch bản trên goc (/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-goc)",
+  "so_ca": 10,
+  "so_skip": 0,
+  "tep": null,
+  "so_fail_closed": 1,
+  "con_do": [
+   "S1",
+   "S2",
+   "S3",
+   "S4",
+   "S5",
+   "S6a",
+   "S6b",
+   "S7",
+   "S8"
+  ],
+  "bien_the": "goc",
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-goc"
+ },
+ {
+  "buoc": "B3",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 trien_khai/g20-saoluu/fail_closed.py --json /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/sau.json",
+  "rc": 0,
+  "ghi_chu": "10 kịch bản trên ban_va (/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-ban-va)",
+  "so_ca": 10,
+  "so_skip": 0,
+  "tep": null,
+  "so_fail_closed": 10,
+  "con_do": [],
+  "bien_the": "ban_va",
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-ban-va"
+ },
+ {
+  "buoc": "B4.D1",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 -c import os,sys,json\nos.environ['G21_APP_DIR']='/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d1'\nsys.path.insert(0, '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu')\nimport fail_closed as fc\nkq=fc.chay_tat_ca(chi=tuple(['S6b']))\njson.dump(kq, open('/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/tiem_d1.json','w'), ensure_ascii=False, indent=1, default=str)\n",
+  "rc": 0,
+  "ghi_chu": "tiêm D1 ⇒ S6b PHẢI đỏ",
+  "so_ca": 1,
+  "so_skip": 0,
+  "tep": null,
+  "phai_bat": [
+   "S6b"
+  ],
+  "da_bat": [
+   "S6b"
+  ],
+  "dat": true,
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d1"
+ },
+ {
+  "buoc": "B4.D2",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 -c import os,sys,json\nos.environ['G21_APP_DIR']='/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d2'\nsys.path.insert(0, '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu')\nimport fail_closed as fc\nkq=fc.chay_tat_ca(chi=tuple(['S4']))\njson.dump(kq, open('/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/tiem_d2.json','w'), ensure_ascii=False, indent=1, default=str)\n",
+  "rc": 0,
+  "ghi_chu": "tiêm D2 ⇒ S4 PHẢI đỏ",
+  "so_ca": 1,
+  "so_skip": 0,
+  "tep": null,
+  "phai_bat": [
+   "S4"
+  ],
+  "da_bat": [
+   "S4"
+  ],
+  "dat": true,
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d2"
+ },
+ {
+  "buoc": "B4.D3",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 -c import os,sys,json\nos.environ['G21_APP_DIR']='/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d3'\nsys.path.insert(0, '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu')\nimport fail_closed as fc\nkq=fc.chay_tat_ca(chi=tuple(['S5']))\njson.dump(kq, open('/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/tiem_d3.json','w'), ensure_ascii=False, indent=1, default=str)\n",
+  "rc": 0,
+  "ghi_chu": "tiêm D3 ⇒ S5 PHẢI đỏ",
+  "so_ca": 1,
+  "so_skip": 0,
+  "tep": null,
+  "phai_bat": [
+   "S5"
+  ],
+  "da_bat": [
+   "S5"
+  ],
+  "dat": true,
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d3"
+ },
+ {
+  "buoc": "B4.D4",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 -c import os,sys,json\nos.environ['G21_APP_DIR']='/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d4'\nsys.path.insert(0, '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu')\nimport fail_closed as fc\nkq=fc.chay_tat_ca(chi=tuple(['S3', 'S7']))\njson.dump(kq, open('/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/tiem_d4.json','w'), ensure_ascii=False, indent=1, default=str)\n",
+  "rc": 0,
+  "ghi_chu": "tiêm D4 ⇒ S3 và S7 PHẢI đỏ",
+  "so_ca": 2,
+  "so_skip": 0,
+  "tep": null,
+  "phai_bat": [
+   "S3",
+   "S7"
+  ],
+  "da_bat": [
+   "S3",
+   "S7"
+  ],
+  "dat": true,
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d4"
+ },
+ {
+  "buoc": "B4.D5",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 -c import os,sys,json\nos.environ['G21_APP_DIR']='/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d5'\nsys.path.insert(0, '/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu')\nimport fail_closed as fc\nkq=fc.chay_tat_ca(chi=tuple(['S8']))\njson.dump(kq, open('/Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/tiem_d5.json','w'), ensure_ascii=False, indent=1, default=str)\n",
+  "rc": 0,
+  "ghi_chu": "tiêm D5 ⇒ S8 PHẢI đỏ",
+  "so_ca": 1,
+  "so_skip": 0,
+  "tep": null,
+  "phai_bat": [
+   "S8"
+  ],
+  "da_bat": [
+   "S8"
+  ],
+  "dat": true,
+  "bien_the_duong": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d5"
+ },
+ {
+  "buoc": "B5.E3-rieng-1",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 app/thu/thu_g20_saoluu.py E_KhoiPhucDeLenCsdlDangChay",
+  "rc": 0,
+  "ghi_chu": "E3 chạy RIÊNG, lượt 1",
+  "so_ca": 3,
+  "so_skip": 0,
+  "tep": null,
+  "ban_cat_sau_1_lan": 1,
+  "ban_cat_sau_3_lan": 3
+ },
+ {
+  "buoc": "B5.E3-rieng-2",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 app/thu/thu_g20_saoluu.py E_KhoiPhucDeLenCsdlDangChay",
+  "rc": 0,
+  "ghi_chu": "E3 chạy RIÊNG, lượt 2",
+  "so_ca": 3,
+  "so_skip": 0,
+  "tep": null,
+  "ban_cat_sau_1_lan": 1,
+  "ban_cat_sau_3_lan": 3
+ },
+ {
+  "buoc": "B5.E3-rieng-3",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 app/thu/thu_g20_saoluu.py E_KhoiPhucDeLenCsdlDangChay",
+  "rc": 0,
+  "ghi_chu": "E3 chạy RIÊNG, lượt 3",
+  "so_ca": 3,
+  "so_skip": 0,
+  "tep": null,
+  "ban_cat_sau_1_lan": 1,
+  "ban_cat_sau_3_lan": 3
+ },
+ {
+  "buoc": "B6",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 app/thu/thu_g21_saoluu.py",
+  "rc": 0,
+  "ghi_chu": "bộ thử fail-closed (vào lượt hồi quy chung)",
+  "so_ca": 23,
+  "so_skip": 0,
+  "tep": null
+ },
+ {
+  "buoc": "B7",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 app/thu/thu_g20_saoluu.py",
+  "rc": 0,
+  "ghi_chu": "bộ thử AG-04 (G20) trên tệp ĐÃ VÁ — CHẠY CHUNG",
+  "so_ca": 41,
+  "so_skip": 0,
+  "tep": null,
+  "ban_cat_sau_1_lan": 1,
+  "ban_cat_sau_3_lan": 3
+ },
+ {
+  "buoc": "B9",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 app/thu/thu_g22_saoluu.py",
+  "rc": 0,
+  "ghi_chu": "bộ thử G22 (kho đang chạy + đồng hồ là đầu vào)",
+  "so_ca": 14,
+  "so_skip": 0,
+  "tep": null
+ },
+ {
+  "buoc": "B8.TRƯỚC",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 trien_khai/g20-saoluu/bang_tung_bang.py /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/truoc.json --md /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/bang_tung_bang_trước.md",
+  "rc": 0,
+  "ghi_chu": "bảng từng bảng (TRƯỚC) → bang_tung_bang_trước.md",
+  "so_ca": null,
+  "so_skip": null,
+  "tep": null
+ },
+ {
+  "buoc": "B8.SAU",
+  "lenh": "/Library/Developer/CommandLineTools/usr/bin/python3 trien_khai/g20-saoluu/bang_tung_bang.py /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/sau.json --md /Users/viporder/orca/workspaces/vip-express-hub/g21-ag02-backup/trien_khai/g20-saoluu/ket_qua/bang_tung_bang_sau.md",
+  "rc": 0,
+  "ghi_chu": "bảng từng bảng (SAU) → bang_tung_bang_sau.md",
+  "so_ca": null,
+  "so_skip": null,
+  "tep": null
+ }
+]

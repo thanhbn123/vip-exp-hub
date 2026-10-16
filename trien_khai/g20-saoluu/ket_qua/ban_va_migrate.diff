@@ -1,0 +1,454 @@
+diff --git a/app/migrate.py b/app/migrate.py
+index 8c79db5..d0ff501 100644
+--- a/app/migrate.py
++++ b/app/migrate.py
+@@ -2,11 +2,28 @@
+ # Chạy: python3 app/migrate.py            (nâng cấp, có backup + verify)
+ #       python3 app/migrate.py --kiem     (chỉ xem phiên bản, không sửa gì)
+ #       python3 app/migrate.py --rollback <file-backup>   (khôi phục từ backup)
++#       python3 app/migrate.py --rollback <f> --toi-da-biet-chua-kiem-duoc
++#           (CHỈ khi đã biết rõ tệp đó: bỏ chốt dấu kiểm `.sha256` và chốt tụt schema)
+ #
+ # Nguyên tắc: KHÔNG xóa dữ liệu, KHÔNG đụng gateway.db, KHÔNG gán tenant cho dữ liệu chưa rõ chủ.
++#
++# ==========================================================================
++# G21 / AG-02 — ĐÃ ÁP BẢN VÁ FAIL-CLOSED CHO `sao_luu()` / `khoi_phuc()`
++# ==========================================================================
++# Bốn chốt, mỗi chốt ứng với một phép đo ĐỎ trên chính tệp này (docs/G21_BACKUP_RESTORE.md §6):
++#   (1) DẤU KIỂM `<bản-sao-lưu>.sha256`, `sao_luu()` ghi và `khoi_phuc()` BẮT BUỘC kiểm.
++#       Vế DUY NHẤT bắt được "lật 1 byte trong trang dữ liệu đang dùng": đo được
++#       `PRAGMA integrity_check` vẫn trả "ok" cho tệp đó.
++#   (2) GHI QUA TỆP TẠM rồi `os.replace` — hỏng giữa đường thì CSDL đang chạy KHÔNG bị đụng.
++#   (3) TÊN BẢN CẤT KHÔNG BAO GIỜ ĐÈ + KIỂM PHIÊN BẢN SCHEMA trước khi đè.
++#   (4) KHAI BÁO "KHO ĐANG CHẠY" — `sao_luu()` chỉ có nhánh SQLite, nên khi kho đang chạy là
++#       PostgreSQL nó phải TỪ CHỐI, chứ không được đưa ra một ĐƯỜNG LÙI GIẢ (P-G15-02).
++# Bộ đo: trien_khai/g20-saoluu/fail_closed.py · bộ thử: app/thu/thu_g21_saoluu.py
++import hashlib
+ import json
+ import os
+ import shutil
++import sqlite3
+ import sys
+ from datetime import datetime
+ 
+@@ -40,41 +57,290 @@ def dem_dong(kn):
+     return ra
+ 
+ 
+-def sao_luu():
+-    """Chụp một bản CSDL trước khi nâng cấp. Trả đường dẫn bản sao.
++# ==========================================================================
++# G21 / AG-02 — HẠ TẦNG FAIL-CLOSED (bốn chốt; xem banner đầu tệp)
++# ==========================================================================
++def _bam_tep(duong):
++    """SHA-256 của một tệp, đọc theo khúc — không nạp cả tệp vào bộ nhớ."""
++    h = hashlib.sha256()
++    with open(duong, "rb") as f:
++        for khuc in iter(lambda: f.read(1 << 20), b""):
++            h.update(khuc)
++    return h.hexdigest()
+ 
+-    AG-05 phát hiện ở đợt 3, AG-00 đo lại: bản cũ đặt tên theo GIÂY, nên hai lượt gọi trong
+-    cùng một giây trả **đúng cùng một đường dẫn** và lượt sau **ghi đè im lặng** — đo được 2
+-    lượt gọi liền nhau chỉ để lại **1 file** trên đĩa.
+ 
+-    Hậu quả thật: migration hỏng rồi chạy lại ngay sẽ **xoá mất bản "trước khi hỏng"** — đúng
+-    thứ cần nhất lúc đó. Và nó không báo gì; người vận hành chỉ thấy có một file sao lưu và
+-    tưởng đó là bản mình cần.
++def _duong_chua_dung(goc_ten, duoi):
++    """Đường dẫn CHƯA TỒN TẠI: trùng tên thì thêm hậu tố, KHÔNG BAO GIỜ ghi đè.
+ 
+-    Nay: trùng tên thì **thêm hậu tố**, không bao giờ ghi đè. Và **kiểm bản sao > 0 byte**
+-    trước khi tin nó — một file sao lưu rỗng còn tệ hơn không có file, vì nó làm người ta
+-    tưởng đã có đường lùi (§12.1: thứ dùng để kiểm chứng phải được kiểm trước khi tin).
++    Cùng khuôn với `sao_luu()` — hàm đó đã bị bắt đúng lỗi này và đã vá; `khoi_phuc()` thì chưa.
++    Đo được: ba lượt khôi phục trong cùng một giây để lại ĐÚNG MỘT tệp `hub-truoc-rollback-*`,
++    tức bản cất của lượt đầu — thứ duy nhất giữ dữ liệu thật — đã bị lượt sau xoá.
+     """
+-    os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
+-    goc = os.path.join(THU_MUC_SAO_LUU,
+-                       "hub-truoc-migrate-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+-    dich, n = goc + ".db", 1
++    goc = os.path.join(THU_MUC_SAO_LUU, goc_ten + "-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
++    dich, n = goc + duoi, 1
+     while os.path.exists(dich):
+-        dich = f"{goc}-{n}.db"      # KHÔNG ghi đè bản đã có, dù cùng giây
++        dich = "%s-%d%s" % (goc, n, duoi)
+         n += 1
+         if n > 1000:
+-            raise RuntimeError(f"quá 1000 bản sao lưu cùng giây tại {goc} — có gì đó sai")
+-    # Dùng API backup của SQLite để lấy bản nhất quán kể cả khi có WAL.
+-    nguon = csdl.ket_noi()
+-    ban = csdl.ket_noi(dich)
+-    with ban:
+-        nguon.backup(ban)
+-    ban.close()
+-    nguon.close()
+-    co = os.path.getsize(dich)
++            raise SystemExit("[migrate] TỪ CHỐI: quá 1000 bản cùng giây tại %s — có gì đó sai" % goc)
++    return dich
++
++
++def _chep_nguyen_tu(nguon, dich):
++    """Chép qua tệp TẠM CÙNG THƯ MỤC rồi `os.replace`. Hỏng giữa đường thì `dich` KHÔNG ĐỔI."""
++    tam = "%s.tam-%d" % (dich, os.getpid())
++    try:
++        shutil.copy2(nguon, tam)
++        with open(tam, "rb+") as f:
++            f.flush()
++            os.fsync(f.fileno())
++        os.replace(tam, dich)
++    except BaseException:
++        if os.path.exists(tam):
++            try:
++                os.remove(tam)
++            except OSError:
++                pass
++        raise
++    return dich
++
++
++def _kiem_cau_truc(duong, toi_thieu_bang=1):
++    """Xác minh CẤU TRÚC một tệp CSDL. NÉM `SystemExit` nếu không dùng được. CHỈ ĐỌC.
++
++    ====== CÁI BẪY ĐÃ ĐO ĐƯỢC, VÀ CÁCH NÓ ĐƯỢC TRÁNH Ở ĐÂY ======
++    Bản sao lưu do `sao_luu()` sinh ra MANG CHẾ ĐỘ WAL (byte 18-19 của phần đầu = 2). Mở nó
++    bằng `file:...?mode=ro` **THẤT BẠI** — `unable to open database file` — vì SQLite cần tạo
++    được tệp `-shm` cạnh nó. Một bản vá ngây thơ dùng `mode=ro` sẽ TỪ CHỐI NHẦM MỌI bản sao lưu
++    TỐT. Đo được 16/10/2026 trên chính cây này:
++        mode=ro              -> OperationalError: unable to open database file
++        mode=ro&immutable=1  -> integrity_check = ok · 51 bảng
++    Nên ở đây dùng `immutable=1`. Đổi lại phải trả giá: `immutable=1` BỎ QUA tệp `-wal` đi kèm,
++    nên nó chỉ đọc đúng phần đã nằm trong tệp chính. Với bản sao lưu của `sao_luu()` thì đúng
++    (API backup của SQLite ghi thẳng nội dung vào tệp chính), và đó là lý do phép kiểm này đặt
++    trên BẢN SAO LƯU, không đặt trên CSDL đang chạy.
++    """
++    if not os.path.exists(duong):
++        raise SystemExit("[migrate] TỪ CHỐI: không thấy tệp %s" % duong)
++    co = os.path.getsize(duong)
+     if co <= 0:
+-        raise RuntimeError(f"bản sao lưu {dich} rỗng ({co} byte) — KHÔNG có đường lùi, "
+-                           f"dừng trước khi nâng cấp")
++        raise SystemExit("[migrate] TỪ CHỐI: %s RỖNG (0 byte) — không có gì để dùng" % duong)
++    with open(duong, "rb") as f:
++        dau = f.read(16)
++    if not dau.startswith(b"SQLite format 3\x00"):
++        raise SystemExit("[migrate] TỪ CHỐI: %s KHÔNG PHẢI CSDL SQLite (16 byte đầu: %r)"
++                         % (duong, dau))
++    try:
++        kn = sqlite3.connect("file:%s?mode=ro&immutable=1" % duong.replace("?", "%3f"), uri=True)
++        try:
++            kq = kn.execute("PRAGMA integrity_check").fetchone()[0]
++            if kq != "ok":
++                raise SystemExit("[migrate] TỪ CHỐI: %s hỏng cấu trúc — integrity_check = %r"
++                                 % (duong, kq))
++            so_bang = kn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
++                                 " AND name NOT LIKE 'sqlite_%'").fetchone()[0]
++            try:
++                pb = kn.execute("SELECT COALESCE(MAX(phien_ban),0) FROM schema_version").fetchone()[0]
++            except sqlite3.OperationalError:
++                # CSDL SQLite HỢP LỆ nhưng KHÔNG có bảng `schema_version` (bản sao lưu của một hệ
++                # trước G01.5). Đó KHÔNG phải lý do để từ chối — thiếu bảng thì phiên bản là 0,
++                # và chốt TỤT SCHEMA ở dưới tự so tiếp. Từ chối ở đây là TỪ CHỐI NHẦM một bản sao
++                # lưu TỐT, đúng cùng loại lỗi với cái bẫy `mode=ro` ở docstring trên.
++                pb = 0
++        finally:
++            kn.close()
++    except sqlite3.DatabaseError as e:
++        raise SystemExit("[migrate] TỪ CHỐI: %s KHÔNG ĐỌC ĐƯỢC như CSDL SQLite: %s" % (duong, e))
++    # CHỐT CHỐNG BẪY 0 BYTE: tệp SQLite dài 0 byte LÀ một CSDL rỗng HỢP LỆ —
++    # `integrity_check` trả "ok" cho nó. Chỉ SỐ BẢNG mới bắt được. Đo được, không suy đoán.
++    if so_bang < toi_thieu_bang:
++        raise SystemExit("[migrate] TỪ CHỐI: %s chỉ có %d bảng (cần >= %d) — tệp dở hoặc rỗng, "
++                         "KHÔNG phải bản sao lưu dùng được" % (duong, so_bang, toi_thieu_bang))
++    return {"duong": duong, "so_byte": co, "so_bang": int(so_bang), "phien_ban": int(pb),
++            "integrity": kq}
++
++
++def _kiem_ban_sao_luu(duong, bat_buoc_dau_kiem=True):
++    """Xác minh một bản sao lưu TRƯỚC khi tin nó: cấu trúc + DẤU KIỂM `.sha256` đi kèm.
++
++    Vì sao dấu kiểm là BẮT BUỘC chứ không "kiểm nếu có": đo được rằng một byte bị lật trong
++    TRANG DỮ LIỆU ĐANG DÙNG (`don_hang.ma_don`) làm ĐỔI DỮ LIỆU THẬT mà `integrity_check` vẫn
++    trả **"ok"**. Không có dấu kiểm thì tệp đó đi qua mọi phép kiểm cấu trúc. Còn "kiểm nếu có"
++    thì kẻ làm hỏng chỉ cần xoá tệp `.sha256` là xong — một chốt mà kẻ tấn công bỏ được thì
++    không phải chốt.
++
++    Đường thoát cho người trực: `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`. Mặc định là
++    TỪ CHỐI — fail-closed, và nói rõ vì sao.
++    """
++    tt = _kiem_cau_truc(duong, toi_thieu_bang=1)
++    duong_dau = duong + ".sha256"
++    if os.path.exists(duong_dau):
++        with open(duong_dau, encoding="utf-8") as f:
++            mong = f.read().split()[0].strip()
++        that = _bam_tep(duong)
++        if that != mong:
++            raise SystemExit(
++                "[migrate] TỪ CHỐI: %s KHÁC dấu kiểm %s\n"
++                "          mong đợi %s\n          thực tế  %s\n"
++                "          Tệp đã bị sửa. KHÔNG khôi phục từ nó."
++                % (duong, os.path.basename(duong_dau), mong, that))
++        tt["co_dau_kiem"] = True
++    elif bat_buoc_dau_kiem:
++        raise SystemExit(
++            "[migrate] TỪ CHỐI: %s KHÔNG có dấu kiểm %s.\n"
++            "          Không kiểm chứng được thì không khôi phục: một byte lật trong trang dữ "
++            "liệu đang dùng\n          vẫn qua được `integrity_check` (đã đo).\n"
++            "          Nếu đã biết rõ tệp này: gọi `khoi_phuc(..., toi_da_biet_chua_kiem_duoc=True)`\n"
++            "          hoặc chạy `python3 app/migrate.py --rollback <tệp> --toi-da-biet-chua-kiem-duoc`."
++            % (duong, os.path.basename(duong_dau)))
++    else:
++        tt["co_dau_kiem"] = False
++    return tt
++
++
++# ---- CHỐT (4): KHO ĐANG CHẠY — ĐỌC TỪ KHAI BÁO, KHÔNG ĐOÁN -------------------------------
++# `sao_luu()` chỉ có nhánh SQLite. Khi kho đang chạy là PostgreSQL thì mọi "bản sao lưu" nó
++# tạo ra đều KHÔNG chứa dữ liệu đang phục vụ — một ĐƯỜNG LÙI GIẢ. Hệ KHÔNG có cách nào tự
++# biết kho nào đang chạy (`app/csdl.py` thuần SQLite, không có nhánh PostgreSQL), nên câu trả
++# lời phải đến từ một KHAI BÁO của người triển khai. Đọc theo thứ tự: `cau_hinh.KHO_DANG_CHAY`
++# (chỗ chính thức, do AG-00/AG-05 thêm) rồi tới biến môi trường. KHÔNG suy ra từ mtime /
++# kích thước / tên tệp: một phép đoán ở đây sẽ im lặng đúng vào lúc cần nhất.
++KHO_SQLITE = "sqlite"
++KHO_POSTGRESQL = "postgresql"
++BIEN_KHAI_KHO = "VIP_KHO_DANG_CHAY"
++
++# CHÍNH SÁCH KHI CHƯA KHAI — đây là QUYẾT ĐỊNH SẢN PHẨM, nên nó nằm ở MỘT chỗ và có tên.
++#   "sqlite"  — chưa khai ⇒ coi kho là SQLite, ĐÚNG BẰNG hành vi cũ. Không làm gãy làn nào.
++#               Vì sao không chọn "từ chối": ĐO ĐƯỢC rằng `migrate.chay()` trên một thư mục dữ
++#               liệu MỚI CÓ gọi `sao_luu()` (`csdl.mo()` tạo `schema_version` rỗng ⇒
++#               `MAX(phien_ban)=0` ⇒ chạy nâng cấp), và 8 bộ thử NGOÀI vùng được ghi của AG-02
++#               gọi `migrate.chay()`: thu_giao_dich · thu_han_muc_nguyen_tu · dong_thoi/
++#               do_dong_thoi · thu_qa_g18 · thu_header_bao_mat · thu_qa_g19 · thu_g17 ·
++#               thu_g17_baomat. Đổi mặc định thành "từ chối" là làm đỏ cả 8 bộ đó.
++#               ĐỔI LẠI — và đây là khoảng hở CÒN LẠI: `hub.db` CŨ còn sót trong khi dữ liệu
++#               đã sang PostgreSQL thì `sao_luu()` VẪN thoát 0 với một đường lùi giả, TRỪ KHI
++#               deployment KHAI `postgresql`. docs/G21_BACKUP_RESTORE.md §8 mục 1.
++#   "tu_choi" — chưa khai ⇒ TỪ CHỐI (rc != 0) kèm hướng dẫn. Fail-closed tuyệt đối, nhưng làm
++#               đỏ 8 bộ thử nêu trên ⇒ CHỜ AG-00/AG-05 chốt (đã báo: msg_f12dea468ee2).
++CHINH_SACH_CHUA_KHAI = "sqlite"
++
++
++def _chuan_hoa_kho(gia_tri):
++    """`sqlite3` ⇒ sqlite · `pg`/`postgres` ⇒ postgresql · lạ ⇒ TỪ CHỐI.
++
++    Khai báo sai chính tả KHÔNG được coi là "chưa khai": coi nó là chưa khai là âm thầm đưa hệ
++    về đúng chỗ đang muốn tránh, mà lại im lặng.
++    """
++    if gia_tri is None:
++        return None
++    v = str(gia_tri).strip().lower()
++    if not v:
++        return None
++    if v in ("sqlite", "sqlite3"):
++        return KHO_SQLITE
++    if v in ("postgres", "postgresql", "pg", "psql"):
++        return KHO_POSTGRESQL
++    raise SystemExit(
++        "[migrate] TỪ CHỐI: khai báo kho đang chạy không nhận ra: %r.\n"
++        "          Nhận 'sqlite' hoặc 'postgresql'." % (gia_tri,))
++
++
++def kho_dang_chay():
++    """Trả `(kho, nguồn)`. `kho is None` nghĩa là CHƯA KHAI — KHÔNG phải "mặc định SQLite"."""
++    for nguon, gia_tri in (("cau_hinh.KHO_DANG_CHAY", getattr(cau_hinh, "KHO_DANG_CHAY", None)),
++                           (BIEN_KHAI_KHO, os.environ.get(BIEN_KHAI_KHO))):
++        kho = _chuan_hoa_kho(gia_tri)
++        if kho:
++            return kho, nguon
++    return None, None
++
++
++def _kiem_kho_truoc_khi_sao_luu():
++    """CHỐT (4). NÉM `SystemExit` nếu kho đang chạy KHÔNG PHẢI SQLite (theo khai báo)."""
++    kho, nguon = kho_dang_chay()
++    if kho == KHO_POSTGRESQL:
++        raise SystemExit(
++            "[migrate] TỪ CHỐI: kho đang chạy là PostgreSQL (khai ở %s) nhưng `sao_luu()`\n"
++            "          KHÔNG CÓ NHÁNH PostgreSQL — nó chỉ biết `csdl.ket_noi()` của SQLite.\n"
++            "          Chạy tiếp thì nó tạo ra một tệp SQLite KHÔNG chứa một dòng nào của dữ\n"
++            "          liệu đang phục vụ: một ĐƯỜNG LÙI GIẢ, và im lặng. Đo được trên cụm\n"
++            "          PostgreSQL riêng: 4.096 byte / 0 BẢNG / integrity_check = 'ok' trong khi\n"
++            "          PostgreSQL giữ 6 đơn và 9.324.000 đồng (P-G15-02).\n"
++            "          Sao lưu PostgreSQL bằng `pg_dump -Fc`; xem docs/G21_BACKUP_RESTORE.md."
++            % nguon)
++    if kho is None:
++        if CHINH_SACH_CHUA_KHAI == "tu_choi":
++            raise SystemExit(
++                "[migrate] TỪ CHỐI: CHƯA KHAI kho đang chạy nên KHÔNG kiểm chứng được bản sao\n"
++                "          lưu này có chứa dữ liệu đang phục vụ hay không.\n"
++                "          Khai một trong hai: `KHO_DANG_CHAY = 'sqlite'` trong app/cau_hinh.py,\n"
++                "          hoặc biến môi trường %s=sqlite|postgresql." % BIEN_KHAI_KHO)
++        # CẢNH BÁO ra STDERR, không ra STDOUT: `stdout` của `sao_luu()` là GIAO DIỆN
++        # (dòng cuối cùng chính là đường dẫn bản sao lưu, và bộ đo đọc nó). Một dòng cảnh báo
++        # lẫn vào đó có thể bị đọc thành đường dẫn — hỏng phép đo mà không ai thấy.
++        sys.stderr.write(
++            "[migrate] CẢNH BÁO: CHƯA KHAI kho đang chạy (`cau_hinh.KHO_DANG_CHAY` hoặc `%s`)\n"
++            "          — lượt này COI KHO LÀ SQLITE (chính sách `CHINH_SACH_CHUA_KHAI`).\n"
++            "          Nếu dữ liệu nghiệp vụ thật đang nằm ở PostgreSQL thì bản sao lưu dưới\n"
++            "          đây KHÔNG chứa nó. Khai `postgresql` để hàm này TỪ CHỐI thay vì đưa ra\n"
++            "          một đường lùi giả.\n" % BIEN_KHAI_KHO)
++    return kho
++
++
++def sao_luu():
++    """Chụp một bản CSDL trước khi nâng cấp. Trả đường dẫn bản sao. **FAIL-CLOSED.**
++
++    Bốn chốt, mỗi chốt ứng với một phép đo ĐỎ trên CHÍNH tệp này:
++      (1) `hub.db` KHÔNG tồn tại ⇒ TỪ CHỐI, thay vì `csdl.ket_noi()` TẠO RA một CSDL rỗng rồi
++          sao lưu nó. Đo được trên cụm PostgreSQL riêng: bản cũ thoát 0 và trả một tệp 4.096
++          byte / 0 BẢNG / `integrity_check = ok` trong khi PostgreSQL giữ 6 đơn và 9.324.000
++          đồng — một ĐƯỜNG LÙI GIẢ, và không một dòng cảnh báo. (P-G15-02)
++      (2) Ghi ra tệp TẠM rồi `os.replace` sang tên thật. Hỏng giữa đường (hết đĩa) thì KHÔNG
++          còn tệp dở nào mang tên bản sao lưu. Đo được: bản cũ để lại `hub-truoc-migrate-*.db`
++          **0 byte** và không dọn.
++      (3) Ghi DẤU KIỂM `<bản-sao-lưu>.sha256` sau khi tệp đã đóng và đã kiểm cấu trúc.
++      (4) Kho đang chạy KHÔNG PHẢI SQLite (theo khai báo) ⇒ TỪ CHỐI — `_kiem_kho_truoc_khi_sao_luu`.
++          CHƯA KHAI thì hành vi do `CHINH_SACH_CHUA_KHAI` quyết định, và có cảnh báo ra stderr.
++
++    Giữ nguyên hai tính chất TỐT của bản trước (AG-05/AG-00 đã đo): tên KHÔNG BAO GIỜ ĐÈ
++    (trùng giây thì thêm hậu tố), và dùng API backup của SQLite để lấy bản nhất quán kể cả khi
++    có WAL.
++    """
++    _kiem_kho_truoc_khi_sao_luu()
++    if not os.path.exists(cau_hinh.DUONG_DAN_CSDL):
++        raise SystemExit(
++            "[migrate] TỪ CHỐI: không thấy CSDL tại %s nên KHÔNG có gì để sao lưu.\n"
++            "          (Bản cũ vẫn 'thành công' ở đây bằng cách TẠO RA một CSDL rỗng rồi sao "
++            "lưu nó —\n           đó là đường lùi giả. Nếu kho đang chạy là PostgreSQL thì "
++            "`sao_luu()` này không dùng được;\n           xem docs/G21_BACKUP_RESTORE.md.)"
++            % cau_hinh.DUONG_DAN_CSDL)
++    os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
++    dich = _duong_chua_dung("hub-truoc-migrate", ".db")
++    tam = dich + ".dang-ghi"
++    try:
++        nguon = csdl.ket_noi()
++        ban = csdl.ket_noi(tam)
++        try:
++            with ban:
++                nguon.backup(ban)
++        finally:
++            ban.close()
++            nguon.close()
++        with open(tam, "rb+") as f:
++            f.flush()
++            os.fsync(f.fileno())
++        _kiem_cau_truc(tam, toi_thieu_bang=1)
++        os.replace(tam, dich)
++    except BaseException:
++        if os.path.exists(tam):
++            try:
++                os.remove(tam)
++            except OSError:
++                pass
++        raise
++    bam = _bam_tep(dich)
++    with open(dich + ".sha256", "w", encoding="utf-8") as f:
++        f.write("%s  %s\n" % (bam, os.path.basename(dich)))
+     return dich
+ 
+ 
+@@ -598,21 +864,76 @@ def chay(im_lang=False):
+             "truoc": truoc, "sau": sau, "buoc": buoc}
+ 
+ 
+-def khoi_phuc(duong_backup):
+-    """Rollback: đưa CSDL về đúng file backup (có cất bản hiện tại trước khi đè)."""
+-    if not os.path.exists(duong_backup):
+-        raise SystemExit(f"Không thấy file backup: {duong_backup}")
++def khoi_phuc(duong_backup, toi_da_biet_chua_kiem_duoc=False):
++    """Rollback CSDL về đúng tệp backup — **FAIL-CLOSED**.
++
++    ====== BẤT BIẾN ======
++    Hỏng ở BẤT KỲ bước nào thì CSDL ĐANG CHẠY phải còn NGUYÊN VẸN, và phải có thông báo nói
++    rõ hỏng ở đâu. Ba bước, theo đúng thứ tự này:
++      1. KIỂM BẢN SAO LƯU **TRƯỚC KHI ĐỤNG** CSDL đang chạy (cấu trúc + dấu kiểm + phiên bản);
++      2. CẤT bản đang chạy vào một tên KHÔNG BAO GIỜ ĐÈ, và kiểm bản cất đọc được;
++      3. GHI BẢN MỚI RA TỆP TẠM cùng thư mục, kiểm lại, RỒI MỚI `os.replace`.
++    Bước 3 là vế bắt được "hết đĩa giữa đường". Đo được trên bản gốc: CSDL đích bị để lại ở
++    280.576 byte với `DatabaseError: database disk image is malformed` và MẤT SẠCH 20 bảng.
++
++    `toi_da_biet_chua_kiem_duoc=True` là ĐƯỜNG THOÁT cho người trực đã biết rõ tệp này chưa
++    kiểm chứng được (bỏ chốt dấu kiểm + chốt tụt schema). Mặc định là TỪ CHỐI.
++    """
++    tt = _kiem_ban_sao_luu(duong_backup, bat_buoc_dau_kiem=not toi_da_biet_chua_kiem_duoc)
+     os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
+-    cat_di = os.path.join(THU_MUC_SAO_LUU,
+-                          "hub-truoc-rollback-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".db")
++
++    if os.path.exists(cau_hinh.DUONG_DAN_CSDL) and not toi_da_biet_chua_kiem_duoc:
++        try:
++            _hien_tai = _kiem_cau_truc(cau_hinh.DUONG_DAN_CSDL, toi_thieu_bang=1)["phien_ban"]
++        except SystemExit:
++            # CSDL đang chạy CÓ nhưng KHÔNG đọc được (đang hỏng, đang bị khoá, một tiến trình
++            # khác đang ghi). Cố ý ĐI TIẾP chứ không TỪ CHỐI: khôi phục chính là đường CỨU một
++            # CSDL hỏng, nên từ chối ở đây là chặn đúng lúc cần nhất. Cái mất là chốt TỤT SCHEMA
++            # cho riêng lượt này — và cái mất đó ĐƯỢC NÓI RA ở thông báo dưới, không im lặng.
++            _hien_tai = None
++            print("[migrate] GHI CHÚ: không đọc được phiên bản của CSDL đang chạy nên BỎ QUA "
++                  "chốt TỤT SCHEMA cho lượt này.")
++        if _hien_tai and tt["phien_ban"] < _hien_tai:
++            raise SystemExit(
++                "[migrate] TỪ CHỐI: TỤT SCHEMA. Bản sao lưu ở phiên bản **v%d**, CSDL đang chạy "
++                "ở **v%d**.\n          Khôi phục sẽ bỏ rơi dữ liệu của %d phiên bản migration. "
++                "Đo được: v6 đè lên v9 làm CSDL còn\n          20 bảng thay vì 51 và tổng tiền "
++                "rơi từ 34.336.000 xuống 1.298.000 đồng — KHÔNG một lời cảnh báo.\n"
++                "          Nếu đây đúng là ý định, chạy lại với `toi_da_biet_chua_kiem_duoc=True`."
++                % (tt["phien_ban"], _hien_tai, _hien_tai - tt["phien_ban"]))
++
++    cat_di = _duong_chua_dung("hub-truoc-rollback", ".db")
+     if os.path.exists(cau_hinh.DUONG_DAN_CSDL):
+-        shutil.copy2(cau_hinh.DUONG_DAN_CSDL, cat_di)
+-    for duoi in ("-wal", "-shm"):
+-        p = cau_hinh.DUONG_DAN_CSDL + duoi
+-        if os.path.exists(p):
+-            os.remove(p)
+-    shutil.copy2(duong_backup, cau_hinh.DUONG_DAN_CSDL)
+-    print(f"[migrate] Đã khôi phục từ {duong_backup}. Bản trước khi khôi phục cất ở {cat_di}")
++        _chep_nguyen_tu(cau_hinh.DUONG_DAN_CSDL, cat_di)
++        for _duoi in ("-wal", "-shm"):
++            if os.path.exists(cau_hinh.DUONG_DAN_CSDL + _duoi):
++                _chep_nguyen_tu(cau_hinh.DUONG_DAN_CSDL + _duoi, cat_di + _duoi)
++        _kiem_cau_truc(cat_di, toi_thieu_bang=1)
++
++    tam = cau_hinh.DUONG_DAN_CSDL + ".dang-khoi-phuc-%d" % os.getpid()
++    try:
++        shutil.copy2(duong_backup, tam)
++        with open(tam, "rb+") as _f:
++            _f.flush()
++            os.fsync(_f.fileno())
++        _kiem_cau_truc(tam, toi_thieu_bang=tt["so_bang"])
++        for _duoi in ("-wal", "-shm"):
++            _p = cau_hinh.DUONG_DAN_CSDL + _duoi
++            if os.path.exists(_p):
++                os.remove(_p)
++        os.replace(tam, cau_hinh.DUONG_DAN_CSDL)
++    except BaseException as _e:
++        if os.path.exists(tam):
++            try:
++                os.remove(tam)
++            except OSError:
++                pass
++        raise SystemExit(
++            "[migrate] KHÔI PHỤC HỎNG: %s\n"
++            "          CSDL đang chạy KHÔNG bị đụng (bản mới chỉ nằm ở tệp tạm, đã dọn).\n"
++            "          Bản cất trước khi khôi phục: %s" % (_e, cat_di))
++    print("[migrate] Đã khôi phục từ %s (kiểm cấu trúc + dấu kiểm TRƯỚC khi đè). "
++          "Bản trước khi khôi phục cất ở %s" % (duong_backup, cat_di))
+ 
+ 
+ if __name__ == "__main__":
+@@ -620,6 +941,11 @@ if __name__ == "__main__":
+         csdl.mo()
+         print(f"Phiên bản schema trong CSDL: {csdl.phien_ban_hien_tai()} (mã nguồn: {csdl.PHIEN_BAN_SCHEMA})")
+     elif "--rollback" in sys.argv:
+-        khoi_phuc(sys.argv[sys.argv.index("--rollback") + 1])
++        # VÌ SAO ĐƯỜNG THOÁT NÀY **PHẢI** CÓ Ở DÒNG LỆNH: mọi bản sao lưu sinh ra TRƯỚC bản vá
++        # này đều KHÔNG có tệp `.sha256` đi kèm, nên mặc định chúng bị TỪ CHỐI. Một đường thoát
++        # chỉ gọi được từ Python thì với người trực đang gõ `migrate.py --rollback` nó KHÔNG TỒN
++        # TẠI — và một chốt không có đường thoát sẽ bị gỡ bằng cách tệ nhất: sửa mã lúc 3 giờ sáng.
++        khoi_phuc(sys.argv[sys.argv.index("--rollback") + 1],
++                  toi_da_biet_chua_kiem_duoc="--toi-da-biet-chua-kiem-duoc" in sys.argv)
+     else:
+         chay()

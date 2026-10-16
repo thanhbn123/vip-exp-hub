@@ -1,0 +1,61 @@
+{
+ "ban_ghi": {
+  "S4": {
+   "ma": "S4",
+   "ten": "4. KHÔI PHỤC ĐÈ LÊN CSDL ĐÃ CÓ DỮ LIỆU",
+   "bat_buoc": "dữ liệu TRƯỚC khi đè phải CÒN CỨU ĐƯỢC · ba lượt CÙNG MỘT MỐC THỜI GIAN (mốc TRUYỀN VÀO, không đọc đồng hồ) KHÔNG xoá nhau",
+   "ap_dung_mau": false,
+   "rc": 0,
+   "thong_bao": "",
+   "dong_bao_hong": "",
+   "co_dong_bao_hong": false,
+   "la_traceback_tho": false,
+   "c_dat": false,
+   "c_lech": [],
+   "csdl_dich_truoc": {
+    "ton_tai": false
+   },
+   "csdl_dich_sau": {
+    "ton_tai": false
+   },
+   "chup_day_du": {
+    "truoc": null,
+    "sau": null
+   },
+   "bang_chung": {
+    "rc_gieo": 0,
+    "rc_sao_luu": 0,
+    "rc_them": 0,
+    "rc_kp1": 0,
+    "rc_kp2": 0,
+    "rc_kp3": 0,
+    "luc": "20261016-120000",
+    "cung_mot_moc": false,
+    "nhan_luc": true,
+    "so_ban_cat_sau_1_lan": 1,
+    "so_ban_cat_sau_3_lan": 1,
+    "ban_cat": [
+     "hub-truoc-rollback-20261016-225701.db"
+    ],
+    "bam_ban_cat_sau_1_lan": "52d0324e9e73e9670d77a04774d17b2cc4f462082f48f8f7d4e69d189612c4ad",
+    "bam_ban_cat_sau_3_lan": "8d5a9ce8c36915fed0c40d15d8982b9055692bec0460458ba8a8d0b173ac7ae4",
+    "bam_du_lieu_luc_chup_day": "52d0324e9e73e9670d77a04774d17b2cc4f462082f48f8f7d4e69d189612c4ad",
+    "ban_cat_con_giu_duoc_du_lieu_goc": false,
+    "ban_cat_khop_du_lieu_luc_chup": true,
+    "bam_moi_ban_cat_cuoi": {
+     "hub-truoc-rollback-20261016-225701.db": "8d5a9ce8c36915fed0c40d15d8982b9055692bec0460458ba8a8d0b173ac7ae4"
+    },
+    "so_ban_cat_giu_du_lieu_goc": 0,
+    "ban_cat_integrity": "ok",
+    "ban_cat_so_bang": 51,
+    "lech_truoc_kp1": [],
+    "nguon_ve_c": "bất biến của S4 KHÔNG phải 'đích không đổi' (khôi phục đè thành công thì đích PHẢI đổi) mà là 'dữ liệu trước khi đè còn cứu được': so băm bản cất với băm dữ liệu lúc chụp."
+   }
+  }
+ },
+ "bo_qua": {},
+ "app": "/var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T/g21-chaydo-p_9v3dkt/app-tiem-d2",
+ "thu_tu": [
+  "S4"
+ ]
+}

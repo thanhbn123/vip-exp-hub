@@ -642,19 +642,29 @@ class C_TranTanSuat(unittest.TestCase):
         print("  [C4] HTTP 2 tiến trình (xen kẽ)       : %d lượt qua  ⇒ TỈ LỆ %.1f× (khai báo %d)"
               % (tong, tong / float(mot), self.tran_khai_bao))
 
-    def test_c5_hai_ket_luan_khong_mau_thuan(self):
-        """KẾT LUẬN: "HTTP == gọi thẳng hàm" và "trần NHÂN theo số bản" CÙNG ĐÚNG.
+    def test_c5_mot_ket_luan_nhat_quan(self):
+        """KẾT LUẬN G19: "HTTP == gọi thẳng hàm" VÀ "trần DÙNG CHUNG qua tiến trình" CÙNG ĐÚNG.
 
-        Chúng nói về hai phạm vi khác nhau, không phải hai sự thật đối nhau:
+        BẢN TRƯỚC của ca này khẳng định `2 × h1 == h2`, với lý giải "qua NHIỀU tiến trình, mỗi bản
+        có ngân sách RIÊNG nên tổng nhân lên". **Đó là khẳng định CHÍNH LỖ HỔNG B-G11-10** — đo
+        được ở G18: khai 20 ⇒ 20/40/80/160 với N=1/2/4/8. G19/AG-02 đã sửa.
+
+        Khẳng định ĐÚNG nay:
           · trong MỘT tiến trình, đường đi (HTTP hay gọi hàm) KHÔNG đổi con số;
-          · qua NHIỀU tiến trình, mỗi bản có ngân sách RIÊNG nên tổng nhân lên.
+          · qua NHIỀU tiến trình, ngân sách vẫn là MỘT — trần KHÔNG nhân.
+
+        GIỮ NGUYÊN ĐỘ RĂNG: ai quay lại kho bộ nhớ một tiến trình thì `h2` thành `2 × h1` và ca
+        này ĐỎ lại — đúng chiều ngược với bản cũ, nhưng vẫn canh cùng một bất biến.
         """
         thang, h1, h2 = (self.ket_qua.get("thang"), self.ket_qua.get("http1"),
                          self.ket_qua.get("http2"))
-        self.assertEqual(thang, h1)
-        self.assertEqual(2 * h1, h2)
-        print("  [C5] KẾT LUẬN: HTTP==hàm trong 1 tiến trình (%d==%d) VÀ trần × N qua N tiến trình"
-              " (%d→%d). Hai điều CÙNG ĐÚNG — khác PHẠM VI, không mâu thuẫn." % (thang, h1, h1, h2))
+        self.assertEqual(thang, h1, "HTTP != gọi thẳng hàm trong CÙNG một tiến trình")
+        self.assertEqual(h1, h2,
+                         "1 tiến trình cho %d, 2 tiến trình cho %d — trần DÙNG CHUNG thì phải BẰNG"
+                         " nhau, KHÔNG nhân đôi (B-G11-10). Nếu %d gấp đôi %d thì kho đếm đã quay"
+                         " lại BỘ NHỚ MỘT TIẾN TRÌNH." % (h1, h2, h2, h1))
+        print("  [C5] KẾT LUẬN: HTTP==hàm trong 1 tiến trình (%d==%d) VÀ trần DÙNG CHUNG qua"
+              " 2 tiến trình (%d==%d, tỉ lệ 1.0×)." % (thang, h1, h1, h2))
 
 
 # ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -712,8 +722,18 @@ class D_RanhGioiAg02Ag05(unittest.TestCase):
         so_ten, _, ghi = quet_ghi_ten_muc_modun(DUONG_GIOI_HAN)
         self.assertGreater(len(ghi), 0, "phép quét KHÔNG thấy trạng thái dùng chung ở gioi_han ⇒ quét mù")
         ten_ghi = sorted({t for t, _ in ghi})
-        self.assertTrue(any("_lan" in t or "_chan_den" in t for t in ten_ghi),
-                        "không thấy bộ đếm trần bị ghi: %s" % ten_ghi)
+        # VÁ G19 (AG-00): bản trước đòi thấy `_lan` / `_chan_den` — tên bộ đếm TRONG BỘ NHỚ.
+        # AG-02 đã chuyển kho đếm vào CSDL (bảng `gioi_han_luot` / `gioi_han_chan`), nên hai tên
+        # đó KHÔNG còn là trạng thái mức mô-đun — và đó chính là điều G19 muốn.
+        # Đối chứng dương vẫn phải chứng minh BỘ QUÉT KHÔNG MÙ, chứ không được bỏ ca: nay nó phải
+        # thấy trạng thái mức mô-đun CÒN LẠI (cờ đệm `global _da_tao_bang_gh`), và phải thấy kho
+        # đếm đã CHUYỂN SANG CSDL.
+        self.assertTrue(len(ten_ghi) > 0,
+                        "bộ quét KHÔNG thấy trạng thái mức mô-đun nào ở gioi_han ⇒ quét mù: %s"
+                        % ten_ghi)
+        self.assertIn("gioi_han_luot", open(DUONG_GIOI_HAN, encoding="utf-8").read(),
+                      "kho đếm KHÔNG còn nhắc bảng CSDL `gioi_han_luot` ⇒ nó đã quay lại BỘ NHỚ"
+                      " MỘT TIẾN TRÌNH, và trần lại nhân theo số bản (B-G11-10)")
         print("  [D2] app/gioi_han.py: %d dấu hiệu GHI ⇒ %s" % (len(ghi), ten_ghi))
 
     def test_d3_khoa_ghi_la_rlock_khong_phu_tien_trinh(self):

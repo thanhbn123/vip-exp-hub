@@ -33,6 +33,17 @@ Chế độ được chọn như sau (in ra ở dòng đầu, không im lặng):
 (b) **ĐỐI CHỨNG ĐƯỜNG cho MỌI ca phủ định** — sổ `DOI_CHUNG`; `Z1` tự phán HỎNG nếu một nhóm
     có ca ÂM mà không có ca DƯƠNG.
 
+====== CHỐT "CÂY SẠCH" — BẢN SAO THỨ BA ĐÃ VÁ (AG-05 G22) ======
+`N-G18-03`/`N-G19-03` (miễn trừ bằng **DANH SÁCH TÊN CỨNG**) có mặt ở ba tệp. Hai tệp kia
+(`thu_qa_g17.py`, `thu_qa_g18.py`) đã vá ở G21; bản sao **thứ ba** nằm ngay trong tệp NÀY —
+`A_Nen.test_a1` miễn trừ đúng hai tên `TEP_CUA_AG01_G19` — và nó **DORMANT**: `setUpModule` cũ
+bỏ qua cả bộ ngoài nền đóng băng, nên `python3 app/thu/thu_qa_g19.py A_Nen` chạy **0 ca**.
+Nay: miễn trừ theo **QUY TẮC VÙNG** (`docs/` + mọi thư mục tên bắt đầu `thu`), có CHỨNG MINH vùng
+vô hại (`chung_minh_vung`, kèm bản dự phòng tại chỗ vì nền đóng băng chưa có `thu_g21_chotcay.py`)
+và có ĐỐI CHỨNG ÂM bốn tầng (`test_a1d`). Chốt "nền đóng băng" chuyển từ `setUpModule` (bỏ qua
+CẢ BỘ) sang từng nhóm (`_chi_tren_nen`): sáu khoản nợ vẫn bỏ qua y như cũ, còn cổng cây sạch —
+một TÍNH CHẤT phải đúng trên mọi cây — nay ĐO ĐƯỢC.
+
 ====== PHẠM VI VÀ ĐIỀU BỊ CẤM ======
 Không gọi API hãng kể cả sandbox (`V-G09-01` + `V-13906-05` CHƯA CẤP): mọi phép đo lớp HTTP chỉ
 dùng stub `127.0.0.1` **cổng 0**. Không push/deploy/tunnel, không mở cổng ra ngoài. Không mở
@@ -45,7 +56,9 @@ dùng stub `127.0.0.1` **cổng 0**. Không push/deploy/tunnel, không mở cổ
     python3 app/thu/thu_qa_g19.py                 # làn MẶC ĐỊNH (nhanh, không Chromium)
     VIP_G19_DAY_DU=1 python3 app/thu/thu_qa_g19.py  # + hồi quy toàn phần + tầng 3 Chromium
 """
+import ast
 import atexit
+import fnmatch
 import hashlib
 import json
 import os
@@ -76,7 +89,45 @@ GOC_APP_DO = os.environ.get("VIP_G19_APP", GOC_APP)
 HEAD_GHIM = os.environ.get("VIP_G19_HEAD", "").strip()
 DAY_DU = os.environ.get("VIP_G19_DAY_DU", "") == "1"
 
-TEP_CUA_AG01_G19 = ("app/thu/thu_qa_g19.py", "docs/QA_G19.md")
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 0c. CHỐT "CÂY SẠCH" — MIỄN TRỪ THEO **QUY TẮC** (vá `N-G19-03`, BẢN SAO **THỨ BA**)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# BẢN CŨ (còn nguyên tới hết G21): `TEP_CUA_AG01_G19 = ("app/thu/thu_qa_g19.py",
+# "docs/QA_G19.md")` và `_la_tep_ag01()` tra ĐÚNG hai tên ấy — miễn trừ bằng **DANH SÁCH TÊN
+# CỨNG**. Đó chính là `N-G18-03`/`N-G19-03`: chỉ cần một làn KHÁC giao một tệp MỚI hợp lệ là cổng
+# ĐỎ — không phải vì cây bẩn, mà vì người ta vừa làm ĐÚNG việc của mình. Cùng lỗi đã đo được ở
+# `thu_qa_g17.py`, `thu_qa_g18.py` (đã vá ở G21) và `thu_g20_baomat.py::A_Nen`; đây là bản sao
+# **thứ ba**, và nó còn DORMANT (`setUpModule` bỏ qua cả bộ ngoài nền đóng băng) nên chưa ai đo.
+#
+# BẢN NÀY: miễn trừ theo **QUY TẮC VÙNG THỬ/TÀI LIỆU** (`docs/` + mọi thư mục tên bắt đầu `thu`),
+# tệp MỚI do `git status -uall` TỰ TÌM. Quy tắc không phải danh sách nên không ai phải nhớ thêm
+# một dòng mỗi wave.
+#
+# HAI CÂU HỎI KHÁC NHAU — ĐỪNG LẪN (giống hệt cách đã làm ở `thu_qa_g17.py`/`thu_qa_g18.py`):
+#   · HẸP — "đường này có phải tệp của CHÍNH làn AG-01 G19 không" (`PHAM_VI_LAN_NHA`,
+#     `_la_tep_ag01`). Dùng cho phép PHÂN LOẠI ở `do_cong_cay_sach_wave_truoc` ("bộ wave trước đỏ
+#     vì tệp ĐƯỢC PHÉP TẠO của tôi"). Giữ NGUYÊN độ hẹp: nới nó ra là làm `test_h2` trả lời SAI
+#     câu hỏi nó được viết để trả lời.
+#   · RỘNG — "đường này có nằm trong VÙNG được phép bẩn không" (`PHAM_VI_WAVE`, `_chot_do`).
+#     Đây mới là CHỐT "CÂY SẠCH".
+PHAM_VI_LAN_NHA = ("app/thu/thu_qa_g19.py", "docs/QA_G19.md")
+TEP_CUA_AG01_G19 = PHAM_VI_LAN_NHA      # tên CŨ, giữ nguyên cho hai chỗ gọi HẸP hiện có
+
+# MẪU VÙNG THỬ/TÀI LIỆU — KHAI RA để canh TRÔI; `test_a1b` so với bản TỰ DÒ từ cây.
+PHAM_VI_WAVE = (
+    "app/thu/**",
+    "docs/**",
+    "gateway/thu/**",
+    "thu_frontend/**",
+    "thu_giao_dien/**",
+)
+
+# Làn KHÁC trong cùng wave — nay **RỖNG**, và phải RỖNG MÃI: miễn trừ theo QUY TẮC, không theo tên.
+PHAM_VI_LAN_KHAC = ()
+
+# Các thư mục được phép xuất hiện trong phạm vi miễn trừ. Mã sản phẩm nằm NGOÀI.
+THU_MUC_PHAM_VI = ("app/thu/", "docs/", "gateway/thu/", "thu_frontend/", "thu_giao_dien/")
 
 # Cổng "cây sạch" của HAI wave TRƯỚC: mỗi bộ chỉ miễn trừ tệp của chính nó, nên tệp AG-01 G19
 # (thứ đề bài cho phép tôi tạo) làm chúng ĐỎ. Đây là `N-G18-03` tái diễn — xem `N-G19-03`.
@@ -145,20 +196,272 @@ def _doc(duong_tuong_doi):
         return f.read()
 
 
-def _git(*tham_so, env=None):
-    """Git với môi trường ĐÃ GỠ `GIT_CONFIG_*` (N-G18-00/N-G17-00 còn nguyên trên máy này)."""
+def _git(*tham_so, env=None, goc=None):
+    """Git với môi trường ĐÃ GỠ `GIT_CONFIG_*` (N-G18-00/N-G17-00 còn nguyên trên máy này).
+
+    `goc` = cây git KHÁC (đối chứng âm dựng trên cây tạm). Mặc định `GOC_CAY` — cây ĐANG ĐO.
+    """
     e = {k: v for k, v in os.environ.items() if not k.startswith("GIT_CONFIG")}
     e["GIT_CONFIG_COUNT"] = "0"
     e.update(env or {})
-    return subprocess.run(["git"] + list(tham_so), capture_output=True, text=True,
-                          cwd=GOC_CAY, env=e, timeout=60)
+    return subprocess.run(["git", "-C", goc or GOC_CAY] + list(tham_so), capture_output=True,
+                          text=True, env=e, timeout=60)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 0d. VÙNG THỬ/TÀI LIỆU — TỰ DÒ, MỘT CHỖ (`thu_g21_chotcay`), CÓ BẢN DỰ PHÒNG TẠI CHỖ
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# Vì sao vẫn có bản DỰ PHÒNG: bộ này phải chạy được trên NỀN ĐÓNG BĂNG (`VIP_G19_HEAD=6e61fc1`),
+# mà ở đó `thu_g21_chotcay.py` (ra đời ở G21) **không tồn tại**. Bản dự phòng cài ĐÚNG một quy tắc
+# ấy tại chỗ; `test_a1b` và `test_a1c` ĐO rằng hai bản KHỚP nhau (không có chỗ cho trôi).
+#
+# Không dùng `try/except ImportError` quanh `import`: tệp VẮNG là trạng thái HỢP LỆ (có lý do in
+# ra), còn tệp CÓ mà import hỏng là lỗi THẬT và phải nổi lên — không được nuốt.
+_TEP_CHOTCAY = os.path.join(THU_MUC_THU, "thu_g21_chotcay.py")
+if os.path.exists(_TEP_CHOTCAY):
+    if THU_MUC_THU not in sys.path:
+        sys.path.append(THU_MUC_THU)
+    import thu_g21_chotcay as chotcay                                        # noqa: E402
+    LY_DO_DU_PHONG = ""
+else:
+    chotcay = None
+    LY_DO_DU_PHONG = ("thiếu `app/thu/thu_g21_chotcay.py` ⇒ dùng bản DỰ PHÒNG tại chỗ, "
+                      "CÙNG một quy tắc vùng")
+
+
+def _la_ten_vung(duong_thu_muc):
+    """Tên một THƯ MỤC có phải vùng thử/tài liệu không. QUY TẮC, không danh sách."""
+    ten = duong_thu_muc.rstrip("/").split("/")[-1].lower()
+    return ten == "docs" or ten.startswith("thu")
+
+
+def _vung_tu_quy_tac(goc=None, env=None):
+    """BẢN DỰ PHÒNG của `thu_g21_chotcay.vung_thu_tai_lieu` — CÙNG một quy tắc, cài tại chỗ."""
+    ra = set()
+    for doi_so in (("ls-files",), ("ls-files", "--others", "--exclude-standard")):
+        r = _git(*doi_so, env=env, goc=goc)
+        if r.returncode != 0:
+            raise RuntimeError("`git %s` hỏng (mã thoát %d): %s"
+                               % (" ".join(doi_so), r.returncode, (r.stderr or "").strip()))
+        for p in r.stdout.splitlines():
+            if not p.strip():
+                continue
+            phan = p.split("/")
+            for i in range(1, len(phan)):          # tiền tố THƯ MỤC, bỏ tên tệp
+                d = "/".join(phan[:i])
+                if _la_ten_vung(d):
+                    ra.add(d + "/")
+    return tuple(sorted(ra))
+
+
+def vung_thu_tai_lieu(goc=None, env=None):
+    """VÙNG THỬ/TÀI LIỆU của cây — TỰ DÒ, không liệt kê tệp nào."""
+    if chotcay is not None:
+        return chotcay.vung_thu_tai_lieu(goc=goc or GOC_CAY, env=env)
+    return _vung_tu_quy_tac(goc=goc, env=env)
+
+
+def mau_vung_chuan(goc=None, env=None):
+    """Mẫu fnmatch của vùng thử/tài liệu — dạng dùng được với `fnmatch` như luật cũ."""
+    return tuple(v + "**" for v in vung_thu_tai_lieu(goc=goc, env=env))
+
+
+def la_trong_vung(duong, vung):
+    """Đường (tương đối gốc cây) có nằm trong một vùng thử/tài liệu không."""
+    d = duong.lstrip("./")
+    return any(d == v.rstrip("/") or d.startswith(v) for v in vung)
+
+
+def _giai_ma_thanh_duong(ten_mo_dun, goc):
+    """Mô-đun `a.b.c` → đường dẫn tệp trong cây (nếu có). Thử cả gốc cây lẫn `app/`."""
+    phan = ten_mo_dun.split(".")
+    for g in (goc, os.path.join(goc, "app")):
+        for duoi in (".py", "/__init__.py"):
+            p = os.path.join(g, *phan) + duoi
+            if os.path.exists(p):
+                return os.path.relpath(p, goc).replace(os.sep, "/")
+    return None
+
+
+def _import_js(nguon):
+    """Chuỗi đường dẫn trong `require(...)` / `from "..."` / `import("...")` của JS."""
+    ra = []
+    ra.extend(re.findall(r"""require\(\s*['"]([^'"]+)['"]\s*\)""", nguon))
+    ra.extend(re.findall(r"""from\s+['"]([^'"]+)['"]""", nguon))
+    ra.extend(re.findall(r"""import\(\s*['"]([^'"]+)['"]\s*\)""", nguon))
+    return ra
+
+
+def _chung_minh_vung_du_phong(goc, vung=None):
+    """BẢN DỰ PHÒNG của `thu_g21_chotcay.chung_minh_vung` — HAI phép đo độc lập, cùng luật:
+
+      (A1) KHÔNG tệp SẢN XUẤT nào (được theo dõi, ngoài vùng) import / nạp một mô-đun trong vùng;
+      (A2) `app/server.py::THU_MUC_CHO_PHEP` KHÔNG chứa vùng nào ⇒ vùng không ra tới người dùng.
+
+    Trả danh sách VI PHẠM (rỗng = chứng minh đứng vững). Đọc không được thì trả VI PHẠM, không
+    "tha mù".
+    """
+    vung = tuple(vung) if vung is not None else _vung_tu_quy_tac(goc=goc)
+    vi = []
+    r = _git("ls-files", goc=goc)
+    if r.returncode != 0:
+        return ["`git ls-files` hỏng (mã thoát %d) ⇒ (A1) không chạy được (không tha mù)"
+                % r.returncode]
+    for p in [x for x in r.stdout.splitlines() if x.strip()]:
+        if la_trong_vung(p, vung):
+            continue
+        try:
+            with open(os.path.join(goc, p), encoding="utf-8") as f:
+                nguon = f.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        if p.endswith(".py"):
+            try:
+                cay = ast.parse(nguon)
+            except SyntaxError:
+                continue
+            for nut in ast.walk(cay):
+                ten = None
+                if isinstance(nut, ast.Import):
+                    for a in nut.names:
+                        d = _giai_ma_thanh_duong(a.name, goc)
+                        if d and la_trong_vung(d, vung):
+                            vi.append("%s imports %s → %s (nằm trong vùng thử)" % (p, a.name, d))
+                elif isinstance(nut, ast.ImportFrom) and nut.level == 0 and nut.module:
+                    ten = nut.module
+                elif isinstance(nut, ast.Call):
+                    f = nut.func
+                    if (getattr(f, "attr", None) or getattr(f, "id", None)) in (
+                            "import_module", "__import__") and nut.args:
+                        a = nut.args[0]
+                        if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                            ten = a.value
+                if ten:
+                    d = _giai_ma_thanh_duong(ten, goc)
+                    if d and la_trong_vung(d, vung):
+                        vi.append("%s imports %s → %s (nằm trong vùng thử)" % (p, ten, d))
+        elif p.endswith(".js") or p.endswith(".mjs"):
+            for tham in _import_js(nguon):
+                if not tham.startswith("."):
+                    continue
+                d = os.path.normpath(os.path.join(os.path.dirname(p), tham)).replace(os.sep, "/")
+                if la_trong_vung(d, vung):
+                    vi.append("%s nạp %s → %s (nằm trong vùng thử)" % (p, tham, d))
+    # (A2) danh sách thư mục TĨNH mà máy chủ cho phép phục vụ.
+    bang = os.path.join(goc, "app", "server.py")
+    if not os.path.exists(bang):
+        vi.append("KHÔNG đọc được app/server.py ⇒ chứng minh (A2) không chạy được (không tha mù)")
+        return vi
+    with open(bang, encoding="utf-8") as f:
+        cay = ast.parse(f.read())
+    thay = None
+    for nut in ast.walk(cay):
+        if isinstance(nut, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "THU_MUC_CHO_PHEP" for t in nut.targets):
+            try:
+                thay = ast.literal_eval(nut.value)
+            except ValueError:
+                thay = None
+    if thay is None:
+        vi.append("app/server.py KHÔNG còn `THU_MUC_CHO_PHEP` dạng literal ⇒ chứng minh (A2) "
+                  "không chạy được (không tha mù)")
+        return vi
+    for t in thay:
+        if la_trong_vung(str(t), vung):
+            vi.append("app/server.py PHỤC VỤ %r — nằm trong vùng thử ⇒ vùng đã thành sản phẩm" % (t,))
+    return vi
+
+
+def chung_minh_vung(goc=None, env=None, vung=None, mau=None):
+    """PHÉP ĐO: vùng thử/tài liệu có THẬT SỰ không chạy trong sản phẩm không.
+
+    Dùng `thu_g21_chotcay.chung_minh_vung` khi có (MỘT chỗ cho cả ba bản sao); không có thì dùng
+    bản DỰ PHÒNG cùng luật ở trên. Chứng minh hỏng ⇒ `_chot_do()` NÉM LỖI, không tha mù.
+    """
+    if chotcay is not None:
+        return chotcay.chung_minh_vung(goc=goc or GOC_CAY, env=env, vung=vung, mau=mau)
+    return _chung_minh_vung_du_phong(goc=goc or GOC_CAY, vung=vung)
 
 
 def _la_tep_ag01(dong_porcelain):
+    """HẸP CÓ CHỦ Ý — dòng này có phải tệp của **CHÍNH làn AG-01 G19** không.
+
+    ⚠ ĐÂY **KHÔNG PHẢI** CHỐT "CÂY SẠCH". Chốt là `_chot_do()` (miễn trừ theo QUY TẮC vùng).
+    Hàm này trả lời câu hỏi HẸP hơn, và giữ nguyên độ hẹp đó là CỐ Ý: `do_cong_cay_sach_wave_truoc`
+    + `test_h2` đo đúng câu hỏi hẹp ấy — "bộ wave trước đỏ vì tệp ĐƯỢC PHÉP TẠO của tôi".
+    """
     duong = dong_porcelain[3:].strip().strip('"')
     if " -> " in duong:
         duong = duong.split(" -> ", 1)[1]
     return duong in TEP_CUA_AG01_G19
+
+
+def _la_tep_trong_pham_vi(duong):
+    """Đường này có nằm trong VÙNG THỬ/TÀI LIỆU (được phép bẩn) không. QUY TẮC, không danh sách."""
+    return any(fnmatch.fnmatch(duong, m) for m in PHAM_VI_WAVE)
+
+
+def _duong_porcelain(dong):
+    """CÁC đường của một dòng `git status --porcelain`. Dòng ĐỔI TÊN trả **CẢ HAI** đường.
+
+    Vì sao CẢ HAI, không chỉ đường ĐÍCH: kéo một tệp SẢN PHẨM vào thư mục thử
+    (`R  app/gioi_han.py -> thu_giao_dien/gioi_han.py`) vẫn là một thay đổi sản phẩm. Chỉ nhìn
+    đường đích là **nuốt** đúng ca ấy — và đó không phải giả thuyết: bản đầu của hàm này (chỉ trả
+    đường đích) đã bị chính `test_a1d` bắt lỗi khi chạy KHÔNG có `thu_g21_chotcay.py` (đường dự
+    phòng), tức trên nền đóng băng. Xem `docs/G22_CHOTCAY.md` §3.4.
+    """
+    if not dong or not dong.strip():
+        return []
+    p = dong[3:].strip()
+    if " -> " in p:
+        cu, moi = p.split(" -> ", 1)
+        return [x.strip().strip('"') for x in (cu, moi)]
+    return [p.strip('"')]
+
+
+def _loc_cay_ban(dong, ngoai=()):
+    """HÀM THUẦN: bỏ các dòng mà MỌI đường của nó khớp `ngoai`; giữ phần còn lại.
+
+    `ngoai=()` ⇒ trả về **MỌI** dòng bẩn: hàm này KHÔNG tự áp chính sách ẩn nào. Chốt "cây sạch"
+    là `_loc_cay_ban(dong, _mau_chot())` — xem `_chot_do()`.
+
+    Dòng ĐỔI TÊN bị ĐỎ nếu **MỘT TRONG HAI** đường nằm ngoài `ngoai`.
+
+    Dùng `_duong_porcelain` **tại chỗ** kể cả khi có `thu_g21_chotcay`: hai bản phải GIỐNG NHAU, và
+    `test_a1c` so chúng trên cùng một bộ dòng mẫu. Một hàm lọc có hai cách đọc dòng là đúng khuôn
+    "hai nhiệt kế" (`N-G18-00`) — chỗ này chỉ được có MỘT luật.
+    """
+    ra = []
+    for d in dong:
+        if not d.strip():
+            continue
+        ds = _duong_porcelain(d)
+        if ngoai and all(any(fnmatch.fnmatch(x, m) for m in ngoai) for x in ds):
+            continue
+        ra.append(d)
+    return ra
+
+
+def _mau_chot(goc=None, env=None):
+    """Mẫu của CHỐT — TỰ DÒ từ cây, không liệt kê tệp nào."""
+    return mau_vung_chuan(goc=goc or GOC_CAY, env=env)
+
+
+def _chot_do(env=None, goc=None):
+    """CHỐT "CÂY SẠCH": các dòng ĐỎ = thay đổi **NGOÀI vùng thử/tài liệu**.
+
+    Trước khi tha cả một vùng, `chung_minh_vung()` phải CHỨNG MINH được vùng đó không chạy trong
+    sản phẩm; chứng minh hỏng ⇒ NÉM LỖI (không tha mù). Chỉ chạy chứng minh trên cây THẬT: cây
+    git tạm của đối chứng âm không có `app/server.py`.
+    """
+    if goc is None:
+        vi = chung_minh_vung(goc=GOC_CAY, env=env)
+        if vi:
+            raise RuntimeError("VÙNG THỬ/TÀI LIỆU không còn vô hại — chốt TỪ CHỐI tha:\n  - "
+                               + "\n  - ".join(vi))
+    st = _git("status", "--porcelain=v1", "-uall", env=env, goc=goc).stdout
+    return _loc_cay_ban(st.splitlines(), _mau_chot(goc=goc, env=env))
 
 
 def van_tay_cay(env=None):
@@ -821,10 +1124,51 @@ def do_ban_phim_that(giay=300):
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 3. CÁC NHÓM CA
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# CHỐT "NỀN ĐÓNG BĂNG" — nay là **BỘ LỌC THEO NHÓM**, không còn là `setUpModule` bỏ qua CẢ BỘ.
+#
+# VÌ SAO PHẢI ĐỔI (đo được, không phải sở thích): bản cũ `raise unittest.SkipTest` trong
+# `setUpModule` bỏ qua **MỌI** nhóm khi HEAD ≠ nền đóng băng — kể cả CỔNG "CÂY SẠCH" (`A_Nen`),
+# vốn là một TÍNH CHẤT PHẢI ĐÚNG TRÊN MỌI CÂY. Hệ quả đo được: bản sao thứ ba của `N-G19-03` nằm
+# trong chính tệp này **DORMANT** — `python3 app/thu/thu_qa_g19.py A_Nen` trên cây đã gộp chạy
+# **0 ca** (`OK (skipped=1)`), nên "3/3 bản sao" không tài nào đo được, và QA/Giám sát chỉ đếm 2.
+#
+# NAY: SÁU KHOẢN NỢ (C1..C6) + bốn phép đột biến + hồi quy/tầng 3 vẫn **BỎ QUA y như cũ** khi
+# ngoài nền đóng băng (chúng khẳng định nợ còn NGUYÊN — trên cây đã gộp thì không thể xanh, và
+# đúng là không nên xanh). Còn `A_Nen` (cây sạch · chốt an toàn · D-8) và `Z_TongKet` (sổ đối
+# chứng · vân tay) chạy trên MỌI cây, vì chúng canh TÍNH CHẤT chứ không canh SỰ THẬT MÔI TRƯỜNG.
+#
+# ĐÂY KHÔNG PHẢI "NỚI ĐIỀU KIỆN CHO QUA": không nhóm nợ nào được tha; chỉ có một nhóm TRƯỚC ĐÂY
+# BỊ BỎ QUA OAN (nó không hề phụ thuộc nền) nay được ĐO. `test_z4` in ra nhóm nào chạy, nhóm nào
+# bỏ qua, nên "đo được 3/3 bản sao" là con số đọc được chứ không phải lời khai.
+_NEN_DONG_BANG = "6e61fc1e1f1f9a6d64931464e4f40ed887192ab5"
+
+LY_DO_BO_QUA = (
+    "BỘ ĐO NỀN — HEAD %s != nền đóng băng %s. Nhóm này khẳng định SÁU KHOẢN NỢ G19 còn nguyên; "
+    "trên cây đã gộp thì nợ đã đóng nên nó không thể xanh, và đúng là không nên xanh. Nghiệm thu "
+    "cây ĐÃ GỘP thuộc bộ riêng `thu_qa_g19_tich_hop.py`. Muốn chạy trên nền: VIP_G19_HEAD=%s"
+    % (_git("rev-parse", "HEAD").stdout.strip()[:7], _NEN_DONG_BANG[:7], _NEN_DONG_BANG))
+
+_TREN_NEN_DONG_BANG = bool(HEAD_GHIM) or (
+    _git("rev-parse", "HEAD").stdout.strip() == _NEN_DONG_BANG)
+
+
+def _chi_tren_nen(cls):
+    """Gắn "chỉ chạy trên NỀN ĐÓNG BĂNG" cho MỘT nhóm ca (thay cho `setUpModule` bỏ qua cả bộ)."""
+    return unittest.skipUnless(_TREN_NEN_DONG_BANG, LY_DO_BO_QUA)(cls)
+
+
 class A_Nen(unittest.TestCase):
     """Nền đóng băng + chốt an toàn. Nhóm này ĐỎ thì mọi số đo khác vô hiệu."""
 
     def test_a1_head_dung_ghim_va_cay_sach(self):
+        """CỔNG "CÂY SẠCH" (F0) — miễn trừ theo **QUY TẮC VÙNG**, tệp MỚI do git TỰ TÌM.
+
+        Bản cũ miễn trừ ĐÚNG HAI TÊN (`TEP_CUA_AG01_G19`): một làn KHÁC giao tệp mới là cổng ĐỎ
+        dù cây không hề bẩn — `N-G18-03`/`N-G19-03`, bản sao thứ ba. Nay "các tệp mà wave đang làm"
+        được TỰ DÒ (`docs/` + mọi thư mục tên bắt đầu `thu`), và vùng ấy phải CHỨNG MINH được là
+        không chạy trong sản phẩm trước khi tha.
+        """
         head = _git("rev-parse", "HEAD").stdout.strip()
         # TÍNH CHẤT luôn được canh: HEAD phải là một SHA hợp lệ (đọc được, 40 hex).
         self.assertRegex(head, r"^[0-9a-f]{40}$", "HEAD không đọc được: %r" % head)
@@ -834,13 +1178,190 @@ class A_Nen(unittest.TestCase):
         if HEAD_GHIM:
             self.assertEqual(head, HEAD_GHIM,
                              "HEAD KHÁC nền đóng băng đã ghim — mọi số đo phải coi là vô hiệu")
-        st = [d for d in _git("status", "--porcelain=v1", "-uall").stdout.splitlines()
-              if d.strip() and not _la_tep_ag01(d)]
-        self.assertEqual(st, [], "cây có thay đổi NGOÀI hai tệp AG-01 G19: %s" % st[:5])
+        vi = chung_minh_vung(goc=GOC_CAY)
+        self.assertEqual(vi, [], "VÙNG THỬ/TÀI LIỆU đã chạm sản phẩm ⇒ không được tha:\n  - "
+                         + "\n  - ".join(vi))
+        _dc_duong("nen-dong-bang-vung-co-chung-minh")
+        ban = _chot_do()
+        self.assertEqual(ban, [], "cây có thay đổi NGOÀI vùng thử/tài liệu: %s" % ban[:5])
         _dc_duong("nen-dong-bang")
-        print("\n  [A1] HEAD=%s · %s · cây sạch ngoài 2 tệp AG-01 · vân tay=%s"
+        print("\n  [A1] HEAD=%s · %s · cây sạch ngoài VÙNG THỬ/TÀI LIỆU %s · vân tay=%s"
               % (head[:7], ("ghim " + HEAD_GHIM[:7]) if HEAD_GHIM else "KHÔNG ghim (đo trên cây gộp)",
-                 VAN_TAY_LUC_NAN[:16]))
+                 PHAM_VI_WAVE, VAN_TAY_LUC_NAN[:16]))
+
+    # ── BA CỔNG TỰ KIỂM CHÍNH CÁI MIỄN TRỪ (AG-05 G22) ──────────────────────────────────────
+    # Vì sao phải có: `N-G18-03`/`N-G19-03` tái diễn vì miễn trừ QUÁ HẸP (danh sách tên cứng).
+    # Cách chữa rẻ nhất — và SAI — là nới thành "bỏ qua hết". Ba ca dưới đây chặn đúng nước đi
+    # sai đó: chúng không đo mã sản phẩm, chúng đo CHÍNH PHẠM VI MIỄN TRỪ.
+    def test_a1b_pham_vi_wave_chi_phu_bo_thu_va_tai_lieu(self):
+        """Phạm vi miễn trừ chỉ được trỏ vào VÙNG THỬ/TÀI LIỆU — và phải KHỚP cây, không trôi.
+
+        Ca này PIN gì: (1) mọi mục khai báo nằm trong `THU_MUC_PHAM_VI`; (2) `PHAM_VI_LAN_KHAC`
+        **RỖNG** — miễn trừ nay theo QUY TẮC, không theo tên tệp; (3) mẫu khai báo PHẢI BẰNG mẫu
+        TỰ DÒ từ cây — lệch là ĐỎ, vì lệch nghĩa là một vùng thử không được khai (cổng sẽ đỏ vì
+        một tệp hợp lệ) hoặc một vùng sản phẩm bị nuốt.
+        """
+        self.assertTrue(PHAM_VI_WAVE, "phạm vi wave RỖNG ⇒ mọi phép đo dưới đây vô nghĩa")
+        for m in PHAM_VI_WAVE:
+            self.assertTrue(m.startswith(THU_MUC_PHAM_VI),
+                            "miễn trừ %r trỏ RA NGOÀI vùng thử/tài liệu ⇒ có thể nuốt mã sản phẩm"
+                            % (m,))
+        for m in PHAM_VI_LAN_KHAC:
+            self.assertFalse(any(c in m for c in "*?["),
+                             "miễn trừ làn khác %r chứa KÝ TỰ MẪU ⇒ nuốt vô hình tệp chưa ai khai"
+                             % (m,))
+            self.assertNotIn(m, PHAM_VI_LAN_NHA)
+        self.assertEqual(PHAM_VI_LAN_KHAC, (),
+                         "`PHAM_VI_LAN_KHAC` KHÔNG còn rỗng ⇒ ai đó lại liệt kê tên tệp của làn "
+                         "khác; miễn trừ phải theo QUY TẮC vùng")
+        tu_do = mau_vung_chuan(goc=GOC_CAY)
+        self.assertEqual(tuple(sorted(PHAM_VI_WAVE)), tuple(sorted(tu_do)),
+                         "mẫu KHAI BÁO %s KHÁC mẫu TỰ DÒ %s ⇒ lời khai đã trôi khỏi cây"
+                         % (PHAM_VI_WAVE, tu_do))
+        # Đối chứng dương: bộ dò phải THẤY được một mục cố ý đặt sai chỗ.
+        self.assertFalse(all("app/webhook.py".startswith(t) for t in THU_MUC_PHAM_VI),
+                         "bộ dò mù: nó cho `app/webhook.py` là nằm trong phạm vi")
+        _dc_am("cay-sach-pham-vi")
+        _dc_duong("cay-sach-pham-vi")
+        print("  [A1b] phạm vi wave: %d mục VÙNG cho %d mẫu của làn này · đích danh làn khác=%d "
+              "(phải 0)" % (len(PHAM_VI_WAVE), len(PHAM_VI_LAN_NHA), len(PHAM_VI_LAN_KHAC)))
+
+    def test_a1c_ban_du_phong_khop_ban_dung_chung(self):
+        """Bản DỰ PHÒNG tại chỗ phải KHỚP `thu_g21_chotcay` — nếu không, hai nhiệt kế, hai số đo.
+
+        Vì sao cần bản dự phòng: bộ này còn phải chạy trên NỀN ĐÓNG BĂNG, nơi `thu_g21_chotcay.py`
+        chưa ra đời. Vì sao cần ca này: một bản dự phòng TRÔI khỏi bản chính là đúng khuôn
+        `N-G18-00` (hai nhiệt kế, hai kết quả trên cùng một cây). Ca này đo CẢ HAI chiều:
+          (1) quy tắc vùng của hai bản cho CÙNG một kết quả trên cây thật;
+          (2) phép chứng minh của hai bản cho CÙNG một kết quả trên cây thật;
+          (3) bản dự phòng phải BẮT được một vi phạm cố ý (đối chứng dương) — nếu không, "0 vi
+              phạm" chỉ là một bộ dò mù.
+        """
+        if chotcay is None:
+            self.skipTest("không có `thu_g21_chotcay.py` (%s) — chỉ đo được bản dự phòng"
+                          % LY_DO_DU_PHONG)
+        self.assertEqual(_vung_tu_quy_tac(goc=GOC_CAY), vung_thu_tai_lieu(goc=GOC_CAY),
+                         "quy tắc vùng của BẢN DỰ PHÒNG đã trôi khỏi `thu_g21_chotcay`")
+        self.assertEqual(_chung_minh_vung_du_phong(GOC_CAY), chung_minh_vung(goc=GOC_CAY),
+                         "phép CHỨNG MINH VÙNG của BẢN DỰ PHÒNG đã trôi khỏi `thu_g21_chotcay`")
+        # (3) HAI CÁCH ĐỌC MỘT DÒNG PORCELAIN phải GIỐNG NHAU — kể cả dòng ĐỔI TÊN.
+        #     Đây là chỗ bản đầu của `_duong_porcelain` (chỉ trả đường ĐÍCH) đã nuốt một ca
+        #     "kéo tệp SẢN PHẨM vào thư mục thử"; `test_a1d` bắt được lỗi ấy khi chạy KHÔNG có
+        #     `thu_g21_chotcay.py`. So trực tiếp để lỗi ấy không quay lại bằng đường khác.
+        for dong in (" M app/webhook.py", "?? docs/G22_CHOTCAY.md", "A  app/thu/thu_moi.py",
+                     "R  app/gioi_han.py -> thu_giao_dien/gioi_han.py",
+                     "R  thu_giao_dien/gioi_han.py -> app/gioi_han.py", '?? "docs/ten co dau.md"'):
+            self.assertEqual(_duong_porcelain(dong), chotcay.duong_tu_dong_porcelain(dong),
+                             "hai cách đọc dòng porcelain KHÁC nhau ở %r ⇒ hai nhiệt kế" % (dong,))
+        # (3b) đối chứng dương: bộ đọc CẢ HAI đường phải THẬT SỰ trả hai đường cho dòng đổi tên
+        self.assertEqual(len(_duong_porcelain("R  app/gioi_han.py -> thu_giao_dien/gioi_han.py")), 2,
+                         "bộ đọc bỏ mất một đường của dòng ĐỔI TÊN ⇒ nuốt được tệp sản phẩm")
+        # (4) đối chứng dương trên cây TẠM: một tệp SẢN PHẨM import mô-đun trong vùng ⇒ phải thấy.
+        tam = tempfile.mkdtemp(prefix="veh-g19-cm-")
+        try:
+            os.makedirs(os.path.join(tam, "app", "thu"), exist_ok=True)
+            with open(os.path.join(tam, "app", "thu", "thu_gia.py"), "w", encoding="utf-8") as f:
+                f.write("# tệp trong vùng thử\n")
+            with open(os.path.join(tam, "app", "webhook.py"), "w", encoding="utf-8") as f:
+                f.write("import thu.thu_gia\n")          # vi phạm (A1) CỐ Ý
+            _git("init", "-q", goc=tam)
+            _git("-c", "user.email=ag05@local", "-c", "user.name=AG05", "add", "-A", goc=tam)
+            _git("-c", "user.email=ag05@local", "-c", "user.name=AG05",
+                 "commit", "-q", "-m", "nen", goc=tam)
+            vi = _chung_minh_vung_du_phong(tam)
+            self.assertTrue(any("webhook.py" in x for x in vi),
+                            "bộ dò DỰ PHÒNG mù với vi phạm cố ý: %s" % vi)
+        finally:
+            shutil.rmtree(tam, ignore_errors=True)
+        _dc_am("ban-du-phong-vung")
+        _dc_duong("ban-du-phong-vung")
+        print("  [A1c] bản DỰ PHÒNG khớp bản chính: vùng + chứng minh (0 vi phạm) · "
+              "bắt được vi phạm cố ý `app/webhook.py`")
+
+    def test_a1d_doi_chung_am_tep_san_pham_lam_chot_DO(self):
+        """ĐỐI CHỨNG ÂM BẮT BUỘC: sửa/tạo một tệp SẢN PHẨM ⇒ chốt "cây sạch" PHẢI ĐỎ.
+
+        Bốn tầng, cố ý chồng nhau — một tầng xanh mà tầng khác đỏ thì ca này đỏ:
+          (1) HÀM THUẦN: dòng porcelain của tệp sản phẩm không được lọc mất (kể cả dòng ĐỔI TÊN
+              kéo tệp sản phẩm VÀO thư mục thử);
+          (2) GIT THẬT trên CÂY TẠM: `app/webhook.py` (đã commit) bị sửa ⇒ cổng ĐỎ, còn khi chỉ
+              tệp của vùng thử bẩn ⇒ cổng XANH (đối chứng DƯƠNG của chính phép đo);
+          (3) GIT THẬT trên CÂY ĐANG ĐO: một tệp mới trong `app/` ⇒ cổng ĐỎ; xoá đi ⇒ XANH LẠI;
+          (4) GIT THẬT trên CÂY ĐANG ĐO: tệp mới trong VÙNG THỬ ⇒ cổng vẫn XANH (đúng N-G19-03).
+        Không tệp sản phẩm nào của cây thật bị sửa nội dung: tầng (3)/(4) chỉ TẠO RỒI XOÁ một tệp
+        tạm trong `finally`, tầng (2) sửa trên cây sao chép.
+        """
+        # (1) hàm thuần
+        gia = [" M app/webhook.py", " M app/server.py", "?? mock/tep_moi.json",
+               " M app/cau_hinh.py", "R  app/gioi_han.py -> thu_giao_dien/gioi_han.py"]
+        self.assertEqual(_loc_cay_ban(gia, PHAM_VI_WAVE), gia,
+                         "hàm lọc NUỐT tệp sản phẩm ⇒ cổng mất răng")
+        self.assertEqual(_loc_cay_ban(["?? app/thu/thu_g22_chotcay.py"], PHAM_VI_WAVE), [],
+                         "hàm lọc KHÔNG tha tệp của làn khác trong vùng thử ⇒ N-G19-03 tái diễn")
+        self.assertEqual(_loc_cay_ban(gia), gia,
+                         "`ngoai=()` phải là HÀM THUẦN (trả về MỌI dòng bẩn), không chính sách ẩn")
+        # (2) git THẬT trên cây tạm
+        tam = tempfile.mkdtemp(prefix="veh-g19-dc-am-")
+        try:
+            _git("init", "-q", goc=tam)
+            for d in ("app/thu", "docs", "app"):
+                os.makedirs(os.path.join(tam, d), exist_ok=True)
+            for duong, noi_dung in (("app/webhook.py", "SAN PHAM\n"),
+                                    ("app/thu/thu_g22_gia.py", "bo thu cua lan khac\n"),
+                                    ("docs/G22_GIA.md", "tai lieu\n")):
+                with open(os.path.join(tam, duong), "w", encoding="utf-8") as f:
+                    f.write(noi_dung)
+            _git("-c", "user.email=ag05@local", "-c", "user.name=AG05", "add", "-A", goc=tam)
+            _git("-c", "user.email=ag05@local", "-c", "user.name=AG05",
+                 "commit", "-q", "-m", "nen", goc=tam)
+            mau_tam = mau_vung_chuan(goc=tam)
+            self.assertEqual(_loc_cay_ban(
+                _git("status", "--porcelain=v1", "-uall", goc=tam).stdout.splitlines(), mau_tam), [],
+                "cây tạm SẠCH mà cổng báo bẩn ⇒ phép đo hỏng")
+            with open(os.path.join(tam, "app/thu/thu_g22_gia.py"), "a", encoding="utf-8") as f:
+                f.write("them\n")
+            self.assertEqual(_loc_cay_ban(
+                _git("status", "--porcelain=v1", "-uall", goc=tam).stdout.splitlines(), mau_tam), [],
+                "tệp của vùng thử làm cổng ĐỎ ⇒ N-G19-03 tái diễn")
+            with open(os.path.join(tam, "app/webhook.py"), "a", encoding="utf-8") as f:
+                f.write("SUA SAN PHAM\n")
+            ban = _loc_cay_ban(
+                _git("status", "--porcelain=v1", "-uall", goc=tam).stdout.splitlines(), mau_tam)
+            self.assertEqual(len(ban), 1, "cổng MÙ với tệp sản phẩm bị sửa: %s" % ban)
+            self.assertIn("app/webhook.py", ban[0])
+        finally:
+            shutil.rmtree(tam, ignore_errors=True)
+
+        # (3) git THẬT trên CÂY ĐANG ĐO — tạo rồi xoá, không đụng nội dung tệp nào
+        tam_that = os.path.join(GOC_APP, "_ag05_doi_chung_am_tam_g19.py")
+        self.assertFalse(os.path.exists(tam_that), "đường tạm đã tồn tại: %s" % tam_that)
+        try:
+            with open(tam_that, "w", encoding="utf-8") as f:
+                f.write("# TỆP TẠM CỦA ĐỐI CHỨNG ÂM — bộ thử tự xoá, không phải mã sản phẩm\n")
+            ban = _chot_do()
+            self.assertIn("_ag05_doi_chung_am_tam_g19.py", " ".join(ban),
+                          "cổng MÙ với tệp mới trong `app/`: %s" % ban)
+        finally:
+            if os.path.exists(tam_that):
+                os.remove(tam_that)
+        self.assertEqual(_chot_do(), [], "cây KHÔNG sạch lại sau khi xoá tệp tạm")
+
+        # (4) tệp MỚI TRONG VÙNG THỬ ⇒ cổng vẫn XANH (đúng N-G19-03, đo được chứ không suy luận)
+        trong_vung = os.path.join(THU_MUC_THU, "_ag05_doi_chung_duong_g19.py")
+        self.assertFalse(os.path.exists(trong_vung), "đường tạm đã tồn tại: %s" % trong_vung)
+        try:
+            with open(trong_vung, "w", encoding="utf-8") as f:
+                f.write("# làn KHÁC giao tệp mới TRONG VÙNG THỬ — cổng PHẢI vẫn xanh\n")
+            self.assertEqual(_chot_do(), [],
+                             "tệp mới của làn khác trong vùng thử làm cổng ĐỎ ⇒ N-G19-03 tái diễn")
+        finally:
+            if os.path.exists(trong_vung):
+                os.remove(trong_vung)
+
+        _dc_am("cay-sach-doi-chung-am")
+        _dc_duong("cay-sach-doi-chung-am")
+        print("  [A1d] ĐỐI CHỨNG ÂM: tệp sản phẩm bị sửa/tạo ⇒ cổng ĐỎ ở CẢ 4 tầng; "
+              "tệp của làn khác trong VÙNG THỬ ⇒ cổng vẫn XANH")
 
     def test_a2_chot_an_toan_du(self):
         self.assertIsNone(kiem_chot_an_toan(), "chốt an toàn báo sai: %s" % _LY_DO_TU_CHOI)
@@ -885,6 +1406,7 @@ class A_Nen(unittest.TestCase):
                  type(kn).__module__, type(kn).__name__))
 
 
+@_chi_tren_nen
 class B_AG02_TranTheoBan(unittest.TestCase):
     """CỔNG C1 — trần tần suất phải GIỮ NGUYÊN qua N tiến trình thật."""
 
@@ -905,6 +1427,7 @@ class B_AG02_TranTheoBan(unittest.TestCase):
                          % (nhan, d["theo_n"], ky, "\n" + _nhac()))
 
 
+@_chi_tren_nen
 class C_AG03_KhoiDongLai(unittest.TestCase):
     """CỔNG C2 — bộ đếm tần suất phải SỐNG qua khởi động lại."""
 
@@ -924,6 +1447,7 @@ class C_AG03_KhoiDongLai(unittest.TestCase):
                          % (nhan, d["tong_cho_phep"], ky, "\n" + _nhac()))
 
 
+@_chi_tren_nen
 class D_AG04_MaVTP(unittest.TestCase):
     """CỔNG C3 — 21 mã VTP hãng đã công bố phải có bảng ánh xạ, và KHÔNG được đoán."""
 
@@ -995,6 +1519,7 @@ class D_AG04_MaVTP(unittest.TestCase):
                          % (nhan, do, ky, "\n" + _nhac()))
 
 
+@_chi_tren_nen
 class E_AG05_ManChuaCam(unittest.TestCase):
     """CỔNG C4 — màn khai ở đợt 3 phải có ĐƯỜNG VÀO thật (hoặc bị bỏ kèm lý do)."""
 
@@ -1011,6 +1536,7 @@ class E_AG05_ManChuaCam(unittest.TestCase):
                          % (nhan, d["so_module_chet"], d["ds_module_chet"], ky, "\n" + _nhac()))
 
 
+@_chi_tren_nen
 class F_AG06_BanPhim(unittest.TestCase):
     """CỔNG C5 — giao diện quản trị phải tới được bằng BÀN PHÍM."""
 
@@ -1030,6 +1556,7 @@ class F_AG06_BanPhim(unittest.TestCase):
                          "kỳ vọng %s%s" % (nhan, d["so_muc_khong_ban_phim_duoc"], ky, "\n" + _nhac()))
 
 
+@_chi_tren_nen
 class G_AG00_TruyVanMigration(unittest.TestCase):
     """CỔNG C6 — `truy_van.py` phải có route thật + `DDL_G12Q` vào migration v9."""
 
@@ -1050,6 +1577,7 @@ class G_AG00_TruyVanMigration(unittest.TestCase):
                          % (nhan, do, ky, "\n" + _nhac()))
 
 
+@_chi_tren_nen
 class H_HoiQuy(unittest.TestCase):
     """Làn H — hồi quy toàn phần. CHỈ chạy khi `VIP_G19_DAY_DU=1` (bỏ qua KHÔNG im lặng)."""
 
@@ -1113,6 +1641,7 @@ class H_HoiQuy(unittest.TestCase):
               % (", ".join(sorted(d)), list(TEP_CUA_AG01_G19)))
 
 
+@_chi_tren_nen
 class I_Tang3(unittest.TestCase):
     """Làn I — tầng 3 Chromium THẬT cho AG-05/AG-06. CHỈ chạy khi `VIP_G19_DAY_DU=1`."""
 
@@ -1163,6 +1692,7 @@ class I_Tang3(unittest.TestCase):
                          % (nhan, do, ky, "\n" + _nhac(), d["log"]))
 
 
+@_chi_tren_nen
 class J_TuKiemBoDo(unittest.TestCase):
     """HAI CHỐT CHẶN BẮT BUỘC — không có nhóm này thì mọi dòng "✓" của tệp này vô nghĩa."""
 
@@ -1310,6 +1840,13 @@ class Z_TongKet(unittest.TestCase):
         print("\n  [Z4] PHẠM VI ĐÃ ĐO: %s %s · python %s · SQLite %s"
               % (os.uname().sysname, os.uname().machine,
                  ".".join(map(str, sys.version_info[:3])), __import__("sqlite3").sqlite_version))
+        # VÁ G22: nói rõ nhóm nào CHẠY, nhóm nào BỎ QUA — để "đo được 3/3 bản sao" là con số đọc
+        # được chứ không phải lời khai, và để không ai đọc "OK (skipped=18)" thành "tất cả đều xanh".
+        chay = ["A_Nen (cây sạch · chốt an toàn · D-8)", "Z_TongKet (sổ đối chứng · vân tay)"]
+        bo = ["B..J — sáu khoản nợ C1..C6, bốn phép đột biến, hồi quy, tầng 3"]
+        print("       NHÓM CHẠY trên mọi cây: %s" % " · ".join(chay))
+        print("       NHÓM BỎ QUA (chỉ đúng trên NỀN ĐÓNG BĂNG, %s): %s"
+              % ("ĐANG Ở NỀN" if _TREN_NEN_DONG_BANG else "cây này KHÔNG phải nền", " · ".join(bo)))
         print("       CHẾ ĐỘ: nợ %s — %s" % ("ĐÓNG" if NHO_DONG else "MỞ", LY_DO_CHE_DO))
         print("       LÀN NẶNG (hồi quy + tầng 3 Chromium): %s"
               % ("BẬT" if DAY_DU else "TẮT — bật bằng VIP_G19_DAY_DU=1"))
@@ -1343,24 +1880,16 @@ NHO_DONG, LY_DO_CHE_DO = _chon_che_do()
 # Nó khẳng định SÁU KHOẢN NỢ G19 còn NGUYÊN (C1..C6), cộng BỐN PHÉP ĐỘT BIẾN dựng trên chính
 # các khoản nợ đó. Trên cây ĐÃ GỘP thì nợ đã đóng, nên nó KHÔNG THỂ xanh — và ĐÚNG là không nên
 # xanh. Chạy nó trên cây gộp rồi báo "hỏng" là báo hỏng GIẢ, và một cổng kêu nhầm là cổng sẽ bị
-# học cách bỏ qua. Nay nó TỰ NHẬN BIẾT: ngoài nền đóng băng (và không được ghim chủ động) thì
-# BỎ QUA cả bộ kèm lý do, chứ không đỏ.
+# học cách bỏ qua.
+#
+# VÁ G22 (AG-05): chốt ấy nay gắn theo TỪNG NHÓM (`_chi_tren_nen`, xem khối chú thích ở đầu
+# "3. CÁC NHÓM CA"), KHÔNG còn là `setUpModule` bỏ qua cả bộ. Lý do ĐO ĐƯỢC: `setUpModule` cũ
+# bỏ qua luôn CỔNG "CÂY SẠCH" (`A_Nen`) — một TÍNH CHẤT phải đúng trên mọi cây — nên bản sao thứ
+# ba của `N-G19-03` nằm DORMANT trong chính tệp này và không ai đo được nó.
+# `LY_DO_BO_QUA` / `_TREN_NEN_DONG_BANG` / `_chi_tren_nen` được định nghĩa phía trên, TRƯỚC các
+# lớp ca (Python chạy từ trên xuống, mà trang trí lớp cần chúng ngay lúc định nghĩa lớp).
 #
 # Nghiệm thu cây ĐÃ GỘP thuộc bộ RIÊNG `thu_qa_g19_tich_hop.py` — đúng khuôn đã dùng cho G18.
-_NEN_DONG_BANG = "6e61fc1e1f1f9a6d64931464e4f40ed887192ab5"
-
-
-def setUpModule():
-    head = _git("rev-parse", "HEAD").stdout.strip()
-    if HEAD_GHIM:
-        return                      # người đo ghim CHỦ ĐỘNG — cứ chạy; lệch thì đỏ là ĐÚNG
-    if head != _NEN_DONG_BANG:
-        raise unittest.SkipTest(
-            "BỘ ĐO NỀN — HEAD %s != nền đóng băng %s. Bộ này khẳng định SÁU KHOẢN NỢ G19 còn "
-            "nguyên; trên cây đã gộp thì nợ đã đóng nên nó không thể xanh, và đúng là không nên "
-            "xanh. Nghiệm thu cây ĐÃ GỘP thuộc bộ riêng `thu_qa_g19_tich_hop.py`. "
-            "Muốn chạy trên nền: VIP_G19_HEAD=%s"
-            % (head[:7], _NEN_DONG_BANG[:7], _NEN_DONG_BANG))
 
 
 if __name__ == "__main__":

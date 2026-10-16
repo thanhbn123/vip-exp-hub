@@ -177,6 +177,29 @@ def tu_http(status, hang=None, thao_tac=None, thong_diep=""):
                                   hang=hang, thao_tac=thao_tac, http_status=s)
 
 
+def _mo_ta_msg_hang(msg):
+    """Mô tả thông điệp của hãng mà KHÔNG chép nội dung của nó vào `thong_diep`.
+
+    VÌ SAO (G21/AG-03) — `msg` là VĂN BẢN TỰ DO của máy chủ bên kia, tức DỮ LIỆU NGOÀI. Nó có thể
+    echo lại CHÍNH credential vừa gửi. ĐO ĐƯỢC trước bản vá (`thu_g21_bimat.D1`): stub trả
+    `{"code":"145005005","msg":"khoa cua ban: <privateKey>"}` ở một lượt HTTP **200**; vì thân 2xx
+    là bằng chứng nguyên văn (hợp đồng §36) nên nó không bị che ở tầng HTTP, rồi `tu_ma_hang` chép
+    thẳng vào `thong_diep` ⇒ `KetQuaHang.loi/tho` ⇒ `don_hang` ném `LoiNghiepVu` ⇒ **HTTP 502 mang
+    bí mật trong thân phản hồi** — bí mật đi ra ngoài đúng đường người dùng nhìn thấy.
+
+    Nên ở đây chỉ giữ thứ KHÔNG THỂ chứa bí mật: ĐỘ DÀI của thông điệp. Phần hành động được vẫn
+    còn nguyên — mô tả tiếng Việt của mã lỗi và chính mã lỗi (`ma_goc_hang`) — nên không có chẩn
+    đoán nào bị mất: người trực tra bảng mã của hãng bằng mã, không bằng câu chữ tiếng Trung.
+
+    KHÔNG dùng vân tay băm (sha256) thay thế: băm một bí mật NGẮN là chuyện giải ngược được bằng
+    vét cạn, tức vẫn là một đường rò — chỉ khó thấy hơn.
+    """
+    tho = str(msg or "")
+    if not tho:
+        return ""
+    return f" | msg hãng: {len(tho)} ký tự (KHÔNG chép nguyên văn — văn bản NGOÀI có thể echo credential)"
+
+
 def tu_ma_hang(hang, ma_goc, msg="", thao_tac=None, http_status=None):
     """Đổi mã lỗi riêng của hãng → NormalizedCarrierError.
     Mã không có trong bảng ⇒ KHONG_RO + KHÔNG thử lại (không đoán nghĩa mã lạ)."""
@@ -186,11 +209,11 @@ def tu_ma_hang(hang, ma_goc, msg="", thao_tac=None, http_status=None):
         ma_chuan, mo_ta = bang[khoa]
         if ma_chuan is None:
             raise ValueError(f"mã '{khoa}' của hãng {hang} là mã THÀNH CÔNG, không phải lỗi")
-        thong_diep = f"{mo_ta}" + (f" | msg hãng: {msg}" if msg else "")
+        thong_diep = f"{mo_ta}" + _mo_ta_msg_hang(msg)
     else:
         ma_chuan = KHONG_RO
         thong_diep = (f"mã lỗi '{khoa}' chưa có trong bảng đã đọc của hãng {hang}"
-                      + (f" | msg hãng: {msg}" if msg else ""))
+                      + _mo_ta_msg_hang(msg))
     return NormalizedCarrierError(ma_chuan, ma_goc_hang=khoa, thong_diep=thong_diep,
                                   hang=hang, thao_tac=thao_tac, http_status=http_status)
 

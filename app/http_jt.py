@@ -340,10 +340,18 @@ def _gia_tri_bi_mat_tu_phan_hoi(than, headers_tra_loi):
     """
     ra = set()
     for ten, gt in (headers_tra_loi or ()):
+        s = str(gt)
         if str(ten).strip().lower() in TRUONG_CREDENTIAL_PHAN_HOI:
-            s = str(gt)
             if s:
                 ra.add(s)
+        # G21 (AG-03): GIÁ TRỊ của một header phản hồi cũng là dữ liệu NGOÀI, và nó có thể mang
+        # bí mật của chính hãng ở dạng JSON lồng hoặc cặp `ten=giá_trị` — đúng hai dạng mà thân
+        # phản hồi đã được soi từ G18. Trước bản vá, header chỉ được soi theo TÊN, nên
+        # `X-Debug: {"privateKey": "…"}` đi thẳng vào `headers_da_che` và thông điệp ngoại lệ:
+        # hai đường (thân / header) cho hai đáp án khác nhau. Đo được: `thu_g21_bimat.A5`.
+        if s:
+            _gia_tri_bi_mat_trong_json(s, ra)
+            _gia_tri_bi_mat_trong_vb(s, ra)
     if than:
         van_ban = than.decode("utf-8", "replace")
         _gia_tri_bi_mat_trong_json(van_ban, ra)
@@ -436,6 +444,7 @@ def _gia_tri_tu_url(url):
         for ten, gt in parse_qsl(urlsplit(url).query, keep_blank_values=True):
             if _dang_che(ten, gt):
                 ra.add(gt)
+            _gia_tri_trong_json(gt, ra)
     except Exception:
         pass
     return ra
@@ -516,6 +525,12 @@ def _gia_tri_ta_gui(headers, than_gui, url=None):
         s = str(gt)
         if _dang_che(ten, s):
             ra.add(s)
+        # G21 (AG-03): giá trị header cũng có thể là JSON mang trường credential bên trong
+        # (`X-Du-Lieu: {"password": "…"}`) — cùng luật với thân form ngay dưới. Trước bản vá này
+        # chỉ THÂN được soi JSON lồng, nên hai đường cho hai đáp án khác nhau: bí mật NGẮN nằm
+        # trong JSON của một header KHÔNG thuộc `TRUONG_CREDENTIAL` không vào tập che, và hãng
+        # echo lại đúng giá trị bên trong là nó rò. Đo được: `thu_g21_bimat.A4`.
+        _gia_tri_trong_json(s, ra)
     try:
         for ten, gt in parse_qsl(than_gui.decode("utf-8"), keep_blank_values=True):
             if _dang_che(ten, gt):
@@ -647,6 +662,38 @@ def _duong_dan_da_che(url, headers, than):
         else:
             ra.append(doan)
     return "/".join(ra), so_che
+
+
+def doan_duong_dan_da_che(duong):
+    """Bản ĐÃ CHE của một ĐƯỜNG DẪN THÔ để **GHI LOG** (không đổi đích gửi đi).
+
+    VÌ SAO CẦN, tách khỏi `_duong_dan_da_che`: hàm kia cần `headers`/`than` để dựng tập che, nên
+    chỉ dùng được BÊN TRONG một lượt gọi đã dựng yêu cầu. Nhưng chỗ rò lại nằm ở tầng khác: máy
+    chủ ghi dòng access log cho MỌI lượt HTTP vào một TỆP TRÊN ĐĨA, và ở đó chỉ có đường dẫn. ĐO
+    ĐƯỢC (AG-03, `thu_g21_bimat.E3`): `/api/<bí mật dài>/x` xuống thẳng tệp log.
+
+    Luật giống hệt `_duong_dan_da_che` (một nguồn, không hai bản): đoạn nào TRÔNG NHƯ credential
+    (`_la_doan_bi_mat`) hoặc đã bị percent-encode rồi trông như credential thì thay bằng `[DA-CHE]`;
+    đoạn còn lại NGUYÊN VĂN — endpoint thật (`/api/v2/suc-khoe`) phải đọc được trong log.
+    """
+    try:
+        duong = str(duong or "")
+    except Exception:
+        return "[DA-CHE]"
+    ra = []
+    for doan in duong.split("/"):
+        if not doan:
+            ra.append(doan)
+            continue
+        try:
+            doan_giai = unquote(doan)              # đoạn có thể đã bị percent-encode trên URL
+        except Exception:
+            doan_giai = doan
+        if _la_doan_bi_mat(doan) or _la_doan_bi_mat(doan_giai):
+            ra.append("[DA-CHE]")
+        else:
+            ra.append(doan)
+    return "/".join(ra)
 
 
 def mo_ta_yeu_cau(url, headers, than) -> str:

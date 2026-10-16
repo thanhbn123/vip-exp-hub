@@ -25,6 +25,7 @@ import don_hang
 import gioi_han
 import goi_dich_vu
 import harness_hang
+import http_jt
 import nhap_file
 import polling
 import quan_sat
@@ -60,12 +61,41 @@ def _json(obj):
     return json.dumps(obj, ensure_ascii=False, default=_ma_hoa_la).encode()
 
 
+# G21/AG-03: MỌI đường dẫn xuất hiện trong một dòng log đều đi qua ĐÚNG bộ che của lớp HTTP
+# (`http_jt.doan_duong_dan_da_che`). Dùng cho cả access log (`log_message`) lẫn trường `duong`
+# của dòng JSONL — hai chỗ, một luật.
+_MAU_DUONG_TRONG_LOG = re.compile(r"/[^\s\"']*")
+
+
+def _doan_duong_dan_trong_log(dong):
+    """Che đoạn nguy hiểm trong mọi đường dẫn có mặt trong `dong`; phần còn lại NGUYÊN VĂN."""
+    return _MAU_DUONG_TRONG_LOG.sub(lambda m: http_jt.doan_duong_dan_da_che(m.group(0)), dong)
+
+
 class BoXuLy(BaseHTTPRequestHandler):
     server_version = "VIPExpressHub/0.3-SaaS"
 
     def log_message(self, fmt, *args):
-        # Log KHÔNG BAO GIỜ chứa body/secret — chỉ dòng request chuẩn.
-        sys.stderr.write("[hub] %s\n" % (fmt % args))
+        """Dòng access log: KHÔNG mang QUERY, và ĐOẠN đường dẫn trông như bí mật thì bị che.
+
+        G21/AG-03 — SỬA MỘT KHẲNG ĐỊNH SAI CỦA BẢN CŨ. Bản cũ ghi `fmt % args` kèm chú thích
+        "Log KHÔNG BAO GIỜ chứa body/secret — chỉ dòng request chuẩn". Chú thích đó SAI: `fmt %
+        args` chính là dòng yêu cầu ĐẦY ĐỦ, nên QUERY — thứ mà chính tệp này (`_chay`) đã khai là
+        "có thể mang token" và đã cắt khỏi dòng JSONL — vẫn xuống tệp log qua đường này. ĐO ĐƯỢC
+        (`thu_g21_bimat.E2`, `E3`): tệp log trên đĩa chứa cả bí mật trong QUERY lẫn bí mật trong
+        ĐƯỜNG DẪN.
+
+        Giữ nguyên hình dạng dòng log (ai đang đọc vẫn đọc được): chỉ cắt query và che đoạn nguy
+        hiểm. Việc che dùng ĐÚNG một nguồn với lớp HTTP (`http_jt.doan_duong_dan_da_che`) — hai
+        bản cài cho một luật là hai bản sẽ trôi khỏi nhau.
+        """
+        try:
+            dong = fmt % args
+        except Exception:                                            # noqa: BLE001
+            dong = " ".join(str(x) for x in (fmt,) + tuple(args))
+        # Cắt query ở MỌI dạng xuất hiện: phần chữ giữa log của `log_error` cũng mang dòng yêu cầu.
+        dong = re.sub(r"\?[^\s\"']*", "?<da-cat-query>", dong)
+        sys.stderr.write("[hub] %s\n" % _doan_duong_dan_trong_log(dong))
 
     # ---------- tiện ích ----------
     def _headers_thuong(self):
@@ -341,7 +371,11 @@ class BoXuLy(BaseHTTPRequestHandler):
                 # `"ma": "***"` — ca `a2` của `thu_nhat_ky_yeu_cau.py` bắt được ngay. Dùng đúng
                 # `method`/`ma_http`/`duong`/`ms` mà danh sách trắng đã khai.
                 quan_sat.ghi("yeu_cau", muc="tin", method=method,
-                             duong=self.path.split("?")[0].split("#")[0][:300],
+                             # G21/AG-03: trường `duong` cũng phải qua bộ che đường dẫn — trước
+                             # bản vá, một bí mật nằm trong ĐƯỜNG DẪN xuống thẳng tệp log ở đây
+                             # (`thu_g21_bimat.E3`).
+                             duong=_doan_duong_dan_trong_log(
+                                 self.path.split("?")[0].split("#")[0])[:300],
                              ma_http=self._ma_da_tra, ms=ms,
                              request_id=rid, correlation_id=cid)
             except Exception as e:                                       # noqa: BLE001

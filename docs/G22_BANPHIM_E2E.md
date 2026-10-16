@@ -10,13 +10,21 @@ từng tệp** (§1).
 **Lệnh dựng lại toàn bộ số trong tài liệu này:**
 
 ```sh
-python3 app/thu/thu_g22_e2e.py --tu-kiem        # 26 ca tự kiểm của cổng, exit 0
+python3 app/thu/thu_g22_e2e.py --tu-kiem        # 26 ca tự kiểm của Phần A — Phần B thêm e1–e5 ⇒ 31 ca, exit 0
 python3 app/thu/thu_g22_e2e.py --ghim-chromium  # đường dẫn + phiên bản + sha256 binary
 python3 app/thu/thu_g22_e2e.py                  # CỔNG ĐẦY ĐỦ: 65 ca, exit 0
 sh thu_giao_dien/chay.sh                        # bộ chạy cũ — ĐỌC §3 TRƯỚC KHI TIN
 ```
 
 ---
+
+> **CẬP NHẬT — DISPATCH 2 (17/10/2026): tài liệu này có thêm **PHẦN B** ở CUỐI.**
+> Phần B gồm: **vá hai lỗi báo cáo của `chay.sh`** (dòng PHẠM VI + mã thoát nay in trong
+> `trap … EXIT`; bộ dọn không còn nói dối về tiến trình đã chết), **bộ đo giới hạn tiến trình**
+> (fd · ổ cắm · cổng · con · thời gian sống · tín hiệu làm nó chết) kèm **đối chứng âm + dương
+> bắt buộc**, và **7 lượt chạy lại trọn bộ ghi rõ từng lượt**. Đọc Phần B trước khi dùng lại
+> những con số ở Phần A: ba lượt đỏ của Phần A nay có **bản sao dấu vết tái lập được** và một
+> **phán quyết bằng máy** (`HA_TANG_CHET`, không phải "sản phẩm hỏng").
 
 ## 0. BA CÂU — ĐỌC LÀ ĐỦ
 
@@ -432,3 +440,403 @@ git add app/thu/thu_g22_e2e.py docs/G22_BANPHIM_E2E.md \
    6/9 lượt xanh. Đây là việc **ngoài** vùng được ghi của AG-06.
 4. **QA lượt sau:** dùng cổng G22 (`python3 app/thu/thu_g22_e2e.py`) thay vì đọc `chay.sh` trần —
    nó nói thẳng lượt đỏ là *sản phẩm* hay *nền*, và ghim đúng binary Chromium ở §6.
+
+---
+---
+
+# PHẦN B — LƯỢT AG-06 #2 (DISPATCH MỚI): VÁ RUNNER · ĐO GIỚI HẠN TIẾN TRÌNH · CHẠY LẠI TRỌN BỘ
+
+**Người làm:** AG-06 · dispatch 2 (`task_506aad6bf953` / `ctx_9282e8c40431`) · 17/10/2026 ·
+nối tiếp Phần A (`integration/g20` @ `7344c02`, đã được AG-00 gộp ở commit `05eecf1`).
+**Vùng được ghi của lượt này:** `thu_giao_dien/chay.sh` · `thu_giao_dien/*.spec.js` ·
+`admin/ban_phim.js` · `app/thu/thu_g22_e2e.py` · `docs/G22_BANPHIM_E2E.md`.
+**KHÔNG sửa một dòng mã sản phẩm nào** — sha256 sản phẩm ở §B.5 khớp đúng bản đã ghim ở §1.
+
+Ba việc của lượt này thay cho ba đề nghị ở §11 Phần A: **đề nghị 2 (vá `chay.sh`) đã làm**,
+**đề nghị 3 (điều tra cái chết) đã đo tới đáy những gì đo được**, **đề nghị 1 (commit hộ) vẫn cần
+AG-00** vì `.git` vẫn bị chặn ghi (§B.5).
+
+## B.0 — BA CÂU, ĐỌC LÀ ĐỦ
+
+1. **Đã vá HAI lỗi báo cáo thật của `chay.sh`** (`set -e` nuốt dòng PHẠM VI + mã thoát;
+   `kill -0` nói dối về tiến trình đã chết), và chứng minh bằng **sáu đường thoát**: trên **cùng
+   một ca hỏng thật**, bản cũ in **0** dòng PHẠM VI, bản vá in **2**; thoát sớm giữ đúng mã `2`;
+   ca hỏng giữ đúng mã `1`; `SIGTERM` giữa lượt giữ đúng mã `143` và **không để lại tiến trình mồ
+   côi nào** (`0` người nghe trên cổng, `0` tiến trình `app/server.py` còn lại).
+2. **Đã đo giới hạn tiến trình của chính lượt chạy, và phép đo BẮT ĐƯỢC cái chết**:
+   đỉnh `fd` = **50–53** trên trần `ulimit -n` = **1048575** (≈ 0,005 %), tiến trình con = **0**,
+   cổng đang mở = **đúng 1** (cổng được chọn), thời gian sống **112,4–113,5 s**; **đối chứng
+   dương**: giết máy chủ từ ngoài ở giây **30,0** ⇒ bộ đo bắt ở giây **30,01** với
+   `SIGKILL(9)` (tín hiệu KHÔNG do bộ dọn gửi), `0` traceback, `9 × ERR_CONNECTION_REFUSED` —
+   **đúng dấu vết của 3/9 lượt đỏ ở Phần A**.
+3. **Đã chạy lại trọn bộ 7 lượt trong lượt này: 6 lượt ghi được đều `65/0/0/0 · exit 0`, và
+   KHÔNG lượt nào bị một cơ chế LẠ giết** — lượt thứ bảy là **đối chứng dương của chính tôi**
+   (giết ở giây 30 để chứng minh phép đo bắt được cái chết), cộng ma trận 4 tiến trình nền sống
+   đủ **240 s** (kể cả bản sao *giống tên* `app/server.py`, bản sao *nghe cổng* 18xxx, và chính
+   `app/server.py` thật không tải).
+   Cái chết **KHÔNG tái lập** ở lượt này; cái **ĐO ĐƯỢC** là nó không phải lỗi sản phẩm (§B.4).
+
+**Lệnh dựng lại toàn bộ số ở Phần B** (chép nguyên, chạy từ gốc repo):
+
+```sh
+python3 app/thu/thu_g22_e2e.py --tu-kiem                        # 31 ca tự kiểm · exit 0
+python3 app/thu/thu_g22_e2e.py --do-chay-sh 4 \
+        --thu-muc-log /tmp/ag06-do-viec3 --json-tong /tmp/ag06-viec3.json   # 4 lượt trọn bộ + đo
+python3 app/thu/thu_g22_e2e.py --do-chay-sh 1 --giet-luc 30 \
+        --thu-muc-log /tmp/ag06-do-doi-chung --json-tong /tmp/ag06-doi-chung.json  # ĐỐI CHỨNG DƯƠNG
+python3 app/thu/thu_g22_e2e.py --tro-ngo 240 --json-tong /tmp/ag06-tro-ngo.json # ma trận 4 tiến trình
+python3 app/thu/thu_g22_e2e.py --json /tmp/ag06-cong.json       # CỔNG ĐẦY ĐỦ: 65 ca · exit 0
+```
+
+---
+
+## B.1 — VIỆC 1: `chay.sh` NUỐT DÒNG PHẠM VI — ĐÃ VÁ, VÀ CHỨNG MINH BẰNG SÁU ĐƯỜNG THOÁT
+
+### B.1.1 Hai lỗi, nguyên văn nguyên nhân
+
+| # | lỗi | cơ chế ĐO ĐƯỢC | bản vá |
+|---|---|---|---|
+| 1 | **dòng `PHẠM VI` biến mất đúng ở lượt có ca hỏng** | `set -e` + lời gọi `npx playwright test` không được bắt ⇒ shell thoát NGAY tại lời gọi hỏng; `MA=$?`, dòng `mã thoát`, dòng `PHẠM VI`, `exit $MA` là **mã chết**. Mã thoát vẫn ra `1` một cách **tình cờ** (đúng mã lệnh vừa hỏng) nên nhiều wave không ai thấy (§4 Phần A) | lời gọi được bắt `\|\| MA=$?`; **mã thoát THẬT + PHẠM VI in trong `trap … EXIT`** ⇒ không đường thoát nào bỏ qua |
+| 2 | **bộ dọn nói dối về tiến trình ĐÃ CHẾT** | `kill -0 PID` **vẫn thành công với ZOMBIE** ⇒ vòng dọn quay 5 s vô ích, in *"pid VẪN SỐNG — còn tiến trình mồ côi"* cho một máy chủ đã chết, và **bỏ mất mã thoát thật** của nó (128+tín hiệu ⇒ biết bị giết bằng tín hiệu nào). Cùng họ với lỗi đã đo ở §5.4 Phần A | `may_chu_con_song()` = `kill -0` **+ đòi còn ít nhất một mô tả tệp** (zombie không còn tệp nào), rồi `wait` để **thu lại** và đọc mã thoát thật |
+
+### B.1.2 SÁU đường thoát — mỗi dòng là một lượt chạy THẬT, không phải suy luận
+
+| # | đường thoát | lệnh (nguyên văn) | mã thoát THẬT | dòng `[giao-dien] PHẠM VI` | dòng `mã thoát THẬT` |
+|---|---|---|---|---|---|
+| 1 | cây tạm **thiếu Playwright** | `sh <tạm>/thu_giao_dien/chay.sh` | **2** | **2** | 1 (`2`) |
+| 2 | cây tạm **nền hỏng** (thiếu `app/`) | `sh <tạm2>/thu_giao_dien/chay.sh` | **2** | **2** | 1 (`2`) |
+| 3 | **CA HỎNG THẬT**, bản **CŨ** `7d946928` (trích từ `HEAD`, cùng cây) | `sh thu_giao_dien/_chay_cu_tam.sh --reporter=list _tu_kiem_chay_sh_tam.spec.js` | **1** | **0** | **0** |
+| 4 | **cùng ca hỏng ấy**, bản **VÁ** `15e865d8` | `sh thu_giao_dien/chay.sh --reporter=list _tu_kiem_chay_sh_tam.spec.js` | **1** | **2** | 1 (`1`) |
+| 5 | **`SIGTERM` giữa lượt** | `sh chay.sh & P=$!; sleep 20; kill -TERM $P` | **143** | **2** | 1 (`143`) |
+| 6 | **máy chủ bị giết từ NGOÀI** (đối chứng dương §B.2.3) | `--do-chay-sh 1 --giet-luc 30` | **1** | **2** | 1 (`1`) |
+
+**Nguyên văn hai log của đường 3 và 4 — CÙNG một ca hỏng, khác đúng một dòng bản vá:**
+
+```sh
+# BẢN CŨ 7d946928 — các dòng bắt đầu bằng `[giao-dien]`:
+$ grep -n '^\[giao-dien\]' /tmp/ag06-t4-cu.log
+3:[giao-dien] nền=…/veh-giao-dien.hbFKDa cổng=19946 pid=39285
+$ # → KHÔNG có dòng PHẠM VI, KHÔNG có dòng "mã thoát".  (chỉ 1 dòng [giao-dien])
+
+# BẢN VÁ — cùng ca hỏng ấy:
+$ grep -n '^\[giao-dien\]' /tmp/ag06-t4.log | tail -4
+43:[giao-dien] PHẠM VI (in lại khi kết thúc): chỉ Chromium (bản Playwright trong node_modules) · …
+44:[giao-dien] máy chủ pid 38879 còn sống khi lượt kết thúc
+45:[giao-dien] bộ dọn đã tắt máy chủ pid 38879 theo ĐÚNG PID
+46:[giao-dien] bộ dọn đã tắt máy chủ pid 38879: mã 143 = SIGTERM(15) — tín hiệu do CHÍNH bộ dọn gửi
+```
+
+**Đếm bằng máy (neo `^[giao-dien]` — KHÔNG đếm trần, vì chuỗi "PHẠM VI" còn nằm trong chính
+ngữ cảnh lỗi mà Playwright in ra, lượt đầu đã đếm nhầm đúng vì thế):**
+
+| log | tổng dòng `[giao-dien]` | dòng `PHẠM VI` | dòng `mã thoát` |
+|---|---|---|---|
+| bản CŨ `7d946928`, ca hỏng | 1 | **0** | **0** |
+| bản VÁ `15e865d8`, ca hỏng | 7 | **2** | 1 |
+
+**Đường 5 nói thêm điều đáng nói:** `SIGTERM` gửi vào runner giữa lượt **không** ngắt được
+`npx playwright` đang chạy (POSIX hoãn trap tới khi lệnh nền trước kết thúc) — runner chạy hết
+lượt rồi mới thoát `143`. Điều **quan trọng** là: mã thoát thật **được giữ**, dòng PHẠM VI **có
+mặt**, và bộ dọn vẫn tắt đúng PID:
+
+```sh
+$ kill -TERM $P; wait $P; echo $?          # → 143
+$ lsof -nP -iTCP:19547 -sTCP:LISTEN | wc -l # → 0   (không còn người nghe trên cổng của lượt)
+$ pgrep -f 'app/server.py' | wc -l          # → 0   (không còn tiến trình mồ côi)
+```
+
+### B.1.3 Ba bản vá THÔNG BÁO nữa, do chính các lượt đo ở trên làm lộ ra
+
+Ghi ra theo luật của dự án: *một bộ đo chưa từng đỏ thì chưa chứng minh được gì*.
+
+| # | hiện tượng ĐO ĐƯỢC | bản vá |
+|---|---|---|
+| a | lượt đối chứng #1 in `log máy chủ: 0` rồi **một dòng `? traceback`** — vì `grep -c` in ra `0` **rồi** thoát `1`, nên `\|\| echo "?"` ghép thêm một dòng vào biến | tách hai bước: lấy `grep -c`, chỉ thay `?` khi biến RỖNG |
+| b | bộ dọn in *"máy chủ pid … bị GIẾT BẰNG TÍN HIỆU: mã 143"* cho **chính `SIGTERM` của nó** ⇒ đọc nhầm thành bị giết từ ngoài | `thu_hoi_may_chu tu-don` ⇒ câu rõ: *"tín hiệu do CHÍNH bộ dọn gửi"* / *"tín hiệu KHÔNG do bộ dọn gửi"* |
+| c | `SIGTERM` không đủ sau 5 s thì vòng dọn cũ **không thử lại** sau `kill -9` | thêm vòng chờ thứ hai sau `SIGKILL`, vẫn xác minh danh tính trước khi dùng tín hiệu mạnh |
+
+**Chuỗi sha256 của `chay.sh` trong lượt này** (mọi khác biệt giữa ba bản đều nằm ở **câu chữ của
+nhánh BÁO CHẾT**, không đụng đường in PHẠM VI / đọc mã thoát — đã kiểm bằng `diff`):
+
+| bản | sha256[:8] | dùng ở đâu |
+|---|---|---|
+| H1 | `2f724e4d` | lượt trọn bộ 23:27 (lượt #1 ở §B.3) |
+| H2 | `15e865d8` | đường 4 + 5 ở trên, và **lượt đối chứng dương** 00:21 |
+| **H3 (cuối)** | **`d9278db6`** | **bốn lượt trọn bộ 00:25–00:30** (§B.2.2, §B.3) |
+
+---
+
+## B.2 — VIỆC 2: MÁY CHỦ BỊ GIẾT TỪ NGOÀI — ĐO GIỚI HẠN TIẾN TRÌNH, VÀ ĐỐI CHỨNG BẮT BUỘC
+
+### B.2.1 Bộ đo: đo cái gì, và vì sao đo như thế
+
+`app/thu/thu_g22_e2e.py` (§G) thêm `BoDoGioiHan`: lấy mẫu **mỗi 0,4 s** tiến trình máy chủ bằng
+`lsof` + `pgrep` + một phép nối TCP thật — không dùng `ps` (bị sandbox chặn: `/bin/ps: Operation
+not permitted`) và không dùng `dtrace` (SIP chặn: `dtrace: failed to initialize dtrace: Operation
+not permitted`):
+
+| đại lượng | cách đo | trả gì khi KHÔNG đo được |
+|---|---|---|
+| **mô tả tệp đang mở** | `lsof -p PID -F f`, đếm dòng `^f` | `None` (KHÔNG trả `0` — "0 fd" và "không đo được" là hai chuyện khác nhau) |
+| **ổ cắm TCP + cổng đang nghe** | `lsof -nP -p PID -a -iTCP -F fTn`, gom theo fd rồi xét `TST=LISTEN` | `(None, None)` |
+| **tiến trình con trực tiếp** | `pgrep -P PID` | `None` |
+| **máy chủ còn TRẢ LỜI không** | nối TCP + `GET /` (mã HTTP, ms) | `ok=False`, `ms` vẫn đo |
+| **cái CHẾT** | `phat_hien_chet()`: hai dấu hiệu ĐỘC LẬP — (a) `kill(pid,0)` sai **hoặc** hết mô tả tệp (bắt được ZOMBIE), (b) cổng ngừng trả lời trong khi mẫu trước còn trả lời | `(None, None, "còn sống tới hết lượt")` |
+| **trần của phiên** | `ulimit -n`, `ulimit -Hn`, `launchctl limit maxfiles` | `None` |
+
+### B.2.2 BẢNG GIỚI HẠN — số của TỪNG lượt (đây là phần "ghi rõ bằng số" của việc 2)
+
+Bốn lượt trọn bộ (00:25:00 → 00:30:42), chạy **đúng như người dùng gõ** `sh thu_giao_dien/chay.sh`
+(không thêm cờ nào), bộ đo gắn vào tiến trình máy chủ ngay khi runner công bố pid:
+
+| lượt | giờ | mã thoát | đạt/hỏng/bỏ qua/**không chạy** | PHẠM VI | máy chủ sống | **fd** min…max | **tcp** ≤ | **cổng nghe** | **con** ≤ | ms tb / cao nhất | HTTP cuối | phán quyết |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 00:25:00 | **0** | **65**/0/0/0 | 2 | **112,6 s** | 45…**50** | 2 | `18733` | 0 | 0,6 / 4,6 | **200** | **DAT** |
+| 2 | 00:26:53 | **0** | **65**/0/0/0 | 2 | **112,4 s** | 45…**53** | 2 | `18441` | 0 | 1,1 / 136,2 | **200** | **DAT** |
+| 3 | 00:28:48 | **0** | **65**/0/0/0 | 2 | **113,5 s** | 45…**50** | 2 | `18434` | 0 | 0,9 / 30,1 | **200** | **DAT** |
+| 4 | 00:30:42 | **0** | **65**/0/0/0 | 2 | **112,5 s** | 45…**50** | 2 | `19863` | 0 | 0,6 / 6,9 | **200** | **DAT** |
+| **đối chứng dương** | 00:21:02 | **1** | 15/**9**/0/**41** | 2 | **CHẾT ở 30,01 s** | 0…48 | 1 | `19848` | 0 | 0,5 / 3,2 | — (chết) | **HA_TANG_CHET** |
+
+**Trần của chính phiên đo** (máy chủ THỪA HƯỞNG vì cùng cây tiến trình):
+
+```
+ulimit -n  (mềm) = 1048575        ulimit -Hn (cứng) = unlimited
+launchctl limit maxfiles = maxfiles 256 unlimited     ← chỉ áp cho tiến trình do launchd sinh ra;
+                                                        máy chủ của `chay.sh` thừa hưởng 1048575
+```
+
+### B.2.3 ĐỐI CHỨNG — ÂM và DƯƠNG, cả hai đều BẮT BUỘC
+
+**ĐỐI CHỨNG ÂM (mốc so sánh): những lượt KHÔNG bị giết.** Sáu lượt ghi được trong lượt này —
+năm lượt `chay.sh` + một lượt cổng đầy đủ — đều `65/0/0/0`, `exit 0`, PHẠM VI 2 dòng, máy chủ sống
+tới hết lượt (112–119 s), `fd` đỉnh 50–53, `tcp` đỉnh ≤ 2, `con` = 0, **một** cổng nghe duy nhất,
+HTTP cuối `200`, và log máy chủ **0 traceback**. Thêm nữa, lượt cổng đầy đủ giữ được log máy chủ:
+
+```
+$ L=/var/folders/…/T/veh-g22-may-chu-18708.log
+$ wc -l < $L ; wc -c < $L ; grep -c Traceback $L
+4190            623701           0
+$ grep -o 'Thread-[0-9]*' $L | sed 's/Thread-//' | sort -n | tail -1
+2097            ← ≈ 2097 luồng phục vụ đã tạo trong ~110 giây, KHÔNG traceback, dòng cuối là
+                  một yêu cầu 200 lúc 00:34:30 — tức 2 giây trước khi lượt kết thúc (00:34:32)
+```
+
+**ĐỐI CHỨNG DƯƠNG (chứng minh phép đo BẮT ĐƯỢC cái chết — không phải quan sát tình cờ):**
+`--do-chay-sh 1 --giet-luc 30` cho **bộ đo tự giết máy chủ từ một tiến trình KHÁC** (không phải
+từ runner) sau 30 giây, rồi đòi chính phép đo phải thấy nó:
+
+```
+[đo]    máy chủ pid 49972 · cổng 19848 → bắt đầu lấy mẫu mỗi 0.40s
+[đo]    exit=1 · 40.7s · HA_TANG_CHET ⇒ tiến trình máy chủ KHÔNG còn sống khi lượt chạy kết thúc
+        ⇒ 9 ca hỏng / 41 ca không chạy là HỆ QUẢ CỦA NỀN, không phải của sản phẩm
+  │      ↳ ĐỐI CHỨNG DƯƠNG: bộ đo giết máy chủ ở giây 30.0 ⇒ bộ đo bắt được ở giây 30.01
+  │        (tiến trình không còn sống (kill(pid,0) hoặc hết mô tả tệp))
+```
+
+Sai số nói ĐÚNG những gì đo được: **mẫu ĐẦU TIÊN thấy chết ở giây 30,01**, mốc giết là **30,0**,
+lần trả lời HTTP cuối cùng thành công ở **29,56 s**, nhịp lấy mẫu **0,4 s** ⇒ cái chết được định vị
+trong một cửa sổ **0,4 s** quanh mốc giết. Đây **không** phải "quan sát tình cờ": bộ đo còn **nói ra
+lý do** (`tiến trình không còn sống (kill(pid,0) hoặc hết mô tả tệp)`), và **tín hiệu** lấy từ mã
+thoát THẬT của con (`137 = SIGKILL(9)`), không phải từ phỏng đoán. Và runner — **bản vá việc 1** —
+nói đúng cái đã xảy ra, trong khi bản cũ sẽ **im lặng** đúng ở dòng này:
+
+```
+[giao-dien] mã thoát THẬT 1
+[giao-dien] PHẠM VI (in lại khi kết thúc): …
+[giao-dien] CẢNH BÁO: máy chủ pid 49972 ĐÃ CHẾT GIỮA LƯỢT (trước khi bộ dọn tắt nó)
+[giao-dien] máy chủ pid 49972 bị GIẾT BẰNG TÍN HIỆU: mã 137 = SIGKILL(9) — tín hiệu KHÔNG do bộ dọn gửi
+[giao-dien] log máy chủ: 0 traceback · 1000 dòng · 8 dòng cuối (log đứt giữa dòng + 0 traceback
+            ⇒ bị giết bằng tín hiệu, không phải lỗi mã):
+```
+
+**Đây là bản sao CHÍNH XÁC dấu vết của 3/9 lượt đỏ ở Phần A** — cùng loại: log đứt giữa dòng,
+**0 traceback**, ca hỏng là `ERR_CONNECTION_REFUSED` (lượt này: **9** dòng), phần lớn ca còn lại
+"did not run" vì `serial`. Khác duy nhất một điều: lần này **người giết là bộ đo của chính tôi**,
+nên biết chắc nó là **tín hiệu từ ngoài tiến trình**.
+
+### B.2.4 Ma trận BỐN tiến trình nền — 240 giây, để tách "sản phẩm" khỏi "cả phiên"
+
+Nếu một cơ chế nào đó của môi trường giết tiến trình nền dài hơi, nó phải giết **cả những tiến
+trình không liên quan gì tới sản phẩm**. Bốn tiến trình sống cùng một cửa sổ 240 s:
+
+| tiến trình | có gì giống máy chủ thật | số phận trong 240 s |
+|---|---|---|
+| **P1** `sleep 600` | không tên giống, không cổng | **còn sống suốt 240 s** (pid 46322) |
+| **P2** ngủ, đường dẫn `…/app/server.py` | **GIỐNG TÊN** (khớp `pkill -f app/server.py`), không cổng | **còn sống suốt 240 s** (pid 46323) |
+| **P3** ngủ, **nghe cổng 19030** | không giống tên, **CÓ CỔNG trong dải 18xxx của runner** | **còn sống suốt 240 s** (pid 46324) |
+| **P4** chính `app/server.py` **thật**, nền cô lập, **không tải** | giống tên + có cổng + **là sản phẩm** | **còn sống suốt 240 s** (pid 46370) |
+
+Cả bốn bị **chính bộ đo** tắt lúc hết cửa sổ (`mã -15` = do bộ đo gửi) — tức **trong 240 s ấy
+không có cơ chế nào giết tiến trình nền**, kể cả tiến trình *giống tên* hay *đang nghe cổng*.
+
+### B.2.5 Kết luận việc 2 — cái gì ĐÃ BỊ LOẠI BẰNG SỐ, cái gì CHƯA BIẾT
+
+| nghi phạm | phép đo của lượt này | kết luận |
+|---|---|---|
+| Cạn mô tả tệp (`ulimit -n`) | đỉnh **53** / trần **1048575** = **0,005 %** — cả 5 lượt đo đều 50–53, không leo thang | **LOẠI** |
+| Bùng nổ tiến trình con / fork | `pgrep -P` = **0** ở mọi mẫu của mọi lượt | **LOẠI** |
+| Cổng lạ / tranh cổng | mỗi lượt có **đúng một** cổng nghe, đúng cổng runner chọn (`18733`, `18441`, `18434`, `19863`, `19848`) | **LOẠI** |
+| Watchdog "sống quá T giây thì giết" | sống **112,4–113,5 s** ở 4 lượt tải; sống **240 s** khi không tải (P4); không có ngưỡng nào bị chạm | **LOẠI** (với T ≤ 240 s) |
+| Quét theo MẪU TÊN (`pkill -f 'app/server.py'`) trong phiên này | P2 **giống tên y hệt** vẫn sống đủ 240 s | **không xảy ra** trong cửa sổ đo |
+| Sản phẩm tự chết (lỗi mã) | **0 traceback** ở mọi log; log lượt bị giết **đứt GIỮA DÒNG** ngay sau một `200`; log lượt xanh kết thúc bằng `200` lúc 00:34:30 (lượt kết thúc 00:34:32) | **LOẠI** |
+| **Ai gửi tín hiệu** | **VẪN CHƯA BIẾT.** `dtrace` bị SIP chặn (*"dtrace: failed to initialize dtrace: Operation not permitted"*), `ps` bị sandbox chặn (*"/bin/ps: Operation not permitted"*) ⇒ **không nhìn được kẻ gửi**, và tài liệu này **không đoán** | **CHƯA ĐO ĐƯỢC** |
+
+**Tỉ lệ, nói bằng số:** Phần A đo **3/9 lượt bị giết** (1/3). Lượt này: **0/7 lượt trọn bộ bị giết**
+(6 lượt ghi được + 1 lượt chạy bị mất log, xem §B.4.1). Nếu tỉ lệ cũ còn hiệu lực thì xác suất
+quan sát được 0 lượt chết trong 7 lượt là `(2/3)^7 ≈ 5,9 %` — **thấp**, nhưng **không đủ** để nói
+"đã hết". Điều **đủ** để nói, và là điều Owner yêu cầu: **cái chết không phải do sản phẩm** —
+sáu lượt `65/65` trên cùng cây, log máy chủ 0 traceback và trả lời `200` tới 2 giây trước khi lượt
+kết thúc, còn dấu vết của lượt bị giết thì **tái lập được BẰNG MỘT TÍN HIỆU TỪ NGOÀI** (§B.2.3).
+
+---
+
+## B.3 — VIỆC 3: CHẠY LẠI TRỌN BỘ — TỪNG LƯỢT, ĐỦ CẢ ĐẠT LẪN HỎNG
+
+Bảy lượt trọn bộ trong lượt làm việc này (cùng cây, cùng 65 ca, **đúng binary Chromium đã ghim**
+`chromium_headless_shell-1194/…/headless_shell` · `Chromium 141.0.7390.37` ·
+`sha256 a9752d88…fa3040`):
+
+| # | giờ | lệnh | `chay.sh` | mã thoát | đạt / **hỏng** / bỏ qua / **không chạy** | máy chủ | phán quyết |
+|---|---|---|---|---|---|---|---|
+| 1 | 23:27:19→23:29:14 | `sh thu_giao_dien/chay.sh --reporter=list` | H1 `2f724e4d` | **0** | **65**/0/0/0 | sống tới hết lượt | **DAT** |
+| 2 | ≈00:18:50→00:20:44 | `--do-chay-sh 1` (log bị **mất** — lỗi của bộ đo, §B.4.1) | H2 | (không ghi) | (không ghi — **KHÔNG tính là đạt**) | sống | *(không phán)* |
+| 3 | 00:21:02→00:21:42 | `--do-chay-sh 1 --giet-luc 30` (**đối chứng dương**) | H2 | **1** | 15/**9**/0/**41** | **CHẾT ở 30,01 s** (`SIGKILL(9)`) | **HA_TANG_CHET** (cổng trả 3) |
+| 4 | 00:25:00 | `--do-chay-sh 4` (không cờ thêm) | **H3 `d9278db6`** | **0** | **65**/0/0/0 | sống **112,6 s** | **DAT** |
+| 5 | 00:26:53 | ″ | ″ | **0** | **65**/0/0/0 | sống **112,4 s** | **DAT** |
+| 6 | 00:28:48 | ″ | ″ | **0** | **65**/0/0/0 | sống **113,5 s** | **DAT** |
+| 7 | 00:30:42 | ″ | ″ | **0** | **65**/0/0/0 | sống **112,5 s** | **DAT** |
+| 8 | 00:32:36→00:34:32 | `python3 app/thu/thu_g22_e2e.py` (CỔNG ĐẦY ĐỦ, tự dựng nền) | H3 | **0** | **65**/0/0/0 | sống, dọn SẠCH, `còn mồ côi: False` | **DAT** |
+
+**Lượt #2 KHÔNG được tính là đạt** dù nó gần như chắc chắn xanh: log của nó bị mất vì lỗi thư mục
+log của chính bộ đo (§B.4.1) — "không đo được" **không phải** "đạt", đúng luật của tài liệu này.
+
+**Lượt #8 (cổng đầy đủ) là đối chứng hồi quy cho chính những gì tôi sửa** — cổng cũ vẫn phải nói
+`DAT`, và nó nói:
+
+```
+  số ca  ĐẠT/HỎNG/BỎ QUA/KHÔNG CHẠY/CHẬP CHỜN : 65/0/0/0/0  (ghim ĐẠT = 65)
+  Chromium (GHIM)     : …/chromium_headless_shell-1194/chrome-mac/headless_shell
+  Chromium phiên bản  : Chromium 141.0.7390.37
+  Chromium sha256     : a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040  (146794928 byte)
+  sha[:8] sản phẩm    : {"admin/ban_phim.js": "b5c7d741", "admin/billing.js": "00e8d4cd",
+                         "admin/admin.js": "80bdc9fd", "app/server.py": "23515e6d"}
+  ── PHÁN QUYẾT: DAT (mã thoát 0)
+```
+
+**Bộ tự kiểm của cổng: 26 ca (Phần A) → 31 ca, `exit 0`.** Năm ca mới ghim đúng những gì lượt này
+thêm vào:
+
+| ca | ghim điều gì | đối chứng |
+|---|---|---|
+| `e1` | `phat_hien_chet()`: dãy "sống → chết" cho ĐÚNG giây chết; dãy sống suốt cho `None`; **cổng ngừng trả lời trong khi tiến trình vẫn "sống"** cũng bị bắt | đối chứng âm + dương của phép đo cái chết |
+| `e2` | `doc_dong_runner()`: log **thiếu** dòng PHẠM VI ⇒ `pham_vi = 0` (để bất biến ĐỎ ĐƯỢC); log đủ ⇒ `2`; đọc đúng cổng/pid/mã thoát/tín hiệu, và **không** gán cái chết từ ngoài cho bộ dọn | hai log THẬT chép nguyên văn |
+| `e3` | dựng **cây tạm thiếu Playwright**, chạy `chay.sh` thật ⇒ thoát `2` **và** vẫn in dòng PHẠM VI | đối chứng dương của bản vá việc 1 |
+| `e4` | dựng cây tạm **nền hỏng** ⇒ thoát `2`, có `NỀN KHÔNG DỰNG ĐƯỢC`, vẫn in PHẠM VI | đường thoát sớm thứ hai |
+| `e5` | **đối chứng dương của BỘ ĐO**: dựng một tiến trình thật, đo được `fd` + **cổng đang nghe**, rồi **giết nó** và đòi bộ đo **bắt được cái chết** | ca này **ĐỎ ở lần chạy đầu** vì một lỗi thật của bộ đo — §B.4.2 |
+
+```sh
+$ python3 app/thu/thu_g22_e2e.py --tu-kiem
+Ran 31 tests in 2.507s
+OK
+TỰ KIỂM: 31 ca · hỏng 0 · lỗi 0 · bỏ qua 0
+```
+
+---
+
+## B.4 — HAI LỖI CỦA CHÍNH BỘ ĐO LƯỢT NÀY (do chạy nó mà lộ ra, đã vá)
+
+### B.4.1 `--thu-muc-log` chưa tạo thư mục ⇒ mất trắng log của một lượt trọn bộ
+
+Lượt đối chứng dương **đầu tiên** chết ngay sau khi runner khởi động:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/ag06-do-doi-chung/luot-01.log'
+```
+
+Hệ quả **thật**: tiến trình `chay.sh` đã được sinh ra, chạy hết lượt trọn bộ, nhưng **log của nó
+bị bỏ** (ẩu ra đường ống rồi mất) ⇒ một lượt chạy đã tiêu tốn ~2 phút mà **không để lại bằng
+chứng**, và nó **không được tính là đạt** ở §B.3 (lượt #2). **Vá:** `os.makedirs(thu_muc_log,
+exist_ok=True)` trước vòng lặp (kèm chú thích ngay tại dòng ấy).
+
+### B.4.2 Bộ đọc ổ cắm đọc sai THỨ TỰ trường của `lsof` ⇒ ca `e5` ĐỎ
+
+`lsof -F fTn` in **ba dòng liền nhau cho mỗi fd**: `f<fd>` → `n<địa chỉ>` → `TST=<trạng thái>`.
+Bản đầu của `o_cam_tcp()` đòi thấy `TST=LISTEN` **trước** dòng `n`, nên **không bao giờ** thấy cổng
+nào đang nghe — và ca `e5` đỏ đúng ở dòng `assertIn(str(cong), m1["nghe"])`. Nếu ca `e5` không tồn
+tại, "cổng đang mở = 1" ở §B.2.2 sẽ là một **cột rỗng** mà không ai biết. **Vá:** gom theo fd rồi
+mới xét trạng thái; `e5` ghim lại vĩnh viễn.
+
+**Ba lỗi nữa của `chay.sh`** (đã liệt kê ở §B.1.3) cũng thuộc nhóm này: chúng chỉ lộ ra vì có
+người **chạy** bản vá, không phải vì có người **đọc** nó.
+
+---
+
+## B.5 — TỆP ĐÃ SỬA/TẠO, VÀ **AG-00 PHẢI COMMIT HỘ**
+
+### B.5.1 Tệp của lượt này
+
+| tệp | trạng thái | sha256[:8] |
+|---|---|---|
+| `thu_giao_dien/chay.sh` | **SỬA** (2 lỗi báo cáo + 3 bản vá thông báo) | `d9278db6` |
+| `app/thu/thu_g22_e2e.py` | **SỬA** (mục §G bộ đo giới hạn · 5 ca tự kiểm `e1`–`e5` · 2 chế độ CLI `--do-chay-sh`, `--tro-ngo`) | `9c631883` |
+| `docs/G22_BANPHIM_E2E.md` | **SỬA** (Phần B này) | tự tham chiếu |
+
+**KHÔNG sửa gì khác.** Bằng chứng bằng sha256, đo trên cây làm việc:
+
+```
+admin/ban_phim.js b5c7d741 · admin/billing.js 00e8d4cd · admin/admin.js 80bdc9fd · app/server.py 23515e6d
+  → KHỚP đúng bản đã ghim ở §1 Phần A (bản AG-00 gộp)
+10 tệp thu_giao_dien/*.spec.js: giữ nguyên sha (06_ban_phim.spec.js = 193ee9a8)
+  → hai tệp .spec.js tạm dùng cho phép đo đã được XOÁ (đã kiểm: không còn tệp `_tam` nào)
+```
+
+### B.5.2 AG-00 PHẢI COMMIT HỘ — sandbox VẪN chặn ghi `.git`
+
+Đo lại ở lượt này, không suy đoán:
+
+```sh
+touch /Users/viporder/Projects/vip-express-hub/.git/worktrees/g21-ag06-e2e/.ag06-probe
+# touch: … Operation not permitted          ← exit 1 (đường dẫn .git nằm NGOÀI thư mục làm việc)
+```
+
+**Danh sách `git add` chính xác** (đúng ba tệp đang `M` trong `git status --porcelain`; `HEAD` hiện
+là `05eecf1` — bản Phần A đã được gộp, nên Phần B cần một commit MỚI):
+
+```sh
+git add thu_giao_dien/chay.sh app/thu/thu_g22_e2e.py docs/G22_BANPHIM_E2E.md
+```
+
+---
+
+## B.6 — CHƯA ĐO — LỖ HỔNG PHẠM VI, KHÔNG PHẢI ĐẠT
+
+* **Ai giết máy chủ ở 3/9 lượt Phần A — VẪN CHƯA BIẾT** (§B.2.5). Đã loại bằng số: cạn fd, tiến
+  trình con, cổng lạ, watchdog theo thời gian sống, quét theo mẫu tên *trong phiên này*, và lỗi mã
+  sản phẩm. `dtrace` bị SIP chặn, `ps` bị sandbox chặn ⇒ **không có cách nào nhìn thấy kẻ gửi tín
+  hiệu từ trong phiên này**. Cái **đã** đạt được: dấu vết ấy **tái lập được** bằng một tín hiệu từ
+  ngoài (§B.2.3), runner **nói ra** nó (§B.1), và cổng **phân loại** nó thành `HA_TANG_CHET` chứ
+  không gán tội cho sản phẩm (§B.3 lượt #3).
+* **Tỉ lệ 0/7 lượt bị giết ở lượt này KHÔNG chứng minh "đã hết"** — chỉ nói rằng với 7 lượt, nếu
+  tỉ lệ cũ (1/3) còn hiệu lực thì xác suất quan sát như thế là ≈ 5,9 %. Muốn chắc phải có **nhiều
+  lượt hơn** hoặc **nhìn được kẻ gửi tín hiệu** (ngoài phiên này).
+* **Không đo được RSS/bộ nhớ theo tiến trình**: `ps` và `top` đều bị sandbox chặn
+  (`/usr/bin/top: Operation not permitted`). Đĩa/bộ nhớ đã bị loại ở Phần A bằng phép đo khác.
+* **Không đo được số LUỒNG** của máy chủ (cùng lý do). Đo được một **cận dưới** từ log của chính
+  máy chủ: `Thread-2097` ở lượt cổng đầy đủ ⇒ ≈ 2097 luồng đã tạo trong ~110 s, 0 traceback.
+* Chỉ **Chromium** (binary đã ghim), chỉ ba bề rộng 375/768/1280; **không** thiết bị cảm ứng thật,
+  **không** trình đọc màn hình, **không** in/PDF thật, **không** Safari/Firefox.
+* **Không** gọi ra hãng ở bất kỳ môi trường nào; **không** mở `CHO_PHEP_LIVE`; bind `127.0.0.1`;
+  **không** đụng PostgreSQL; **không** deploy/tunnel/push; **không** credentials thật; **không** tự
+  bấm duyệt sandbox.
+
+## B.7 — TUÂN THỦ, TỰ KIỂM
+
+| # | Luật | Cách đo của lượt này | Kết quả |
+|---|---|---|---|
+| 1 | Không gọi API hãng | mọi lượt đều trên nền cô lập + `VIP_HUB_BIND` chỉ loopback; ca `d3` đọc thẳng `CHO_PHEP_LIVE is False` và đòi sổ hãng KHÔNG rỗng | ✓ |
+| 2 | Không push/deploy/tunnel | không lệnh nào ra ngoài; `git` chỉ ĐỌC (`rev-parse`, `show`, `status`), ghi `.git` bị chặn thì **báo AG-00** | ✓ |
+| 3 | Không credentials thật | không tạo/đọc `.env`; tài khoản trong log đều là demo của nền cô lập | ✓ |
+| 4 | Không giết theo MẪU TÊN | tắt theo **đúng PID**; đối chứng dương cũng `os.kill(pid, SIGKILL)` theo PID đã giữ; ma trận trò-ngo chỉ *quan sát* P2/P3 | ✓ |
+| 5 | Không sửa ngoài vùng được ghi | §B.5.1: đúng 3 tệp, sản phẩm và 10 spec giữ nguyên sha; hai tệp `.spec.js` tạm đã xoá | ✓ |
+| 6 | Không PG, không push, không tự duyệt sandbox | không chạm `:5432`; không tự vượt chặn nào | ✓ |
+

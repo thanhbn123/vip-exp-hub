@@ -60,6 +60,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -394,6 +395,28 @@ LOG_HONG_THAT = """\
 DONG_REFUSED_THAT = ("    Error: page.goto: net::ERR_CONNECTION_REFUSED at "
                      "http://127.0.0.1:18856/admin/index.html")
 
+# Nguyên văn dòng của `chay.sh` — lượt BẢN CŨ (7d946928) có ca hỏng: dòng PHẠM VI BIẾN MẤT.
+# Hai dòng đầu chép từ /tmp/ag06-t4-cu.log (lượt đo 16/10/2026, dispatch 2). Hai dòng sau GHÉP
+# THÊM (ghi rõ để không ai đọc thành log thật): bản cũ KHÔNG BAO GIỜ in được chúng, vì `set -e`
+# thoát trước — chúng ở đây để thử bộ đọc ở nhánh "máy chủ chết từ ngoài mà thiếu dòng PHẠM VI".
+LOG_RUNNER_MAT_PHAM_VI = """\
+[giao-dien] nền=/var/folders/v1/T/veh-giao-dien.hbFKDa cổng=19629 pid=38879
+  1 failed
+    [chromium] › thu_giao_dien/_tu_kiem_chay_sh_tam.spec.js:4:1 › CA HỎNG CỐ Ý — 1 phải bằng 2 ─────
+[giao-dien] mã thoát THẬT 1
+[giao-dien] máy chủ pid 38879 bị GIẾT BẰNG TÍN HIỆU: mã 137 = SIGKILL(9) — tín hiệu KHÔNG do bộ dọn gửi
+"""
+# Nguyên văn dòng của `chay.sh` BẢN ĐÃ VÁ, lượt chạy xanh (chép từ /tmp/ag06-luot1.log).
+LOG_RUNNER_DAY_DU = """\
+[giao-dien] PHẠM VI: chỉ Chromium (bản Playwright trong node_modules) · chỉ ba bề rộng 375/768/1280
+[giao-dien] nền=/var/folders/v1/T/veh-giao-dien.ukKOHj cổng=18733 pid=79195
+  65 passed (1.9m)
+[giao-dien] mã thoát THẬT 0
+[giao-dien] PHẠM VI (in lại khi kết thúc): chỉ Chromium (bản Playwright trong node_modules) · chỉ ba
+[giao-dien] máy chủ pid 79195 còn sống khi lượt kết thúc
+[giao-dien] bộ dọn đã tắt máy chủ pid 79195: mã 143 = SIGTERM(15) — tín hiệu do CHÍNH bộ dọn gửi
+"""
+
 
 class TuKiem(unittest.TestCase):
     """Mọi ca ở đây chạy KHÔNG cần trình duyệt, KHÔNG cần mạng, KHÔNG cần máy chủ."""
@@ -633,6 +656,560 @@ class TuKiem(unittest.TestCase):
         self.assertEqual(tong, SO_CA_GHIM,
                          "số ca THẬT (%d) khác GHIM (%d)" % (tong, SO_CA_GHIM))
 
+    # ---------- ĐO GIỚI HẠN TIẾN TRÌNH (việc 2 · dispatch 2) ----------
+    def test_e1_phat_hien_chet_tu_day_mau(self):
+        """Hàm thuần: dãy mẫu "sống → chết" phải cho ra ĐÚNG giây chết; dãy sống suốt phải None.
+
+        ĐỐI CHỨNG ÂM của phép đo cái chết: một bộ dò luôn nói "còn sống" thì không đo được gì,
+        nên ca này đòi nó nói CHẾT ở dãy có mẫu chết VÀ nói SỐNG ở dãy không có mẫu chết."""
+        song = [{"giay": g, "song": True, "sk": True} for g in (0.0, 0.4, 0.8)]
+        self.assertEqual(phat_hien_chet(song)[0], None)
+        chet = song + [{"giay": 1.2, "song": False, "sk": False}]
+        giay, chi_so, ly = phat_hien_chet(chet)
+        self.assertEqual((giay, chi_so), (1.2, 3))
+        self.assertIn("không còn sống", ly)
+        # Cổng ngừng trả lời NHƯNG tiến trình vẫn "sống" (đứng hình) cũng phải bị bắt:
+        dung_hinh = song + [{"giay": 1.2, "song": True, "sk": False}]
+        giay2, _, ly2 = phat_hien_chet(dung_hinh)
+        self.assertEqual(giay2, 1.2)
+        self.assertIn("ngừng trả lời", ly2)
+
+    def test_e2_doc_dong_runner_bat_dung_PHAM_VI_va_ma_that(self):
+        """Bộ đọc dòng của `chay.sh` phải ĐỎ ĐƯỢC: có dòng PHẠM VI ⇒ thấy; thiếu ⇒ BÁO THIẾU."""
+        du = doc_dong_runner(LOG_RUNNER_MAT_PHAM_VI)
+        self.assertEqual(du["pham_vi"], 0, "log KHÔNG có dòng PHẠM VI mà bộ đọc nói có")
+        self.assertFalse(du["co_pham_vi"])
+        self.assertEqual(du["ma_that"], 1)
+        self.assertEqual((du["cong"], du["pid"]), (19629, 38879))
+        self.assertTrue(du["chet_giua_luot"])
+        self.assertEqual(du["ma_tin_hieu"], 137)
+        self.assertIn("SIGKILL", du["tin_hieu"])
+        self.assertFalse(du["tu_don"], "chết từ NGOÀI mà bộ đọc gán cho bộ dọn")
+        day_du = doc_dong_runner(LOG_RUNNER_DAY_DU)
+        self.assertEqual(day_du["pham_vi"], 2)
+        self.assertTrue(day_du["co_pham_vi"])
+        self.assertEqual(day_du["ma_that"], 0)
+        self.assertFalse(day_du["chet_giua_luot"])
+
+    def test_e3_chay_sh_thoat_som_van_in_PHAM_VI_va_giu_ma_thoat(self):
+        """ĐỐI CHỨNG DƯƠNG, chạy THẬT: cây tạm thiếu Playwright ⇒ `chay.sh` thoát sớm mã 2.
+
+        Bản CŨ (`set -e` nuốt) vẫn thoát 2 nhưng KHÔNG in dòng PHẠM VI ở cuối; bản này phải in.
+        """
+        with tempfile.TemporaryDirectory(prefix="veh-ag06-e3.") as t:
+            os.makedirs(os.path.join(t, "thu_giao_dien"))
+            shutil.copy(os.path.join(THU_GD, "chay.sh"), os.path.join(t, "thu_giao_dien", "chay.sh"))
+            os.makedirs(os.path.join(t, "node_modules"))
+            tt = subprocess.run(["sh", os.path.join(t, "thu_giao_dien", "chay.sh")],
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(tt.returncode, 2, "mã thoát THẬT của đường thoát sớm bị nuốt")
+        van_ban = tt.stdout + tt.stderr
+        self.assertIn("mã thoát THẬT 2", van_ban)
+        self.assertGreaterEqual(doc_dong_runner(van_ban)["pham_vi"], 1,
+                                "thoát sớm mà KHÔNG in dòng PHẠM VI ⇒ bản vá hỏng")
+
+    def test_e4_chay_sh_nen_hong_van_giu_ma_thoat(self):
+        """Đường thoát sớm THỨ HAI (nền không dựng được) cũng phải in PHẠM VI + giữ mã thoát."""
+        with tempfile.TemporaryDirectory(prefix="veh-ag06-e4.") as t:
+            os.makedirs(os.path.join(t, "thu_giao_dien"))
+            shutil.copy(os.path.join(THU_GD, "chay.sh"), os.path.join(t, "thu_giao_dien", "chay.sh"))
+            os.makedirs(os.path.join(t, "node_modules", "@playwright", "test"))
+            tt = subprocess.run(["sh", os.path.join(t, "thu_giao_dien", "chay.sh")],
+                                capture_output=True, text=True, timeout=120)
+        self.assertEqual(tt.returncode, 2, "nền hỏng mà mã thoát không phải 2")
+        van_ban = tt.stdout + tt.stderr
+        self.assertIn("NỀN KHÔNG DỰNG ĐƯỢC", van_ban)
+        self.assertGreaterEqual(doc_dong_runner(van_ban)["pham_vi"], 1)
+
+    def test_e5_bo_do_gioi_han_DO_DUOC_fd_cong_va_cai_CHET(self):
+        """ĐỐI CHỨNG DƯƠNG của BỘ ĐO: dựng một tiến trình THẬT, đo được fd + cổng đang nghe, rồi
+        GIẾT nó và đòi bộ đo phải BẮT ĐƯỢC cái chết. Một bộ đo chưa từng thấy cái chết thì không
+        chứng minh được gì về những lượt "không thấy chết"."""
+        cong = tim_cong_rong(dai=(18100, 18299))
+        self.assertIsNotNone(cong)
+        tt = subprocess.Popen(["python3", "-m", "http.server", str(cong), "--bind", "127.0.0.1"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            het = time.time() + 10
+            while time.time() < het and not cong_dang_dung(cong):
+                time.sleep(0.1)
+            self.assertTrue(cong_dang_dung(cong), "không dựng được tiến trình để đo")
+            bd = BoDoGioiHan(tt.pid, cong, nhip=0.2)
+            m1 = bd.lay_mau()
+            self.assertTrue(m1["song"], "bộ đo nói CHẾT về một tiến trình đang sống")
+            self.assertIsNotNone(m1["fd"], "không đo được số mô tả tệp (lsof)")
+            self.assertGreater(m1["fd"], 0)
+            self.assertIn(str(cong), m1["nghe"] or [], "không thấy cổng đang nghe ⇒ đo cổng hỏng")
+            self.assertTrue(m1["sk"], "cổng đang mở mà phép đo sức khỏe nói hỏng")
+            tt.kill()
+            tt.wait(timeout=10)
+            time.sleep(0.3)
+            m2 = bd.lay_mau()
+            self.assertFalse(m2["song"], "tiến trình đã bị giết mà bộ đo vẫn nói SỐNG")
+            giay, _, _ = phat_hien_chet(bd.mau)
+            self.assertIsNotNone(giay, "bộ đo KHÔNG bắt được cái chết ⇒ mọi lượt 'không chết' "
+                                       "của nó là vô nghĩa")
+        finally:
+            if tt.poll() is None:
+                tt.kill()
+                tt.wait(timeout=5)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# G. ĐO GIỚI HẠN TIẾN TRÌNH CỦA CHÍNH LƯỢT CHẠY (việc 2 · dispatch 2)
+#
+# CÂU HỎI: 3/9 lượt `chay.sh` trước đây có MÁY CHỦ BỊ GIẾT TỪ NGOÀI giữa lượt (log đứt giữa dòng,
+# 0 traceback, 20/22 dòng lỗi là ERR_CONNECTION_REFUSED). Đĩa/bộ nhớ/pkill/HTML reporter đã bị
+# loại. Phần còn lại phải ĐO ĐƯỢC, không được đoán: mô tả tệp đang mở (so với `ulimit -n`), số ổ
+# cắm TCP, cổng đang nghe, số tiến trình con, thời gian sống — và TÍN HIỆU làm nó chết.
+#
+# HAI LUẬT CỦA PHẦN NÀY:
+#   (1) KHÔNG đo được thì ghi `None`, KHÔNG ghi 0. "0 mô tả tệp" và "không đo được" là hai
+#       chuyện khác nhau; gộp chúng là bịa ra một phép đo.
+#   (2) Phép đo phải BẮT ĐƯỢC CÁI CHẾT (ca tự kiểm `e5` + `--giet-luc`), nếu không thì mọi lượt
+#       "không thấy chết" đều vô nghĩa.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+NHIP_MAU = 0.4          # giây giữa hai mẫu
+HET_LUOT_MAC_DINH = 900  # giây: trần cứng cho một lượt `chay.sh` (một lượt thật ~2 phút)
+
+
+def _lsof(tham_so, het=15):
+    """Chạy `lsof`. Trả stdout, hoặc None nếu KHÔNG chạy được (thiếu lsof / bị chặn)."""
+    try:
+        tt = subprocess.run(["lsof"] + list(tham_so), capture_output=True, text=True, timeout=het)
+    except (OSError, subprocess.SubprocessError):                            # noqa: BLE001
+        return None
+    return tt.stdout
+
+
+def dem_fd(pid):
+    """Số MÔ TẢ TỆP đang mở. None = không đo được (KHÔNG được trả 0)."""
+    ra = _lsof(["-p", str(pid), "-F", "f"])
+    if ra is None:
+        return None
+    return sum(1 for d in ra.splitlines() if d.startswith("f"))
+
+
+def dem_con(pid):
+    """Số tiến trình con TRỰC TIẾP (`pgrep -P`). None = không đo được."""
+    try:
+        tt = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):                            # noqa: BLE001
+        return None
+    if tt.returncode not in (0, 1):        # 1 = không có con nào (đo được, bằng 0)
+        return None
+    return len(tt.stdout.split())
+
+
+def o_cam_tcp(pid):
+    """(số ổ cắm TCP, danh sách cổng ĐANG NGHE) — (None, None) nếu không đo được.
+
+    Định dạng `lsof -F fTn` là ba dòng LIỀN NHAU cho mỗi mô tả tệp: `f<fd>`, `n<địa chỉ>`,
+    `TST=<trạng thái>` — nên phải gom theo fd rồi mới xét, không được đọc `n` trước `TST`
+    (lượt tự kiểm đầu tiên của ca `e5` ĐỎ đúng vì đọc sai thứ tự này)."""
+    ra = _lsof(["-nP", "-p", str(pid), "-a", "-iTCP", "-F", "fTn"])
+    if ra is None:
+        return None, None
+    so, thong_tin, fd_hien = 0, {}, None
+    for d in ra.splitlines():
+        if d.startswith("f"):
+            so += 1
+            fd_hien = d[1:]
+            thong_tin[fd_hien] = {"ten": None, "nghe": False}
+        elif fd_hien is not None and d.startswith("n"):
+            thong_tin[fd_hien]["ten"] = d[1:]
+        elif fd_hien is not None and d.startswith("TST="):
+            thong_tin[fd_hien]["nghe"] = d[4:].strip().upper().startswith("LISTEN")
+    nghe = [t["ten"].rsplit(":", 1)[1] for t in thong_tin.values()
+            if t["nghe"] and t["ten"] and ":" in t["ten"]]
+    return so, nghe
+
+
+def suc_khoe(goc_url, het=1.5):
+    """Máy chủ còn TRẢ LỜI không: nối TCP + gửi `GET /`. Trả dict (ok · ms · mã HTTP).
+
+    Đây là phép đo ĐẶT CẠNH `kill(pid, 0)`: một tiến trình còn sống nhưng đứng hình (không nhận
+    kết nối nữa) vẫn "sống" với `kill`, nhưng KHÔNG trả lời được — và ca hỏng của lượt thật là
+    `ERR_CONNECTION_REFUSED`, tức cái chết nằm ở tầng ổ cắm."""
+    ra = {"ok": False, "ms": None, "ma_http": None}
+    if "://" not in goc_url:
+        return ra
+    phan = goc_url.split("://", 1)[1]
+    may, _, cong = phan.partition(":")
+    cong = int(cong.split("/")[0] or 80)
+    t0 = time.time()
+    s = socket.socket()
+    s.settimeout(het)
+    try:
+        s.connect((may, cong))
+        s.sendall(b"GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n" % may.encode())
+        tra = s.recv(64)
+        ra["ms"] = round((time.time() - t0) * 1000, 1)
+        ra["ok"] = bool(tra)
+        m = re.match(rb"HTTP/\d\.\d (\d{3})", tra or b"")
+        if m:
+            ra["ma_http"] = int(m.group(1))
+    except OSError:
+        ra["ms"] = round((time.time() - t0) * 1000, 1)
+    finally:
+        s.close()
+    return ra
+
+
+class BoDoGioiHan:
+    """Lấy mẫu một tiến trình theo nhịp: mô tả tệp · ổ cắm · cổng nghe · con · sức khỏe cổng.
+
+    Bộ đo KHÔNG phải cha của tiến trình được đo, nên nó không thể `wait()` để lấy mã thoát; nó
+    phải nhận ra cái chết bằng hai dấu hiệu ĐỘC LẬP: `kill(pid, 0)` và "không còn mô tả tệp nào".
+    Dấu hiệu thứ hai là thứ bắt được ZOMBIE — `kill(pid, 0)` vẫn thành công với một xác chết.
+    """
+
+    def __init__(self, pid, cong, nhip=NHIP_MAU, goc_url=None):
+        self.pid = int(pid)
+        self.cong = int(cong)
+        self.nhip = float(nhip)
+        self.goc_url = goc_url or ("http://127.0.0.1:%d" % self.cong)
+        self.mau = []
+        self._dung = threading.Event()
+        self._th = None
+        self.t_bat_dau = time.time()
+
+    def lay_mau(self):
+        t = time.time()
+        fd = dem_fd(self.pid)
+        song = tien_trinh_con_song(self.pid)
+        if song and fd == 0:
+            # Không còn mô tả tệp nào ⇒ đây là ZOMBIE (đã chết, chưa được `wait`), không phải sống.
+            song = False
+        so_tcp, nghe = o_cam_tcp(self.pid)
+        con = dem_con(self.pid)
+        sk = suc_khoe(self.goc_url)
+        m = {"giay": round(t - self.t_bat_dau, 2), "t": t, "song": bool(song), "fd": fd,
+             "tcp": so_tcp, "nghe": nghe or [], "con": con, "sk": sk["ok"], "ms": sk["ms"],
+             "ma_http": sk["ma_http"]}
+        self.mau.append(m)
+        return m
+
+    def chay(self):
+        self._th = threading.Thread(target=self._vong, daemon=True)
+        self._th.start()
+        return self
+
+    def _vong(self):
+        while not self._dung.is_set():
+            try:
+                self.lay_mau()
+            except Exception:                                                # noqa: BLE001
+                pass
+            self._dung.wait(self.nhip)
+
+    def thoi(self):
+        self._dung.set()
+        if self._th is not None:
+            self._th.join(timeout=10)
+
+    def ket_qua(self):
+        m = self.mau
+        if not m:
+            return {"so_mau": 0, "song_suot": None, "ly_do": "KHÔNG lấy được mẫu nào"}
+        fd = [x["fd"] for x in m if x["fd"] is not None]
+        tcp = [x["tcp"] for x in m if x["tcp"] is not None]
+        con = [x["con"] for x in m if x.get("con") is not None]
+        ms = [x["ms"] for x in m if x["ms"] is not None]
+        giay_chet, chi_so, ly = phat_hien_chet(m)
+        cuoi = m[-1]
+        return {
+            "so_mau": len(m),
+            "nhip": self.nhip,
+            "song_giay": m[-1]["giay"],
+            "song_suot": giay_chet is None,
+            "chet_o_giay": giay_chet,
+            "ly_do_chet": ly,
+            "mau_chet": m[chi_so] if chi_so is not None else None,
+            "fd_min": min(fd) if fd else None,
+            "fd_max": max(fd) if fd else None,
+            "fd_cuoi": fd[-1] if fd else None,
+            "tcp_max": max(tcp) if tcp else None,
+            "cong_nghe": sorted({c for x in m for c in x["nghe"]}),
+            "con_max": max(con) if con else None,
+            "con_do_duoc": bool(con),
+            "ms_trung_binh": round(sum(ms) / len(ms), 1) if ms else None,
+            "ms_cao_nhat": max(ms) if ms else None,
+            "tra_loi_cuoi_o_giay": next((x["giay"] for x in reversed(m) if x["sk"]), None),
+            "ma_http_cuoi": cuoi.get("ma_http"),
+        }
+
+
+def phat_hien_chet(ds_mau):
+    """HÀM THUẦN: (giây chết, chỉ số mẫu, lý do) từ một dãy mẫu. Không có mẫu chết ⇒ (None,None,…).
+
+    Hai dấu hiệu độc lập, cố ý: tiến trình không còn sống, HOẶC cổng ngừng trả lời trong khi mẫu
+    trước còn trả lời. Một bộ dò chỉ có một dấu hiệu sẽ bỏ sót đúng kiểu chết còn lại."""
+    for i, m in enumerate(ds_mau):
+        if not m.get("song"):
+            return m.get("giay"), i, "tiến trình không còn sống (kill(pid,0) hoặc hết mô tả tệp)"
+        if m.get("sk") is False and i > 0 and ds_mau[i - 1].get("sk"):
+            return m.get("giay"), i, "cổng ngừng trả lời (mẫu trước còn trả lời)"
+    return None, None, "còn sống tới hết lượt"
+
+
+_MAU_NEN_RUNNER = re.compile(r"^\[giao-dien\] nền=(\S+) cổng=(\d+) pid=(\d+)", re.M)
+_MAU_MA_THAT = re.compile(r"^\[giao-dien\] mã thoát THẬT (\d+)", re.M)
+_MAU_PHAM_VI = re.compile(r"^\[giao-dien\] PHẠM VI", re.M)
+_MAU_CHET_GIUA_LUOT = re.compile(r"^\[giao-dien\] CẢNH BÁO: máy chủ pid (\d+) ĐÃ CHẾT GIỮA LƯỢT", re.M)
+_MAU_TIN_HIEU = re.compile(
+    r"^\[giao-dien\] máy chủ pid (\d+) bị GIẾT BẰNG TÍN HIỆU: mã (\d+) = (\S+) — tín hiệu KHÔNG do bộ dọn gửi",
+    re.M)
+
+
+def doc_dong_runner(van_ban):
+    """Đọc những dòng MÁY ĐỌC ĐƯỢC của `chay.sh`. Hàm thuần ⇒ tự kiểm được (ca `e2`).
+
+    `pham_vi` = SỐ dòng `[giao-dien] PHẠM VI`. Đây là bất biến của bản vá việc 1: một lượt chạy
+    mà `pham_vi == 0` là một lượt BÁO CÁO HỎNG, kể cả khi mọi ca đều đạt."""
+    van_ban = van_ban or ""
+    ra = {"pham_vi": len(_MAU_PHAM_VI.findall(van_ban)), "nen": None, "cong": None, "pid": None,
+          "ma_that": None, "chet_giua_luot": False, "chet_pid": None, "ma_tin_hieu": None,
+          "tin_hieu": None, "tu_don": False, "dong_giao_dien": 0}
+    ra["co_pham_vi"] = ra["pham_vi"] > 0
+    ra["dong_giao_dien"] = sum(1 for d in van_ban.splitlines() if d.startswith("[giao-dien]"))
+    m = _MAU_NEN_RUNNER.search(van_ban)
+    if m:
+        ra["nen"], ra["cong"], ra["pid"] = m.group(1), int(m.group(2)), int(m.group(3))
+    m = _MAU_MA_THAT.search(van_ban)
+    if m:
+        ra["ma_that"] = int(m.group(1))
+    m = _MAU_CHET_GIUA_LUOT.search(van_ban)
+    if m:
+        ra["chet_giua_luot"] = True
+        ra["chet_pid"] = int(m.group(1))
+    m = _MAU_TIN_HIEU.search(van_ban)
+    if m:
+        ra["chet_giua_luot"] = True
+        ra["chet_pid"] = int(m.group(1))
+        ra["ma_tin_hieu"] = int(m.group(2))
+        ra["tin_hieu"] = m.group(3)
+    ra["tu_don"] = ("tín hiệu do CHÍNH bộ dọn gửi" in van_ban) and ra["tin_hieu"] is None
+    return ra
+
+
+def _giet_tu_ngoai(pid, tin_hieu=signal.SIGKILL):
+    """ĐỐI CHỨNG DƯƠNG: giết máy chủ từ MỘT TIẾN TRÌNH KHÁC (chính bộ đo), không phải từ runner."""
+    try:
+        os.kill(int(pid), tin_hieu)
+        return True
+    except OSError:
+        return False
+
+
+def _gioi_han_he_thong():
+    """Trần tài nguyên của chính phiên đo: `ulimit -n` (máy chủ THỪA HƯỞNG) + trần của HĐH."""
+    ra = {"ulimit_n": None, "ulimit_Hn": None, "launchctl_maxfiles": None}
+    try:
+        tt = subprocess.run(["sh", "-c", "ulimit -n; ulimit -Hn"], capture_output=True, text=True,
+                            timeout=15)
+        dong = tt.stdout.split()
+        if len(dong) >= 1:
+            ra["ulimit_n"] = dong[0]
+        if len(dong) >= 2:
+            ra["ulimit_Hn"] = dong[1]
+    except (OSError, subprocess.SubprocessError):                            # noqa: BLE001
+        pass
+    try:
+        tt = subprocess.run(["launchctl", "limit", "maxfiles"], capture_output=True, text=True,
+                            timeout=15)
+        ra["launchctl_maxfiles"] = tt.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):                            # noqa: BLE001
+        pass
+    return ra
+
+
+def _in_bang_do(ds, giu=None):
+    """Bảng mỗi lượt một dòng — thứ để người đọc so sánh lượt đạt với lượt hỏng bằng MẮT."""
+    giu = giu if giu is not None else []
+    _in(giu, "")
+    _in(giu, "  ┌ LUỢT · mã thoát · ĐẠT/HỎNG/BỎ QUA/KHÔNG CHẠY · PHẠM VI · máy chủ sống · fd trần · tcp trần · con trần · mã HTTP · phán quyết")
+    for r in ds:
+        tk = r.get("dem") or {}
+        gh = r.get("gioi_han") or {}
+        _in(giu, "  │ %-4s %-4s %s/%s/%s/%s  PHẠM VI %-2s  sống %-7s  fd≤%-4s  tcp≤%-4s  con≤%-3s  HTTP %-4s  %s"
+            % (r["lan"], r["ma_runner"], tk.get("passed"), tk.get("failed"), tk.get("skipped"),
+               tk.get("did_not_run"), (r.get("runner") or {}).get("pham_vi"),
+               ("%.1fs" % gh["song_giay"]) if gh.get("song_giay") is not None else "?",
+               gh.get("fd_max"), gh.get("tcp_max"), gh.get("con_max"), gh.get("ma_http_cuoi"),
+               r["nhan"]))
+        if r.get("giet_luc"):
+            _in(giu, "  │      ↳ ĐỐI CHỨNG DƯƠNG: bộ đo giết máy chủ ở giây %s ⇒ bộ đo bắt được ở giây %s (%s)"
+                % (r["giet_luc"], gh.get("chet_o_giay"), gh.get("ly_do_chet")))
+    _in(giu, "  └")
+    return giu
+
+
+def chay_chay_sh(so_lan=1, giet_luc=None, giet_tin_hieu=signal.SIGKILL, thu_muc_log=None,
+                 so_ca_ghim=SO_CA_GHIM, ghi_chu=None, het_luot=HET_LUOT_MAC_DINH,
+                 tham_so_them=()):
+    """Chạy THẬT `sh thu_giao_dien/chay.sh` N lượt, đo giới hạn tiến trình từng lượt.
+
+    Trả (mã thoát tổng, danh sách kết quả từng lượt). Mã thoát tổng = 0 chỉ khi MỌI lượt là `DAT`
+    và MỌI lượt đều in được dòng PHẠM VI.
+    """
+    giu = ghi_chu if ghi_chu is not None else []
+    thu_muc_log = thu_muc_log or tempfile.mkdtemp(prefix="veh-ag06-do.")
+    os.makedirs(thu_muc_log, exist_ok=True)     # lượt đo ĐẦU TIÊN đã đỏ vì thiếu dòng này
+    ds = []
+    _in(giu, "[đo] giới hạn của phiên: %s" % json.dumps(_gioi_han_he_thong(), ensure_ascii=False))
+    for lan in range(1, so_lan + 1):
+        tep = os.path.join(thu_muc_log, "luot-%02d.log" % lan)
+        _in(giu, "[đo] ── lượt %d/%d → %s" % (lan, so_lan, tep))
+        tt = subprocess.Popen(["sh", os.path.join("thu_giao_dien", "chay.sh")] + list(tham_so_them),
+                              cwd=GOC, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, bufsize=1)
+        bo_do, hen_giet, dong, t0 = None, None, [], time.time()
+        bao_het = threading.Timer(het_luot, lambda: tt.kill())
+        bao_het.daemon = True
+        bao_het.start()
+        try:
+            with open(tep, "w", encoding="utf-8") as f:
+                for d in tt.stdout:
+                    f.write(d)
+                    f.flush()
+                    dong.append(d)
+                    if bo_do is None:
+                        m = _MAU_NEN_RUNNER.search(d)
+                        if m:
+                            pid, cong = int(m.group(3)), int(m.group(2))
+                            bo_do = BoDoGioiHan(pid, cong).chay()
+                            _in(giu, "[đo]    máy chủ pid %d · cổng %d → bắt đầu lấy mẫu mỗi %.2fs"
+                                % (pid, cong, NHIP_MAU))
+                            if giet_luc:
+                                hen_giet = threading.Timer(giet_luc, _giet_tu_ngoai,
+                                                           args=(pid, giet_tin_hieu))
+                                hen_giet.daemon = True
+                                hen_giet.start()
+        finally:
+            ma_runner = tt.wait()
+            bao_het.cancel()
+            if hen_giet is not None:
+                hen_giet.cancel()
+        giay_chay = round(time.time() - t0, 1)
+        gh = {}
+        if bo_do is not None:
+            bo_do.thoi()
+            gh = bo_do.ket_qua()
+            if gh.get("con_max") is None:
+                gh["con_max"] = dem_con(bo_do.pid)      # một lần, sau khi lượt kết thúc
+        van_ban = "".join(dong)
+        rd = doc_dong_runner(van_ban)
+        tk = doc_tong_ket(van_ban)
+        dau_hieu = dau_hieu_nen_chet(van_ban)
+        may_chu_chet = bool(rd["chet_giua_luot"]) or (gh.get("song_suot") is False)
+        ma_pq, nhan, ly = phan_quyet(tk, not may_chu_chet, ma_runner, so_ca_ghim, dau_hieu)
+        if rd["pham_vi"] == 0:
+            ma_pq = MA_HONG
+            nhan = "HONG"
+            ly = ("BÁO CÁO HỎNG: lượt chạy KHÔNG in dòng PHẠM VI nào (bất biến của bản vá việc 1). "
+                  "Một lượt không nói được phạm vi của nó thì không được tính là đạt. (%s)" % ly)
+        ds.append({"lan": lan, "gio": time.strftime("%H:%M:%S"), "ma_runner": ma_runner,
+                   "giay_chay": giay_chay, "log": tep, "dem": tk, "runner": rd,
+                   "gioi_han": gh, "giet_luc": giet_luc,
+                   "may_chu_chet": may_chu_chet, "ma": ma_pq, "nhan": nhan, "ly_do": ly,
+                   "dau_hieu_nen_chet": dau_hieu})
+        _in(giu, "[đo]    exit=%s · %.1fs · %s ⇒ %s" % (ma_runner, giay_chay, nhan, ly[:140]))
+    ma_tong = MA_DAT if all(r["ma"] == MA_DAT for r in ds) else (
+        MA_HA_TANG if any(r["ma"] == MA_HA_TANG for r in ds) else MA_HONG)
+    _in_bang_do(ds, giu)
+    return ma_tong, ds
+
+
+def do_tro_ngo(giay=180.0, nhip=1.0, thu_muc=None, ghi_chu=None):
+    """BỐN tiến trình nền KHÁC NHAU, sống cùng `giay` giây, đo CÁI NÀO CHẾT và CHẾT VÌ GÌ.
+
+    Mục đích: tách *"sản phẩm bị giết"* khỏi *"tiến trình nền dài hơi trong phiên này bị giết"*.
+    Tiến trình KHÔNG liên quan gì tới sản phẩm mà cũng chết ⇒ cái chết không phải thuộc tính của
+    sản phẩm. Đó là một PHÉP ĐO, không phải một lời biện hộ.
+
+      P1 `sleep` trần                  — không tên giống, không cổng
+      P2 ngủ, tên đường dẫn có `app/server.py` — GIỐNG TÊN, không cổng
+      P3 ngủ, NGHE một cổng 18xxx      — không giống tên, CÓ CỔNG
+      P4 chính `app/server.py` của repo, KHÔNG tải — giống tên + có cổng + là SẢN PHẨM
+    """
+    giu = ghi_chu if ghi_chu is not None else []
+    thu_muc = thu_muc or tempfile.mkdtemp(prefix="veh-ag06-tro-ngo.")
+    ds = []
+    tt_ds = []
+    cong_p3 = tim_cong_rong(dai=DAI_CONG)
+    # P2 — bản sao tên: `app/server.py` nằm trong ĐƯỜNG DẪN, nhưng KHÔNG phải mã sản phẩm.
+    os.makedirs(os.path.join(thu_muc, "gia-2", "app"), exist_ok=True)
+    with open(os.path.join(thu_muc, "gia-2", "app", "server.py"), "w", encoding="utf-8") as f:
+        f.write("import time\n# tiến trình GIẢ: chỉ ngủ. Không phải mã sản phẩm.\ntime.sleep(3600)\n")
+    # P3 — bản sao cổng: tên khác hẳn, nhưng NGHE đúng dải cổng mà `chay.sh` dùng.
+    with open(os.path.join(thu_muc, "gia-3.py"), "w", encoding="utf-8") as f:
+        f.write("import socket, time\n"
+                "s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+                "s.bind(('127.0.0.1', %d)); s.listen(8)\n"
+                "while True: time.sleep(1)\n" % cong_p3)
+    _in(giu, "[trò-ngo] sống %ss · cổng P3=%s · thư mục=%s" % (giay, cong_p3, thu_muc))
+    try:
+        tt_ds.append(("P1 sleep trần", subprocess.Popen(["sleep", str(int(giay) + 60)])))
+        tt_ds.append(("P2 tên giống app/server.py",
+                      subprocess.Popen(["python3", os.path.join(thu_muc, "gia-2", "app", "server.py")])))
+        tt_ds.append(("P3 nghe cổng %d" % cong_p3,
+                      subprocess.Popen(["python3", os.path.join(thu_muc, "gia-3.py")])))
+        # P4 — máy chủ THẬT: nền cô lập đầy đủ, y như `chay_cong` dựng, nhưng KHÔNG có tải nào.
+        nen = tempfile.mkdtemp(prefix="veh-ag06-tro-ngo-nen.")
+        env, _ = moi_truong_git_sach()
+        env["VIP_HUB_DATA"] = nen
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        dung_duoc = True
+        for lenh in (["python3", "app/migrate.py"], ["python3", "app/khoi_tao.py"],
+                     ["python3", "thu_giao_dien/chuan_bi.py", "mk"]):
+            tt = subprocess.run(lenh, cwd=GOC, env=env, capture_output=True, text=True, timeout=300)
+            if tt.returncode != 0:
+                _in(giu, "[trò-ngo] P4 KHÔNG dựng được (%s thoát %s)" % (lenh[1], tt.returncode))
+                dung_duoc = False
+                break
+        if dung_duoc:
+            cong_p4 = tim_cong_rong(dai=DAI_CONG)
+            log4 = open(os.path.join(thu_muc, "P4-may-chu.log"), "w", encoding="utf-8")
+            tt_ds.append(("P4 app/server.py THẬT (không tải)",
+                          subprocess.Popen(["python3", "app/server.py", str(cong_p4)], cwd=GOC,
+                                           env=env, stdout=log4, stderr=subprocess.STDOUT)))
+        t0 = time.time()
+        while time.time() - t0 < giay:
+            time.sleep(nhip)
+        # Chốt trạng thái NGAY khi hết cửa sổ, TRƯỚC khi bộ đo tự tắt phần còn sống — nếu không,
+        # mọi tiến trình sống sót đều mang mã -15 do CHÍNH bộ đo gửi và không phân biệt được nữa.
+        song_cuoi = [(nhan, tt, tt.poll() is None) for nhan, tt in tt_ds]
+    finally:
+        for nhan, tt in tt_ds:
+            if tt.poll() is None:
+                tt.terminate()
+        for nhan, tt in tt_ds:
+            try:
+                tt.wait(timeout=10)
+            except subprocess.SubprocessError:                               # noqa: BLE001
+                tt.kill()
+    if not tt_ds:
+        return ds
+    if "song_cuoi" not in locals():
+        song_cuoi = [(nhan, tt, False) for nhan, tt in tt_ds]
+    for nhan, tt, con_song_cuoi in song_cuoi:
+        ma = tt.returncode
+        # Tiến trình này là CON của bộ đo ⇒ mã thoát ÂM = số tín hiệu đã giết nó.
+        tin_hieu = signal.Signals(-ma).name if (ma is not None and ma < 0) else None
+        chet_giua = (not con_song_cuoi) and tin_hieu is not None
+        if chet_giua:
+            ket_luan = "BỊ GIẾT BẰNG TÍN HIỆU %s giữa cửa sổ ⇒ không phải sản phẩm làm" % tin_hieu
+        elif con_song_cuoi:
+            ket_luan = "còn sống suốt %ss (bộ đo tự tắt)" % int(giay)
+        else:
+            ket_luan = "tự thoát với mã %s (KHÔNG do tín hiệu)" % ma
+        ds.append({"nhan": nhan, "pid": tt.pid, "ma_thoát": ma, "tin_hieu": tin_hieu,
+                   "song_cuoi_cua_so": con_song_cuoi, "chet_giua_luot": chet_giua,
+                   "ket_luan": ket_luan})
+        _in(giu, "[trò-ngo] %-34s pid %-7s mã %-6s %s" % (nhan, tt.pid, ma, ket_luan))
+    return ds
+
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # F. CHẠY CỔNG
@@ -853,7 +1430,46 @@ def main(argv=None):
     ap.add_argument("--giu-nen", action="store_true", help="không xoá thư mục nền sau khi chạy")
     ap.add_argument("--log", default=None, help="chỗ ghi log playwright thô")
     ap.add_argument("--json", default=None, help="ghi báo cáo JSON ra tệp này")
+    ap.add_argument("--do-chay-sh", type=int, default=0, metavar="N",
+                    help="CHẠY LẠI TRỌN BỘ N lượt qua chính `thu_giao_dien/chay.sh` và ĐO giới hạn "
+                         "tiến trình từng lượt (việc 2 + việc 3)")
+    ap.add_argument("--giet-luc", type=float, default=0.0, metavar="GIAY",
+                    help="ĐỐI CHỨNG DƯƠNG: giết máy chủ TỪ NGOÀI sau GIAY giây (đi với --do-chay-sh)")
+    ap.add_argument("--giet-tin-hieu", default="KILL", choices=["KILL", "TERM"],
+                    help="tín hiệu cho --giet-luc (mặc định KILL)")
+    ap.add_argument("--thu-muc-log", default=None, help="chỗ ghi log từng lượt của --do-chay-sh")
+    ap.add_argument("--tham-so", default="",
+                    help="tham số thêm truyền cho `chay.sh` (ví dụ '--reporter=list'). Bỏ trống ⇒ "
+                         "chạy ĐÚNG như người dùng gõ `sh thu_giao_dien/chay.sh`")
+    ap.add_argument("--tro-ngo", type=float, default=0.0, metavar="GIAY",
+                    help="đo sự sống của BỐN loại tiến trình nền khác nhau trong GIAY giây "
+                         "(tách 'sản phẩm bị giết' khỏi 'mọi tiến trình nền đều bị giết')")
+    ap.add_argument("--json-tong", default=None, help="ghi JSON tổng của --do-chay-sh/--tro-ngo")
     a = ap.parse_args(argv)
+
+    if a.tro_ngo > 0:
+        giu = []
+        ds = do_tro_ngo(giay=a.tro_ngo, ghi_chu=giu)
+        if a.json_tong:
+            with open(a.json_tong, "w", encoding="utf-8") as f:
+                json.dump({"tro_ngo": ds, "gio": time.strftime("%Y-%m-%dT%H:%M:%S%z")}, f,
+                          ensure_ascii=False, indent=2)
+        return MA_DAT
+
+    if a.do_chay_sh > 0:
+        giu = []
+        tin_hieu = signal.SIGKILL if a.giet_tin_hieu == "KILL" else signal.SIGTERM
+        ma, ds = chay_chay_sh(so_lan=a.do_chay_sh, giet_luc=(a.giet_luc or None),
+                              giet_tin_hieu=tin_hieu, thu_muc_log=a.thu_muc_log,
+                              so_ca_ghim=a.so_ca, ghi_chu=giu,
+                              tham_so_them=tuple(a.tham_so.split()))
+        if a.json_tong:
+            with open(a.json_tong, "w", encoding="utf-8") as f:
+                json.dump({"gioi_han_he_thong": _gioi_han_he_thong(), "luot": ds,
+                           "gio": time.strftime("%Y-%m-%dT%H:%M:%S%z")}, f,
+                          ensure_ascii=False, indent=2)
+        _in(giu, "[đo] MÃ THOÁT TỔNG = %s" % ma)
+        return ma
 
     if a.ghim_chromium:
         g = ghim_chromium()

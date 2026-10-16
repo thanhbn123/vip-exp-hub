@@ -747,8 +747,11 @@ class CaG18TuKiem(CaGocG18):
          "http_jt._doan_chua_bi_mat = lambda d, c: False",
          "bỏ luật 'cả đoạn BẰNG NHAU' ⇒ bí mật NGẮN trong đường dẫn lộ nguyên văn"),
         (CA_DUONG + ".test_k2e_bi_mat_o_QUERY_string_va_o_CA_HAI_cung_luc_khong_ro",
-         "http_jt._gia_tri_tu_url = lambda u: set()",
-         "bỏ giá trị QUERY khỏi tập che ⇒ bí mật trong query lộ khi hãng echo lại"),
+         "http_jt._gia_tri_tu_url = lambda u: set()\n"
+         "http_jt._gia_tri_echo_theo_ten = lambda than, h, t: set()",
+         "bỏ giá trị QUERY khỏi tập che ⇒ bí mật trong query lộ khi hãng echo lại. G22: phải gỡ "
+         "CẢ luật ECHO THEO TÊN — từ G22 hai tầng cùng bắt đường này, nên gỡ một tầng là một phép "
+         "đột biến KHÔNG có tác dụng (đúng bài học ở khối `TRUONG_CREDENTIAL_PHAN_HOI` phía trên)"),
     )
 
     LOP_CA = (CA_HANG, CA_DUONG, "CaG18SauDang", "CaG18DoiChungDuong")

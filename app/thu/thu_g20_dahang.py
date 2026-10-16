@@ -642,11 +642,25 @@ class CaGanChat(CaGoc):
 
     # -- c2: GẮN CHẶT 2 — bảng tên credential là bảng của J&T ---------------------------------
     def test_c2a_bang_2x2_che_theo_TEN_khong_chuyen_sang_hang_gia(self):
-        """MA TRẬN 2×2 — phép đo sắc nhất của AG-06.
+        """MA TRẬN 2×2 — phép đo sắc nhất của AG-06 (**ĐÃ VIẾT LẠI Ở G22**, xem ghi chú dưới).
 
                        | tên của J&T          | tên của HÃNG GIẢ
-            NGẮN (5)   | che (theo TÊN)       | *** RÒ ***   ← gắn chặt
+            NGẮN (5)   | che (theo TÊN)       | che (theo ECHO THEO TÊN)   ← G22
             DÀI (35)   | che (theo ĐỘ DÀI)    | che (theo ĐỘ DÀI)
+
+        **CA NÀY ĐANG GHIM HÀNH VI CŨ — ĐÃ ĐƯỢC VIẾT LẠI Ở G22 (`N-G21-03`).** Bản G20 khẳng định
+        `assertTrue(ket_qua["gia_ngan"])`, tức **credential NGẮN của hãng giả RÒ là ĐÚNG** — nó ghim
+        *"tầng che theo TÊN chỉ đúng cho bốn tên của J&T"*. Đó chính là cổng `G5` mà AG-01 đo được
+        **ĐỎ 2/5** trên nền G21 (`docs/QA_G21.md` §2.2, dòng 49).
+
+        Bất biến ĐÚNG: **credential NGẮN của BẤT KỲ hãng nào cũng không được rò.** G22 vá bằng luật
+        **ECHO THEO TÊN** (`http_jt._gia_tri_echo_theo_ten`): một trường phản hồi mang ĐÚNG cái TÊN
+        ta đã gửi, với ĐÚNG giá trị ta đã gửi dưới tên đó, là bản ECHO của yêu cầu TA ⇒ bị che BẤT
+        KỂ ĐỘ DÀI. Luật này KHÔNG dùng danh sách tên nào, nên nó đúng cho hãng CHƯA BIẾT.
+
+        KHÔNG xoá ca, KHÔNG `skipTest`, KHÔNG hạ assert xuống khẳng định yếu hơn: hai dòng dưới đây
+        được ĐỔI CHIỀU theo bất biến đúng, và vế "gắn chặt" mà AG-06 muốn đo vẫn còn — nó được đo ở
+        `test_c2b` (bảng `TRUONG_CREDENTIAL` vẫn là bảng của J&T, KHÔNG mở rộng).
         """
         ket_qua = {}
         for nhan, ten, gt in (("jt_ngan", "privateKey", KHOA_GIA_NGAN),
@@ -658,10 +672,13 @@ class CaGanChat(CaGoc):
                 ket_qua[nhan] = self._co_ro(ten, gt)
         # Tầng che BẮT BUỘC (theo TÊN) chỉ đúng cho bốn tên của J&T.
         self.assertFalse(ket_qua["jt_ngan"], "credential NGẮN của J&T phải bị che")
-        self.assertTrue(ket_qua["gia_ngan"],
-                        "ĐỔI HÀNH VI: credential ngắn của hãng giả nay ĐƯỢC che — nếu ai đó vừa mở "
-                        "rộng `TRUONG_CREDENTIAL`, hãy cập nhật tài liệu và ca này")
-        self.assertTrue(ket_qua["gia_ngan_2"])
+        # G22 — BẤT BIẾN ĐÚNG: credential NGẮN của hãng KHÁC J&T cũng phải bị che. Trước G22 hai
+        # dòng này là `assertTrue` (ghim chính hành vi rò) — xem docstring ở trên.
+        self.assertFalse(ket_qua["gia_ngan"],
+                         "RÒ: credential NGẮN của hãng giả lọt ra ngoài ⇒ bất biến 'credential NGẮN "
+                         "của BẤT KỲ hãng nào cũng không được rò' đã mở lại (cổng G5)")
+        self.assertFalse(ket_qua["gia_ngan_2"],
+                         "RÒ: credential NGẮN của hãng giả (tên thứ hai) lọt ra ngoài ⇒ cổng G5 mở lại")
         # Tầng che theo ĐỘ DÀI thì vendor-neutral: cả hai hãng đều được che.
         self.assertFalse(ket_qua["jt_dai"])
         self.assertFalse(ket_qua["gia_dai"],

@@ -37,9 +37,12 @@ theo quyết định của AG-00, nên tệp này không còn ô "NEEDS_REVIEW" 
 Nhóm **G** chứng minh từng ca ĐỎ ĐƯỢC bằng cách TIÊM LẠI đúng hành vi trước bản vá rồi chạy lại —
 một ca không đỏ được là một ca không có răng.
 
-GIỚI HẠN ĐÃ BIẾT (không phải ĐẠT): xem `docs/G21_BIMAT.md` §5 — bí mật 1–7 ký tự chỉ xuất hiện
-trong ĐƯỜNG DẪN hoặc dưới một TÊN không thuộc danh sách credential thì KHÔNG có gì để nhận diện;
-ca `A10b`/`B3` ghim đúng biên giới đó thay vì giả vờ nó không tồn tại.
+GIỚI HẠN ĐÃ BIẾT (không phải ĐẠT): xem `docs/G21_BIMAT.md` §5 và `docs/G22_BIMAT.md` §5 — bí mật
+1–7 ký tự chỉ xuất hiện trong ĐƯỜNG DẪN hoặc **echo TRẦN** (không kèm tên) thì KHÔNG có gì để nhận
+diện; ca `A10b`/`B3` ghim đúng biên giới đó thay vì giả vờ nó không tồn tại.
+G22 THU HẸP BIÊN GIỚI: từ G22, một giá trị NGẮN dưới một TÊN không thuộc danh sách credential **bị
+che** nếu hãng echo nó lại KÈM ĐÚNG CÁI TÊN ấy (`http_jt._gia_tri_echo_theo_ten`, cổng `G5`) — nên
+`B3` và `C1` của tệp này đã được VIẾT LẠI theo bất biến đó, không nới điều kiện (xem `docs/G22_BIMAT.md` §4).
 
 CHỐT AN TOÀN
 ------------
@@ -718,9 +721,16 @@ class B_NhatQuan(CaGoc):
         đoán mất hết thông tin.
 
         BẤT BIẾN ĐÚNG được khẳng định ở đây, không phải "miễn trừ":
-          · ngưỡng vẫn còn tác dụng (giá trị ngắn dưới tên lạ ⇒ KHÔNG che);
+          · ngưỡng vẫn còn tác dụng: TẬP CHE THEO TÊN/ĐỘ DÀI (`_gia_tri_can_che`) không nhận ra
+            giá trị ngắn dưới tên lạ — nếu nhận ra thì nó đã che cả `trang=2`, `ma=1`, `id=7`;
           · NHƯNG nếu CÙNG bí mật ấy xuất hiện ở một vị trí CÓ TÊN credential thì nó bị che ở MỌI
             chỗ trong thân phản hồi — kể cả chỗ nằm dưới tên lạ (che theo GIÁ TRỊ, đã gom một lần).
+
+        G22 THU HẸP BIÊN GIỚI NÀY (cổng `G5` của AG-01): cùng giá trị ngắn ấy, nếu hãng ECHO LẠI
+        KÈM ĐÚNG CÁI TÊN ta đã gửi, thì nó BỊ CHE — đó là luật ECHO THEO TÊN
+        (`http_jt._gia_tri_echo_theo_ten`), và nó không cần danh sách tên credential nào. Ca này
+        khẳng định CẢ HAI vế: vế cũ (tập che theo tên/độ dài vẫn không nhận ra — còn nguyên) và vế
+        mới (đường echo bắt được). Đây là SIẾT, không phải nới.
         """
         do()
         self.assertNotIn(BM_NGAN, http_jt._gia_tri_can_che({"X-Ma-Don": BM_NGAN}, b"x=1"),
@@ -733,9 +743,14 @@ class B_NhatQuan(CaGoc):
         than = http_jt.che_bi_mat(("tk=" + BM_NGAN + " & privateKey=" + BM_NGAN).encode(),
                                   {BM_NGAN})
         self.assertNotIn(BM_NGAN.encode(), than, "che theo giá trị bỏ sót một chỗ xuất hiện")
+        # G22 — VẾ MỚI: hãng echo lại KÈM TÊN ⇒ bắt được, dù giá trị ngắn và tên không credential.
+        ten_ta_gui = http_jt._ten_ta_gui({"X-Ma-Don": BM_NGAN}, b"x=1")
+        self.assertIn(BM_NGAN, http_jt._gia_tri_echo_theo_ten(
+            ("X-Ma-Don: " + BM_NGAN).encode(), [], ten_ta_gui),
+            "luật ECHO THEO TÊN không bắt được giá trị ngắn dưới tên lạ ⇒ cổng G5 mở lại")
         doi_chung(self.NHOM)
-        bang_ghi("B3 BIÊN GIỚI ngắn dưới tên không-credential", "tập che", "ngắn(3)",
-                 "CHƯA CHE ĐƯỢC (ngưỡng có ý thức — docs/G21_BIMAT.md §5)")
+        bang_ghi("B3 BIÊN GIỚI ngắn dưới tên không-credential", "tập che + đường echo", "ngắn(3)",
+                 "tập theo TÊN/ĐỘ DÀI: không nhận ra · ECHO KÈM TÊN (G22): ĐÃ CHE")
 
     def test_b2_nguong_do_dai_van_con_tac_dung_cho_ten_khong_credential(self):
         """Nhất quán KHÔNG có nghĩa là che hết: giá trị NGẮN dưới một TÊN không phải credential
@@ -756,12 +771,21 @@ class C_DoiChungDuong(CaGoc):
     NHOM = "C"
 
     def test_c1_chuoi_khong_phai_bi_mat_di_qua_NGUYEN_VAN(self):
-        """Không có ca này thì "không rò" ở trên có thể đạt được bằng cách che SẠCH mọi thứ — và
-        một thông điệp chẩn đoán bị che sạch thì người trực ca không đọc được gì.
+        """ĐỐI CHỨNG ĐƯỜNG: thông điệp chẩn đoán KHÔNG được mất thông tin.
 
-        Đối chứng đường ở đây cố ý chọn hai thứ KHÔNG phải bí mật mà phép che hay ăn nhầm nhất:
-        một giá trị NGẮN dưới tên KHÔNG credential (`don-42`), và TÊN endpoint trong đường dẫn
-        (`addOrder`) — thứ duy nhất cho biết lượt gọi đi tới đâu.
+        **CA NÀY ĐÃ ĐƯỢC VIẾT LẠI Ở G22 — nó đang GHIM HÀNH VI CŨ.** Bản G21 khẳng định `don-42`
+        (một giá trị NGẮN ta gửi ở header `X-Ma-Don`) ĐI QUA NGUYÊN VẸN vào thông điệp. Đó đúng là
+        hành vi của bản G21 — bản ấy chỉ che theo TÊN credential và theo ĐỘ DÀI, nên một giá trị
+        ngắn dưới tên lạ đi qua. Nhưng chính khe ấy là **cổng `G5`**: credential NGẮN của hãng thứ
+        hai (`x-mau-khoa-bi-mat: A1b2C`) rò qua `than_da_che` + `headers_da_che` + `str(e)`.
+
+        Từ G22, một trường phản hồi trùng **TÊN** và trùng **GIÁ TRỊ** với thứ ta đã gửi là bản
+        ECHO của yêu cầu ta ⇒ bị che BẤT KỂ ĐỘ DÀI (`http_jt._gia_tri_echo_theo_ten`).
+
+        **Ca này ghim gì (nói rõ, không nới điều kiện):** nó ghim *"giá trị của trường ta tự gửi,
+        khi hãng echo lại, đi qua nguyên vẹn trong thông điệp"*. Bất biến ĐÚNG vẫn được khẳng định
+        ở đây và còn MẠNH HƠN: **TÊN** trường, **TÊN** endpoint, mã HTTP và số byte vẫn nguyên văn —
+        thứ người trực cần để biết chuyện gì xảy ra; cái mất đi chỉ là GIÁ TRỊ ta đã tự gửi.
         """
         ngan = "don-42"                     # 6 ký tự, KHÔNG phải credential, KHÔNG phải bí mật
         stub = self.mo(echo_tat)
@@ -772,12 +796,23 @@ class C_DoiChungDuong(CaGoc):
         self.assertIn(ngan, than, "chuỗi đối chứng không đi trên dây ⇒ ca vô nghĩa")
         doi_chung(self.NHOM)
         do()
-        self.assertIn(ngan, str(e), "giá trị ngắn KHÔNG phải bí mật bị che mất khỏi thông điệp")
-        self.assertIn("addOrder", str(e), "TÊN endpoint bị che mất — chẩn đoán mất thông tin")
+        # (1) TÊN trường ta gửi vẫn đọc được — người trực biết trường nào liên quan.
+        self.assertIn("X-Ma-Don", str(e), "TÊN trường bị che mất — chẩn đoán mất thông tin")
         self.assertIn("apiAccount", str(e), "TÊN trường hợp lệ bị che mất")
+        # (2) TÊN endpoint nguyên văn — thứ duy nhất cho biết lượt gọi đi tới đâu.
+        self.assertIn("addOrder", str(e), "TÊN endpoint bị che mất — chẩn đoán mất thông tin")
+        # (3) Hình dạng thông điệp còn nguyên: mã HTTP và số byte.
+        self.assertIn("HTTP 401", str(e), "thông điệp mất mã HTTP")
+        self.assertIn("byte", str(e), "thông điệp mất số byte của thân")
+        # (4) BẤT BIẾN G22: GIÁ TRỊ echo của trường ta gửi thì ĐÃ CHE (ca cũ ghim nó đi qua).
+        self.assertIn("[DA-CHE]", str(e), "phép che không chạy ⇒ khẳng định trên vô nghĩa")
+        self.assertNotIn(ngan, str(e),
+                         "giá trị ta gửi, hãng echo lại KÈM TÊN, KHÔNG bị che — luật ECHO THEO TÊN "
+                         "không chạy, tức cổng G5 mở lại")
         # ĐỐI CHỨNG DƯƠNG của chính ca này: phép che ĐANG chạy (bí mật dài trong bizContent bị che).
         self.assertNotIn(BM_DAI, str(e), "phép che không chạy ⇒ 'nguyên vẹn' ở trên vô nghĩa")
-        bang_ghi("C1 đối chứng đường", "thông điệp + thân", "ngắn(6) + tên endpoint", "nguyên vẹn")
+        bang_ghi("C1 đối chứng đường", "thông điệp + thân", "ngắn(6) + tên endpoint",
+                 "TÊN trường/endpoint/HTTP nguyên vẹn · giá trị echo ĐÃ CHE (G22)")
 
     def test_c2_than_2xx_van_NGUYEN_VAN_theo_hop_dong(self):
         """Hợp đồng §36: thân 2xx là BẰNG CHỨNG, không được sửa. Che nó là phá dữ liệu nghiệp vụ

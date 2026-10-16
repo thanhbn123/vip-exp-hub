@@ -44,6 +44,39 @@ fi
 
 TOI_THIEU=${VIP_TOI_THIEU_BO:-12}
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# VÂN TAY CÂY — **GIT LÀ CHÍNH** (luật §41 `docs/SHARED_CONTRACTS.md`), vá `G16-09`
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# VÌ SAO PHẢI CÓ: `docs/QA_G16.md` §`G16-09` đo được rằng lệnh vân tay CŨ
+#     find app gateway thu_frontend thu_giao_dien -type f \( -name '*.py' -o -name '*.mjs' \
+#          -o -name '*.sh' -o -name '*.json' \) | sort | shasum -a 256
+# **MÙ** với `docs/` (không nằm trong phạm vi `find`) và với `*.md` (không nằm trong danh sách
+# đuôi): thêm một dòng vào CHÍNH bản hợp đồng mà vân tay **không nhúc nhích**. Con số không kèm
+# vân tay là con số không đối chiếu được — nhưng một vân tay MÙ còn tệ hơn: nó làm người đọc TIN
+# là đã ghim, trong khi lượt sửa hợp đồng giữa lượt đo đã lọt qua cả vân tay lẫn mắt người.
+#
+# NAY: **Git là CHÍNH** — `git rev-parse HEAD` + `git diff HEAD` rỗng + `git status --porcelain
+# -uall` rỗng. Nó phủ MỌI tệp được theo dõi (kể cả `docs/**`, `*.md`, `.gitignore`) và mọi thay
+# đổi CHƯA COMMIT (kể cả tệp mới). Khi cây đã bẩn (nhiều làn cùng ghi) thì dùng vân tay DỰ PHÒNG
+# `{ git ls-files -s; git status --porcelain -uall; }` — và chế độ đang dùng được IN RA.
+#
+# Một chỗ duy nhất hiện thực: `app/thu/thu_g21_chotcay.py` (ba bản sao là ba bản sẽ trôi khỏi nhau).
+# Mã thoát của `--van-tay-so` NÓI RÕ cái gì đã đổi: 1 = HEAD · 2 = tệp đã theo dõi (⇒ HỎNG, số đo
+# thuộc hai mốc mã khác nhau) · 3 = chỉ tập tệp CHƯA theo dõi (⇒ CẢNH BÁO) · 4 = không đo được.
+VT_TEP="$GOC/app/thu/thu_g21_chotcay.py"
+VT_TAM="${TMPDIR:-/tmp}/veh_g21_van_tay_$$.json"
+VT_CO=0
+if [ -f "$VT_TEP" ]; then
+    python3 "$VT_TEP" --van-tay-ghi "$VT_TAM" || VT_CO=$?
+else
+    echo "[cảnh báo] KHÔNG có $VT_TEP ⇒ lượt chạy này KHÔNG có vân tay (số đo không ghim được)"
+    VT_CO=4
+fi
+if [ "$VT_CO" -ne 0 ]; then
+    echo "[cảnh báo] không ghi được vân tay TRƯỚC (mã thoát $VT_CO) — vẫn chạy tiếp, sẽ báo ở cuối"
+fi
+
 echo "══════════ BỘ THỬ PYTHON (unittest) ══════════"
 TONG=0; SO_BO=0; HONG=""; BO_QUA=""; SO_BO_QUA=0
 # `thu_e2e.py` CỐ Ý loại khỏi phép dò: nó cần một máy chủ đang chạy + CSDL cô lập do
@@ -205,5 +238,36 @@ print('%d hang dang ky (%s) - dang MO live: %s'
     echo "      trên cụm tạm cổng riêng) · nhiều tiến trình (bộ riêng app/thu/dong_thoi/chay.py;"
     echo "      trần rate limit sống trong bộ nhớ MỘT tiến trình) · DOM/CSS trong trình duyệt thật ·"
     echo "      nhãn hãng thật · credentials hãng thật · AI thật · dữ liệu lớn · Safari/Firefox"
+echo "══════════════════════════════════════════════════════════"
+echo
+echo "══════════ VÂN TAY CÂY — GIT LÀ CHÍNH (luật §41, vá G16-09) ══════════"
+VT_MA=0
+if [ -f "$VT_TEP" ] && [ "$VT_CO" -eq 0 ]; then
+    python3 "$VT_TEP" --van-tay-so "$VT_TAM" || VT_MA=$?
+elif [ "$VT_CO" -eq 4 ]; then
+    echo "  ✗ KHÔNG có vân tay TRƯỚC ⇒ lượt chạy này KHÔNG ghim được vào cây nào"
+    VT_MA=4
+else
+    echo "  ✗ ghi vân tay TRƯỚC hỏng (mã thoát $VT_CO) ⇒ không so được"
+    VT_MA=4
+fi
+rm -f "$VT_TAM"
+case "$VT_MA" in
+    0) : ;;
+    1|2) echo "  ✗ VÂN TAY ĐỔI ⇒ các con số trên KHÔNG đối chiếu được với một mốc mã (§41)"
+         HONG="$HONG van-tay-cay" ;;
+    3) # CẢNH BÁO, KHÔNG phải HỎNG — và đây là quyết định có căn cứ, không phải nới lỏng:
+       # `docs/QA_G20.md` §1.0 đã ĐO được rằng băm/bắt cả cây làm việc sẽ báo "cây đã đổi" sau MỖI
+       # lượt chạy (báo cáo của Playwright, khoá nội bộ, `__pycache__`) — "một nhiệt kế đo nhầm thứ,
+       # và là nhiệt kế sẽ bị học cách bỏ qua". Một làn KHÁC giao tệp giữa lượt chạy không làm sai
+       # những gì ĐÃ chạy; nó chỉ làm con số "N bộ · M ca" khó tái lập. Nên nó được IN RA KÈM ĐƯỜNG,
+       # ngay trước dòng mã thoát — chứ không im lặng và cũng không làm đỏ oan cả bộ chạy.
+       echo "  ⚠ CẢNH BÁO (không phải HỎNG): có làn giao tệp CHƯA THEO DÕI giữa lượt chạy"
+       echo "     ⇒ con số '$TONG ca · $((SO_BO - SO_BO_QUA)) bộ' KHÔNG tái lập nguyên vẹn;"
+       echo "     chạy lại khi cây đứng yên nếu cần con số ghim." ;;
+    *) echo "  ✗ KHÔNG ĐO ĐƯỢC vân tay ⇒ con số trên là con số KHÔNG GHIM"
+       HONG="$HONG van-tay-cay-khong-do-duoc" ;;
+esac
+echo "  bộ hỏng (cuối): ${HONG:- KHÔNG}"
 echo "══════════════════════════════════════════════════════════"
 [ -z "$HONG" ] || exit 1

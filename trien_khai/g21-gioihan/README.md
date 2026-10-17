@@ -140,3 +140,45 @@ C5** (`N-G22-01`), không phải của bản uỷ quyền. Chi tiết + bản v�
 Cổng này **không mở socket nào**: nó chỉ ĐỌC tệp và chạy tiến trình con cục bộ. Hai tệp được mượn
 tạm (`app/thu/thu_qa_g20.py` chép từ worktree AG-01, và bản sao tiêm lỗi của bản uỷ quyền) đều
 được **trả lại / xoá** trong `finally` + `atexit`, kèm đối chiếu **sha256**.
+
+---
+
+## Lượt AG-04 mới (G22) — khối `B7`: HỢP ĐỒNG TENANT · PHỦ TUYẾN · PHÂN TRANG
+
+Lượt trước đóng điểm vướng **tên tệp** của C5/G7. Lượt này đo **hợp đồng đóng băng §1 của AG-02**
+(`docs/G22_TRUYVAN.md`) trên **fixture SQLite TẠM** với **hai tenant A/B** — và **bác bỏ**
+`assertIn(200, 400)`: một điều kiện nhận cả hai mã thì không phân biệt được *từ chối tường minh*
+với *bỏ qua im lặng*, mà vế thứ hai đúng là dạng hỏng cả nhiệm vụ G12 sinh ra để diệt.
+
+```sh
+sh trien_khai/g21-gioihan/chay_hopdong.sh    # HAI CÂY: cây nhà (ÂM) + cây AG-02 (DƯƠNG)
+python3 app/thu/thu_g22_gioihan.py           # đầy đủ B0…B7 trên cây này
+```
+
+`chay_hopdong.sh` là **đối chứng ÂM/DƯƠNG của chính phép đo**: cây nhà **chưa** gộp tuyến
+`/api/v2/don` của AG-02 nên các **ghim hợp đồng PHẢI ĐỎ** (`exit 1`); cây AG-02 (tuyến đã cắm)
+**PHẢI XANH** (`exit 0`). Runner chỉ thoát `0` khi cặp kết quả đúng như vậy — một cây đối chứng đỏ
+nghĩa là phép đo sai **hoặc** hợp đồng bị vi phạm, cả hai đều phải đỏ.
+
+| Mã | Việc |
+|---|---|
+| `B7a` | **CHỐT AN TOÀN**: CSDL đo nằm trong thư mục `tempfile`; **TỪ CHỐI ĐO (mã thoát 9)** nếu không |
+| `B7b` | Nền: hai tenant A/B, 60 đơn ở A + 1 đơn ở B, dựng bằng **chính `don_hang.tao_don`** |
+| `B7c` | **ĐỐI CHỨNG DƯƠNG**: A đọc dữ liệu A ⇒ **đúng `200`** + đúng bảng khoá §1.5 + trang mặc định **50** |
+| `B7d`·`B7e` | Phân trang: mặc định **50** · trần **500 bị KẸP** (không 400) · **trang 2 RỜI trang 1** |
+| `B7f` | Tham số sai ⇒ **đúng `400`** (4 vế âm) + tham số hợp lệ ⇒ `200` (vế dương) |
+| `B7g`·`B7h` | **CROSS-TENANT**: B gửi `tenant_id=<A>` ⇒ **đúng `400`**; B lọc `ma_don`/`q` của A ⇒ `200` nhưng thân **RỖNG** (kiểm **cả thân**, không chỉ mã) |
+| `B7i`·`B7j`·`B7k` | **ĐỐI CHỨNG DƯƠNG của từng vế âm**: chính A lọc cùng tham số ⇒ thấy đúng đơn của mình |
+| `B7l` | Vô danh ⇒ **đúng `401`** (§1.4) |
+| `B7m`·`B7p` | Hình dạng `truy_van.chay()` khớp §1.5 (10 khoá) · `loc-mo-ta` **bằng đẳng thức** với `mo_ta_bo_loc()` |
+| `B7n` | **PHỦ TUYẾN**: mọi tuyến `/api/v2/don*` dò bằng HTTP thật với **bộ đếm trong tiến trình máy chủ** |
+| `B7o` | **D-8**: CSDL nghiệp vụ không đổi (`sha256` · `mtime` · cỡ y nguyên) |
+
+Kết quả lượt này (HEAD `4431430` + 2 tệp chưa commit): cây nhà **`exit 1` · 32 ca · ĐẠT=22 ·
+HỎNG=8 · BỎ QUA=0 · KHUYẾT=2**; cây đối chứng AG-02 **`exit 0` · 20 ca · ĐẠT=19 · HỎNG=0 ·
+BỎ QUA=1 · KHUYẾT=0**. Phát hiện + bảng đầy đủ: `docs/G22_GIOIHAN.md` §8.
+
+**Phạm vi:** CSDL đo là SQLite TẠM (không migration CSDL nghiệp vụ — **D-8**); máy chủ đo bind
+`127.0.0.1` cổng 0; KHÔNG hãng kể cả sandbox, KHÔNG push/deploy/tunnel, KHÔNG credentials thật.
+Cây đối chứng được đo **CHỈ ĐỌC** (`PYTHONDONTWRITEBYTECODE=1`) — không rơi `__pycache__` sang cây
+khác, và thư mục tạm bị xoá trong `finally`.

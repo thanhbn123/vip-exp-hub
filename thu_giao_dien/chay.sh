@@ -183,6 +183,12 @@ done
 [ -z "$CONG" ] && { echo "KHÔNG tìm được cổng rỗi sau 40 lượt thử"; exit 2; }
 
 export VIP_HUB_DATA="$NEN"
+# CHỐT 4b của `app/migrate.py` (làn sao lưu, G22): tiến trình gọi `migrate` phải KHAI kho đang
+# chạy, thiếu khai thì nó TỪ CHỐI — cố ý, vì `hub.db` CŨ còn sót và `hub.db` ĐANG PHỤC VỤ không
+# phân biệt được bằng mtime/kích thước/tên tệp, và bản sao lưu của kho đoán nhầm vẫn trả mã 0.
+# Nền của lượt này là SQLite trong thư mục TẠM `$NEN` do chính script này dựng — khai `sqlite` là
+# khai ĐÚNG, không phải một mặc định cho tiện. Ghi ra đây để lượt sau không "sửa" nó thành nới chốt.
+export VIP_KHO_DANG_CHAY=sqlite
 cd "$GOC"
 python3 app/migrate.py   > "$NEN/migrate.log" 2>&1 || { echo "[giao-dien] NỀN KHÔNG DỰNG ĐƯỢC: migrate.py thoát $?"; tail -20 "$NEN/migrate.log"; exit 2; }
 python3 app/khoi_tao.py  > "$NEN/seed.log"    2>&1 || { echo "[giao-dien] NỀN KHÔNG DỰNG ĐƯỢC: khoi_tao.py thoát $?"; tail -20 "$NEN/seed.log"; exit 2; }

@@ -1159,6 +1159,11 @@ def do_tro_ngo(giay=180.0, nhip=1.0, thu_muc=None, ghi_chu=None):
         nen = tempfile.mkdtemp(prefix="veh-ag06-tro-ngo-nen.")
         env, _ = moi_truong_git_sach()
         env["VIP_HUB_DATA"] = nen
+        # CHỐT 4b của `app/migrate.py` (làn sao lưu, G22): tiến trình gọi `migrate` phải KHAI
+        # kho đang chạy — thiếu khai thì nó TỪ CHỐI (đúng thiết kế: `hub.db` còn sót và `hub.db`
+        # đang phục vụ KHÔNG phân biệt được). Nền ở đây là SQLite trong thư mục TẠM của chính
+        # bộ thử này, nên khai `sqlite` là khai ĐÚNG, không phải một mặc định cho tiện.
+        env["VIP_KHO_DANG_CHAY"] = "sqlite"
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         dung_duoc = True
         for lenh in (["python3", "app/migrate.py"], ["python3", "app/khoi_tao.py"],
@@ -1274,6 +1279,9 @@ def chay_cong(so_ca_ghim=SO_CA_GHIM, giu_nen=False, duong_log=None, ghi_chu=None
 
     env = dict(env)
     env["VIP_HUB_DATA"] = nen
+    # CHỐT 4b của `app/migrate.py` (làn sao lưu, G22) — xem chú thích ở lượt "trò ngoan" phía
+    # trên: nền của cổng này là SQLite trong thư mục TẠM, nên phải KHAI, không được để trống.
+    env["VIP_KHO_DANG_CHAY"] = "sqlite"
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     pid = None
     sv = None

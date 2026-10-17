@@ -280,9 +280,14 @@ def _tu_choi_chua_khai(nguon):
         "          `pg_dump -Fc`; xem docs/G22_SAOLUU.md.\n"
         "          Nếu kho đang chạy là SQLite: khai `%s` rồi chạy lại. Chốt này cố ý KHÔNG có\n"
         "          mặc định: một mặc định ở đây là một phép đoán, và phép đoán đó trả mã thoát 0.\n"
+        "          CHỈ khai `%s` cho môi trường KIỂM THỬ CÔ LẬP (thư mục dữ liệu TẠM). KHÔNG đặt\n"
+        "          biến này cho tiến trình production: nếu dữ liệu thật đã sang PostgreSQL thì khai\n"
+        "          `%s` ở đó biến mọi bản sao lưu thành ĐƯỜNG LÙI GIẢ mà vẫn trả mã thoát 0.\n"
+        "          Bộ thử dùng SQLite: `cau_hinh.khai_kho_kiem_thu()` (từ chối nếu thư mục dữ liệu\n"
+        "          không cô lập) — xem docs/G22_CAUHINH.md.\n"
         % ("nguồn khai: %s" % nguon if nguon else "chưa có nguồn nào khai", them,
            KHO_SQLITE, KHO_POSTGRESQL, BIEN_KHAI_KHO,
-           KHO_SQLITE, KHO_POSTGRESQL, KHO_SQLITE))
+           KHO_SQLITE, KHO_POSTGRESQL, KHO_SQLITE, KHO_SQLITE, KHO_SQLITE))
 
 
 def _chuan_hoa_kho(gia_tri):
@@ -290,16 +295,19 @@ def _chuan_hoa_kho(gia_tri):
 
     Khai báo sai chính tả KHÔNG được coi là "chưa khai": coi nó là chưa khai là âm thầm đưa hệ
     về đúng chỗ đang muốn tránh, mà lại im lặng.
+
+    BẢNG BIẾN THỂ nằm ở `cau_hinh.KHO_DANG_CHAY_BIEN_THE` (một chỗ, dùng chung với đường khai
+    của bộ thử `cau_hinh.khai_kho_kiem_thu()`); hàm này giữ TÊN CŨ cho mã đang gọi tới và giữ
+    thông báo lỗi của `migrate` — nơi người trực gõ lệnh.
     """
     if gia_tri is None:
         return None
     v = str(gia_tri).strip().lower()
     if not v:
         return None
-    if v in ("sqlite", "sqlite3"):
-        return KHO_SQLITE
-    if v in ("postgres", "postgresql", "pg", "psql"):
-        return KHO_POSTGRESQL
+    kho = cau_hinh.chuan_hoa_kho(v)
+    if kho:
+        return kho
     raise SystemExit(
         "[migrate] TỪ CHỐI: khai báo kho đang chạy không nhận ra: %r.\n"
         "          Nhận 'sqlite' hoặc 'postgresql'." % (gia_tri,))
@@ -815,6 +823,18 @@ def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
             print(*a)
+
+    # CHỐT (4) PHẢI CHẠY TRƯỚC KHI `csdl.mo()` CHẠM ĐĨA, khi CSDL CHƯA TỒN TẠI. `csdl.mo()` TẠO
+    # `hub.db` nếu thiếu; đo được (17/10/2026, dispatch `g22-a1-cauhinh`): một lượt `migrate.py`
+    # CHƯA KHAI kho vẫn để lại `hub.db` 200.704 byte / đủ 51 bảng rồi mới TỪ CHỐI. Tệp đó chính
+    # là "hub.db CŨ còn sót" của P-G15-02 `do2b` — lượt sau nhìn vào nó KHÔNG phân biệt được với
+    # dữ liệu đang phục vụ. Từ chối TRƯỚC khi tạo thì một lượt hỏng không để lại manh mối GIẢ.
+    # Dùng `isfile`, KHÔNG dùng `exists`: mảnh nguồn `os.path.exists(...)` của `sao_luu()` là một
+    # phần của bản vá bị `ban_va.MANH_VA` ghim ĐÚNG MỘT LẦN — thêm một bản y hệt là phép đo của
+    # AG-02 tự báo "tệp đã trôi". CSDL ĐÃ TỒN TẠI: giữ nguyên đường cũ — `sao_luu()` mới là chỗ
+    # kiểm (chỉ khi có nâng cấp), nên `migrate.py` trên CSDL đã ở phiên bản mới nhất vẫn chạy.
+    if not os.path.isfile(cau_hinh.DUONG_DAN_CSDL):
+        _kiem_kho_truoc_khi_sao_luu()
 
     csdl.mo()  # tạo bảng mới (IF NOT EXISTS) nếu thiếu
     kn_kiem = csdl.ket_noi()

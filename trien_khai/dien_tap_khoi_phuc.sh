@@ -34,6 +34,13 @@ if [ -n "${VIP_HUB_DATA:-}" ]; then
 fi
 
 export VIP_HUB_DATA="$NEN/du-lieu"
+# CHỐT 4b của `app/migrate.py` (G22): kho đang chạy PHẢI được KHAI, thiếu khai thì `migrate.py`
+# TỪ CHỐI — cố ý, vì `hub.db` CŨ còn sót và `hub.db` ĐANG PHỤC VỤ không phân biệt được bằng
+# mtime/kích thước/tên tệp. Nền của lượt này là SQLite trong thư mục TẠM `$NEN` do CHÍNH script
+# này dựng ở trên (và nó đã TỪ CHỐI nếu `VIP_HUB_DATA` trỏ vào vùng dữ liệu thật). Nên khai
+# `sqlite` ở đây là khai ĐÚNG THỨ NÓ LÀ — không phải mặc định cho tiện, và không phải đường
+# chuyển production sang SQLite. Ghi ra để lượt sau không "sửa" nó thành nới chốt.
+export VIP_KHO_DANG_CHAY=sqlite
 export VIP_HUB_BACKUP_PASSPHRASE="dien-tap-$(date +%s)-khong-phai-passphrase-that"
 export PYTHONPATH="$GOC/app"
 mkdir -p "$VIP_HUB_DATA"

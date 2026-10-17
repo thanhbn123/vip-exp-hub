@@ -36,6 +36,92 @@ BIEN_KHAI_KHO = "VIP_KHO_DANG_CHAY"
 # LỰA CHỌN CỤC BỘ ĐÃ ĐƯỢC UỶ QUYỀN của AG-02 (sửa local), KHÔNG phải quyết định thay Owner.
 KHO_DANG_CHAY = (os.environ.get(BIEN_KHAI_KHO) or "").strip().lower() or None
 
+# ---------------------------------------------------------------------------------------------
+# G22 — KHAI KHO CHO MỘT MÔI TRƯỜNG KIỂM THỬ CÔ LẬP (dispatch `g22-a1-cauhinh`)
+# ---------------------------------------------------------------------------------------------
+# `KHO_DANG_CHAY` ở trên là chỗ KHAI CHÍNH THỨC của người triển khai, và nó chỉ đọc MỘT LẦN lúc
+# nạp mô-đun. Một bộ thử có ba đường khai, cả ba đi qua CÙNG một bảng biến thể dưới đây:
+#   · `VIP_KHO_DANG_CHAY=sqlite` trong môi trường shell của lượt chạy;
+#   · `os.environ[BIEN_KHAI_KHO] = "sqlite"` trước khi chạy tiến trình con (`migrate` đọc lại
+#     biến môi trường ở MỖI lượt gọi — xem `migrate.kho_dang_chay()`);
+#   · `khai_kho_kiem_thu()` — một dòng, kèm CHỐT CÔ LẬP (xem hàm).
+# Bảng biến thể nằm ở ĐÂY chứ không ở `migrate.py`: chuẩn hoá cấu hình thuộc về cấu hình.
+KHO_DANG_CHAY_BIEN_THE = {
+    "sqlite": KHO_SQLITE,
+    "sqlite3": KHO_SQLITE,
+    "postgres": KHO_POSTGRESQL,
+    "postgresql": KHO_POSTGRESQL,
+    "pg": KHO_POSTGRESQL,
+    "psql": KHO_POSTGRESQL,
+}
+
+
+def chuan_hoa_kho(gia_tri):
+    """`'  SQLite  '` ⇒ `'sqlite'` · `'pg'` ⇒ `'postgresql'` · chưa khai HOẶC giá trị lạ ⇒ `None`.
+
+    Trả `None` cho `None`/chuỗi rỗng (CHƯA KHAI) và cho giá trị LẠ; người gọi phân biệt hai thứ
+    đó bằng chính giá trị thô. Hàm này KHÔNG ném: nó là phép chuẩn hoá thuần, còn quyết định
+    "giá trị lạ thì làm gì" thuộc về chốt gọi nó — `migrate._chuan_hoa_kho()` TỪ CHỐI kèm
+    nguyên văn giá trị sai, và `khai_kho_kiem_thu()` TỪ CHỐI kèm hướng dẫn sửa.
+    """
+    if gia_tri is None:
+        return None
+    v = str(gia_tri).strip().lower()
+    if not v:
+        return None
+    return KHO_DANG_CHAY_BIEN_THE.get(v)
+
+
+def khai_kho_kiem_thu(gia_tri=KHO_SQLITE):
+    """KHAI kho cho MỘT MÔI TRƯỜNG KIỂM THỬ CÔ LẬP. Trả giá trị đã chuẩn hoá (`'sqlite'`).
+
+    VÌ SAO CẦN HÀM NÀY: mỗi bộ thử gọi `migrate.chay()`/`sao_luu()` đều phải khai kho, và một
+    dòng `os.environ[...] = "sqlite"` rải khắp các bộ thử là nhiều chỗ có thể viết nhầm — tệ
+    nhất là viết vào môi trường của một tiến trình đang dùng DỮ LIỆU THẬT. Hàm này gom việc
+    khai về một chỗ, kèm HAI CHỐT CẤU TRÚC (không phải phép đoán):
+
+      (1) `VIP_HUB_DATA` phải được ĐẶT TƯỜNG MINH. Không đặt nghĩa là thư mục dữ liệu mặc định
+          của ứng dụng (`app/du-lieu`) — nơi CSDL nghiệp vụ thật nằm.
+      (2) Đường dữ liệu KHÔNG được nằm trong CÂY REPO và KHÔNG được là volume `/du-lieu` của
+          container — hai vùng đó là dữ liệu thật hoặc theo thiết kế triển khai.
+
+    Từ chối bằng `SystemExit` (mã thoát 1, thông báo đọc được) và KHÔNG đặt biến môi trường:
+    một lượt khai hỏng phải không để lại tác dụng phụ nào. Đây là đường khai của BỘ THỬ, KHÔNG
+    phải đường chuyển production sang SQLite: mọi giá trị khác `sqlite` đều bị từ chối, và
+    quyết định `OWNER_ACTIONS C4` / `D-8` (PostgreSQL) KHÔNG nằm trong hàm này.
+    """
+    v = str(gia_tri if gia_tri is not None else "").strip().lower()
+    kho = chuan_hoa_kho(v)
+    if kho is None:
+        raise SystemExit(
+            "[cau_hinh] TỪ CHỐI: khai báo kho cho môi trường kiểm thử không nhận ra: %r.\n"
+            "          Nhận 'sqlite' (hoặc 'sqlite3')." % (gia_tri,))
+    if kho != KHO_SQLITE:
+        raise SystemExit(
+            "[cau_hinh] TỪ CHỐI: hàm này CHỈ dành cho môi trường kiểm thử dùng SQLite.\n"
+            "          Khai %r không mở được nhánh PostgreSQL: `app/csdl.py` thuần SQLite và\n"
+            "          `sao_luu()` KHÔNG CÓ nhánh PostgreSQL (xem docs/G22_SAOLUU.md)."
+            % (kho,))
+    duong = os.environ.get("VIP_HUB_DATA")
+    if not duong:
+        raise SystemExit(
+            "[cau_hinh] TỪ CHỐI: chưa đặt VIP_HUB_DATA nên thư mục dữ liệu là mặc định của\n"
+            "          ứng dụng (%s) — đó là CSDL nghiệp vụ, KHÔNG phải nền kiểm thử cô lập.\n"
+            "          Đặt VIP_HUB_DATA vào thư mục TẠM rồi gọi lại." % DUONG_DAN_CSDL)
+    that = os.path.realpath(os.path.expanduser(duong))
+    goc = os.path.realpath(THU_MUC_GOC)
+    if that == goc or that.startswith(goc + os.sep):
+        raise SystemExit(
+            "[cau_hinh] TỪ CHỐI: VIP_HUB_DATA trỏ vào CÂY REPO (%s) — không phải nền kiểm thử\n"
+            "          cô lập. Dùng thư mục TẠM (tempfile.mkdtemp)." % that)
+    if that == "/du-lieu" or that.startswith("/du-lieu" + os.sep):
+        raise SystemExit(
+            "[cau_hinh] TỪ CHỐI: VIP_HUB_DATA trỏ vào volume triển khai `/du-lieu` — đó là dữ\n"
+            "          liệu thật, không phải nền kiểm thử.")
+    os.environ[BIEN_KHAI_KHO] = kho
+    globals()["KHO_DANG_CHAY"] = kho
+    return kho
+
 PHIEN_SONG_GIO = 12            # phiên đăng nhập sống 12 giờ
 KHOA_SAU_SO_LAN_SAI = 5        # sai mật khẩu 5 lần liên tiếp → khóa TẠM
 # Khóa TẠM, không khóa vĩnh viễn: khóa vĩnh viễn bằng mật khẩu sai là đường cho người lạ

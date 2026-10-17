@@ -2,14 +2,21 @@
 # -*- coding: utf-8 -*-
 """AG-01 (G22) — BỘ KIỂM ĐỘC LẬP cho wave G22. VAI: NGƯỜI KIỂM, KHÔNG PHẢI NGƯỜI VIẾT.
 
-NỀN ĐO — VÒNG 2 (`ctx_ca352ff451e7`, sau khi 5 agent xong vòng 1):
+NỀN ĐO — VÒNG 3 (`ctx_d56f10e956ad`): NỀN ĐƯỢC ĐỌC TẠI CHỖ, KHÔNG CÒN GHIM.
 
-    Worktree `g22-a2-contract` đang ở `HEAD = dd788fc` — commit gộp CHÍNH bản vá vòng 1 của
-    AGENT 02 vào `integration/g20` (cha: `a76ec51`), cây của HEAD = `9628587`.
-    Hai ghim của vòng 1 (`NEN_SHA=3b7e93b` / `TREE_NEN=37079aa8`) đã STALE: đó là cây của LƯỢT
-    TRƯỚC. Vòng 2 cập nhật ghim theo ĐÚNG nền hiện tại; `A1` tự kiểm `NEN_SHA^{tree}` ==
-    `TREE_NEN` nên ghim lệch nổ ra như lỗi GHIM, không bị báo nhầm thành lỗi MÔI TRƯỜNG.
-    Lịch sử ghim: `7344c02/8fc624de` → `3b7e93b/37079aa8` → **`dd788fc/9628587`**.
+    Vòng 2 đã dựng đúng phép đo nhưng vẫn GHIM kết quả vào hai hằng số (`NEN_SHA`/`TREE_NEN`).
+    `HEAD` nhích ở MỌI commit, nên sau mỗi lần gộp cái ghim lại STALE và `A1` đỏ vĩnh viễn cho
+    tới khi có người sửa số — đúng họ "ghim SỰ THẬT MÔI TRƯỜNG" (H5/N-G19-04) mà cả wave đang
+    diệt (C5/G7, `SO_DO`, tiêu đề F, và nay là A1). Vòng 3 BỎ hẳn ghim:
+
+        nền        = HEAD đọc TẠI CHỖ            (`git rev-parse HEAD`)
+        cây nền    = `HEAD^{tree}` đọc TẠI CHỖ
+        cây đang đo = `write-tree` trên BẢN SAO index (AGENT 03 §3.3 — không ghi `.git` thật)
+
+    `A1` ĐỎ khi hai cây khác nhau, khi index lệch HEAD, khi có thay đổi ngoài phạm vi, hoặc khi
+    KHÔNG đọc được cây — KHÔNG có số nào phải cập nhật khi `HEAD` nhích. Ba đối chứng âm của A1
+    được LÀM THẬT trên một clone tạm (`_doi_chung_am_a1`), không phải lời khai.
+    Lịch sử ghim (CHỈ ĐỂ ĐỌC): `7344c02/8fc624de` → `3b7e93b/37079aa8` → `dd788fc/9628587`.
 
 GIT SANDBOX — HAI NGUYÊN NHÂN ĐỎ CỦA `A1`, CẢ HAI ĐÃ ĐƯỢC XỬ LÝ (AGENT 03 · `docs/G22_A1_GIT.md`):
 
@@ -20,16 +27,16 @@ GIT SANDBOX — HAI NGUYÊN NHÂN ĐỎ CỦA `A1`, CẢ HAI ĐÃ ĐƯỢC XỬ 
         từ kho thật; index thật KHÔNG đổi sha256, KHÔNG có `index.lock`.
         ĐỐI CHỨNG DƯƠNG nhúng ngay trong `A1`: tiêm 1 mục vào BẢN SAO index ⇒ tree ĐỔI
         (`9628587` → `44025342f53b`), còn index thật giữ nguyên sha256. Phép đo vì thế KHÔNG mù.
-    (b) GHIM CŨ: chỉ sửa môi trường mà giữ ghim cũ thì `A1` VẪN ĐỎ — đo được ở `docs/G22_A1_GIT.md`
-        §4.3/§5. Vòng 2 cập nhật ghim theo HEAD hiện tại VÀ thêm vế tự kiểm ghim ở trên.
+    (b) GHIM CŨ: vòng 2 "sửa" bằng cách CẬP NHẬT số — và đúng một commit sau, số lại STALE (đo
+        được ở `docs/G22_A1_GIT.md` §4.3/§5). Vòng 3 BỎ hẳn ghim: nền đọc tại chỗ, nên HEAD
+        nhích bao nhiêu lần cũng không có số nào phải sửa.
 
     Một lỗi MÔI TRƯỜNG ĐỘC LẬP đã có từ trước: `GIT_CONFIG_COUNT=2` thiếu `GIT_CONFIG_KEY_*`
     làm MỌI lệnh git thoát 128. `_git_env()` gỡ gia đình biến dị dạng để ĐO ĐƯỢC — không phải
     để "cho xanh"; ca `C3` của bàn đo G20 mới là ca đo môi trường NGUYÊN BẢN.
 
-    ⇒ Bộ kiểm TỰ ĐO môi trường (`write-tree` tương đương == `TREE_NEN`; `HEAD` == nền) và, khi
-      `HEAD` không phải nền, nó TỪ CHỐI phán quyết trên ba cổng "cây sạch" kèm lý do — thay vì
-      bỏ qua im lặng hoặc báo đỏ giả. Không một byte nào ghi vào `.git` thật.
+    ⇒ Bộ kiểm TỰ ĐO môi trường: `write-tree` tương đương phải BẰNG `HEAD^{tree}` đọc tại chỗ,
+      và cây phải SẠCH ngoài phạm vi. Không một byte nào ghi vào `.git` thật.
 
 LỆNH CHẠY:
 
@@ -87,19 +94,13 @@ GOC_APP = os.path.join(GOC_CAY, "app")
 GOC_THU = os.path.join(GOC_CAY, "app", "thu")
 GOC_SPEC = os.path.join(GOC_CAY, "thu_giao_dien")
 
-# NỀN: SHA, không phải nhãn. `TREE_NEN` là thứ được CANH, vì nó là thứ thật sự được đo.
+# NỀN: KHÔNG còn hằng số. `HEAD` và `HEAD^{tree}` được ĐỌC TẠI CHỖ trong chính phép đo A1.
 #
-# NỀN CỦA VÒNG 2 = **HEAD HIỆN TẠI** của worktree `g22-a2-contract`: `dd788fc` (commit gộp bản
-# vá vòng 1 của AGENT 02 vào `integration/g20`), cây `9628587`. Đây là cây mà bản giao của vòng
-# 2 sẽ được gộp vào, nên đo trên cây nào thì GHIM CÂY ĐÓ.
-# GHIM CŨ `3b7e93b`/`37079aa8` (vòng 1) và `7344c02`/`8fc624de` (trước nữa) chỉ còn là LỊCH SỬ.
-NEN_SHA = "dd788fc01c5c7e7b4da93e2a216aa5d4fe251d0b"
-TREE_NEN = "96285874039248115549c647caa168ec615ce7f2"
-# CÁC MỐC CỦA LƯỢT TRƯỚC — giữ lại làm LỊCH SỬ, KHÔNG dùng để phán quyết nữa:
-NEN_LUOT_TRUOC = "601718e42ea23a30b849d606890070d4816cbf0b"    # HEAD worktree đầu lượt trước
-NEN_LUOT_TRUOC_2 = "7344c020abad562dafb593c4234d5e1f9ecfd18c"  # ghim nền của lượt trước
-NEN_LUOT_TRUOC_3 = "3b7e93b59b70449b8306eb4fa374dd1e97a8e7af"  # ghim nền vòng 1 (cây 37079aa8)
-TREE_LUOT_TRUOC_3 = "37079aa83f2ad62c2862f2eb7ce1c809c24570fb"
+# Vì sao bỏ hẳn: `HEAD` nhích ở MỌI commit, nên mọi cặp `(NEN_SHA, TREE_NEN)` viết cứng đều
+# thành STALE ngay sau lần gộp kế tiếp và biến `A1` thành cổng ĐỎ VĨNH VIỄN — họ H5/N-G19-04.
+# Không ai phải "cập nhật ghim" nữa, vì không còn ghim nào để cập nhật.
+# Lịch sử ghim (CHỈ ĐỂ ĐỌC, KHÔNG dùng để phán quyết):
+#     7344c02/8fc624de  →  3b7e93b/37079aa8  →  dd788fc/9628587  →  (bỏ ghim ở vòng 3)
 
 TEP_DUOC_PHEP = ("docs/QA_G22.md", "docs/G22_CONTRACT.md", "app/thu/thu_qa_g22.py",
                  "app/thu/thu_qa_g21.py", "app/thu/thu_qa_g20.py")
@@ -389,9 +390,10 @@ DOI_CHUNG = {
         "chạy được' (đúng thứ đã xảy ra ở lượt G21: 7 hỏng + 44 không chạy, 0 tín hiệu).",
     "cay-sach-3-ban-sao":
         "TIÊM: đặt một tệp bẩn NGOÀI vùng thử (`admin/__tiem_g22.js`) rồi chạy lại cả ba cổng — "
-        "cả ba phải ĐỎ-THẬT. Vế này chạy trong một CLONE THẬT tại nền (`git clone --shared` + "
-        "`HEAD=NEN_SHA`) để cổng không đỏ vì delta hai commit; vế xanh (cây sạch ⇒ 3/3 XANH) đi "
-        "kèm NGAY TRONG cùng phép đo. Không có cặp xanh↔đỏ này thì '3/3 xanh' có thể chỉ là cổng mù.",
+        "cả ba phải ĐỎ-THẬT. Vế này chạy trong một CLONE THẬT tại HEAD đọc tại chỗ "
+        "(`git clone --shared` + `checkout --detach HEAD`) để cổng không đỏ vì delta hai commit; "
+        "vế xanh (cây sạch ⇒ 3/3 XANH) đi kèm NGAY TRONG cùng phép đo. Không có cặp xanh↔đỏ này "
+        "thì '3/3 xanh' có thể chỉ là cổng mù.",
     "e3-ba-luot-cung-giay":
         "chạy CÙNG kịch bản (cùng mốc đóng băng, cùng dữ liệu) trên BẢN ĐÓNG BĂNG TRƯỚC G22 "
         "`trien_khai/g20-saoluu/migrate_nguyenban.py` (md5 ghim, KHÔNG nhận `luc`): phải ra đúng "
@@ -454,23 +456,39 @@ DA_TIEM = {}     # nhóm → True khi đã TIÊM LỖI và bộ đo BẮT ĐƯ�
 #       7344c02`. Đây là một kho BÌNH THƯỜNG có `HEAD` = nền và cây SẠCH, nên `git init` của
 #       bộ khác không chạm tới nó, và mọi cổng "cây sạch" đo được ĐÚNG cái chúng định đo.
 #
-# ⇒ CÁCH CHẠY ĐÚNG CỦA BỘ KIỂM NÀY LÀ TRONG MỘT CÂY CÓ `HEAD` = `NEN_SHA`. Bộ kiểm TỰ ĐO điều
-#   đó (`git rev-parse HEAD`) và, khi nó KHÔNG đúng, nói thẳng ra và TỪ CHỐI phán quyết trên
-#   những cổng bị môi trường làm nhiễu — thay vì bỏ qua im lặng hoặc báo đỏ giả.
+# ⇒ CÁCH CHẠY ĐÚNG CỦA BỘ KIỂM NÀY LÀ TRÊN MỘT CÂY SẠCH, và "nền" là `HEAD` ĐỌC TẠI CHỖ
+#   (xem đầu tệp) — không còn `NEN_SHA` để so. Các cổng "cây sạch" đo trực tiếp trên cây này;
+#   nếu HEAD không đọc được thì đó là ĐỎ THẬT, không phải skip.
 
 def _git(*tham_so, **kw):
     return chay(["git"] + list(tham_so), **kw)
 
 
-def head_hien_tai():
-    rc, out = _git("rev-parse", "HEAD")
-    return out.strip() if rc == 0 else ""
+def head_hien_tai(goc=None):
+    """SHA của `HEAD`, ĐỌC TẠI CHỖ. Chuỗi rỗng nếu không đọc được."""
+    rc, out = chay(["git", "rev-parse", "HEAD"], cwd=goc or GOC_CAY)
+    dong = [d.strip() for d in out.splitlines() if d.strip()]
+    return dong[-1] if rc == 0 and dong else ""
 
 
-def _git_dir_va_common():
+def _khop_sha(s):
+    """`True` nếu `s` đúng là một SHA-1 40 ký tự thập lục phân."""
+    return bool(re.fullmatch(r"[0-9a-f]{40}", s or ""))
+
+
+def tree_cua_head(goc=None):
+    """Cây của `HEAD` — `git rev-parse HEAD^{tree}`, ĐỌC TẠI CHỖ. Trả `(rc, tree)`."""
+    rc, out = chay(["git", "rev-parse", "HEAD^{tree}"], cwd=goc or GOC_CAY)
+    dong = [d.strip() for d in out.splitlines() if d.strip()]
+    return rc, (dong[-1] if rc == 0 and dong else "")
+
+
+def _git_dir_va_common(goc=None):
     """→ `(gitdir tuyệt đối, git-common-dir tuyệt đối)`. `(None, None)` nếu không đọc được."""
+    goc = goc or GOC_CAY
+
     def _doc(*tham_so):
-        rc, out = _git(*tham_so)
+        rc, out = chay(["git"] + list(tham_so), cwd=goc)
         dong = [d.strip() for d in out.splitlines() if d.strip()]
         return dong[-1] if rc == 0 and dong else ""
 
@@ -479,13 +497,13 @@ def _git_dir_va_common():
     if not git_dir or not common:
         return None, None
     if not os.path.isabs(git_dir):
-        git_dir = os.path.join(GOC_CAY, git_dir)
+        git_dir = os.path.join(goc, git_dir)
     if not os.path.isabs(common):
-        common = os.path.join(GOC_CAY, common)
+        common = os.path.join(goc, common)
     return git_dir, common
 
 
-def tree_hien_tai():
+def tree_hien_tai(goc=None):
     """`write-tree` TƯƠNG ĐƯƠNG — KHÔNG ghi `.git` của worktree chính (AGENT 03 · §3.3).
 
     Sandbox chỉ cho ghi dưới workspace + TMP; gitdir của worktree nằm NGOÀI vùng đó, nên
@@ -495,16 +513,23 @@ def tree_hien_tai():
           (`GIT_OBJECT_DIRECTORY`);
       (3) đọc object cũ qua alternates CHỈ ĐỌC (`GIT_ALTERNATE_OBJECT_DIRECTORIES`).
     Cây trả về là cây của ĐÚNG index đang có; index thật không đổi sha256, không có lock.
+
+    `goc` cho phép đo trên một clone tạm (đối chứng âm của A1) — mặc định là cây này.
+    Trả chuỗi `LỖI(...)` khi KHÔNG đọc được: người gọi PHẢI coi đó là ĐỎ, không phải "đạt".
     """
-    git_dir, common = _git_dir_va_common()
+    goc = goc or GOC_CAY
+    git_dir, common = _git_dir_va_common(goc)
     if not git_dir or not common:
-        return "LỖI(rc=128)"
+        return "LỖI(không đọc được gitdir/git-common-dir)"
+    index_that = os.path.join(git_dir, "index")
+    if not os.path.exists(index_that):
+        return "LỖI(không có index tại %s)" % index_that
     tmp = tempfile.mkdtemp(prefix="g22-a1-")
     try:
         os.makedirs(os.path.join(tmp, "objects"), exist_ok=True)
         index_tam = os.path.join(tmp, "index")
-        shutil.copy2(os.path.join(git_dir, "index"), index_tam)
-        rc, out = chay(["git", "write-tree"], env_them={
+        shutil.copy2(index_that, index_tam)
+        rc, out = chay(["git", "write-tree"], cwd=goc, env_them={
             "GIT_INDEX_FILE": index_tam,
             "GIT_OBJECT_DIRECTORY": os.path.join(tmp, "objects"),
             "GIT_ALTERNATE_OBJECT_DIRECTORIES": os.path.join(common, "objects"),
@@ -518,7 +543,7 @@ def tree_hien_tai():
 def tiem_index_ban_sao():
     """ĐỐI CHỨNG DƯƠNG cho `tree_hien_tai()`: tiêm 1 mục vào BẢN SAO index.
 
-    Không có vế này thì "write-tree == TREE_NEN" có thể chỉ là một phép đo MÙ. Ở đây:
+    Không có vế này thì "write-tree == HEAD^{tree}" có thể chỉ là một phép đo MÙ. Ở đây:
       · bản sao index nhận thêm một mục mới (`__tiem_g22.txt`) với blob ghi vào ODB TẠM;
       · tree của bản sao PHẢI ĐỔI;
       · index THẬT phải giữ nguyên sha256 và KHÔNG sinh `index.lock`.
@@ -568,42 +593,211 @@ def tiem_index_ban_sao():
         ra["co_lock_cuoi"] = os.path.exists(lock)
 
 
-def delta_head_voi_nen():
-    """Các đường KHÁC NHAU giữa HEAD hiện tại và nền — TỰ TÍNH, không viết cứng.
+def do_a1(goc=None):
+    """PHÉP ĐO A1 — NỀN ĐỌC TẠI CHỖ, KHÔNG GHIM. Trả dict; `dat=True` chỉ khi CẢ BỐN vế đúng.
 
-    Khi `HEAD == NEN_SHA` thì hàm này trả `[]`, nên ở môi trường bình thường KHÔNG có gì được
-    miễn trừ. Khi `HEAD != NEN_SHA` (chỉ xảy ra trong worktree bị sandbox chặn ghi `.git`), nó
-    trả ĐÚNG delta của hai commit — và đó là căn cứ ĐO ĐƯỢC để miễn trừ, không phải một ngoại lệ
-    ai đó dán vào cho xanh.
+    Bốn vế, cả bốn đọc từ lệnh thật:
+      (1) đọc được `HEAD` và `HEAD^{tree}`;
+      (2) đọc được cây của index (`write-tree` trên bản sao index);
+      (3) `write-tree(index)` == `HEAD^{tree}` — index KHÔNG lệch HEAD;
+      (4) `git status --porcelain -uall` không có đường NGOÀI `TEP_DUOC_PHEP`.
+
+    Đây là chỗ DUY NHẤT phán quyết A1: ca thật và ba đối chứng âm đều gọi hàm này, nên không
+    thể có chuyện "đối chứng đo một đằng, ca thật đo một nẻo". `goc` cho phép đo trên clone tạm.
     """
-    h = head_hien_tai()
-    if not h or h == NEN_SHA:
-        return []
-    rc, out = _git("diff", "--name-only", h, NEN_SHA)
-    return [d.strip() for d in out.splitlines() if d.strip()] if rc == 0 else []
+    goc = goc or GOC_CAY
+    ra = {"goc": goc, "dat": False, "ly_do": [], "head": "", "tree_head": "",
+          "tree_index": "", "status": [], "trong_phep": [], "ngoai": [],
+          "so_tep": "?", "bam_danh_sach": "?"}
+
+    rc, out = chay(["git", "rev-parse", "HEAD"], cwd=goc)
+    dong = [d.strip() for d in out.splitlines() if d.strip()]
+    ra["head"] = dong[-1] if rc == 0 and dong else ""
+    if not _khop_sha(ra["head"]):
+        ra["ly_do"].append("KHÔNG ĐỌC ĐƯỢC HEAD (`git rev-parse HEAD` rc=%d): %s"
+                           % (rc, (out.strip() or "không có output")[-180:]))
+
+    rc, ra["tree_head"] = tree_cua_head(goc)
+    if not _khop_sha(ra["tree_head"]):
+        ra["ly_do"].append("KHÔNG ĐỌC ĐƯỢC CÂY CỦA HEAD (`git rev-parse HEAD^{tree}` rc=%d)"
+                           % rc)
+
+    ra["tree_index"] = tree_hien_tai(goc)
+    if not _khop_sha(ra["tree_index"]):
+        ra["ly_do"].append("KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX (`write-tree` trên bản sao index): %s"
+                           % ra["tree_index"])
+    elif _khop_sha(ra["tree_head"]) and ra["tree_index"] != ra["tree_head"]:
+        ra["ly_do"].append("INDEX VÀ HEAD LỆCH NHAU: write-tree(index tạm)=%s ≠ HEAD^{tree}=%s"
+                           % (ra["tree_index"][:12], ra["tree_head"][:12]))
+
+    rc, ds = trang_thai(goc)
+    ra["status"] = [d for d in ds if d.strip()]
+    if rc != 0:
+        ra["ly_do"].append("KHÔNG ĐỌC ĐƯỢC `git status --porcelain -uall` (rc=%d)" % rc)
+    else:
+        for d in ra["status"]:
+            p = duong_cua_dong_status(d)
+            if any(p.endswith(t) for t in TEP_DUOC_PHEP):
+                ra["trong_phep"].append(p)
+            else:
+                ra["ngoai"].append(p)
+        if ra["ngoai"]:
+            ra["ly_do"].append("CÂY BẨN NGOÀI PHẠM VI: %s" % ", ".join(ra["ngoai"][:12]))
+
+    rc, out = chay(["git", "ls-files"], cwd=goc)
+    if rc == 0:
+        ra["so_tep"] = str(len([x for x in out.splitlines() if x.strip()]))
+    rc, out = chay(["git", "ls-files", "-s"], cwd=goc)
+    if rc == 0:
+        ra["bam_danh_sach"] = hashlib.sha256(out.encode()).hexdigest()
+
+    ra["dat"] = not ra["ly_do"]
+    return ra
 
 
-def van_tay(env_git_dir=None):
+def _in_a1(kq, nhan="A1"):
+    """In bằng chứng của một phép đo A1 — CÙNG một định dạng cho ca thật và mọi đối chứng."""
+    print("  [%s] NỀN ĐỌC TẠI CHỖ (không ghim): HEAD=%s · HEAD^{tree}=%s"
+          % (nhan, (kq["head"] or "KHÔNG ĐỌC ĐƯỢC")[:12],
+             (kq["tree_head"] or "KHÔNG ĐỌC ĐƯỢC")[:12]))
+    # Cây ĐỌC ĐƯỢC thì in 12 ký tự; cây KHÔNG đọc được thì in NGUYÊN VĂN lỗi — không cắt cụt
+    # đúng chỗ người đọc cần biết vì sao nó đỏ.
+    tree_in = kq["tree_index"] if _khop_sha(kq["tree_index"]) else (kq["tree_index"] or "?")
+    print("       write-tree (index tạm)=%s · %s tệp theo dõi · băm danh sách=%s"
+          % (tree_in[:12] if _khop_sha(tree_in) else tree_in[:110], kq["so_tep"],
+             kq["bam_danh_sach"][:16]))
+    if kq["trong_phep"]:
+        print("       cây bẩn TRONG phạm vi cho phép (%d): %s"
+              % (len(kq["trong_phep"]), ", ".join(kq["trong_phep"][:8])))
+    print("       phân quyết: %s%s" % ("XANH" if kq["dat"] else "ĐỎ",
+          "" if kq["dat"] else " — " + " | ".join(kq["ly_do"])))
+
+
+def _doi_chung_am_a1():
+    """BA ĐỐI CHỨNG ÂM + HAI ĐỐI CHỨNG DƯƠNG cho A1, TẤT CẢ LÀM THẬT trên clone tạm.
+
+    Vì sao phải làm thật: khi nền được "trừu tượng hoá" thành hàm, thứ dễ mất nhất là RĂNG của
+    cổng — hàm vẫn trả `dat=True` cho mọi cây. Trên một clone THẬT trong TMP:
+      (D)  clone SẠCH                 ⇒ `dat=True` (nếu thiếu vế này, ba vế âm dưới đây có thể
+                                        chỉ là "cổng luôn đỏ");
+      (A)  SỬA rồi THÊM tệp ngoài phạm vi ⇒ `dat=False`, lý do CÂY BẨN NGOÀI PHẠM VI;
+      (B)  `git add` một thay đổi      ⇒ `dat=False`, lý do INDEX VÀ HEAD LỆCH NHAU;
+      (C1) xoá index của clone         ⇒ `dat=False`, lý do KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX;
+      (C2) ghi HEAD hỏng               ⇒ `dat=False`, lý do KHÔNG ĐỌC ĐƯỢC HEAD/CÂY CỦA HEAD;
+      (D3) COMMIT THẬT trong clone     ⇒ HEAD và HEAD^{tree} ĐỔI mà `dat=True` — chứng minh
+                                        trực tiếp "HEAD nhích thì không có số nào phải sửa".
+    Mỗi lượt đo xong đều KHÔI PHỤC (`git reset --hard`, trả index/HEAD lại) để vế sau không thừa
+    hưởng lỗi của vế trước.
+
+    Ghi chú phạm vi: `.git` bị đụng ở đây là `.git` của CLONE TẠM trong TMP, không phải gitdir
+    của worktree thật — cùng nguyên tắc đã dùng cho `E1`/AGENT 03 §3.4.
+    """
+    ra = {"clone": "", "duong": None, "a_sua": None, "a_them": None, "b": None,
+          "c1": None, "c2": None, "duong_cuoi": None}
+    goc = tempfile.mkdtemp(prefix="g22-a1-doichung-")
+    ra["clone"] = goc
+    try:
+        head = head_hien_tai()
+        if not _khop_sha(head):
+            raise RuntimeError("không đọc được HEAD của cây thật để dựng clone đối chứng")
+        rc, out = _git("clone", "--shared", "--no-checkout", GOC_CAY, goc, giay=300)
+        if rc != 0:
+            raise RuntimeError("KHÔNG clone được cây để đối chứng: %s" % out[-500:])
+        rc, out = _git("-C", goc, "checkout", "--detach", head, giay=300)
+        if rc != 0:
+            raise RuntimeError("KHÔNG checkout được %s trong clone: %s" % (head[:12], out[-500:]))
+
+        # (D) ĐỐI CHỨNG DƯƠNG — clone SẠCH phải XANH.
+        ra["duong"] = do_a1(goc)
+        _in_a1(ra["duong"], "A1†D clone sạch")
+
+        # (A) CÂY BẨN: sửa một tệp đã theo dõi (KHÔNG stage) rồi thêm một tệp mới ngoài phạm vi.
+        tep_sua = os.path.join(goc, "admin", "admin.js")
+        with open(tep_sua, "a", encoding="utf-8") as f:
+            f.write("\n// TIÊM A1 (a-sua) — chỉ trong clone tạm\n")
+        ra["a_sua"] = do_a1(goc)
+        _in_a1(ra["a_sua"], "A1†A1 sửa tệp")
+
+        tep_them = os.path.join(goc, "admin", "__tiem_a1_g22.js")
+        with open(tep_them, "w", encoding="utf-8") as f:
+            f.write("// TIÊM A1 (a-them) — chỉ trong clone tạm\n")
+        ra["a_them"] = do_a1(goc)
+        _in_a1(ra["a_them"], "A1†A2 thêm tệp")
+        os.remove(tep_them)
+        _git("-C", goc, "checkout", "--", "admin/admin.js", giay=120)
+
+        # (B) INDEX LỆCH HEAD: sửa rồi `git add` (KHÔNG commit).
+        with open(tep_sua, "a", encoding="utf-8") as f:
+            f.write("\n// TIÊM A1 (b-index) — chỉ trong clone tạm\n")
+        rc, out = _git("-C", goc, "add", "admin/admin.js", giay=120)
+        if rc != 0:
+            raise RuntimeError("KHÔNG stage được để dựng đối chứng (b): %s" % out[-300:])
+        ra["b"] = do_a1(goc)
+        _in_a1(ra["b"], "A1†B index lệch")
+        _git("-C", goc, "reset", "--hard", head, giay=120)
+
+        # (C1) KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX: dời index ra khỏi gitdir của clone.
+        git_dir = os.path.join(goc, ".git")
+        index = os.path.join(git_dir, "index")
+        index_bak = os.path.join(git_dir, "index.a1-doichung")
+        os.replace(index, index_bak)
+        ra["c1"] = do_a1(goc)
+        _in_a1(ra["c1"], "A1†C1 index không đọc được")
+        os.replace(index_bak, index)
+
+        # (C2) KHÔNG ĐỌC ĐƯỢC HEAD/CÂY CỦA HEAD: ghi HEAD hỏng trong clone.
+        head_f = os.path.join(git_dir, "HEAD")
+        with open(head_f, "rb") as f:
+            head_goc = f.read()
+        with open(head_f, "w", encoding="utf-8") as f:
+            f.write("khong-phai-sha-cua-G22\n")
+        ra["c2"] = do_a1(goc)
+        _in_a1(ra["c2"], "A1†C2 HEAD không đọc được")
+        with open(head_f, "wb") as f:
+            f.write(head_goc)
+
+        # (D2) ĐỐI CHỨNG DƯƠNG CUỐI — sau khi khôi phục, clone lại SẠCH và XANH.
+        ra["duong_cuoi"] = do_a1(goc)
+        _in_a1(ra["duong_cuoi"], "A1†D2 clone khôi phục")
+
+        # (D3) HEAD NHÍCH — chứng minh TRỰC TIẾP "không còn số nào phải cập nhật": tạo một commit
+        # THẬT trong clone rồi đo lại. HEAD và HEAD^{tree} đều ĐỔI, A1 vẫn phải XANH. Nếu ai đó
+        # còn ghim SHA/cây ở đâu, vế này sẽ lộ ra ngay.
+        ra["head_truoc"] = head
+        with open(os.path.join(goc, "admin", "__head_nhich_g22.txt"), "w",
+                  encoding="utf-8") as f:
+            f.write("commit de chung minh nen doc tai cho, khong ghim\n")
+        _git("-C", goc, "add", "admin/__head_nhich_g22.txt", giay=120)
+        rc, out = _git("-C", goc, "-c", "user.name=AG-02-G22", "-c", "user.email=ag02@local",
+                       "commit", "-m", "A1: HEAD nhich — khong cap nhat so nao", giay=120)
+        if rc != 0:
+            raise RuntimeError("KHÔNG commit được trong clone để thử HEAD nhích: %s" % out[-300:])
+        ra["nhich"] = do_a1(goc)
+        _in_a1(ra["nhich"], "A1†D3 HEAD nhích")
+    finally:
+        shutil.rmtree(goc, ignore_errors=True)
+    return ra
+
+
+def van_tay():
     """Vân tay cây: HEAD, tree, và băm danh sách tệp theo dõi. Trả dict.
 
     `tree` lấy từ `tree_hien_tai()` — phép đo TƯƠNG ĐƯƠNG bằng index tạm, nên vân tay đọc được
     cả khi sandbox chặn ghi `.git` (AGENT 03 · `docs/G22_A1_GIT.md` §3.3).
     """
-    env_them = {"GIT_DIR": env_git_dir} if env_git_dir else {}
     ra = {}
     for ten, tham in (("head", ("rev-parse", "HEAD")), ("so_tep", ("ls-files",))):
-        rc, out = chay(["git"] + list(tham), env_them=env_them)
+        rc, out = chay(["git"] + list(tham))
         ra[ten] = out.strip() if rc == 0 else "LỖI(rc=%d)" % rc
     ra["tree"] = tree_hien_tai()
-    rc, out = chay(["git", "ls-files", "-s"], env_them=env_them)
+    rc, out = chay(["git", "ls-files", "-s"])
     ra["bam_danh_sach"] = hashlib.sha256(out.encode()).hexdigest() if rc == 0 else "LỖI"
     ra["so_tep"] = str(len([x for x in ra["so_tep"].splitlines() if x.strip()]))
     return ra
 
 
-def trang_thai(env_git_dir=None):
-    env_them = {"GIT_DIR": env_git_dir} if env_git_dir else {}
-    rc, out = chay(["git", "status", "--porcelain", "-uall"], env_them=env_them)
+def trang_thai(goc=None):
+    rc, out = chay(["git", "status", "--porcelain", "-uall"], cwd=goc or GOC_CAY)
     return rc, [d for d in out.splitlines() if d.strip()]
 
 
@@ -991,35 +1185,23 @@ class A_Nen(unittest.TestCase):
     """NỀN — cây nào đang được đo. Sai nền thì mọi số dưới đây vô nghĩa."""
 
     def test_a1_cay_dung_bang_cay_cua_nen(self):
-        """CÂY (không phải nhãn) phải bằng cây của nền ĐANG ĐO — `dd788fc`/`9628587`.
+        """CÂY ĐANG ĐO phải bằng `HEAD^{tree}` của CHÍNH `HEAD` hiện tại — KHÔNG còn ghim.
+
+        KHÔNG có `NEN_SHA`/`TREE_NEN` để cập nhật: nền là HEAD đọc ngay trong phép đo, nên
+        `HEAD` nhích ở mọi commit cũng không sinh ra một cái ĐỎ VĨNH VIỄN (họ H5/N-G19-04).
 
         BA vế, cả ba đọc từ lệnh thật:
-          (i)   GHIM không stale: `NEN_SHA^{tree}` phải đúng `TREE_NEN` — nếu không, lỗi là GHIM,
-                không phải môi trường (AGENT 03 §5);
-          (ii)  PHÉP ĐO không mù: tiêm 1 mục vào BẢN SAO index ⇒ tree ĐỔI, index THẬT giữ nguyên
-                sha256, không có `index.lock` (AGENT 03 §3.4);
-          (iii) cây đo được bằng phép đo tương đương phải bằng `TREE_NEN`.
+          (i)   `do_a1()` — HEAD, `HEAD^{tree}`, cây index, `status` — phải XANH;
+          (ii)  ĐỐI CHỨNG DƯƠNG phép đo index: tiêm 1 mục vào BẢN SAO index ⇒ cây ĐỔI, index
+                THẬT giữ nguyên sha256, không có `index.lock` (AGENT 03 §3.4);
+          (iii) BA ĐỐI CHỨNG ÂM LÀM THẬT trên clone tạm — cây bẩn, index≠HEAD, không đọc được
+                cây — cả ba PHẢI ĐỎ, kèm đối chứng dương (clone sạch ⇒ XANH).
         """
-        vt = van_tay()
-        self.assertRegex(vt["head"], r"^[0-9a-f]{40}$", "không đọc được HEAD")
-        print("\n  [A1] HEAD=%s · write-tree (index tạm)=%s · %s tệp theo dõi · băm danh sách=%s"
-              % (vt["head"][:12], vt["tree"][:12], vt["so_tep"], vt["bam_danh_sach"][:16]))
-        print("       nền: SHA=%s · tree=%s" % (NEN_SHA[:12], TREE_NEN[:12]))
+        kq = do_a1()
+        print("\n  [A1] PHÉP ĐO NỀN — HEAD và HEAD^{tree} ĐỌC TẠI CHỖ (không hằng số)")
+        _in_a1(kq)
 
-        # (i) GHIM — `TREE_NEN` có thật là cây của `NEN_SHA` không.
-        rc_pin, out_pin = _git("rev-parse", NEN_SHA + "^{tree}")
-        dong_pin = [d.strip() for d in out_pin.splitlines() if d.strip()]
-        tree_ghim = dong_pin[-1] if rc_pin == 0 and dong_pin else ""
-        print("       GHIM: `git rev-parse %s^{tree}` → rc=%d · %s"
-              % (NEN_SHA[:12], rc_pin, tree_ghim[:12] or "KHÔNG ĐỌC ĐƯỢC"))
-        self.assertEqual(rc_pin, 0, "KHÔNG đọc được cây của NEN_SHA — ghim trỏ vào commit lạ: %s"
-                         % out_pin[-300:])
-        self.assertEqual(tree_ghim, TREE_NEN,
-                         "GHIM STALE: `TREE_NEN=%s` KHÔNG phải cây của `NEN_SHA=%s` (cây thật "
-                         "của commit ghim = `%s`). Đây là lỗi GHIM, không phải lỗi môi trường."
-                         % (TREE_NEN[:12], NEN_SHA[:12], tree_ghim[:12] or "?"))
-
-        # (ii) ĐỐI CHỨNG DƯƠNG — phép đo phải NHÌN THẤY thay đổi, và không làm bẩn index thật.
+        # (ii) ĐỐI CHỨNG DƯƠNG — phép đo index phải NHÌN THẤY thay đổi, và không làm bẩn index thật.
         doi = tiem_index_ban_sao()
         print("       ĐỐI CHỨNG DƯƠNG: tiêm `__tiem_g22.txt` vào BẢN SAO index → "
               "tree %s → %s · rc=%s"
@@ -1029,46 +1211,68 @@ class A_Nen(unittest.TestCase):
                  doi.get("co_lock_truoc"), doi.get("co_lock_sau")))
         self.assertEqual(doi.get("rc"), 0, "KHÔNG tiêm được vào bản sao index: %s"
                          % doi.get("loi", "")[-600:])
+        self.assertEqual(doi.get("tree_truoc"), kq["tree_index"],
+                         "phép tiêm đo trên một cây KHÁC cây A1 vừa đo — hai phép đo không khớp")
         self.assertNotEqual(doi.get("tree_sau"), doi.get("tree_truoc"),
                             "PHÉP ĐO MÙ: tiêm một mục vào bản sao index mà cây KHÔNG đổi")
         self.assertEqual(doi.get("index_sha256_sau"), doi.get("index_sha256_truoc"),
                          "index THẬT bị đổi bởi phép đo — vi phạm 'không ghi .git thật'")
         self.assertFalse(doi.get("co_lock_sau"), "phép đo làm sót `index.lock` trong gitdir thật")
 
-        # (iii) CÂY ĐANG ĐO.
-        self.assertEqual(
-            vt["tree"], TREE_NEN,
-            "CÂY ĐANG ĐO KHÔNG PHẢI CÂY CỦA `%s`. Mọi con số của bộ kiểm này chỉ có nghĩa trên "
-            "đúng cây đó." % NEN_SHA[:12])
+        # (iii) BA ĐỐI CHỨNG ÂM + HAI DƯƠNG — LÀM THẬT trên clone tạm, không phải lời khai.
+        dc = _doi_chung_am_a1()
+        self.assertTrue(dc["duong"]["dat"],
+                        "ĐỐI CHỨNG DƯƠNG HỎNG: clone SẠCH mà A1 ĐỎ: %s" % dc["duong"]["ly_do"])
+        self.assertFalse(dc["a_sua"]["dat"],
+                         "ĐỐI CHỨNG ÂM (a) MÙ: SỬA một tệp ngoài phạm vi mà A1 vẫn XANH")
+        self.assertIn("CÂY BẨN NGOÀI PHẠM VI", " | ".join(dc["a_sua"]["ly_do"]),
+                      "A1 ĐỎ nhưng KHÔNG vì cây bẩn: %s" % dc["a_sua"]["ly_do"])
+        self.assertFalse(dc["a_them"]["dat"],
+                         "ĐỐI CHỨNG ÂM (a) MÙ: THÊM một tệp ngoài phạm vi mà A1 vẫn XANH")
+        self.assertIn("CÂY BẨN NGOÀI PHẠM VI", " | ".join(dc["a_them"]["ly_do"]),
+                      "A1 ĐỎ nhưng KHÔNG vì cây bẩn: %s" % dc["a_them"]["ly_do"])
+        self.assertFalse(dc["b"]["dat"],
+                         "ĐỐI CHỨNG ÂM (b) MÙ: index LỆCH HEAD mà A1 vẫn XANH")
+        self.assertIn("INDEX VÀ HEAD LỆCH NHAU", " | ".join(dc["b"]["ly_do"]),
+                      "A1 ĐỎ nhưng KHÔNG vì index lệch HEAD: %s" % dc["b"]["ly_do"])
+        self.assertFalse(dc["c1"]["dat"],
+                         "ĐỐI CHỨNG ÂM (c) MÙ: cây index KHÔNG đọc được mà A1 vẫn XANH")
+        self.assertIn("KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX", " | ".join(dc["c1"]["ly_do"]),
+                      "A1 ĐỎ nhưng KHÔNG nói rõ 'không đọc được cây index': %s" % dc["c1"]["ly_do"])
+        self.assertFalse(dc["c2"]["dat"],
+                         "ĐỐI CHỨNG ÂM (c) MÙ: HEAD KHÔNG đọc được mà A1 vẫn XANH")
+        self.assertIn("KHÔNG ĐỌC ĐƯỢC HEAD", " | ".join(dc["c2"]["ly_do"]),
+                      "A1 ĐỎ nhưng KHÔNG nói rõ 'không đọc được HEAD': %s" % dc["c2"]["ly_do"])
+        self.assertTrue(dc["duong_cuoi"]["dat"],
+                        "clone KHÔNG khôi phục được sau đối chứng: %s" % dc["duong_cuoi"]["ly_do"])
+        self.assertNotEqual(dc["nhich"]["head"], dc["head_truoc"],
+                            "HEAD KHÔNG nhích sau commit thử ⇒ vế D3 không đo được gì")
+        self.assertNotEqual(dc["nhich"]["tree_head"], dc["duong"]["tree_head"],
+                            "cây của HEAD KHÔNG đổi sau commit thử ⇒ vế D3 không đo được gì")
+        self.assertTrue(dc["nhich"]["dat"],
+                        "HEAD NHÍCH mà A1 ĐỎ ⇒ vẫn còn một cái ghim phải cập nhật: %s"
+                        % dc["nhich"]["ly_do"])
+
+        # (i) PHÁN QUYẾT CUỐI — trên cây THẬT. Không có số ghim nào để so.
+        self.assertTrue(kq["dat"], "A1 ĐỎ: %s" % " | ".join(kq["ly_do"]))
 
     def test_a2_khong_sua_ma_san_pham(self):
         """Chỉ được có các tệp trong `TEP_DUOC_PHEP` (hai tệp AG-01 G22 + tệp của lượt hiện
         tại); không sửa mã sản phẩm.
 
-        Miễn trừ duy nhất — và nó được TÍNH RA, không được dán vào: khi `HEAD != NEN_SHA` (chỉ
-        xảy ra trong worktree bị sandbox chặn ghi `.git`), `git status` so cây với HEAD CŨ nên nó
-        kể ra delta của HAI COMMIT. Delta đó lấy từ `git diff --name-only HEAD NEN_SHA`.
-        Ở môi trường bình thường (`HEAD == NEN_SHA`) delta RỖNG, nên không có gì được tha.
+        Nền là HEAD ĐỌC TẠI CHỖ, nên KHÔNG còn "delta hai commit" để miễn trừ: mọi đường
+        `git status` không thuộc danh sách tệp được phép đều là thay đổi của lượt này.
         """
         rc, ds = trang_thai()
         self.assertEqual(rc, 0, "`git status` hỏng (rc=%d) — không đo được cây" % rc)
         la = [d for d in ds if d.strip()]
-        delta = set(delta_head_voi_nen())
         duoc_phep = [d for d in la
                      if any(duong_cua_dong_status(d).endswith(t) for t in TEP_DUOC_PHEP)]
-        mien_tru = [d for d in la if duong_cua_dong_status(d) in delta and d not in duoc_phep]
-        ngoai = [d for d in la if d not in duoc_phep and d not in mien_tru]
-        print("\n  [A2] `status --porcelain -uall`: %d đường = %d tệp được phép + %d delta HEAD↔nền "
-              "+ %d NGOÀI phép" % (len(la), len(duoc_phep), len(mien_tru), len(ngoai)))
+        ngoai = [d for d in la if d not in duoc_phep]
+        print("\n  [A2] `status --porcelain -uall`: %d đường = %d tệp được phép + %d NGOÀI phép"
+              % (len(la), len(duoc_phep), len(ngoai)))
         for d in ngoai:
             print("       %s" % d)
-        if delta:
-            print("       ⚠ HEAD=%s ≠ nền=%s ⇒ miễn trừ %d đường là DELTA HAI COMMIT (đo được: "
-                  "`git diff --name-only HEAD %s`). Chạy trong cây có HEAD=nền thì delta RỖNG."
-                  % (head_hien_tai()[:8], NEN_SHA[:8], len(delta), NEN_SHA[:8]))
-        else:
-            print("       HEAD == nền ⇒ delta RỖNG, KHÔNG đường nào được miễn trừ ngoài danh sách "
-                  "được phép")
         self.assertEqual(ngoai, [], "có thay đổi NGOÀI danh sách tệp được phép")
 
     def test_a3_csdl_nghiep_vu_van_la_sqlite_D8(self):
@@ -1319,12 +1523,11 @@ class E_CaySach(unittest.TestCase):
     )
 
     def _doi_chung_cong_cay_sach_o_clone_nen(self):
-        """ĐỐI CHỨNG DƯƠNG cho nhóm `cay-sach-3-ban-sao` — chạy trên CLONE THẬT tại nền.
+        """ĐỐI CHỨNG DƯƠNG cho nhóm `cay-sach-3-ban-sao` — chạy trên CLONE THẬT tại HEAD.
 
-        Trên cây thợ này `HEAD != NEN_SHA` và sandbox CHẶN ghi `.git`, nên ba cổng so-cây-với-HEAD
-        KHÔNG thể phán quyết ở đây. Nhưng "không phán quyết được trên cây này" KHÔNG đồng nghĩa
-        với "không cần đối chứng": một clone `--shared` trong TMP có `HEAD = NEN_SHA` và cây SẠCH,
-        nên đó là môi trường đo ĐÚNG của chính ba cổng đó (xem §3 đầu tệp).
+        Một clone `--shared` trong TMP có `HEAD` = HEAD đọc tại chỗ và cây SẠCH, nên đó là môi
+        trường đo ĐÚNG của ba cổng so-cây-với-HEAD (xem §3 đầu tệp). KHÔNG ghim SHA nền: HEAD
+        nhích ở mọi commit, ghim lại sẽ sinh đúng cái ĐỎ VĨNH VIỄN mà vòng 3 đang diệt.
 
         HAI VẾ, cả hai đều ĐO ĐƯỢC:
           (a) cây SẠCH  ⇒ CẢ BA cổng XANH (rc=0);
@@ -1332,19 +1535,22 @@ class E_CaySach(unittest.TestCase):
         Chỉ khi cả hai vế đúng thì nhóm mới được coi là "đã chạy đối chứng" — nếu không, `Z6`
         phải tiếp tục ĐỎ chứ không được bật cờ suông.
         """
+        head = head_hien_tai()
+        self.assertRegex(head, r"^[0-9a-f]{40}$",
+                         "KHÔNG đọc được HEAD của cây thợ ⇒ không dựng được clone đối chứng")
         goc = tempfile.mkdtemp(prefix="g22-clone-nen-")
         try:
             rc, out = _git("clone", "--shared", "--no-checkout", GOC_CAY, goc, giay=300)
             self.assertEqual(rc, 0, "KHÔNG clone được nền để đối chứng: %s" % out[-500:])
-            rc, out = _git("-C", goc, "checkout", "--detach", NEN_SHA, giay=300)
-            self.assertEqual(rc, 0, "KHÔNG checkout được nền %s: %s" % (NEN_SHA[:12], out[-500:]))
+            rc, out = _git("-C", goc, "checkout", "--detach", head, giay=300)
+            self.assertEqual(rc, 0, "KHÔNG checkout được HEAD %s: %s" % (head[:12], out[-500:]))
             rc, out = _git("-C", goc, "rev-parse", "HEAD")
-            self.assertEqual(out.strip(), NEN_SHA,
-                             "clone có HEAD=%r ≠ nền=%s" % (out.strip(), NEN_SHA))
+            self.assertEqual(out.strip(), head,
+                             "clone có HEAD=%r ≠ HEAD đọc tại chỗ=%s" % (out.strip(), head))
             rc, out = _git("-C", goc, "status", "--porcelain", "-uall")
             self.assertEqual(rc, 0, "`git status` trong clone hỏng: %s" % out[-300:])
             self.assertEqual([d for d in out.splitlines() if d.strip()], [],
-                             "clone tại nền KHÔNG sạch ⇒ đối chứng sẽ đo sai: %s"
+                             "clone tại HEAD KHÔNG sạch ⇒ đối chứng sẽ đo sai: %s"
                              % out[-500:])
             sach, tiem = [], []
             for ten, lenh in self.CONG:
@@ -1356,14 +1562,14 @@ class E_CaySach(unittest.TestCase):
             for ten, lenh in self.CONG:
                 rc, out = chay(lenh, giay=600, cwd=goc)
                 tiem.append((ten, rc, _phan_loai_cong_cay_sach(out, rc)))
-            print("\n  [E1†] ĐỐI CHỨNG CLONE THẬT tại nền %s (HEAD=nền, cây sạch — ngoài cây thợ):"
-                  % NEN_SHA[:12])
+            print("\n  [E1†] ĐỐI CHỨNG CLONE THẬT tại HEAD %s (HEAD đọc tại chỗ, cây sạch):"
+                  % head[:12])
             for (ten, rc, loai), (_, rc_t, loai_t) in zip(sach, tiem):
                 print("       %-12s cây SẠCH rc=%-3d %-13s · TIÊM `admin/__tiem_g22.js` "
                       "rc=%-3d %s" % (ten, rc, loai, rc_t, loai_t))
             self.assertTrue(
                 all(rc == 0 and loai == "XANH" for _, rc, loai in sach),
-                "cây SẠCH tại nền mà cổng KHÔNG xanh ⇒ đối chứng không dựng được: %r" % (sach,))
+                "cây SẠCH tại HEAD mà cổng KHÔNG xanh ⇒ đối chứng không dựng được: %r" % (sach,))
             self.assertTrue(
                 all(rc != 0 and loai == "DO_THAT" for _, rc, loai in tiem),
                 "TIÊM tệp bẩn mà có cổng KHÔNG ĐỎ-THẬT ⇒ cổng MÙ: %r" % (tiem,))
@@ -1375,20 +1581,18 @@ class E_CaySach(unittest.TestCase):
     def test_e1_ba_cong_cay_sach_chay_that(self):
         """Chạy CẢ BA cổng trong TIẾN TRÌNH CON, và phân loại từng cổng.
 
-        BA CỔNG NÀY SO CÂY VỚI `HEAD`, nên chúng CHỈ đo được khi `HEAD` = nền. Chạy chúng trên
-        một cây có `HEAD` cũ hơn sẽ ra ĐỎ vì delta hai commit — ĐỎ GIẢ của môi trường, và lượt
-        `qa_g22_lan1_nhiem.log` đã đo đúng cái ĐỎ GIẢ đó (13 đường). Bộ kiểm vì thế TỪ CHỐI phán
-        quyết ở đây khi `HEAD` không phải nền, và NÓI RA — chứ không bỏ qua im lặng.
+        BA CỔNG NÀY SO CÂY VỚI `HEAD`. Nền nay là HEAD ĐỌC TẠI CHỖ, nên trạng thái "HEAD ≠ nền"
+        không còn tồn tại: không có lý do môi trường nào để TỪ CHỐI phán quyết. Nếu HEAD không
+        đọc được thì đó là ĐỎ THẬT, không phải skip.
 
-        DÙ có skip phần "3/3 trên cây này", ĐỐI CHỨNG DƯƠNG vẫn phải CHẠY THẬT: nó được đo trong
-        một clone tại nền (`_doi_chung_cong_cay_sach_o_clone_nen`) TRƯỚC khi skip. `Z6` vì thế
-        chỉ xanh khi phép tiêm thật sự bắt được lỗi, không phải khi có một lời khai.
+        ĐỐI CHỨNG DƯƠNG vẫn CHẠY THẬT trước: clone tại HEAD
+        (`_doi_chung_cong_cay_sach_o_clone_nen`) — sạch 3/3 XANH, tiêm 3/3 `DO_THAT`. `Z6` vì
+        thế chỉ xanh khi phép tiêm thật sự bắt được lỗi, không phải khi có một lời khai.
         """
         self._doi_chung_cong_cay_sach_o_clone_nen()
-        if head_hien_tai() != NEN_SHA:
-            self.skipTest("MÔI TRƯỜNG ĐO KHÔNG TRÙNG: HEAD=%s ≠ nền=%s. Ba cổng này so cây với "
-                          "HEAD nên sẽ ĐỎ GIẢ. Chạy bộ kiểm trong cây có HEAD=nền (xem §3)."
-                          % (head_hien_tai()[:12], NEN_SHA[:12]))
+        head = head_hien_tai()
+        self.assertRegex(head, r"^[0-9a-f]{40}$",
+                         "KHÔNG đọc được HEAD ⇒ ba cổng cây sạch không thể phán quyết")
         xanh, chi_tiet = 0, []
         for ten, lenh in self.CONG:
             # DÙNG `.format()`, KHÔNG DÙNG `%`: đoạn mã con có chứa `%d`/`%r` của CHÍNH NÓ, và
@@ -2259,7 +2463,11 @@ class Y_Bang(unittest.TestCase):
         print("\n" + "=" * 92)
         print("  BẢNG PHÁN QUYẾT — chế độ=%s%s" % (CHE_DO,
               "  (ô 'nen' CŨNG ĐỎ: nghiệm thu bản ĐÃ GỘP)" if CHE_DO == "gop" else "  (đo nợ trên nền)"))
-        print("  nền: SHA=%s · tree=%s" % (NEN_SHA[:12], TREE_NEN[:12]))
+        kq = do_a1()
+        print("  nền: HEAD ĐỌC TẠI CHỖ=%s · HEAD^{tree}=%s · write-tree(index tạm)=%s"
+              % (kq["head"][:12] or "KHÔNG ĐỌC ĐƯỢC",
+                 kq["tree_head"][:12] or "KHÔNG ĐỌC ĐƯỢC",
+                 kq["tree_index"][:12] or "KHÔNG ĐỌC ĐƯỢC"))
         print("  số ca E2E DO PLAYWRIGHT LIỆT KÊ (`--list`): toàn bộ=%d · bàn phím=%d "
               "· %d tệp spec" % (SO_CA["toan_bo"], SO_CA["ban_phim"], SO_CA["so_tep"]))
         print("=" * 92)
@@ -2290,23 +2498,21 @@ def _khoa_tam():
 def _kiem_tra_pham_vi():
     """Bộ kiểm TỰ KIỂM phạm vi ghi: ngoài danh sách tệp được phép, cây phải sạch.
 
-    Miễn trừ delta HEAD↔nền dùng CÙNG hàm `delta_head_voi_nen()` như `A2` — một luật, một chỗ.
+    Nền là HEAD ĐỌC TẠI CHỖ, nên KHÔNG còn delta hai commit để miễn trừ — cùng một luật với `A2`.
     """
     rc, ds = trang_thai()
     la = [d for d in ds if d.strip()]
-    delta = set(delta_head_voi_nen())
     ngoai = [d for d in la
-             if duong_cua_dong_status(d) not in delta
-             and not any(duong_cua_dong_status(d).endswith(t) for t in TEP_DUOC_PHEP)]
+             if not any(duong_cua_dong_status(d).endswith(t) for t in TEP_DUOC_PHEP)]
     return {"rc": rc, "so_duong": len(la), "ngoai": ngoai}
 
 
 MAIN_DOC = """
   BỘ KIỂM G22 — AG-01 (QA/VERIFIER)
 
-  Nền: %s  (tree %s)
+  Nền: HEAD ĐỌC TẠI CHỖ = %s  (tree %s)
   Cây đang đo: %s
-  HEAD hiện tại: %s   %s
+  Index hiện tại: write-tree (bản sao index) = %s
 
   Lệnh:
     python3 app/thu/thu_qa_g22.py                       # làn mặc định
@@ -2318,30 +2524,16 @@ MAIN_DOC = """
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    # ĐO MÔI TRƯỜNG TRƯỚC KHI ĐO SẢN PHẨM. `write-tree` là bất biến NỘI DUNG — nó đúng thì cây
-    # đang đo ĐÚNG LÀ cây của nền, dù `HEAD` có nhích được hay không.
-    tree = tree_hien_tai()
-    head = head_hien_tai()
-    dung_cay = (tree == TREE_NEN)
-    dung_head = (head == NEN_SHA)
-    if dung_head:
-        ghi_chu = "= nền ✓"
+    # ĐO NỀN TRƯỚC KHI ĐO SẢN PHẨM. Nền KHÔNG phải hằng số: HEAD và HEAD^{tree} đọc tại chỗ.
+    kq = do_a1()
+    head = kq["head"] or "KHÔNG ĐỌC ĐƯỢC"
+    tree_head = kq["tree_head"] or "KHÔNG ĐỌC ĐƯỢC"
+    tree_index = kq["tree_index"] or "KHÔNG ĐỌC ĐƯỢC"
+    print(MAIN_DOC % (head[:12], tree_head[:12], GOC_CAY, tree_index[:12]))
+    if kq["dat"]:
+        print("  NỀN: index == HEAD^{tree} ✓ · không có thay đổi ngoài phạm vi ✓")
     else:
-        ghi_chu = ("≠ nền ⇒ delta hai commit được miễn trừ ở `A2`; CÁC CỔNG 'CÂY SẠCH' TỪ CHỐI "
-                   "PHÁN QUYẾT (xem §3 đầu tệp)")
-    print(MAIN_DOC % (NEN_SHA[:12], TREE_NEN[:12], GOC_CAY, head[:12] if head else "KHÔNG ĐỌC ĐƯỢC",
-                      ghi_chu))
-    if not dung_cay:
-        print("  ⚠ CÂY ĐANG ĐO KHÔNG PHẢI CÂY CỦA NỀN: write-tree=%s · nền=%s"
-              % (tree[:12], TREE_NEN[:12]))
-    # GHIM phải là CÂY CỦA CHÍNH COMMIT GHIM — tách "lỗi ghim" khỏi "lỗi môi trường".
-    rc_ghim, out_ghim = _git("rev-parse", NEN_SHA + "^{tree}")
-    dong_ghim = [d.strip() for d in out_ghim.splitlines() if d.strip()]
-    tree_ghim = dong_ghim[-1] if rc_ghim == 0 and dong_ghim else ""
-    print("  GHIM: `%s^{tree}` = %s %s"
-          % (NEN_SHA[:12], tree_ghim[:12] or "KHÔNG ĐỌC ĐƯỢC",
-             "= TREE_NEN ✓" if tree_ghim == TREE_NEN
-             else "≠ TREE_NEN — GHIM STALE, sửa ghim trước khi đọc số"))
+        print("  ⚠ NỀN: A1 SẼ ĐỎ — " + " | ".join(kq["ly_do"]))
     print("  số ca E2E do Playwright liệt kê (`--list`): toàn bộ=%d · bàn phím=%d"
           % (SO_CA["toan_bo"], SO_CA["ban_phim"]))
 

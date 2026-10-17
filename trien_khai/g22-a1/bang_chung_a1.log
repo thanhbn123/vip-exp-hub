@@ -1,0 +1,140 @@
+==============================================================================
+ AG-03 (G22) · A1 GIT SANDBOX · môi trường đo write-tree
+ Thời điểm: 2026-10-17T22:56:40+0700
+ Worktree : /Users/viporder/orca/workspaces/vip-express-hub/g22-a3-gitsandbox
+ TMP      : /var/folders/v1/443y_fys65vflj24_rjw9x_w0000gn/T//g22-a1-script.FKep0I
+==============================================================================
+
+== 0. KHẢO SÁT — lệnh THẬT, rc NGAY sau lệnh ==
+$ git --version
+git version 2.50.1 (Apple Git-155)
+rc=0
+$ git rev-parse --git-dir --git-common-dir --show-toplevel
+/Users/viporder/Projects/vip-express-hub/.git/worktrees/g22-a3-gitsandbox
+/Users/viporder/Projects/vip-express-hub/.git
+/Users/viporder/orca/workspaces/vip-express-hub/g22-a3-gitsandbox
+rc=0
+HEAD=a76ec51c9931b62451721302446d7c3b74b9c81f
+tree(HEAD)=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+so tep theo doi=379
+index=/Users/viporder/Projects/vip-express-hub/.git/worktrees/g22-a3-gitsandbox/index
+sha256(index) TRUOC=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+index.lock TRUOC=KHONG
+
+== 1. LỆNH BỊ CHẶN — git write-tree TRẦN ==
+$ git write-tree
+rc=128
+stdout=
+stderr=fatal: Unable to create '/Users/viporder/Projects/vip-express-hub/.git/worktrees/g22-a3-gitsandbox/index.lock': Operation not permitted
+→ BỊ CHẶN đúng như báo cáo: index.lock / Operation not permitted (LỖI MÔI TRƯỜNG ĐO)
+sha256(index) SAU  =283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+index.lock SAU    =KHONG
+
+== 2. PHƯƠNG ÁN A — index TẠM + ODB TẠM + alternates CHỈ ĐỌC ==
+$ GIT_INDEX_FILE=<tmp>/index GIT_OBJECT_DIRECTORY=<tmp>/objects \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES=<common>/objects git write-tree
+rc=0
+stdout=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+stderr=
+tree(HEAD)=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · KHOP=YES
+sha256(index) sau A=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+
+== 3. PHƯƠNG ÁN B — BẢN SAO CÔ LẬP trong TMP ==
+$ git clone --shared --no-checkout <worktree> <tmp>/cp
+rc=0
+$ git -C <tmp>/cp checkout --detach <HEAD>
+rc=0
+$ git -C <tmp>/cp write-tree
+rc=0
+HEAD(clone)=a76ec51c9931b62451721302446d7c3b74b9c81f
+write-tree(clone)=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+tree(HEAD)=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · KHOP=YES
+
+== 4. BỘ ĐO CỦA AG-03 — app/thu/thu_g22_a1.py ==
+$ python3 app/thu/thu_g22_a1.py
+test_00_khao_sat_moi_truong (__main__.A_MoiTruong) ... ok
+test_01_lenh_tran_va_ly_do_bi_chan (__main__.A_MoiTruong)
+Ghi lại ĐÚNG lệnh bị chặn: rc, stderr, và chứng minh nó KHÔNG để lại dấu vết. ... ok
+test_02_do_an_toan_tra_dung_cay (__main__.A_MoiTruong)
+Phương án A: index tạm + ODB tạm + alternates CHỈ ĐỌC ⇒ tương đương write-tree. ... ok
+test_03_doi_chung_duong_bat_duoc_thay_doi (__main__.A_MoiTruong)
+ĐỔI MỘT MỤC trong BẢN SAO index ⇒ cây ĐỔI. Chứng minh phép đo KHÔNG mù. ... ok
+test_04_moi_truong_co_lap_clone (__main__.A_MoiTruong)
+Phương án B: clone `--shared` + `checkout --detach` trong TMP ⇒ write-tree chạy. ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.525s
+
+OK
+============================================================================================
+  AG-03 (G22) · A1 GIT SANDBOX · đo CÂY trong worktree bị sandbox chặn ghi .git
+  Worktree: /Users/viporder/orca/workspaces/vip-express-hub/g22-a3-gitsandbox
+  Cách chạy: python3 app/thu/thu_g22_a1.py [--kiem-ghim] [--json] [--giu-tmp]
+============================================================================================
+
+  [A1-00] git=git version 2.50.1 (Apple Git-155)
+          worktree=/Users/viporder/orca/workspaces/vip-express-hub/g22-a3-gitsandbox
+          gitdir  =/Users/viporder/Projects/vip-express-hub/.git/worktrees/g22-a3-gitsandbox
+          common  =/Users/viporder/Projects/vip-express-hub/.git
+          HEAD=a76ec51c9931b62451721302446d7c3b74b9c81f · tree(HEAD)=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · 379 tệp theo dõi
+          index  =/Users/viporder/Projects/vip-express-hub/.git/worktrees/g22-a3-gitsandbox/index
+          sha256(index) TRƯỚC=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3 · index.lock=False
+
+  [A1-01] $ git write-tree
+          rc=0
+          → môi trường NÀY GHI ĐƯỢC .git: đo trực tiếp được (tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147)
+
+  [A1-02] $ GIT_INDEX_FILE=<tmp>/index GIT_OBJECT_DIRECTORY=<tmp>/objects \
+             GIT_ALTERNATE_OBJECT_DIRECTORIES=<common>/objects git write-tree
+          rc=0 · tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+          tree(HEAD)=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · khớp=True
+          sha256(index) TRƯỚC=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3 SAU=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3 (KHÔNG ĐỔI=True)
+
+  [A1-03] tiêm 1 mục vào BẢN SAO index:
+          blob mới=a7c10aa40c0d53655f0b3667764e9e643d05e6b5
+          tree TRƯỚC=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+          tree SAU  =5bf63bb330be65b0c68e2f7682e3947b9af1ad6d
+          ĐỔI=True · sha256(index thật) TRƯỚC=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3 SAU=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+
+  [A1-04] $ git clone --shared --no-checkout <worktree> <tmp>/cp
+          $ git -C <tmp>/cp checkout --detach a76ec51c9931b62451721302446d7c3b74b9c81f
+          rc clone=0 · rc checkout=0 · rc write-tree=0
+          HEAD(clone)=a76ec51c9931b62451721302446d7c3b74b9c81f · write-tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+          tree(nền)=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · khớp=True
+
+============================================================================================
+  BẢNG TỔNG — số đo THẬT của lượt này
+    HEAD=a76ec51c9931b62451721302446d7c3b74b9c81f · tree(HEAD)=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · 379 tệp
+    gitdir=/Users/viporder/Projects/vip-express-hub/.git/worktrees/g22-a3-gitsandbox
+    write-tree TRẦN          : rc=0 · tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147 · chạy được
+    write-tree AN TOÀN       : rc=0 · tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+    index THẬT sha256 TRƯỚC  : 283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+    index THẬT sha256 SAU    : 283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+    index.lock sau lượt      : False
+    GHIM bộ kiểm chính thức  : NEN_SHA=3b7e93b59b70449b8306eb4fa374dd1e97a8e7af · TREE_NEN=37079aa83f2ad62c2862f2eb7ce1c809c24570fb
+    GHIM == cây đo được      : False   ⚠ GHIM LỆCH — cần AG-02/AG-00 cập nhật, KHÔNG tự sửa
+    ca: 5 · hỏng/lỗi: 0 · bỏ qua: 0 · MÃ THOÁT = 0
+============================================================================================
+rc=0
+
+== 5. KIỂM TRA CUỐI — không dấu vết trên cây chính ==
+sha256(index) TRUOC=283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+sha256(index) CUOI =283acae98addd21020b2bedb5e7505263233632a9a23b61e80c0075fe99f0aa3
+index.lock CUOI   =KHONG
+$ git status --porcelain -uall
+?? app/thu/thu_g22_a1.py
+?? trien_khai/g22-a1/do_moi_truong.sh
+rc=0
+==============================================================================
+ KẾT LUẬN ĐO ĐƯỢC
+ - write-tree TRẦN: rc=128 (bị chặn ở index.lock / Operation not permitted)
+ - PHƯƠNG ÁN A (index tạm): rc=0 · tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+ - PHƯƠNG ÁN B (bản sao)  : rc=0 · tree=4676e5c53288e21e7c1a87e6bdde9a12c295a147
+ - tree(HEAD)             : 4676e5c53288e21e7c1a87e6bdde9a12c295a147
+ - Bộ đo AG-03            : rc=0
+ - index THẬT bất biến    : YES
+ - index.lock còn lại     : KHONG
+ - EXIT CODE THAT = 0
+==============================================================================
+
+[CHAY TAY] EXIT CODE THAT = 0

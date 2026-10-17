@@ -1,0 +1,113 @@
+==============================================================================
+ AG-03 (G22) · A1 · ĐỐI CHỨNG GHIM trong BẢN SAO GHI ĐƯỢC .git
+ Thời điểm: 2026-10-17T22:56:58+0700
+==============================================================================
+
+$ git clone --shared --no-checkout <worktree> <tmp>/cp
+Cloning into '/tmp/g22a1-clone-bc-F0bihL/cp'...
+done.
+rc=0
+$ git -C <tmp>/cp checkout --detach a76ec51
+HEAD is now at a76ec51 AG-00: GOP BAN VA C5/G7 CUA AG-01 VAO CAY TICH HOP (sua loi gop -X ours)
+rc=0
+$ git -C <tmp>/cp rev-parse HEAD
+a76ec51c9931b62451721302446d7c3b74b9c81f
+rc=0
+$ git -C <tmp>/cp rev-parse HEAD^{tree}
+4676e5c53288e21e7c1a87e6bdde9a12c295a147
+rc=0
+$ git -C <tmp>/cp write-tree
+4676e5c53288e21e7c1a87e6bdde9a12c295a147
+rc=0
+
+== (1) A1 NGUYÊN BẢN — ghim cũ 3b7e93b/37079aa8 ==
+$ cd <tmp>/cp && python3 app/thu/thu_qa_g22.py A_Nen.test_a1_cay_dung_bang_cay_cua_nen
+test_a1_cay_dung_bang_cay_cua_nen (__main__.A_Nen)
+CÂY (không phải nhãn) phải bằng cây `7344c02`. ... FAIL
+
+======================================================================
+FAIL: test_a1_cay_dung_bang_cay_cua_nen (__main__.A_Nen)
+CÂY (không phải nhãn) phải bằng cây `7344c02`.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/g22a1-clone-bc-F0bihL/cp/app/thu/thu_qa_g22.py", line 746, in test_a1_cay_dung_bang_cay_cua_nen
+    self.assertEqual(
+AssertionError: '4676e5c53288e21e7c1a87e6bdde9a12c295a147' != '37079aa83f2ad62c2862f2eb7ce1c809c24570fb'
+- 4676e5c53288e21e7c1a87e6bdde9a12c295a147
++ 37079aa83f2ad62c2862f2eb7ce1c809c24570fb
+ : CÂY ĐANG ĐO KHÔNG PHẢI CÂY CỦA `3b7e93b59b70`. Mọi con số của bộ kiểm này chỉ có nghĩa trên đúng cây đó.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.037s
+
+FAILED (failures=1)
+
+  BỘ KIỂM G22 — AG-01 (QA/VERIFIER)
+
+  Nền: 3b7e93b59b70  (tree 37079aa83f2a)
+  Cây đang đo: /private/tmp/g22a1-clone-bc-F0bihL/cp
+  HEAD hiện tại: a76ec51c9931   ≠ nền ⇒ delta hai commit được miễn trừ ở `A2`; CÁC CỔNG 'CÂY SẠCH' TỪ CHỐI PHÁN QUYẾT (xem §3 đầu tệp)
+
+  Lệnh:
+    python3 app/thu/thu_qa_g22.py                       # làn mặc định
+    VIP_G22_CHE_DO=gop python3 app/thu/thu_qa_g22.py    # nghiệm thu bản đã gộp
+    VIP_G22_DAY_DU=1 python3 app/thu/thu_qa_g22.py      # + chạy lại chay_tat_ca.sh
+
+  ⚠ CÂY ĐANG ĐO KHÔNG PHẢI CÂY CỦA NỀN: write-tree=4676e5c53288 · nền=37079aa83f2a
+
+  [A1] HEAD=a76ec51c9931 · write-tree=4676e5c53288 · 379 tệp theo dõi · băm danh sách=9d4e1abd658b4927
+       nền đề bài: SHA=3b7e93b59b70 · tree=37079aa83f2a
+
+============================================================================================
+  VÂN TAY SAU KHI CHẠY — cây KHÔNG được đổi vì bộ kiểm
+    HEAD=a76ec51c9931 · write-tree=4676e5c53288 · 379 tệp · băm danh sách=9d4e1abd658b4927
+    phạm vi ghi: 0 đường trong `status`; ngoài hai tệp được phép: KHÔNG
+    TỆP NGUỒN `app/thu/thu_qa_g20.py` (C5): ĐÃ VÁ = True
+    TỆP NGUỒN `app/thu/thu_qa_g21.py` (G7): ĐÃ VÁ = True
+    đường chép tạm `g20_cop_tam()`/`g20_va_c5()`: KHÔNG còn (đã xoá hẳn)
+    ca: 1 · hỏng/loi: 1 · bỏ qua: 0 · MÃ THOÁT = 1
+============================================================================================
+rc=1
+
+== (2) BẢN SAO CHỈ ĐỔI GHIM sang cây của lượt này ==
+    NEN_SHA  : 3b7e93b -> a76ec51
+    TREE_NEN : 37079aa8 -> 4676e5c5
+107:NEN_SHA = "a76ec51c9931b62451721302446d7c3b74b9c81f"
+108:TREE_NEN = "4676e5c53288e21e7c1a87e6bdde9a12c295a147"
+$ python3 app/thu/thu_qa_g22_ghim_moi.py A_Nen.test_a1_cay_dung_bang_cay_cua_nen
+test_a1_cay_dung_bang_cay_cua_nen (__main__.A_Nen)
+CÂY (không phải nhãn) phải bằng cây `7344c02`. ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.033s
+
+OK
+
+  BỘ KIỂM G22 — AG-01 (QA/VERIFIER)
+
+  Nền: a76ec51c9931  (tree 4676e5c53288)
+  Cây đang đo: /private/tmp/g22a1-clone-bc-F0bihL/cp
+  HEAD hiện tại: a76ec51c9931   = nền ✓
+
+  Lệnh:
+    python3 app/thu/thu_qa_g22.py                       # làn mặc định
+    VIP_G22_CHE_DO=gop python3 app/thu/thu_qa_g22.py    # nghiệm thu bản đã gộp
+    VIP_G22_DAY_DU=1 python3 app/thu/thu_qa_g22.py      # + chạy lại chay_tat_ca.sh
+
+
+  [A1] HEAD=a76ec51c9931 · write-tree=4676e5c53288 · 379 tệp theo dõi · băm danh sách=9d4e1abd658b4927
+       nền đề bài: SHA=a76ec51c9931 · tree=4676e5c53288
+
+============================================================================================
+  VÂN TAY SAU KHI CHẠY — cây KHÔNG được đổi vì bộ kiểm
+    HEAD=a76ec51c9931 · write-tree=4676e5c53288 · 379 tệp · băm danh sách=9d4e1abd658b4927
+    phạm vi ghi: 1 đường trong `status`; ngoài hai tệp được phép: ['?? app/thu/thu_qa_g22_ghim_moi.py']
+    TỆP NGUỒN `app/thu/thu_qa_g20.py` (C5): ĐÃ VÁ = True
+    TỆP NGUỒN `app/thu/thu_qa_g21.py` (G7): ĐÃ VÁ = True
+    đường chép tạm `g20_cop_tam()`/`g20_va_c5()`: KHÔNG còn (đã xoá hẳn)
+    ca: 1 · hỏng/loi: 0 · bỏ qua: 0 · MÃ THOÁT = 0
+============================================================================================
+rc=0
+
+== dọn bản sao ==
+rm rc=0

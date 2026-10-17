@@ -1,0 +1,5 @@
+# Sản phẩm của BỘ ĐO NGHIỆM THU G22 (log, JSON, bản sao tạm). Không commit kết quả đo:
+# mỗi lượt phải là một phép đo MỚI; bằng chứng nằm trong `ket_qua/<lượt>/` trên đĩa.
+ket_qua/
+__pycache__/
+*.pyc

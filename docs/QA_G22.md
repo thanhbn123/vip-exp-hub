@@ -1,5 +1,11 @@
 # NGHIỆM THU G22 — AG-01 (QA/VERIFIER) · BASELINE ĐỘC LẬP TRÊN `7344c02` + KẾ HOẠCH CÓ CỔNG FAIL
 
+> **ĐỌC §10 TRƯỚC NẾU BẠN CHỈ ĐỌC MỘT MỤC.** §0–§9 là lượt TRƯỚC (đo trên `7344c02`, bản vá còn nằm
+> trên **bản chép tạm**). **§10** là lượt `N-G22-01`: bản vá nay nằm **TRONG hai tệp nguồn**
+> (`app/thu/thu_qa_g20.py` · `app/thu/thu_qa_g21.py`), đường chép tạm **đã xoá hẳn**, `C5`/`G7` đi
+> `0/1 → 1/2 · ĐÓNG`, và **bản đồ chủ sở hữu** (§10.4) được chốt:
+> **`G19-C6` ⇒ làn AG-02** · **`OWNER_ACTIONS C4` (PostgreSQL, D-8) ⇒ BLOCKED OWNER**.
+
 **Vai:** AG-01 QA/VERIFIER · **Nhiệm vụ:** `task_6b5a1611cd28` · **Dispatch:** `ctx_dfc5af670515`
 **Nền đo:** `7344c020abad562dafb593c4234d5e1f9ecfd18c` — cây `8fc624deb0330dc8846a3337bf9a76fc90e253b0`
 **KHÔNG** dùng `main` (`de740dc`) — `main` **không** chứa G13–G22.
@@ -474,6 +480,10 @@ giá trị NỬA VỜI 2 (nền=1, đóng=3) → sổ: NUA_VOI (đòi NUA_VOI)
 
 ### 6.1 `N-G22-01` — **CAO**: ca TỰ KIỂM tầng 3 **phụ thuộc THỨ TỰ** — xanh khi chạy riêng, đỏ khi chạy chung
 
+> **MÃ NÀY BỊ DÙNG CHO HAI PHÁT HIỆN KHÁC NHAU.** Dispatch vá bộ đếm `C5`/`G7` cũng gọi lỗ hổng
+> của nó là `N-G22-01` (commit `4431430`). Mục **§9** ghi phát hiện đó, kèm hậu tố `(bộ đếm
+> C5/G7)`. **Mục này giữ nguyên, không đổi.**
+
 `thu_giao_dien/06_ban_phim.spec.js` ca 06 (**TỰ KIỂM: gỡ `ban_phim.js` ⇒ menu KHÔNG vào được thứ
 tự Tab và Enter không đổi màn**) **XOÁ một tệp SẢN PHẨM ngay giữa lượt chạy** để chứng minh ca 02
 đo bản vá. Đo được:
@@ -540,6 +550,12 @@ nhận 128. Đây là **lỗi môi trường của máy**, không phải của s
 |---|---|---|---|
 | 1 | **C4** (`truy_van` vào migration v9) | **không có chủ sở hữu**; AG-00 đã ghi vào backlog G22–G25 | AG-00 giao làn |
 | 2 | **C5** (bộ `thu_qa_g19*.py` chạy thật) | `thu_qa_g19.py` tự bỏ qua (`HEAD` ≠ nền đóng băng); bộ `thu_qa_g19_tich_hop.py` mà nó trỏ tới **KHÔNG TỒN TẠI** | AG-00 |
+
+> **CẬP NHẬT (dispatch vá `N-G22-01`):** **lỗ hổng BỘ ĐẾM đã đóng** (hai bản sao `C5`/`G7` nay
+> trừ ca bỏ qua — §9.1–9.2, có đối chứng âm cho **cả năm** dị dạng). **NHƯNG `C5`/`G7` VẪN ĐỎ
+> ở `0/1`** trên cây này, vì lý do ở dòng trên: thiếu `app/thu/thu_qa_g19_tich_hop.py`
+> (commit `4431430`, **không phải tổ tiên** của `HEAD` `85e0a6c`) — **ngoài vùng được ghi** của
+> dispatch. Xem **§9.3**. Bản gốc `g20-ag01-qa/app/thu/thu_qa_g20.py` **vẫn còn lỗ** — **§9.4**.
 | 3 | **Tầng 3 trong Safari / Firefox · trình đọc màn hình · cảm ứng thật · in PDF thật** | ngoài phạm vi thiết kế (`thu_giao_dien/chay.sh` tự khai) | Owner |
 | 4 | **CSDL nghiệp vụ trên PostgreSQL** (`D-8`) | **0** kết nối; cụm `:5432` **không bị đụng tới** | Owner |
 | 5 | **Credentials hãng thật · API hãng kể cả sandbox · AI thật · dữ liệu lớn** | `V-G09-01` + `V-13906-05` **CHƯA CẤP** ⇒ **BỊ CẤM** | Owner |
@@ -598,3 +614,390 @@ git -C /Users/viporder/orca/workspaces/vip-express-hub/g21-ag01-qa commit \
 ```
 AG-01 (G22) QA BASELINE: 7344c02 1984 ca/56 bo/7 bo hong · C1+C2 XANH · E3 do bang dong ho dong bang
 ```
+
+---
+
+## 9. `N-G22-01` CỦA **BỘ ĐẾM** `C5`/`G7` — ĐÃ VÁ; VÀ **C5/G7 VẪN ĐỎ**, NÓI THẲNG
+
+> ### ⚠ TRÙNG MÃ SỐ HIỆU — ĐỌC TRƯỚC
+> Dispatch này gọi lỗ hổng **bộ đếm** là `N-G22-01`, và commit `4431430` của AG-04 cũng gọi như
+> vậy (*"tìm ra lỗ hổng THẬT `N-G22-01` của bộ đếm AG-01"*). Nhưng **§6.1 đã dùng `N-G22-01`**
+> cho một phát hiện **KHÁC** (ca TỰ KIỂM tầng 3 phụ thuộc THỨ TỰ). **Hai phát hiện khác nhau,
+> cùng một mã.** Mục này giữ nguyên mã mà dispatch đã giao, kèm hậu tố **`(bộ đếm C5/G7)`**;
+> **§6.1 giữ nguyên, không đổi**. Ai đọc "N-G22-01" phải đọc cả hai chỗ.
+
+### 9.1 Lỗ hổng — và vì sao bốn dị dạng đầu KHÔNG phải lỗ hổng
+
+Cổng `bo-g19-tong-hop` tồn tại ở **HAI bản sao** với **cùng một thân bộ đếm**:
+
+| Bản sao | Tệp | Nhãn in ra | Chủ sở hữu |
+|---|---|---|---|
+| `C5` | `app/thu/thu_qa_g20.py` (bàn đo G20; **không nằm trong cây này**) | `[C5]` | AG-01 G20 |
+| `G7` | `app/thu/thu_qa_g21.py` (`G7_BoG19TongHop`) | `[G7]` | AG-04 (`g21-ag04-gioihan`) |
+
+Cả hai đếm "bộ G19-tổng-hợp CHẠY THẬT" bằng:
+
+```python
+n = int(re.findall(r"Ran (\d+) tests?", ra)[-1]) if m else 0
+chay = min(sum(1 for _, ma, n in chi_tiet if ma == 0 and n > 0), 1)     # ← LỖ
+```
+
+`unittest` **KỂ CẢ ca BỎ QUA** trong `Ran N tests`. Nên một bộ mà **MỌI ca đều `@unittest.skip`**
+in ra `Ran 3 tests` + `OK (skipped=3)` rồi **thoát 0** — **đúng khuôn của một lượt chạy TỐT** —
+trong khi **không ca nào chạy**. Phép kiểm `n > 0` gọi đó là ĐẠT.
+
+**Bản vá (hai khối, y hệt nhau ở cả hai bản sao):** trừ số ca bỏ qua, và chỉ xanh khi có ca
+**THẬT SỰ CHẠY**:
+
+```diff
+-            chi_tiet.append((t, ma, n))
+-        chay = min(sum(1 for _, ma, n in chi_tiet if ma == 0 and n > 0), 1)
++            bq = int((re.findall(r"skipped=(\d+)", ra) or ["0"])[-1])
++            chi_tiet.append((t, ma, n, bq, max(n - bq, 0)))
++        chay = min(sum(1 for _, ma, n, bq, nc in chi_tiet
++                       if ma == 0 and n > 0 and nc > 0), 1)
+```
+
+Ở `thu_qa_g21.py` bản vá còn có **tự kiểm ba vế hai chiều** ngay trong `G7`
+(`dem_ca_chay_that("Ran 3 tests … skipped=3")[0] == 0` · `"Ran 0 tests"` → 0 · `"Ran 7 tests"` → 7)
+— vế dương chứng minh bộ đếm **không mù**, vế âm chứng minh lỗ hổng **đã đóng**.
+
+### 9.2 ĐỐI CHỨNG ÂM CHO **CẢ NĂM** DỊ DẠNG — chạy THẬT, TRƯỚC và SAU khi vá
+
+`python3 app/thu/thu_qa_g22.py I_TiemLoiC5` dựng **cây GƯƠNG trong `TMP`** (không ghi một byte
+nào vào cây thật): một bản bàn đo G20 **CHƯA vá** và một bản **ĐÃ vá**, cộng các bộ `unittest`
+**thật** cho từng dị dạng; rồi chạy **CHÍNH cổng `C5`** trên từng cây. Cùng dị dạng, cùng lệnh,
+cùng cây — **chỉ khác hai khối bộ đếm**, nên chênh lệch giữa hai cột chỉ có thể là do bản vá.
+Cây gương luôn có **HAI** bộ `thu_qa_g19*.py` (trừ dị dạng ii) ⇒ mẫu số là 2, so thẳng được với
+`0/2` · `1/2` của AG-04.
+
+| # | Dị dạng | Bộ tiêm (mã thoát · chạy thật/bỏ qua/tổng) | `C5` **TRƯỚC** khi vá | `C5` **SAU** khi vá |
+|---|---|---|---|---|
+| i | mã thoát ≠ 0 | `1` · `1/0/1` | `thoát 1 · 0/2` ⇒ **ĐỎ** | `thoát 1 · 0/2` ⇒ **ĐỎ** |
+| ii | **không còn bộ gốc** (0 tệp) | — (không đặt bộ nào) | `thoát 1 · KHÔNG có dòng [C5]` ⇒ **ĐỎ** | `thoát 1 · KHÔNG có dòng [C5]` ⇒ **ĐỎ** |
+| iii | suite RỖNG 0 ca | `0` · `0/0/0` | `thoát 1 · 0/2` ⇒ **ĐỎ** | `thoát 1 · 0/2` ⇒ **ĐỎ** |
+| iv | bỏ qua mức **MÔ-ĐUN** | `0` · `0/1/0` | `thoát 1 · 0/2` ⇒ **ĐỎ** | `thoát 1 · 0/2` ⇒ **ĐỎ** |
+| **v** | **MỌI CA BỎ QUA ở mức PHƯƠNG THỨC** | `0` · **`0/3/3`** | **`thoát 0 · 1/2 · DONG` ⇒ XANH** ← **LỖ HỔNG** | **`thoát 1 · 0/2` ⇒ ĐỎ** ← **ĐÃ ĐÓNG** |
+
+Đọc bảng: **bốn dị dạng đầu đã bị bắt từ trước** (`0/2`, mã thoát 1) — chúng **không phải** lỗ
+hổng. **Dị dạng thứ năm LỌT** (`1/2 · DONG`, mã thoát **0**) đúng như AG-04 mô tả, và **sau khi
+vá thì nó ĐỎ**. Cột "bộ tiêm" là **output THẬT** của chính bộ `unittest` đã tiêm: dị dạng v in
+`Ran 3 tests` + `skipped=3` + thoát 0 — **0 ca chạy thật**.
+
+**ĐỐI CHỨNG DƯƠNG — bản vá không được là "luôn luôn đỏ"** (`I2`, cùng bộ chạy):
+
+| Vế | Cây | Kết quả (bản ĐÃ vá) |
+|---|---|---|
+| (a) | bộ **ĐẠT THẬT** + bộ HỎNG | `thoát 0 · 1/2 · DONG` ⇒ **XANH** |
+| (b) | bộ **ĐẠT THẬT** + bộ **MỌI CA BỎ QUA** | `thoát 0 · 1/2 · DONG` ⇒ **XANH** |
+
+Vế (b) là vế quan trọng: bản vá **TRỪ** ca bỏ qua, chứ **không CẤM** bỏ qua. Một bộ bỏ qua hết
+**bên cạnh** một bộ chạy thật vẫn cho `1/2 · DONG` — đúng.
+
+### 9.2b TÁI HIỆN NGUYÊN VĂN `1/2 · DONG` TRÊN MỘT CÂY THẬT (không phải cây gương)
+
+Cây gương ở §9.2 chứng minh bộ đếm; mục này tái hiện **đúng triệu chứng AG-04 đã báo**, trên
+**cây thật** `7344c02` (bản sao sạch trong `$CP`, **ngoài** cây được ghi), với **HAI** bộ
+`thu_qa_g19*.py` thật:
+
+```sh
+# Bộ thứ hai: MỌI CA BỎ QUA ở mức PHƯƠNG THỨC — output THẬT của nó:
+$ python3 app/thu/thu_qa_g19_bo_qua.py
+Ran 3 tests in 0.000s
+OK (skipped=3)                      # ← 0 ca CHẠY THẬT, thoát 0
+```
+
+| | Bộ thứ nhất `thu_qa_g19.py` | Bộ thứ hai `…_bo_qua.py` | `[C5]` | Mã thoát |
+|---|---|---|---|---|
+| **CHƯA vá** | `thoát 0 · 0 ca` | `thoát 0 · **3 ca**` ← đếm cả 3 ca bỏ qua | **`1/2 · DONG` ⇒ XANH** | **0** |
+| **ĐÃ vá** | `thoát 0 · 0 ca · 1 BỎ QUA · **0 CHẠY THẬT**` | `thoát 0 · 3 ca · 3 BỎ QUA · **0 CHẠY THẬT**` | `0/2 ⇒ ĐỎ` | **1** |
+
+⇒ **`C5` báo XANH (`1/2 · DONG`) trong khi 0 ca chạy** — nguyên văn điều AG-04 đo được. Sau khi
+vá, **cùng cây, cùng lệnh, cùng hai bộ** ⇒ `0/2` ⇒ **ĐỎ**. Đây là vế mạnh nhất: nó không dùng
+cây gương nào, chỉ dùng cây thật + hai bộ thật.
+
+### 9.3 `C5`/`G7` trên CÂY THẬT — **VẪN ĐỎ**, và đây là lý do
+
+Lệnh của VIỆC 3, chạy **nguyên văn** trên cây này với bàn đo **đã vá**:
+
+```sh
+$ VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py
+Ran 21 tests in 11.931s · FAILED (failures=6, skipped=2)        # MÃ THOÁT = 1
+  [B1] nhị phân: chỉ định BAN_GIAO §1 (chromium-1194) · mã thoát=0 · 7 đạt · 0 hỏng · 0 bỏ qua
+  [C4] PHIEN_BAN_SCHEMA=9 · nang_len_v9=True · tệp SẢN XUẤT import truy_van=0
+  [C5] bộ `thu_qa_g19*.py` CHẠY THẬT trên cây này: 0/1 · phán quyết=chế độ GỘP: khoản nợ 0 VẪN CÒN NGUYÊN
+  [C2] GIT_CONFIG_COUNT=2 · KEY_*=0 · VALUE_*=2
+```
+
+Bản sao thứ hai, chạy riêng (`VIP_G21_CHE_DO=gop python3 app/thu/thu_qa_g21.py G7_BoG19TongHop`,
+**mã thoát 1**):
+
+```
+  [G7] bộ `thu_qa_g19*.py` CHẠY THẬT: 0/1 · chủ sở hữu=AG-04 (g21-ag04-gioihan) · phán quyết=chế độ GỘP: khoản nợ 0 VẪN CÒN NGUYÊN
+       thu_qa_g19.py → mã thoát 0 · 0 ca · 1 BỎ QUA · 0 CHẠY THẬT
+```
+
+> ### ⇒ **C5 VÀ G7 CHƯA ĐÓNG. CẢ HAI VẪN ĐỎ, Ở `0/1`.**
+
+**Vì sao** — và đây **không phải** lỗi của bộ đếm nữa, mà là **khoản nợ thật của cây**:
+
+1. Trên cây này `thu_qa_g19*.py` chỉ khớp **MỘT** tệp: `app/thu/thu_qa_g19.py`.
+2. Tệp đó **tự bỏ qua ở mức MÔ-ĐUN** (nguyên văn):
+   `skipped 'BỘ ĐO NỀN — HEAD 85e0a6c != nền đóng băng 6e61fc1. … Nghiệm thu cây ĐÃ GỘP thuộc bộ
+   riêng thu_qa_g19_tich_hop.py.'` ⇒ `Ran 0 tests` + `OK (skipped=1)` + **thoát 0**.
+   Đây là **dị dạng (iv)**, và **cả bộ đếm CŨ LẪN MỚI đều bắt được nó** ⇒ `0/1` ⇒ ĐỎ.
+3. Bộ bạn đồng hành mà nó trỏ tới — `app/thu/thu_qa_g19_tich_hop.py` — **KHÔNG có trong cây
+   này**. Nó nằm ở commit **`4431430`** (*"AG-04 (G22) NỐI C5: 0/1 → 1/2 DONG (XANH)"*, nhánh
+   `g21-ag04-gioihan` · `integration/g20` · `integration/g22`), **không phải tổ tiên của `HEAD`
+   `85e0a6c`** của worktree này.
+
+⇒ Đường đóng `C5` **không phải** sửa bộ đếm (việc đó đã xong ở §9.1–9.2), mà là **đưa
+`app/thu/thu_qa_g19_tich_hop.py` vào cây** — **ngoài vùng được ghi** của dispatch này
+(chỉ `app/thu/thu_qa_g20.py` · `app/thu/thu_qa_g21.py` · `app/thu/thu_qa_g22.py` · `docs/QA_G22.md`).
+**Không tự vượt phạm vi.** Việc của AG-00.
+
+**Một điều KHÔNG được đọc nhầm:** bản vá **không làm `C5` xanh**, và **cũng không làm nó đỏ
+thêm**. Trên cây thật `C5` = `0/1` ⇒ **ĐỎ ở CẢ HAI bản** (bộ đếm cũ: `n = 0` nên không đếm;
+bộ đếm mới: `nc = 0` nên không đếm). Cái bản vá **lấy đi** là khả năng **XANH GIẢ**: trước khi vá,
+chỉ cần **một** bộ bỏ qua hết là `C5` báo `1/2 · DONG` (XANH) và **khoản nợ chưa đóng hiện ra
+như đã đóng**. Đó đúng là điều đã xảy ra với phép đo của AG-04.
+
+### 9.4 Bản gốc của `C5` **vẫn chưa được vá** — AG-00 phải vá ở NGUỒN
+
+Bản gốc `app/thu/thu_qa_g20.py` nằm ở worktree **`g20-ag01-qa`**, **ngoài vùng được ghi** của
+tôi, và `thu_qa_g22.py` chỉ **CHÉP TẠM** nó vào cây (`BAN_DO_G20_SHA` ghim
+`5a4b3c83c45f2f2c465d2eed380f1f6f69583878ca9e3a5f910bd01c1a0ddcd0`) rồi **XOÁ** trước khi kết
+thúc. Nên bản vá được áp **lên bản chép**, bằng `g20_va_c5()`; nó **KHÔNG im lặng**: khớp không
+đúng nguyên văn ⇒ `g20_cop_tam()` trả `None` ⇒ cổng `D1` **HỎNG**, chứ **không** đo tiếp bằng
+một bộ đếm còn lỗ (và hàm tự kiểm 3 vế: khớp · thay được · cú pháp còn hợp lệ).
+
+> **⇒ `g20-ag01-qa/app/thu/thu_qa_g20.py` VẪN CÒN LỖ `N-G22-01`.**
+> Bản vá là **hai khối** ở §9.1. Ai có quyền ghi vào worktree đó phải áp **đúng hai khối** đó.
+> Cho tới lúc đó, mọi con số `C5` sinh ra ở **bất kỳ đâu khác** vẫn có thể XANH GIẢ.
+
+### 9.5 C4 — đo lại ở dispatch này: **VẪN ĐỎ, VẪN KHÔNG CÓ CHỦ SỞ HỮU**
+
+`python3 app/thu/thu_qa_g22.py H_C4` (mã thoát 0):
+
+```
+  [H1] C4 — `PHIEN_BAN_SCHEMA`=9 (đòi 9) · tệp SẢN XUẤT import `truy_van`: 0
+       cặp đo được = (True, False) · nền=(True, False) · đóng=(True, True)
+       CHỦ SỞ HỮU: **KHÔNG AI** — AG-00 đã ghi thẳng vào backlog G22-G25
+```
+
+Nửa `migration v9` **đã đóng** (`PHIEN_BAN_SCHEMA = 9`); nửa `route thật` **chưa**: **0** tệp
+SẢN XUẤT import `truy_van`. Cặp `(True, False)` **trùng nền** ⇒ `C4` **ĐỎ**. AG-02 được giao
+**local** (fixture + định tuyến `truy_van` **LOCAL**, **KHÔNG** migration CSDL nghiệp vụ) —
+**chưa có kết quả nào của AG-02 trong cây này**, nên `C4` **vẫn mở**. Không đổi so với §4.5; ghi
+lại đây vì dispatch yêu cầu đo lại.
+
+### 9.6 Phạm vi ghi của dispatch này + tuân thủ
+
+| Tệp | Thay đổi |
+|---|---|
+| `app/thu/thu_qa_g21.py` | bản sao `G7`: bộ đếm trừ ca bỏ qua + tự kiểm ba vế |
+| `app/thu/thu_qa_g22.py` | `g20_va_c5()` + vá trong `g20_cop_tam()`; lớp `I_TiemLoiC5` (đối chứng năm dị dạng); `TEP_DUOC_PHEP` += `thu_qa_g21.py` |
+| `docs/QA_G22.md` | §9 này · §6.1 và §7 nay trỏ chéo tới đây |
+| `app/thu/thu_qa_g20.py` | **bản CHÉP TẠM** đã vá, **đã XOÁ** trước khi kết thúc (bộ kiểm tự khẳng định) |
+
+Không `push` · không deploy · không tunnel · không credentials thật · **không tự bấm duyệt
+sandbox** · **không ghi `.git`** (sandbox chặn, tôi không tự vượt — §8.1) · mọi phép đo chỉ chạm
+`127.0.0.1`. Cây gương của §9.2 nằm **ngoài** cây thật (`$TMP/veh_g22_tiem_loi`).
+
+### 9.7 HỒI QUY — bản vá **KHÔNG** làm hỏng gì (chạy đúng cách: trong bản sao sạch)
+
+Vì worktree này bị sandbox chặn ghi `.git`, `HEAD` **không thể** về nền ⇒ `A1` không đo được
+(§1.2). Nên lượt hồi quy được chạy **đúng cách của §8.1** — trong một bản sao sạch:
+
+```sh
+$ git clone --shared --no-checkout <kho> $CP && git -C $CP checkout --detach 7344c02
+$ git -C $CP rev-parse HEAD   → 7344c020abad562dafb593c4234d5e1f9ecfd18c
+$ git -C $CP write-tree       → 8fc624deb0330dc8846a3337bf9a76fc90e253b0   (= TREE_NEN)
+# chép BA tệp của dispatch này vào $CP rồi chạy
+$ PYTHONDONTWRITEBYTECODE=1 python3 app/thu/thu_qa_g22.py
+```
+
+| | Baseline (§2.1) | **Sau bản vá** |
+|---|---|---|
+| Số ca | `Ran 22 tests` | **`Ran 24 tests`** (+2: `I1`, `I2`) |
+| Hỏng / bỏ qua | 1 / 1 | **1 / 1** — **KHÔNG tăng** |
+| Ca hỏng | `E1` (`cây sạch` 2/3 — `N-G22-02`) | **`E1`** — **đúng ca cũ**, không ca mới |
+| `A1` cây == `7344c02` | XANH | **XANH** |
+| `A2` phạm vi ghi | XANH | **XANH** — `status` = **đúng 3** tệp, **0** ngoài phép |
+| `Z6` đối chứng dương | XANH | **XANH** |
+| `write-tree` sau lượt | không đổi | **không đổi** (`8fc624de…`) |
+| Bản chép tạm G20 | đã xoá | **đã xoá** (`còn tồn tại = False`) |
+| Bảng `[I1]` | — | **lặp lại y hệt** lượt trong worktree ⇒ **tất định** |
+
+⇒ **Bản vá thêm 2 ca, cả hai XANH, và không đổi bất kỳ phán quyết nào khác.**
+Lượt chạy **trong worktree** (không phải bản sao) có thêm `A1`/`Z6` đỏ — **nguyên nhân môi
+trường đã biết**: `HEAD 85e0a6c ≠ 7344c02` và `git write-tree` bị chặn (`rc=128`, §1.2). Một
+lượt trước đó còn để sót bản chép tạm trong cây nên `A2` đỏ — **bộ kiểm bắt đúng**, và nó tự
+xoá ở cuối lượt.
+
+### 9.8 BA VIỆC AG-00 PHẢI LÀM (ngoài vùng được ghi của dispatch này)
+
+| # | Việc | Vì sao | Chứng cứ |
+|---|---|---|---|
+| 1 | Áp **đúng hai khối** ở §9.1 vào `g20-ag01-qa/app/thu/thu_qa_g20.py` | bản gốc **vẫn còn lỗ**; bản vá của tôi chỉ nằm trên **bản chép** | §9.4 |
+| 2 | Đưa `app/thu/thu_qa_g19_tich_hop.py` (commit `4431430`) vào cây nghiệm thu | **không có nó thì `C5`/`G7` KHÔNG THỂ xanh**: bộ duy nhất còn lại tự bỏ qua | §9.3 |
+| 3 | Giao làn cho **`C4`** | `(True, False)` = nền ⇒ vẫn ĐỎ; **không ai sở hữu** | §9.5 |
+
+
+---
+
+## 10. DISPATCH `N-G22-01` (AG-01) — VÁ `C5`/`G7` **Ở TỆP NGUỒN**, ĐO NĂM HÌNH DẠNG, VÀ BẢN ĐỒ CHỦ SỞ HỮU
+
+Lượt §9 vá trên một **bản chép tạm rồi XOÁ** — bản nguồn vẫn còn lỗ. §10 này đóng đúng chỗ đó:
+bản vá nay nằm **TRONG hai tệp nguồn**, và **đường chép tạm đã bị XOÁ HẲN**.
+
+### 10.1 VIỆC 1 — bản vá ở TỆP NGUỒN (không qua bản sao)
+
+| Tệp nguồn | sha256 TRƯỚC (bản đã track) | sha256 SAU | Khối vá |
+|---|---|---|---|
+| `app/thu/thu_qa_g20.py` | `5a4b3c83c45f2f2c465d2eed380f1f6f69583878ca9e3a5f910bd01c1a0ddcd0` | `efc917d3c7a58d0087cc6c10fad610173477750272bcb847dda19f30bb00c58b` | `C5`: **2 khối** (bộ đếm + quyết định) |
+| `app/thu/thu_qa_g21.py` | `4ebf21e8804246bda315fbe9bc1721625fad0ec2130c5036f235d4e04ca40700` | `b973302c4651ca0074d18f1d4ebcfc3d669bb3759bf68f7e4f0537e615c375e1` | `G7`: **2 khối giống hệt** + 1 hunk TRÌNH BÀY (G7 in chi tiết ở vòng riêng) |
+
+Hai khối bộ đếm được **BẢO ĐẢM GIỐNG HỆT BẰNG MÃ**, không bằng lời khai: trong
+`thu_qa_g22.py`, `G21_G7_VA` **lấy thẳng** hai khối của `G20_C5_VA` (`G20_C5_VA[0][1]` và
+`G20_C5_VA[1]`). Đường tạm `g20_cop_tam()`, `g20_xoa_tam()`, `g20_va_c5()`, `BAN_DO_G20_TAM`,
+`BAN_DO_G20_NGUON` **không còn trong mã**; bộ kiểm tự khẳng định (`_khoa_tam()`, in ở dòng cuối
+mỗi lượt: `đường chép tạm ...: KHÔNG còn (đã xoá hẳn)`).
+
+Chốt chống trôi mới — `nguon_goc()`: **HOÀN VÁ** tệp đang có trong cây (khối mới → khối cũ) rồi
+BĂM; phải ra đúng sha ghim ở bảng trên, nếu không thì **DỪNG, không đo**. Nhờ vậy cột "TRƯỚC" của
+§10.2 dựng lại được **từ chính tệp nguồn**, không cần bản sao nào khác.
+
+### 10.2 VIỆC 2 — NĂM HÌNH DẠNG + ĐỐI CHỨNG DƯƠNG, **CÙNG MỘT SHA**, bằng CHÍNH cổng của hai tệp nguồn
+
+Cột `TRƯỚC` = bản **hoàn vá** của tệp nguồn (băm ra đúng sha ghim); cột `SAU` = **chính tệp nguồn
+trong cây** (chép nguyên byte, băm lại sau khi chép). Mỗi cây gương đều bị **kiểm sha** — không đo
+một bản đã trôi. Chạy bằng `python3 app/thu/thu_qa_g22.py I_TiemLoiC5`; số dưới đây là `đạt/tổng`
+và mã thoát của **chính cổng**.
+
+| Hình dạng | bộ tiêm (thoát/thật/bỏ/tổng) | `C5` TRƯỚC | `C5` SAU | `G7` TRƯỚC | `G7` SAU |
+|---|---|---|---|---|---|
+| i mã thoát ≠ 0 | `1 · 1/0/1` | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** |
+| ii không còn bộ gốc | (không đặt bộ nào) | thoát 1 · **ĐỎ** | thoát 1 · **ĐỎ** | thoát 1 · **ĐỎ** | thoát 1 · **ĐỎ** |
+| iii suite rỗng 0 ca | `0 · 0/0/0` | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** |
+| iv bỏ qua mức MÔ-ĐUN | `0 · 0/1/0` | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** | thoát 1 · 0/2 · **ĐỎ** |
+| **v bỏ qua mức PHƯƠNG THỨC** | `0 · 0/3/3` | thoát 0 · 1/2 · **XANH (LỌT!)** | thoát 1 · 0/2 · **ĐỎ** | thoát 0 · 1/2 · **XANH (LỌT!)** | thoát 1 · 0/2 · **ĐỎ** |
+| **đối chứng DƯƠNG** (bộ chạy thật, đạt) | `0 · 2/0/2` | thoát 0 · 1/2 · XANH | thoát 0 · 1/2 · **XANH** | thoát 0 · 1/2 · XANH | thoát 0 · 1/2 · **XANH** |
+
+Đọc bảng này: **bốn hình dạng đầu đỏ ở CẢ HAI cột** (chúng không phải lỗ hổng); hình dạng **thứ
+năm LỌT ở cả hai cổng trước khi vá** (`Ran 3 tests` + `OK (skipped=3)` + thoát 0 — đúng khuôn một
+lượt chạy tốt) và **ĐỎ ở cả hai cổng sau khi vá**; **đối chứng dương vẫn XANH** ⇒ bản vá TRỪ ca bỏ
+qua chứ **không CẤM** bỏ qua. Đây là bằng chứng `N-G22-01` đã đóng **trên tệp nguồn**, không phải
+trên bản chép.
+
+### 10.3 VIỆC 3 — `C5`/`G7` chuyển **XANH**: `0/1` → `1/2 · ĐÓNG`
+
+```sh
+# KHÔNG có `thu_qa_g19_tich_hop.py` trong cây (nhánh `g21-ag01-qa` ở 85e0a6c):
+$ VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py
+       thu_qa_g19.py → mã thoát 0 · 0 ca · 1 BỎ QUA · 0 CHẠY THẬT
+  [C5] bộ `thu_qa_g19*.py` CHẠY THẬT trên cây này: 0/1 · phán quyết=chế độ GỘP: khoản nợ 0 VẪN CÒN NGUYÊN   ⇒ ĐỎ
+
+$ VIP_G21_CHE_DO=gop python3 app/thu/thu_qa_g21.py G7_BoG19TongHop
+  [G7] bộ `thu_qa_g19*.py` CHẠY THẬT: 0/1 · chủ sở hữu=AG-04 (g21-ag04-gioihan) · phán quyết=... VẪN CÒN NGUYÊN  ⇒ ĐỎ
+```
+
+AG-00 cho phép **chép TẠM** hai tệp entrypoint **đã được track ở cây tích hợp** vào cây để ĐO
+(`thu_qa_g19_tich_hop.py` = `bcd440e34d29…`, `thu_g19_tich_hop.py` = `ea0fe8646714…`):
+
+```sh
+$ VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py
+       thu_qa_g19.py            → mã thoát 0 · 0 ca · 1 BỎ QUA · 0 CHẠY THẬT
+       thu_qa_g19_tich_hop.py   → mã thoát 0 · 8 ca · 0 BỎ QUA · 8 CHẠY THẬT
+  [C5] bộ `thu_qa_g19*.py` CHẠY THẬT trên cây này: 1/2 · phán quyết=DONG          ⇒ XANH
+# Ran 21 tests in 68.381s · FAILED (failures=5, skipped=2) · mã thoát 1 — 5 lỗi KHÔNG có lỗi nào là C5
+
+$ VIP_G21_CHE_DO=gop python3 app/thu/thu_qa_g21.py G7_BoG19TongHop
+       thu_qa_g19.py            → mã thoát 0 · 0 ca · 1 BỎ QUA · 0 CHẠY THẬT
+       thu_qa_g19_tich_hop.py   → mã thoát 0 · 8 ca · 0 BỎ QUA · 8 CHẠY THẬT
+  [G7] bộ `thu_qa_g19*.py` CHẠY THẬT: 1/2 · chủ sở hữu=AG-04 (g21-ag04-gioihan) · phán quyết=DONG   ⇒ XANH (mã thoát 0)
+```
+
+⇒ **`C5`: `0/1` → `1/2 · ĐÓNG`. `G7`: `0/1` → `1/2 · ĐÓNG`.** Và lần này phán quyết **không còn
+giả**: `thu_qa_g19.py` (bộ duy nhất còn lại trong nhánh này) bị bộ đếm đã vá **gạt ra đúng** vì nó
+chỉ in `Ran 0 tests` + 1 ca bỏ qua — trước khi vá, chính nó là thứ giữ `C5` ở trạng thái "có bộ
+chạy" giả. **Hai tệp tạm đã XOÁ** trước khi kết thúc (`ls app/thu | grep g19_tich_hop` = 0 dòng;
+`git status` còn đúng 4 đường trong vùng được ghi).
+
+**Nói thẳng phần còn thiếu:** trong **nhánh `g21-ag01-qa`, `C5`/`G7` KHÔNG THỂ xanh** vì
+`app/thu/thu_qa_g19_tich_hop.py` không có ở đó (nó được track ở cây tích hợp từ commit `4431430`
+của AG-04). Trên **cây tích hợp** (nơi tệp đó có mặt) `C5`/`G7` = `1/2 · ĐÓNG` — đo được ở §10.5
+lượt (3), nơi bộ kiểm chạy trong bản sao sạch **có** tệp đó.
+
+### 10.4 VIỆC 4 — BẢN ĐỒ CHỦ SỞ HỮU (**hai dòng, để không bao giờ đánh đông hai thứ**)
+
+| Khoản | Nội dung | **Chủ sở hữu / trạng thái** |
+|---|---|---|
+| `G19-C6` | route `truy_van` + `DDL_G12Q` vào migration | **CÓ CHỦ: làn AG-02** (đang mở, `C4` = `(True, False)` = nền) |
+| `OWNER_ACTIONS C4` | "Chuyển CSDL nghiệp vụ sang PostgreSQL" — quyết định **D-8** | **BLOCKED OWNER** — **KHÔNG** phải khoản nợ local · **KHÔNG** ép cổng xanh · **KHÔNG** giao cho ai |
+
+Đây là hai dòng **khác nhau** và bản báo cáo cũ gộp chúng làm một ("`C4` chưa có chủ sở hữu").
+Nay tách rõ: **`C4` là cổng ĐO**, `G19-C6` là **khoản nợ có làn**, còn `OWNER_ACTIONS C4`
+(PostgreSQL / D-8) là **việc chờ Owner quyết** — ba thứ, không phải một.
+
+### 10.5 VIỆC 5 — HỒI QUY: ba lượt, **tách biến**, có đối chứng
+
+| # | Cây đo | `Ran` | hỏng/lỗi | bỏ qua | mã thoát | ca hỏng |
+|---|---|---|---|---|---|---|
+| (1) | worktree `85e0a6c` (ghim mới) | **24** | **2** | **2** | **1** | `A1` (môi trường: `git write-tree` bị chặn, `rc=128`) · `Z6` (hệ quả: nhóm `cay-sach-3-ban-sao` không chạy vì `E1` bỏ qua) |
+| (2) | bản sao sạch `3b7e93b`, **KHÔNG vá** (đối chứng) | 22 | 8 | 2 | 1 | `A1`, `B2`, `B3`, `F1`, `F2`(lỗi), `F3`, `G1`, `Z6` |
+| (3) | bản sao sạch `3b7e93b`, **CÓ bản vá** | **24** | **7** | **1** | **1** | `B2`, `B3`, `F1`, `F2`(lỗi), `F3`, `G1`, `Z6` |
+
+So (2) với (3): **khác đúng MỘT ca — `A1`** — và `+2` ca mới `I1`/`I2` (cả hai XANH). Nói cách
+khác: **bản vá bộ đếm không đổi một phán quyết nào khác**; `A1` xanh là do **ghim nền được cập nhật
+cho đúng lượt này** (§10.5b), không phải do bản vá.
+
+**7 ca hỏng của (3) KHÔNG do bản vá này** — chúng có đúng từng ca ở lượt đối chứng (2):
+`B2`/`B3` (e2e) + `F1`/`F2`/`F3` (E3) + `G1` (`N-G21-03`) đều bắt nguồn từ commit **`bf8696d`**
+(`AG-02 (G22) DONG S8/do2b: 1/10 -> 10/10 FAIL_CLOSED · ca E3 het phu thuoc dong ho`) đã vào cây
+tích hợp **sau** `85e0a6c`:
+
+* `app/migrate.py` nay có chốt **"KHAI BÁO, KHÔNG ĐOÁN"** (`KHO_DANG_CHAY = None` ⇒ `migrate.chay()`
+  **TỪ CHỐI**): `[giao-dien] NỀN KHÔNG DỰNG ĐƯỢC: migrate.py thoát 1` ⇒ e2e `B2`/`B3` không lên
+  được nền. Chính chú thích của AG-02 ghi rõ: *"8 bộ thử NGOÀI vùng được ghi của AG-02 gọi
+  `migrate.chay()` mà không khai kho ⇒ chúng TỪ CHỐI cho tới khi mỗi bộ khai một dòng"*.
+* `khoi_phuc()` **đã được vá** (`_duong_chua_dung("hub-truoc-rollback", ".db", luc)`) ⇒ nhóm `F`
+  của bộ g22 (đo **khoản nợ E3**) nay **STALE**: `_app_tam()` không còn khớp nguyên văn đoạn gốc.
+
+**Còn gì (nói thẳng, không cộng vào cột xanh):**
+
+1. **e2e `B2`/`B3` trên cây tích hợp** cần **một dòng khai kho** (`VIP_KHO_DANG_CHAY=sqlite`, hoặc
+   `KHO_DANG_CHAY = "sqlite"` trong `app/cau_hinh.py`) — **ngoài vùng ghi của tôi**; liên quan trực
+   tiếp `OWNER_ACTIONS C4`/D-8 (§10.4) nhưng **không** cần Owner quyết để khai `sqlite` (D-8 nói
+   CSDL nghiệp vụ **vẫn là SQLite**).
+2. **Nhóm `F` và `G` của `thu_qa_g22.py` nay STALE** trước `bf8696d` (E3 đã vá; `N-G21-03` đã vá)
+   ⇒ phải cập nhật bộ đo ở lượt sau, **không** phải "nợ sản phẩm".
+3. **`A1` không đo được trong worktree** (`git write-tree` bị sandbox chặn, `index.lock`) — đo được
+   trong bản sao sạch (lượt (2)/(3): `write-tree=37079aa8` = `TREE_NEN` ✓).
+4. **`C5`/`G7` xanh cần `thu_qa_g19_tich_hop.py`** — có ở cây tích hợp, **không** có ở nhánh này.
+5. Lượt (1) và (3) đều thoát **1** ⇒ **CHƯA phải acceptance**; nhưng cả hai đều **không** còn ca
+   hỏng nào thuộc bản vá này.
+
+#### 10.5b GHIM NỀN ĐÃ ĐƯỢC CẬP NHẬT — và vì sao (khai thẳng)
+
+`NEN_SHA`/`TREE_NEN` được cập nhật `7344c02`/`8fc624de` → **`3b7e93b`/`37079aa8`** = **cây tích hợp
+của lượt này** (nơi AG-00 đã đưa `thu_qa_g20.py` vào và nơi `thu_qa_g19_tich_hop.py` đã được track).
+Hai mốc cũ được giữ nguyên trong mã (`NEN_LUOT_TRUOC`, `NEN_LUOT_TRUOC_2`) làm lịch sử. **Hệ quả đo
+được, không giấu:** ở lượt (2) (đối chứng, ghim cũ) `A1` ĐỎ vì cây `37079aa8` ≠ ghim `8fc624de`;
+ở lượt (3) `A1` XANH. Đây là **cập nhật ghim cho đúng cây đang đo**, KHÔNG phải nới điều kiện: `A1`
+vẫn là "cây chỉ mục == cây nền", và `E1` vẫn tự bỏ qua khi `HEAD` ≠ nền.
+
+### 10.6 Phạm vi ghi + tuân thủ (dispatch `N-G22-01`)
+
+| Tệp | Thay đổi |
+|---|---|
+| `app/thu/thu_qa_g20.py` | **TỆP NGUỒN**: vá `C5` (2 khối) — nay **nằm lại trong cây**, không xoá |
+| `app/thu/thu_qa_g21.py` | **TỆP NGUỒN**: vá `G7` (2 khối giống hệt + hunk trình bày) |
+| `app/thu/thu_qa_g22.py` | xoá đường tạm; `nguon_goc()`/`nguon_da_va()`; `G21_G7_VA`; `D1` đo trên tệp nguồn; `I1`/`I2` đo **cả hai cổng**; `TEP_DUOC_PHEP` += `thu_qa_g20.py`; cập nhật ghim nền |
+| `docs/QA_G22.md` | §10 này |
+| `app/thu/thu_qa_g19_tich_hop.py`, `app/thu/thu_g19_tich_hop.py` | **chép TẠM để ĐO** (AG-00 cho phép), **đã XOÁ** — sha ghi ở §10.3 |
+
+Không `push` · không deploy · không tunnel · không credentials thật · **không tự bấm duyệt
+sandbox** · **không ghi `.git`** (sandbox chặn, tôi báo AG-00 commit hộ) · mọi phép đo chỉ chạm
+`127.0.0.1`. Cây gương nằm **ngoài** cây thật (`$TMP/veh_g22_tiem_loi`); ba bản sao sạch dùng cho
+§10.5 nằm ở `/tmp/ag01_cp*`.

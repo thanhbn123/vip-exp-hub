@@ -909,13 +909,20 @@ class G7_BoG19TongHop(unittest.TestCase):
             ma, ra, _ = _chay(["python3", os.path.join("app", "thu", t)], giay=1800)
             m = re.findall(r"Ran (\d+) tests?", ra)
             n = int(m[-1]) if m else 0
-            chi_tiet.append((t, ma, n))
-        chay = min(sum(1 for _, ma, n in chi_tiet if ma == 0 and n > 0), 1)
+            # VÁ `N-G22-01`: `Ran N` KỂ ca BỎ QUA ⇒ phải TRỪ ra mới biết có ca nào CHẠY.
+            bq = int((re.findall(r"skipped=(\d+)", ra) or ["0"])[-1])
+            chi_tiet.append((t, ma, n, bq, max(n - bq, 0)))
+            print("       %s → mã thoát %s · %d ca · %d BỎ QUA · %d CHẠY THẬT"
+                  % (t, ma, n, bq, max(n - bq, 0)))
+        # XANH chỉ khi có ca THẬT SỰ CHẠY và ĐẠT: `nc > 0` (ĐÃ TRỪ bỏ qua), không phải `n > 0`.
+        chay = min(sum(1 for _, ma, n, bq, nc in chi_tiet
+                       if ma == 0 and n > 0 and nc > 0), 1)
         dat, vi = dat_cong("bo-g19-tong-hop", chay)
         print("\n  [G7] bộ `thu_qa_g19*.py` CHẠY THẬT: %d/%d · chủ sở hữu=%s · phán quyết=%s"
               % (chay, len(ung_vien), CHU_SO_HUU["bo-g19-tong-hop"], vi))
-        for t, ma, n in chi_tiet:
-            print("       %s → mã thoát %s · %d ca" % (t, ma, n))
+        for t, ma, n, bq, nc in chi_tiet:
+            print("       %s → mã thoát %s · %d ca · %d BỎ QUA · %d CHẠY THẬT"
+                  % (t, ma, n, bq, nc))
         self.assertTrue(dat, "CỔNG `bo-g19-tong-hop` ĐỎ: %s" % vi)
 
 

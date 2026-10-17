@@ -171,61 +171,179 @@ const DON = [
     tao_luc: "2026-10-10 10:00:00", can_doi_soat_ket_qua: 1 },
 ];
 
-test("18 chiaDieuKien — chỉ q/trang_thai/gioi_han đi lên máy chủ, phần còn lại lọc tại giao diện", () => {
-  const c = L.chiaDieuKien({ q: "abc", trang_thai: "nhap", gioi_han: "100",
-                             hang: "jt", cod_tu: "1000", tu_ngay: "2026-10-01" });
-  assert.deepEqual(Object.keys(c.may_chu).sort(), ["gioi_han", "q", "trang_thai"]);
-  assert.deepEqual(Object.keys(c.giao_dien).sort(), ["cod_tu", "hang", "tu_ngay"]);
+/* --- Chín ca dưới đây (18–26) VIẾT LẠI theo hợp đồng đã chốt (G22), KHÔNG phải sửa cho xanh.
+   Bản cũ của chúng ghim HÀNH VI CŨ — "chỉ q/trang_thai/gioi_han đi lên máy chủ, phần còn lại
+   lọc tại giao diện" — tức là ghim đúng khoản nợ mà G22 đóng (`app/server.py` thời ấy BỎ QUA
+   IM LẶNG mọi tham số khác). Nay nguồn sự thật là `app/truy_van.py::BANG_DON` + §1 của
+   `docs/G22_TRUYVAN.md`, và bốn bất biến của khối này:
+     1. Mười ba tham số đi LÊN MÁY CHỦ, chép ĐÚNG tên máy chủ nhận; chỉ `co_van_don` ở lại trang.
+     2. Một điều kiện chỉ được lọc ở MỘT chỗ — `locDon` nhận điều kiện của máy chủ thì NÉM.
+     3. Tên lạ KHÔNG bị nuốt: vào túi `la` và màn hình phải nói ra; riêng `tenant_id` thì
+        tuyệt đối không gửi (máy chủ lấy tenant từ PHIÊN, `tenant_id` trong query là 400).
+     4. Dòng "phạm vi" đọc từ CHÍNH phản hồi máy chủ; thiếu số thì nói CHƯA ĐO ĐƯỢC, không suy ra.
+   Mỗi ca ghi rõ nó từng ghim gì (CŨ) và bất biến đúng là gì (MỚI). */
+
+test("18 chiaDieuKien — mười ba tham số của máy chủ đi LÊN MÁY CHỦ, chỉ `co_van_don` ở lại trang", () => {
+  // CŨ: ca này chốt nguyên văn "chỉ q/trang_thai/gioi_han đi lên máy chủ" — đúng với máy chủ
+  // chỉ biết ba tham số, và chính là ghim của khoản nợ G22.
+  // MỚI: túi `may_chu` phải bằng ĐÚNG danh sách máy chủ nhận (14 trường lọc §1.1 mà giao diện
+  // dùng, cộng ba tham số điều khiển `sap_xep`/`gioi_han`/`trang`), và `co_van_don` là điều kiện
+  // DUY NHẤT lọc tại trang.
+  const c = L.chiaDieuKien({ q: "abc", trang_thai: "nhap", trang_thai_giao: "cho_lay", hang: "jt",
+                             carrier_account_id: "9", cod_tu: "1000", cod_den: "2000",
+                             tu_ngay: "2026-10-01", den_ngay: "2026-10-31", can_doi_soat: "1",
+                             gioi_han: "100", trang: "2", sap_xep: "cod_cao", co_van_don: "co" });
+  assert.deepEqual(Object.keys(c.may_chu).sort(),
+    ["can_doi_soat", "carrier_account_id", "cod_den", "cod_tu", "den_ngay", "gioi_han",
+     "hang", "q", "sap_xep", "trang", "trang_thai", "trang_thai_giao", "tu_ngay"]);
+  assert.deepEqual(Object.keys(c.giao_dien), ["co_van_don"],
+    "chỉ `co_van_don` lọc tại trang — điều kiện đã gửi lên máy chủ thì KHÔNG lọc lại");
+  assert.deepEqual(c.la, []);
 });
 
-test("19 chiaDieuKien — bỏ điều kiện rỗng/false để không gửi tham số vô nghĩa", () => {
+test("19 chiaDieuKien — bỏ điều kiện rỗng/false, NHƯNG `0` là điều kiện THẬT; tên lạ phải NÓI RA", () => {
+  // CŨ: ca này chốt luật bỏ-rỗng và coi `cod_tu='0'` là điều kiện lọc TẠI TRANG.
+  // MỚI: luật bỏ-rỗng áp cho cả ba túi, và nó KHÔNG được nuốt hai giá trị `0` có nghĩa:
+  // `cod_tu='0'` (đầu khoảng COD) và `can_doi_soat='0'` — theo §1.1, `can_doi_soat=0` nghĩa là
+  // "chỉ đơn KHÔNG cần đối soát", tức bỏ nó đi là lọc SAI CHIỀU chứ không phải "bỏ điều kiện rỗng".
   const c = L.chiaDieuKien({ q: "", trang_thai: null, hang: "", can_doi_soat: false, cod_tu: "0" });
-  assert.deepEqual(c.may_chu, {});
-  assert.deepEqual(c.giao_dien, { cod_tu: "0" });
+  assert.deepEqual(c.may_chu, { cod_tu: "0" }, "cod_tu='0' là điều kiện THẬT, không phải rỗng");
+  assert.deepEqual(c.giao_dien, {});
+  assert.deepEqual(c.la, [], "rỗng/false/null không phải 'tên lạ'");
+  const c0 = L.chiaDieuKien({ can_doi_soat: "0" });
+  assert.deepEqual(c0.may_chu, { can_doi_soat: "0" },
+    'can_doi_soat="0" là điều kiện THẬT (chỉ đơn KHÔNG cần đối soát) — false mới là "không lọc"');
+  const c2 = L.chiaDieuKien({ q: "a", ten_khong_co_that: "x" });
+  assert.deepEqual(c2.la, ["ten_khong_co_that"], "tên lạ KHÔNG được nuốt im lặng");
+  assert.deepEqual(Object.keys(c2.may_chu), ["q"], "tên lạ không được lọt vào túi gửi máy chủ");
 });
 
-test("20 locDon — q tìm cả mã vận đơn, không chỉ mã đơn", () => {
-  assert.deepEqual(L.locDon(DON, { q: "vtp777" }, TK).map(d => d.id), [3], "phải không phân biệt hoa thường");
-  assert.deepEqual(L.locDon(DON, { q: "0902" }, TK).map(d => d.id), [2]);
-  assert.deepEqual(L.locDon(DON, { q: "Cường" }, TK).map(d => d.id), [3]);
-});
-
-test("21 locDon — lọc theo trạng thái giao vận (trục riêng, không lẫn với trạng thái nghiệp vụ)", () => {
-  assert.deepEqual(L.locDon(DON, { trang_thai_giao: "cho_lay" }, TK).map(d => d.id), [3]);
-  assert.deepEqual(L.locDon(DON, { trang_thai: "nhap" }, TK).map(d => d.id), [2]);
-});
-
-test("22 locDon — lọc theo hãng phải đi qua bảng tài khoản hãng", () => {
-  assert.deepEqual(L.locDon(DON, { hang: "jt" }, TK).map(d => d.id), [1]);
-  assert.deepEqual(L.locDon(DON, { hang: "jt" }, {}).map(d => d.id), [],
-    "không có bảng tài khoản thì không được đoán bừa là khớp");
-  assert.deepEqual(L.locDon(DON, { tai_khoan_id: "9" }, TK).map(d => d.id), [3]);
-});
-
-test("23 locDon — khoảng COD bao gồm hai đầu, COD=0 vẫn lọc được", () => {
-  assert.deepEqual(L.locDon(DON, { cod_tu: "100000" }, TK).map(d => d.id), [1, 3]);
-  assert.deepEqual(L.locDon(DON, { cod_den: "0" }, TK).map(d => d.id), [2],
-    "cod_den='0' phải có hiệu lực, không bị coi là rỗng");
-  assert.deepEqual(L.locDon(DON, { cod_tu: "100000", cod_den: "100000" }, TK).map(d => d.id), [1]);
-});
-
-test("24 locDon — khoảng ngày so theo 10 ký tự đầu của tao_luc, bao gồm hai đầu", () => {
-  assert.deepEqual(L.locDon(DON, { tu_ngay: "2026-10-05" }, TK).map(d => d.id), [2, 3]);
-  assert.deepEqual(L.locDon(DON, { den_ngay: "2026-10-05" }, TK).map(d => d.id), [1, 2]);
-  assert.deepEqual(L.locDon(DON, { tu_ngay: "2026-10-05", den_ngay: "2026-10-05" }, TK).map(d => d.id), [2]);
-});
-
-test("25 locDon — cờ cần đối soát và cờ có/không mã vận đơn", () => {
-  assert.deepEqual(L.locDon(DON, { can_doi_soat: true }, TK).map(d => d.id), [3]);
+test("20 locDon — điều kiện TẠI TRANG `co_van_don` lọc đúng cả hai chiều", () => {
+  // CŨ: ca này chốt `locDon` tự tìm chữ (`q`) trên tập ĐÃ TẢI — phép tìm ấy nay ở máy chủ, và
+  // ở đó nó tìm 5 cột (thêm `hang_hoa`), tức bản cũ còn ghim một phạm vi HẸP HƠN hợp đồng.
+  // MỚI: `locDon` chỉ còn đúng một điều kiện, và cả hai chiều của nó đều phải đúng.
   assert.deepEqual(L.locDon(DON, { co_van_don: "co" }, TK).map(d => d.id), [1, 3]);
   assert.deepEqual(L.locDon(DON, { co_van_don: "khong" }, TK).map(d => d.id), [2]);
+  assert.equal(L.locDon(DON, {}, TK).length, 3, "không điều kiện thì trả nguyên danh sách");
+  assert.equal(L.locDon(null, {}, TK).length, 0);
 });
 
-test("26 locDon — nhiều điều kiện cùng lúc là AND; không điều kiện thì trả nguyên danh sách", () => {
-  assert.deepEqual(L.locDon(DON, { hang: "vtp", can_doi_soat: true, cod_tu: "1" }, TK).map(d => d.id), [3]);
-  assert.deepEqual(L.locDon(DON, { hang: "vtp", can_doi_soat: true, cod_den: "1" }, TK).map(d => d.id), []);
-  assert.equal(L.locDon(DON, {}, TK).length, 3);
-  assert.equal(L.locDon(null, {}, TK).length, 0);
+test("21 locDon — NÉM khi nhận điều kiện CỦA MÁY CHỦ (không lọc hai chỗ)", () => {
+  // CŨ: ca này chốt `locDon` tự lọc `trang_thai_giao` tại trang (trục giao vận riêng).
+  // MỚI: điều kiện ấy nay đi lên máy chủ. Lọc lại tại trang là LỌC HAI CHỖ — đúng một cách
+  // TÌNH CỜ, và sai ngay khi máy chủ đổi cách hiểu. Nên MỌI tên trong `THAM_SO_MAY_CHU` phải
+  // làm `locDon` NÉM, và câu lỗi phải NÊU TÊN điều kiện vừa nhận.
+  for (const ten of L.THAM_SO_MAY_CHU) {
+    assert.throws(() => L.locDon(DON, { [ten]: "x" }, TK),
+      new RegExp("điều kiện của máy chủ: " + ten),
+      `lọc lại \`${ten}\` tại trang là LỌC HAI CHỖ — phải ném, không lặng lẽ lọc`);
+  }
+  assert.throws(() => L.locDon(DON, { q: "a", co_van_don: "co" }, TK), /q/,
+    "trộn điều kiện máy chủ với điều kiện tại trang cũng phải ném");
+});
+
+test("22 phamViLoc — dựng dòng phạm vi từ CHÍNH phản hồi của máy chủ, kể cả giá trị ĐÃ KẸP", () => {
+  // CŨ: ca này chốt `locDon` tự lọc theo hãng, đi qua bảng tài khoản hãng, TẠI TRANG.
+  // MỚI: dòng phạm vi là DỮ LIỆU đọc từ phản hồi máy chủ, và hai con số phân trang phải là con
+  // số máy chủ THẬT SỰ dùng: `gioi_han=99999` bị kẹp còn 500 thì dòng phạm vi nói 500 —
+  // nói lại con số giao diện XIN là nói sai (§1.3: kẹp, và giá trị thật được TRẢ RA).
+  const pv = L.phamViLoc({ dong: [{ id: 1 }, { id: 2 }], tong: 7, tong_chinh_xac: true,
+                           trang: 2, gioi_han: 2, con_nua: true, sap_xep: "cod_cao",
+                           loc_bo_qua: [] }, { co_van_don: "co" }, 1);
+  assert.equal(pv.tong, 7);
+  assert.equal(pv.tong_chinh_xac, true);
+  assert.equal(pv.trang, 2);
+  assert.equal(pv.gioi_han, 2);
+  assert.equal(pv.con_nua, true);
+  assert.equal(pv.so_dong_trang, 1);
+  assert.deepEqual(pv.loc_tai_trang, ["co_van_don"]);
+  assert.equal(pv.sap_xep, "cod_cao");
+  assert.deepEqual(pv.loc_may_chu, L.THAM_SO_MAY_CHU.slice(),
+    "dòng phạm vi phải nói ra ĐÚNG danh sách điều kiện đã gửi lên máy chủ");
+  const kep = L.phamViLoc({ dong: [], tong: 0, tong_chinh_xac: true, trang: 1, gioi_han: 500,
+                            con_nua: false, sap_xep: "moi_nhat" }, {}, 0);
+  assert.equal(kep.gioi_han, 500, "máy chủ kẹp `gioi_han` thì dòng phạm vi nói giá trị ĐÃ KẸP");
+  assert.equal(kep.sap_xep, "moi_nhat", "sắp xếp mặc định của máy chủ phải hiện ra được");
+  assert.deepEqual(kep.loc_tai_trang, []);
+});
+
+test("23 phamViLoc — máy chủ KHÔNG trả `tong` thì nói CHƯA ĐO ĐƯỢC, không suy ra 0", () => {
+  // CŨ: ca này chốt khoảng ngày lọc tại trang theo 10 ký tự đầu của `tao_luc`.
+  // MỚI: hình dạng phản hồi là hợp đồng — thiếu `tong`/`trang`/`gioi_han` thì dòng phạm vi phải
+  // nói CHƯA ĐO ĐƯỢC (null), tuyệt đối không hiện 0 như một con số chính xác: "0 đơn" và
+  // "chưa đo được" là hai câu khác hẳn nhau với người đang tìm đơn.
+  const pv = L.phamViLoc({ don: [{ id: 1 }] }, {}, 1);
+  assert.equal(pv.tong, null, "thiếu `tong` ⇒ null (chưa đo được), KHÔNG phải 0");
+  assert.equal(pv.tong_chinh_xac, null);
+  assert.equal(pv.trang, null);
+  assert.equal(pv.gioi_han, null);
+  assert.equal(pv.so_dong_trang, 1);
+  assert.equal(pv.con_nua, false, "thiếu `con_nua` thì KHÔNG được hứa là còn trang sau");
+});
+
+test("24 phamViLoc — chạm trần đếm thì nói TỐI THIỂU, và chuyển tiếp điều kiện máy chủ BỎ", () => {
+  // CŨ: ca này chốt `locDon` tự lọc khoảng ngày tại trang.
+  // MỚI: hai lời nói thật BẮT BUỘC của dòng phạm vi — (a) `tong_chinh_xac=false` nghĩa là `tong`
+  // chỉ là TỐI THIỂU (đã chạm trần đếm), không được đọc như số chính xác; (b) điều kiện máy chủ
+  // BỎ (cột chưa migrate) phải được chuyển tiếp lên màn, không nằm im trong log.
+  const pv = L.phamViLoc({ dong: [], tong: 10000, tong_chinh_xac: false, trang: 1,
+                           gioi_han: 100, con_nua: true,
+                           loc_bo_qua: ["external_reference (CSDL chưa có cột)"] }, {}, 0);
+  assert.equal(pv.tong_chinh_xac, false);
+  assert.equal(pv.tong, 10000);
+  assert.deepEqual(pv.loc_bo_qua, ["external_reference (CSDL chưa có cột)"],
+    "máy chủ BỎ điều kiện thì phải chuyển tiếp lên màn hình");
+  assert.equal(pv.so_dong_trang, 0);
+});
+
+test("25 THAM_SO_MAY_CHU — tên máy chủ nhận, hai danh sách RỜI NHAU, và KHÔNG bao giờ gửi `tenant_id`", () => {
+  // CŨ: ca này chốt `can_doi_soat` lọc TẠI TRANG và giao diện gọi tên riêng `tai_khoan_id`.
+  // MỚI, bốn bất biến:
+  //  (a) hai danh sách RỜI NHAU — một điều kiện chỉ được lọc ở MỘT chỗ;
+  //  (b) gửi ĐÚNG tên máy chủ (`carrier_account_id`), không gửi tên riêng của giao diện;
+  //  (c) `co_van_don` không có trên máy chủ nên nó ở lại trang — và là điều kiện DUY NHẤT;
+  //  (d) KHÔNG BAO GIỜ gửi `tenant_id`: máy chủ lấy tenant từ PHIÊN và coi `tenant_id` trong
+  //      query là tham số lạ ⇒ 400 (§1.4). Gửi nó là tự làm hỏng MỌI lượt lọc.
+  //      Cùng luật với `lech`: giao diện đánh số bằng `trang`, gửi cả `trang` lẫn `lech` ⇒ 400.
+  for (const ten of L.THAM_SO_MAY_CHU) {
+    assert.ok(L.THAM_SO_LOC_TAI_GIAO_DIEN.indexOf(ten) < 0,
+      `${ten} vừa gửi lên máy chủ vừa lọc tại trang`);
+  }
+  assert.deepEqual(L.THAM_SO_LOC_TAI_GIAO_DIEN, ["co_van_don"],
+    "`co_van_don` là điều kiện DUY NHẤT lọc tại trang");
+  assert.ok(L.THAM_SO_MAY_CHU.indexOf("carrier_account_id") >= 0,
+    "máy chủ nhận `carrier_account_id`; giao diện không được gửi tên riêng `tai_khoan_id`");
+  assert.ok(L.THAM_SO_MAY_CHU.indexOf("tai_khoan_id") < 0);
+  assert.ok(L.THAM_SO_MAY_CHU.indexOf("co_van_don") < 0,
+    "`co_van_don` không có trong hợp đồng của máy chủ");
+  assert.ok(L.THAM_SO_MAY_CHU.indexOf("trang") >= 0 && L.THAM_SO_MAY_CHU.indexOf("lech") < 0,
+    "giao diện đánh số bằng `trang`; gửi thêm `lech` là 400");
+  assert.ok(L.THAM_SO_MAY_CHU.indexOf("tenant_id") < 0,
+    "`tenant_id` KHÔNG bao giờ đi từ giao diện: máy chủ lấy tenant từ phiên, gửi lên là 400");
+  const c = L.chiaDieuKien({ tenant_id: "2", q: "x" });
+  assert.deepEqual(c.la, ["tenant_id"],
+    "`tenant_id` là tên lạ — phải bị NÓI RA ở dòng phạm vi, và KHÔNG được gửi đi");
+  assert.deepEqual(Object.keys(c.may_chu), ["q"]);
+});
+
+test("26 SAP_XEP_DON — khoá sắp xếp chép đúng danh sách trắng của máy chủ", () => {
+  // CŨ: ca này chốt nhiều điều kiện lọc tại trang là AND (nay ở ca 20) và `locDon` trả nguyên
+  // danh sách khi không có điều kiện.
+  // MỚI: `sap_xep` là DANH SÁCH TRẮNG — máy chủ TỪ CHỐI (400) khoá lạ, nên giao diện chép
+  // thiếu / đủ / thừa một khoá là màn Đơn hàng TRẮNG BẢNG chứ không phải "sắp xếp hơi khác".
+  // Tầng 2 (`test_40`) đối chiếu danh sách này với `GET /api/v2/don/loc-mo-ta`; ở đây ghim
+  // đúng tám khoá của §1.2 và nhãn tiếng Việt của từng khoá.
+  const khoa = L.SAP_XEP_DON.map(([k]) => k);
+  assert.deepEqual(khoa.slice().sort(),
+    ["cap_nhat_cu", "cap_nhat_moi", "cod_cao", "cod_thap", "cu_nhat", "ma_don", "moi_nhat", "nang_nhat"]);
+  assert.equal(new Set(khoa).size, khoa.length, "khoá sắp xếp bị trùng");
+  assert.ok(khoa.indexOf("moi_nhat") >= 0, "thiếu khoá MẶC ĐỊNH `moi_nhat` của máy chủ");
+  const nhan = new Set();
+  for (const [, ten] of L.SAP_XEP_DON) {
+    assert.ok(ten && ten.length, `khoá ${ten} phải có nhãn tiếng Việt`);
+    assert.ok(!nhan.has(ten), `nhãn sắp xếp bị trùng: ${ten}`);
+    nhan.add(ten);
+  }
 });
 
 /* ====================== 5. Dòng thời gian giao vận ====================== */

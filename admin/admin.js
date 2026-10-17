@@ -575,9 +575,12 @@ const CAC_MAN = {
      Ba điều phải đúng ở màn này:
      1. CHẾ ĐỘ DỮ LIỆU hiện rõ từng đơn: MOCK DATA / LOCAL REAL DATA / LIVE CARRIER DATA.
         `CHO_PHEP_LIVE=False` và `live_mo=0` ⇒ không đơn nào được dán LIVE (luật ở L.cheDoDon).
-     2. PHẠM VI LỌC nói thật: máy chủ chỉ nhận q · trang_thai · gioi_han (đo ở app/server.py
-        15/10/2026). Điều kiện còn lại lọc TẠI GIAO DIỆN trên tập đã tải — ghi rõ, không để
-        người đọc tưởng đang lọc toàn bộ CSDL.
+     2. PHẠM VI LỌC nói thật — G22/AG-06: máy chủ ĐÃ lọc nâng cao (`GET /api/v2/don` đi qua
+        `app/truy_van.py::BANG_DON`), nên màn này GỬI điều kiện lên máy chủ và phân trang bằng
+        `tong`/`trang`/`con_nua` của máy chủ, KHÔNG lọc lại tại trang. Điều kiện duy nhất còn
+        lọc tại trang là `co_van_don` (đã có / chưa có mã vận đơn — máy chủ không có phép lọc
+        tương ứng). Dòng "phạm vi" dưới bảng do `L.phamViLoc()` dựng từ CHÍNH phản hồi máy chủ,
+        nên nó không thể nói rộng hơn con số đo được. Hợp đồng: docs/G22_HOPDONG_FRONTEND.md.
      3. API chưa có thì hiện CHỜ BACKEND, không tự chế endpoint. */
   async don() {
     const co_hang = duoc("tenant.hang.xem");
@@ -595,7 +598,7 @@ const CAC_MAN = {
           ${Object.keys(L.TT_DON).map(t => `<option value="${t}">${T(L.TT_DON[t][1])}</option>`).join("")}</select>
         <button class="nut" id="d-nang-cao" aria-expanded="false">⚙ Bộ lọc nâng cao</button>
         <div class="day">
-          <a class="nut" href="/api/v2/don/xuat-csv">⬇ Xuất CSV</a>
+          <a class="nut" id="d-xuat" href="/api/v2/don/xuat-csv" title="Xuất 2000 đơn mới nhất — KHÔNG áp bộ lọc đang chọn (đường xuất chưa nhận tham số lọc)">⬇ Xuất CSV</a>
           ${duoc("tenant.don.ghi") ? `<button class="nut nut-chinh" id="d-them">➕ Tạo đơn</button>` : ""}
         </div>
       </div>
@@ -612,16 +615,19 @@ const CAC_MAN = {
           <div class="form-nhom"><label for="l-tk">Tài khoản hãng cụ thể</label>
             <select id="l-tk" class="o-nho"><option value="">Mọi tài khoản</option>
               ${tk.tai_khoan.map(x => `<option value="${x.id}">${T(x.hang)} · ${T(x.ten)}${x.kich_hoat ? "" : " (khóa)"}</option>`).join("")}</select></div>
-          <div class="form-nhom"><label for="l-vd">Mã vận đơn</label>
+          <div class="form-nhom"><label for="l-vd">Mã vận đơn <span class="ghi-chu-nguon">(lọc trên trang đã tải)</span></label>
             <select id="l-vd" class="o-nho"><option value="">Không xét</option>
               <option value="co">Đã có mã vận đơn</option><option value="khong">Chưa có mã vận đơn</option></select></div>
-          <div class="form-nhom"><label for="l-cod-tu">COD từ (₫)</label><input id="l-cod-tu" class="o-nho" type="number" min="0" placeholder="0"></div>
-          <div class="form-nhom"><label for="l-cod-den">COD đến (₫)</label><input id="l-cod-den" class="o-nho" type="number" min="0" placeholder="không giới hạn"></div>
-          <div class="form-nhom"><label for="l-tu-ngay">Tạo từ ngày</label><input id="l-tu-ngay" class="o-nho" type="date"></div>
-          <div class="form-nhom"><label for="l-den-ngay">Tạo đến ngày</label><input id="l-den-ngay" class="o-nho" type="date"></div>
-          <div class="form-nhom"><label for="l-gioi-han">Số đơn tải từ máy chủ</label>
+          <div class="form-nhom"><label for="l-cod-tu">COD từ (₫)</label><input id="l-cod-tu" class="o-nho" type="number" min="0" step="1" placeholder="0"></div>
+          <div class="form-nhom"><label for="l-cod-den">COD đến (₫)</label><input id="l-cod-den" class="o-nho" type="number" min="0" step="1" placeholder="không giới hạn"></div>
+          <div class="form-nhom"><label for="l-tu-ngay">Tạo từ ngày <span class="ghi-chu-nguon">(bao gồm)</span></label><input id="l-tu-ngay" class="o-nho" type="date"></div>
+          <div class="form-nhom"><label for="l-den-ngay">Tạo đến ngày <span class="ghi-chu-nguon">(bao gồm)</span></label><input id="l-den-ngay" class="o-nho" type="date"></div>
+          <div class="form-nhom"><label for="l-sap-xep">Sắp xếp</label>
+            <select id="l-sap-xep" class="o-nho">
+              ${L.SAP_XEP_DON.map(([ma, ten]) => `<option value="${T(ma)}">${T(ten)}</option>`).join("")}</select></div>
+          <div class="form-nhom"><label for="l-gioi-han">Số đơn mỗi trang</label>
             <select id="l-gioi-han" class="o-nho">
-              <option value="100">100 đơn mới nhất</option><option value="300">300</option><option value="500">500 (trần API)</option></select></div>
+              <option value="50">50</option><option value="100" selected>100</option><option value="300">300</option><option value="500">500 (trần máy chủ)</option></select></div>
           <div class="form-nhom" style="display:flex;align-items:center;gap:8px;padding-top:18px">
             <input type="checkbox" id="l-doi-soat" style="width:auto">
             <label for="l-doi-soat" style="margin:0">Chỉ đơn <b>cần đối soát</b> với hãng</label></div>
@@ -629,12 +635,15 @@ const CAC_MAN = {
         <div class="hang-cong-cu" style="margin:6px 0 0"><div class="day">
           <button class="nut" id="l-xoa">↺ Xóa bộ lọc</button></div></div>
         <p class="ghi-chu-nguon" style="margin-top:10px">
-          <b>Phạm vi lọc — đọc kỹ:</b> máy chủ chỉ lọc được
-          <code>${L.THAM_SO_MAY_CHU.map(x => T(x)).join("</code> · <code>")}</code>.
-          ${L.THAM_SO_LOC_TAI_GIAO_DIEN.length} điều kiện còn lại
-          (<code>${L.THAM_SO_LOC_TAI_GIAO_DIEN.map(x => T(x)).join("</code> <code>")}</code>)
-          lọc <b>tại giao diện trên tập đã tải</b>, nên đơn cũ hơn trần tải về sẽ không xuất hiện
-          dù khớp điều kiện. ${nhanChoBackend("/api/v2/don")} cần tham số lọc + <code>tong</code> ở máy chủ.
+          <b>Lọc ở đâu — đọc kỹ:</b> mọi ô trong khung này (trừ <b>Mã vận đơn</b>) được gửi lên
+          <b>máy chủ</b>, lọc trên <b>toàn bộ CSDL</b> của doanh nghiệp rồi trả về đúng MỘT trang.
+          Máy chủ nhận: <code>${L.THAM_SO_MAY_CHU.map(x => T(x)).join("</code> · <code>")}</code>.
+          Riêng <code>${L.THAM_SO_LOC_TAI_GIAO_DIEN.map(x => T(x)).join("</code> <code>")}</code>
+          (đã có / chưa có mã vận đơn) không có phép lọc tương ứng ở máy chủ nên nó lọc
+          <b>trên trang vừa tải</b> — số thật của nó nằm ở dòng phạm vi dưới bảng, không gộp
+          vào con số của máy chủ. Tham số lạ bị máy chủ <b>TỪ CHỐI (400)</b>, không bỏ qua im lặng.
+          Nút <b>Xuất CSV</b> xuất 2000 đơn mới nhất và <b>KHÔNG áp bộ lọc đang chọn</b> —
+          đường xuất chưa nhận tham số lọc, nên phạm vi của nó khác phạm vi của bảng.
         </p>
       </div></div>
 
@@ -658,29 +667,73 @@ const CAC_MAN = {
         <tbody id="d-bang"></tbody></table></div></div>`);
 
     const g = (id) => document.getElementById(id);
+    /* Trang đang xem. Mọi thay đổi BỘ LỌC đưa về trang 1 (điều kiện đổi ⇒ tập kết quả đổi ⇒
+       số trang cũ vô nghĩa); chỉ hai nút "trang trước/sau" mới giữ trang. */
+    let trang_dang_xem = 1;
+    /* Số thứ tự lượt vẽ. Xem chú thích trong `ve()`: lượt gọi CŨ về SAU lượt gọi MỚI thì phải
+       bị BỎ, không được vẽ — nếu không, màn hình hiện số của bộ lọc cũ trong khi ô lọc đã đổi. */
+    let lan_ve = 0;
+
+    /* Điều kiện đọc từ màn. TÊN KHOÁ = TÊN THAM SỐ MÁY CHỦ NHẬN (trừ `co_van_don` — điều kiện
+       duy nhất lọc tại trang). Đổi tên ở đây mà không đổi ở `L.THAM_SO_MAY_CHU` thì
+       `chiaDieuKien()` trả nó vào túi `la` và màn hình NÓI RA, không gửi bừa. */
     const docDieuKien = () => ({
       q: g("d-tim").value.trim(), trang_thai: g("d-tt").value,
-      gioi_han: g("l-gioi-han").value,
       trang_thai_giao: g("l-giao").value, hang: g("l-hang").value,
-      tai_khoan_id: g("l-tk").value, co_van_don: g("l-vd").value,
+      carrier_account_id: g("l-tk").value, co_van_don: g("l-vd").value,
       cod_tu: g("l-cod-tu").value, cod_den: g("l-cod-den").value,
       tu_ngay: g("l-tu-ngay").value, den_ngay: g("l-den-ngay").value,
-      can_doi_soat: g("l-doi-soat").checked,
+      can_doi_soat: g("l-doi-soat").checked ? "1" : "",
+      sap_xep: g("l-sap-xep").value,
+      gioi_han: g("l-gioi-han").value,
     });
 
-    const ve = async () => {
+    const ve = async (giu_trang) => {
+      /* LUẬT "LƯỢT VẼ MỚI NHẤT THẮNG". Gõ nhanh vào ô lọc (hoặc một ô vừa `input` vừa `change`)
+         tạo ra HAI lượt gọi chồng nhau; mạng không bảo đảm thứ tự trả về, nên lượt CŨ có thể
+         về SAU và ghi đè lượt MỚI — màn hình khi ấy hiện số của bộ lọc cũ trong khi ô lọc đã
+         đổi, tức là "phạm vi" nói một đằng còn bảng một nẻo. Đo được ở tầng 3: ca 03 chập chờn
+         1/3 lượt trước khi có dòng này. Lượt nào không còn là lượt mới nhất thì BỎ, không vẽ.
+         (Không phải "chống lag": đây là tính ĐÚNG của con số hiện trên màn.) */
+      const lan = ++lan_ve;
       const dk = docDieuKien();
       const chia = L.chiaDieuKien(dk);
+      if (!giu_trang) trang_dang_xem = 1;
       const ts = new URLSearchParams();
-      ts.set("q", chia.may_chu.q || "");
-      ts.set("trang_thai", chia.may_chu.trang_thai || "");
-      ts.set("gioi_han", chia.may_chu.gioi_han || "100");
-      const tai_ve = (await api("/api/v2/don?" + ts.toString())).don;
-      const ds = L.locDon(tai_ve, chia.giao_dien, tk_theo_id);
-      const so_dk_gd = Object.keys(chia.giao_dien).length;
-      const cham_tran = tai_ve.length >= +(chia.may_chu.gioi_han || 100);
+      Object.keys(chia.may_chu).forEach(k => ts.set(k, chia.may_chu[k]));
+      ts.set("trang", String(trang_dang_xem));
+      let kq;
+      try {
+        kq = await api("/api/v2/don?" + ts.toString());
+      } catch (e) {
+        if (lan !== lan_ve) return;
+        // Lớp truy vấn TỪ CHỐI (400) tham số lạ thay vì bỏ qua im lặng — nên chỗ này PHẢI hiện
+        // nguyên văn câu từ chối. Nuốt nó đi là biến "máy chủ nói không nhận" thành "bảng trống".
+        g("d-dem").innerHTML = '<span class="huy-hieu hh-do">máy chủ từ chối bộ lọc</span>';
+        g("d-bang").innerHTML = `<tr><td colspan="10"><div class="hop-loi">
+          <b>Máy chủ TỪ CHỐI bộ lọc (HTTP ${T(String(e.ma))}):</b> ${T(e.message)}
+          <div class="ghi-chu-nguon" style="margin-top:6px">Đã gửi: <code>${T(ts.toString())}</code></div>
+          </div></td></tr>`;
+        g("d-trang").innerHTML = ""; g("d-pham-vi").innerHTML = "";
+        return;
+      }
+      if (lan !== lan_ve) return;       // đã có lượt vẽ mới hơn chạy xong — bỏ kết quả cũ
+      const tai_ve = kq.dong || kq.don || [];       // `dong` là khoá mới; `don` giữ tương thích
+      let ds, loi_loc_trang = null;
+      try {
+        ds = L.locDon(tai_ve, chia.giao_dien, tk_theo_id);
+      } catch (e) {
+        // `locDon` chỉ nhận điều kiện TẠI TRANG; ném ra nghĩa là mã nguồn gọi sai. Không giấu:
+        ds = tai_ve; loi_loc_trang = e.message;
+      }
+      const pv = L.phamViLoc(kq, chia.giao_dien, ds.length);
 
-      g("d-dem").innerHTML = `<span class="huy-hieu hh-xam">${ds.length}/${tai_ve.length} đơn</span>`;
+      g("d-dem").innerHTML =
+        `<span class="huy-hieu hh-xam">trang ${T(String(pv.trang))} · ${ds.length}/${tai_ve.length} đơn trên trang</span>` +
+        (pv.tong == null
+          ? ' <span class="huy-hieu hh-vang" title="máy chủ không trả trường tong">chưa đo được tổng</span>'
+          : ` <span class="huy-hieu hh-xam">${pv.tong}${pv.tong_chinh_xac ? "" : "+"} đơn khớp ở máy chủ</span>`);
+
       g("d-bang").innerHTML = ds.map(d => {
         const t2 = tk_theo_id[d.carrier_account_id];
         const h = t2 ? hang_theo_ma[t2.hang] : null;
@@ -698,20 +751,62 @@ const CAC_MAN = {
           <td>${nhanCheDo(cd)}</td>
           <td><button class="nut nut-nho" data-xem="${d.id}">Chi tiết</button></td></tr>`;
       }).join("") || `<tr><td colspan="10"><div class="trang-thai-rong"><div class="to">📦</div>
-          ${tai_ve.length ? `Máy chủ trả <b>${tai_ve.length}</b> đơn nhưng không đơn nào khớp ${so_dk_gd} điều kiện lọc tại giao diện.`
-                          : "Không có đơn nào khớp điều kiện gửi máy chủ."}</div></td></tr>`;
+          ${tai_ve.length
+            ? `Máy chủ trả <b>${tai_ve.length}</b> đơn cho trang này nhưng không đơn nào khớp
+               ${Object.keys(chia.giao_dien).length} điều kiện lọc <b>tại trang</b> —
+               bộ lọc của máy chủ thì vẫn khớp <b>${pv.tong == null ? "?" : pv.tong}</b> đơn.`
+            : (pv.tong ? `Máy chủ đếm <b>${pv.tong}</b> đơn khớp điều kiện nhưng trang
+               <b>${T(String(pv.trang))}</b> không còn dòng nào — lùi về trang trước.`
+                       : "Không có đơn nào khớp điều kiện gửi máy chủ.")}</div></td></tr>`;
 
-      g("d-pham-vi").innerHTML = `Máy chủ trả <b>${tai_ve.length}</b> đơn
-        (lọc máy chủ: ${Object.keys(chia.may_chu).filter(k => chia.may_chu[k] && k !== "gioi_han").length || "không"} điều kiện).
-        Giao diện lọc thêm <b>${so_dk_gd}</b> điều kiện, còn <b>${ds.length}</b> đơn.
-        ${cham_tran ? `<b class="canh">⚠ Đã chạm trần ${T(chia.may_chu.gioi_han || "100")} đơn — có thể còn đơn cũ hơn khớp điều kiện mà chưa tải về.</b>` : ""}`;
+      // Dòng PHẠM VI — dựng từ chính phản hồi máy chủ, không từ con số giao diện tự đếm.
+      // `gioi_han`/`sap_xep` là điều khiển HIỂN THỊ, không phải điều kiện lọc: đếm chung vào
+      // "số điều kiện lọc" là nói rộng hơn thực tế.
+      const dk_loc = Object.keys(chia.may_chu).filter(k => k !== "gioi_han" && k !== "sap_xep");
+      g("d-pham-vi").innerHTML = [
+        `Máy chủ lọc trên <b>toàn bộ CSDL</b> của doanh nghiệp: <b>${dk_loc.length}</b> điều kiện` +
+        (dk_loc.length ? ` (<code>${dk_loc.map(k => T(k)).join("</code> <code>")}</code>)` : ""),
+        pv.tong == null
+          ? '<b class="canh">máy chủ KHÔNG trả <code>tong</code> — chưa đo được tổng khớp</b>'
+          : `khớp <b>${pv.tong}${pv.tong_chinh_xac ? "" : "+"}</b> đơn` +
+            (pv.tong_chinh_xac ? " (đếm chính xác)" : " (đã chạm trần đếm — con số là TỐI THIỂU)"),
+        `trang <b>${T(String(pv.trang))}</b>` + (pv.gioi_han ? ` · mỗi trang <b>${pv.gioi_han}</b> đơn` : ""),
+        pv.loc_tai_trang.length
+          ? `lọc thêm <b>tại trang</b> (${pv.loc_tai_trang.map(k => `<code>${T(k)}</code>`).join(" ")}) còn <b>${ds.length}/${tai_ve.length}</b> đơn`
+          : "không lọc gì thêm tại trang",
+        pv.con_nua ? "<b>còn trang sau</b>" : "đã là trang cuối",
+        pv.sap_xep ? `sắp xếp <code>${T(pv.sap_xep)}</code>` : "",
+        pv.loc_bo_qua.length
+          ? `<b class="canh">máy chủ BỎ điều kiện (CSDL chưa có cột): ${T(pv.loc_bo_qua.join(" · "))}</b>` : "",
+        chia.la.length
+          ? `<b class="canh">giao diện khai điều kiện lạ, KHÔNG gửi lên máy chủ: ${T(chia.la.join(", "))}</b>` : "",
+        loi_loc_trang ? `<b class="canh">lỗi lọc tại trang: ${T(loi_loc_trang)}</b>` : "",
+      ].filter(Boolean).join(" · ") + ".";
+
+      g("d-trang").innerHTML = `<div class="day" style="align-items:center">
+        <button class="nut nut-nho" id="d-truoc"${pv.trang > 1 ? "" : " disabled"}>← Trang trước</button>
+        <span class="ghi-chu-nguon">Trang <b>${T(String(pv.trang))}</b>${
+          pv.tong != null && pv.gioi_han
+            ? ` · ${Math.max(1, Math.ceil(pv.tong / pv.gioi_han))}${pv.tong_chinh_xac ? "" : "+"} trang`
+            : ""}</span>
+        <button class="nut nut-nho" id="d-sau"${pv.con_nua ? "" : " disabled"}>Trang sau →</button></div>`;
+      g("d-truoc").addEventListener("click", () => {
+        if (pv.trang > 1) { trang_dang_xem = pv.trang - 1; ve(true); }
+      });
+      g("d-sau").addEventListener("click", () => {
+        if (pv.con_nua) { trang_dang_xem = pv.trang + 1; ve(true); }
+      });
 
       document.querySelectorAll("[data-xem]").forEach(n =>
-        n.addEventListener("click", () => chiTietDon(+n.dataset.xem, tk.tai_khoan, hs.hang, ve)));
+        n.addEventListener("click", () => chiTietDon(+n.dataset.xem, tk.tai_khoan, hs.hang, veGiuTrang)));
     };
+    // Mở chi tiết rồi sửa đơn xong: vẽ lại nhưng GIỮ TRANG đang xem (đổi trang sau mỗi thao tác
+    // là mất chỗ đang làm việc).
+    const veGiuTrang = () => ve(true);
 
-    // dòng phạm vi đặt ngay dưới bảng, dựng một lần rồi cập nhật nội dung
+    // hai dòng dưới bảng, dựng một lần rồi cập nhật nội dung: thanh chuyển trang + dòng phạm vi
     g("d-bang").closest(".the").insertAdjacentHTML("beforeend",
+      '<div id="d-trang" style="padding:0 18px 6px"></div>' +
       '<p class="ghi-chu-nguon" id="d-pham-vi" style="padding:0 18px 14px"></p>');
 
     g("d-tim").addEventListener("input", ve);
@@ -721,14 +816,16 @@ const CAC_MAN = {
       o.hidden = !o.hidden;
       g("d-nang-cao").setAttribute("aria-expanded", String(!o.hidden));
     });
-    ["l-giao", "l-hang", "l-tk", "l-vd", "l-gioi-han", "l-doi-soat"].forEach(id =>
+    ["l-giao", "l-hang", "l-tk", "l-vd", "l-sap-xep", "l-gioi-han", "l-doi-soat"].forEach(id =>
       g(id).addEventListener("change", ve));
     ["l-cod-tu", "l-cod-den", "l-tu-ngay", "l-den-ngay"].forEach(id =>
       g(id).addEventListener("change", ve));
     g("l-xoa").addEventListener("click", () => {
       ["l-giao", "l-hang", "l-tk", "l-vd", "l-cod-tu", "l-cod-den", "l-tu-ngay", "l-den-ngay"]
         .forEach(id => g(id).value = "");
-      g("l-doi-soat").checked = false; g("l-gioi-han").value = "100"; ve();
+      g("l-doi-soat").checked = false; g("l-gioi-han").value = "100";
+      g("l-sap-xep").value = "moi_nhat";
+      ve();
     });
     const nutThem = g("d-them");
     if (nutThem) nutThem.addEventListener("click", () => formDon(null, ve));

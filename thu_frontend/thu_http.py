@@ -13,17 +13,21 @@
 # Cổng: bind 0 để hệ cấp cổng TRỐNG. Cố ý — các bộ thử sẵn có dùng cổng cố định và đã đụng
 # nhau thật khi hai worktree chạy cùng lúc (đo 15/10/2026: thu_g01_g02 hỏng vì
 # gateway/thu/thu_gateway.py bind 18898 trùng phiên khác).
+import datetime
 import hashlib
 import hmac
 import io
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 
 GOC_DU_AN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -131,6 +135,53 @@ def api_dang_dung():
     i = ma.index("const API_DANG_DUNG = [")
     j = ma.index("\n  ];", i)
     return re.findall(r'\["(\w+)",\s*"([^"]+)"\]', ma[i:j])
+
+
+# ============================================================================
+# G22/AG-06 — HỢP ĐỒNG LỌC Ở MÁY CHỦ: đọc các danh sách KHAI TRONG GIAO DIỆN
+# ============================================================================
+# Bốn mặt phải khớp nhau, mỗi mặt một phép đo ở dưới:
+#   (1) ngữ nghĩa lọc   — `test_37`
+#   (2) phân trang      — `test_38`
+#   (3) tenant          — `test_39`
+#   (4) phạm vi giao diện — `test_40` (+ tầng 3, `thu_giao_dien/01_luong_chinh.spec.js` ca 03)
+# Các hàm dưới đây đọc THẲNG `admin/logic.js` và `admin/admin.js` — không chép danh sách sang
+# Python: hai bản nội dung là hai bản sẽ lệch nhau (§14.6). Đọc không được ⇒ ca thử HỎNG, chứ
+# không lặng lẽ kiểm 0 mục rồi báo đạt (§12.1 luật 5).
+
+def _khoi_js(ten, mo_dau):
+    ma = doc_js(ten)
+    i = ma.index(mo_dau)
+    j = ma.index("];", i)
+    return ma[i:j]
+
+
+def ds_tham_so_may_chu():
+    """Tham số giao diện khai là GỬI LÊN MÁY CHỦ (`L.THAM_SO_MAY_CHU`)."""
+    return re.findall(r'"([a-z_]+)"', _khoi_js("logic.js", "const THAM_SO_MAY_CHU = ["))
+
+
+def ds_loc_tai_trang():
+    """Điều kiện giao diện khai là CHỈ lọc tại trang (`L.THAM_SO_LOC_TAI_GIAO_DIEN`)."""
+    return re.findall(r'"([a-z_]+)"', _khoi_js("logic.js", "const THAM_SO_LOC_TAI_GIAO_DIEN = ["))
+
+
+def ds_sap_xep_giao_dien():
+    """Khoá sắp xếp giao diện khai (`L.SAP_XEP_DON`) — phải nằm trong danh sách trắng của máy chủ."""
+    return re.findall(r'\["([a-z_]+)",\s*"', _khoi_js("logic.js", "const SAP_XEP_DON = ["))
+
+
+def ds_dieu_kien_man_don():
+    """Tên khoá mà `don()` trong admin.js THẬT SỰ đọc từ màn hình (`docDieuKien`).
+
+    Đây là phép đo bắt lỗi "thêm một ô lọc rồi quên khai nó ở logic.js": khoá nào không nằm
+    trong `THAM_SO_MAY_CHU` lẫn `THAM_SO_LOC_TAI_GIAO_DIEN` thì `chiaDieuKien()` bỏ vào túi
+    `la` — và nếu ai đó lại im lặng bỏ qua túi ấy thì điều kiện người dùng chọn biến mất.
+    """
+    ma = doc_js("admin.js")
+    i = ma.index("const docDieuKien = () => ({")
+    j = ma.index("});", i)
+    return re.findall(r'([a-z_]+):', ma[i:j])
 
 
 class ThuFrontendHTTP(unittest.TestCase):
@@ -352,28 +403,82 @@ class ThuFrontendHTTP(unittest.TestCase):
         print("      [ca09] bỏ qua vì mot_phan=true: %s" % (bo_qua or "không có",))
         self.assertGreaterEqual(len(da_kiem), 3, da_kiem)
 
-    def test_10_tham_so_loc_nang_cao_that_su_chua_duoc_may_chu_ho_tro(self):
-        """Giao diện nói 'máy chủ chỉ nhận q · trang_thai · gioi_han'. Đo lại câu đó:
-        bắn tham số lọc nâng cao, nếu máy chủ bắt đầu lọc thật thì ca này hỏng."""
+    def test_10_may_chu_loc_nang_cao_that_su_va_TU_CHOI_tham_so_la(self):
+        """BẤT BIẾN MỚI (G22/AG-06) — `GET /api/v2/don` LỌC NÂNG CAO Ở MÁY CHỦ và TỪ CHỐI
+        (400) tham số nó không nhận.
+
+        Ca này là vế ĐỐI LẬP của bản trước. Bản trước khẳng định "máy chủ CHƯA lọc nâng cao"
+        và đạt được là nhờ máy chủ BỎ QUA IM LẶNG mọi tham số lạ — tức là nó đo đúng cái hỏng
+        mà G12 sinh ra để diệt. Nay AG-02 đã cắm route vào `app/truy_van.py::BANG_DON`
+        (hợp đồng: docs/G22_HOPDONG_FRONTEND.md) nên bất biến đảo chiều:
+
+          (a) một điều kiện KHÔNG khớp đơn nào ⇒ kết quả PHẢI RỖNG (không phải "trả hết");
+          (b) tham số lạ ⇒ **400**, không được bỏ qua im lặng;
+          (c) ba tham số máy chủ vốn đã hỗ trợ vẫn phải có hiệu lực;
+          (d) phản hồi phải mang đủ trường phân trang mà giao diện đang đọc.
+
+        ĐỐI CHỨNG ÂM (chạy được, không phải lời hứa): đặt lại máy chủ ĐÚNG BẢN TRƯỚC AG-02
+        rồi chạy lại chính ca này —
+
+            python3 thu_frontend/thu_http.py --doi-chung-am <đường-dẫn app/server.py BẢN CŨ>
+
+        Cây sao chép ấy PHẢI làm ca này ĐỎ, và đỏ vì đúng câu "máy chủ BỎ QUA điều kiện ...".
+        """
         for _ in range(2):
             self._tao_don()
+
+        def dong_cua(kq):
+            """Danh sách đơn của một phản hồi: `dong` là khoá của hợp đồng mới, `don` là khoá
+            tương thích mà AG-02 còn giữ trong lượt chuyển tiếp. Ca này đo PHÉP LỌC; việc
+            phản hồi có đủ khoá hay không do `test_40` canh — đọc cả hai ở đây để ca này
+            không đỏ vì lý do của ca khác (đỏ vì lý do khác là một phép đo khác)."""
+            return kq.get("dong", kq.get("don"))
+
         st, tat_ca, _ = self.a.goi("/api/v2/don?gioi_han=500")
         self.assertEqual(st, 200)
-        n = len(tat_ca["don"])
-        self.assertGreater(n, 0)
-        # cod_tu cực lớn: nếu máy chủ ĐÃ lọc thì kết quả phải ít hơn
-        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&cod_tu=999999999&tu_ngay=2099-01-01"
-                               "&trang_thai_giao=khong_ton_tai&hang=khong_co_hang")
+        self.assertIsNotNone(dong_cua(tat_ca), "phản hồi không có danh sách đơn (cả `dong` lẫn `don`)")
+        n = len(dong_cua(tat_ca))
+        self.assertGreater(n, 0, "nền không có đơn nào ⇒ ca này không chứng minh được gì")
+
+        # (a) điều kiện KHÔNG khớp đơn nào ⇒ RỖNG. Mỗi dòng là một trường lọc khác nhau của
+        # hợp đồng, để ca không chỉ đo một trường rồi suy ra cả sáu.
+        for ten, truy_van in (
+                ("cod_tu", "cod_tu=999999999"),
+                ("tu_ngay", "tu_ngay=2099-01-01"),
+                ("trang_thai_giao", "trang_thai_giao=khong_ton_tai"),
+                ("hang", "hang=khong_co_hang"),
+                ("carrier_account_id", "carrier_account_id=999999"),
+                ("q", "q=khong-co-don-nao-nhu-the-nay"),
+        ):
+            st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + truy_van)
+            self.assertEqual(st, 200, "%s → %s: %s" % (ten, st, kq))
+            self.assertEqual(
+                len(dong_cua(kq) or []), 0,
+                "máy chủ BỎ QUA điều kiện %r (trả về %d/%d đơn) — lọc nâng cao CHƯA chạy ở "
+                "máy chủ; đây đúng là cái hỏng mà ca này canh"
+                % (ten, len(dong_cua(kq) or []), n))
+
+        # (b) tham số lạ ⇒ 400. Bỏ qua im lặng là để người gõ sai tên nhận về danh sách KHÔNG
+        # LỌC mà tin rằng đã lọc — không có gì báo, chỉ nhiều dòng hơn mong đợi.
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&trang_thai_gia0=nhap")
+        self.assertEqual(st, 400,
+                         "tham số lạ phải bị TỪ CHỐI (400); nhận %s — bỏ qua im lặng là hỏng "
+                         "lâu dài mà không ai biết" % st)
+        self.assertIn("loi", kq, "400 phải có thông điệp để giao diện hiện nguyên văn")
+
+        # (c) ba tham số máy chủ vốn đã hỗ trợ: vẫn phải có hiệu lực thật
+        st, kq, _ = self.a.goi("/api/v2/don?trang_thai=huy&gioi_han=500")
         self.assertEqual(st, 200)
-        self.assertEqual(len(kq["don"]), n,
-                         "máy chủ đã hỗ trợ lọc nâng cao — phải chuyển bộ lọc lên máy chủ và "
-                         "sửa dòng 'phạm vi lọc' ở màn Đơn hàng")
-        # ngược lại, ba tham số máy chủ CÓ hỗ trợ thì phải có hiệu lực thật
-        st, kq, _ = self.a.goi("/api/v2/don?trang_thai=huy")
-        self.assertEqual(st, 200)
-        self.assertTrue(all(d["trang_thai"] == "huy" for d in kq["don"]))
+        self.assertTrue(all(d["trang_thai"] == "huy" for d in dong_cua(kq) or []))
         st, kq, _ = self.a.goi("/api/v2/don?gioi_han=1")
-        self.assertLessEqual(len(kq["don"]), 1)
+        self.assertLessEqual(len(dong_cua(kq) or []), 1)
+
+        # (d) hợp đồng phân trang: thiếu một trường là giao diện hết phân trang đúng được
+        for khoa in ("dong", "tong", "tong_chinh_xac", "gioi_han", "trang", "con_nua",
+                     "sap_xep", "loc_bo_qua"):
+            self.assertIn(khoa, tat_ca, "phản hồi thiếu %r — giao diện không phân trang được" % khoa)
+        self.assertEqual(tat_ca["tong"], n, "`tong` phải là số dòng KHỚP ĐIỀU KIỆN, không phải số dòng trang")
+        self.assertEqual(tat_ca["trang"], 1)
 
     # ===================== D. Trạng thái đăng nhập: 401 / 403 =====================
 
@@ -677,5 +782,344 @@ class ThuFrontendHTTP(unittest.TestCase):
                                  "ô CSV bắt đầu bằng ký tự công thức: %r" % sach)
 
 
+    # ========== K. (G22/AG-06) HỢP ĐỒNG LỌC Ở MÁY CHỦ — BỐN MẶT PHẢI KHỚP ==========
+    # Mỗi ca dưới đây đo MỘT mặt và in ra con số đo được. Bốn mặt:
+    #   1 ngữ nghĩa lọc (test_37) · 2 phân trang (test_38) · 3 tenant (test_39) ·
+    #   4 phạm vi giao diện (test_40, và ca 03 của tầng 3 đo trên DOM thật).
+    # Hợp đồng: `docs/G22_HOPDONG_FRONTEND.md`; nguồn sự thật: `app/truy_van.py::BANG_DON`.
+
+    def _don_g22(self, so, cod_goc, nhan):
+        """Dựng `so` đơn có COD tăng dần + tên người nhận đánh dấu.
+
+        Fixture RIÊNG của khối này, không mượn đơn của ca khác: mượn thì ca này đo dữ liệu của
+        ca kia, và thứ tự chạy đổi là nó đổi theo (§12.1 — phép đo phải đứng một mình).
+        """
+        ra = []
+        for i in range(so):
+            st, kq, _ = self._tao_don(cod=cod_goc + i * 1000,
+                                      nguoi_nhan_ten="%s-%d" % (nhan, i),
+                                      hang_hoa="Kiện %s-%d" % (nhan, i))
+            self.assertIn(st, (200, 201), kq)
+            ra.append(kq["don"])
+        return ra
+
+    def test_37_ngu_nghia_loc_o_may_chu_khop_hop_dong(self):
+        """MẶT 1 — NGỮ NGHĨA LỌC. Mỗi trường lọc của hợp đồng phải lọc ĐÚNG NGHĨA mà giao diện
+        hứa với người dùng: hai đầu khoảng BAO GỒM, `q` tìm cả `hang_hoa`, `hang` đi qua tài
+        khoản hãng, `can_doi_soat` là cờ 0/1, `sap_xep` là danh sách trắng.
+
+        Đối chứng đường: mỗi vế "phải khớp" đều có vế "phải rỗng" đi kèm — chỉ khẳng định
+        chiều khớp thì một bộ lọc LUÔN trả về 0 dòng cũng "đạt".
+        """
+        self._don_g22(5, 700000, "G22-M1")
+        q = "q=G22-M1-"
+        # COD: hai đầu BAO GỒM. `cod_tu=702000` mà thiếu đơn 702000 là lọc lệch một đồng.
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&cod_tu=702000")
+        self.assertEqual(st, 200, kq)
+        self.assertEqual(sorted(d["cod"] for d in kq["dong"]), [702000, 703000, 704000],
+                         "cod_tu phải BAO GỒM chính giá trị chặn")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&cod_den=701000")
+        self.assertEqual(sorted(d["cod"] for d in kq["dong"]), [700000, 701000],
+                         "cod_den phải BAO GỒM chính giá trị chặn")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&cod_tu=701000&cod_den=703000")
+        self.assertEqual(sorted(d["cod"] for d in kq["dong"]), [701000, 702000, 703000])
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&cod_tu=800000")
+        self.assertEqual(len(kq["dong"]), 0, "khoảng COD không khớp mà vẫn trả dòng")
+
+        # NGÀY: `tu_ngay`/`den_ngay` bao gồm CẢ NGÀY. Đây là chỗ dễ sai nhất: so `<=` cùng ngày
+        # sẽ loại sạch mọi đơn TRONG ngày đó (vì "2026-10-17 08:00" > "2026-10-17").
+        hom_nay = datetime.date.today().isoformat()
+        hom_qua = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&tu_ngay=" + hom_nay)
+        self.assertEqual(len(kq["dong"]), 5, "tu_ngay=hôm nay phải BAO GỒM đơn tạo trong hôm nay")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&den_ngay=" + hom_nay)
+        self.assertEqual(len(kq["dong"]), 5, "den_ngay=hôm nay phải BAO GỒM CẢ NGÀY hôm nay")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&den_ngay=" + hom_qua)
+        self.assertEqual(len(kq["dong"]), 0, "den_ngay=hôm qua mà vẫn thấy đơn hôm nay")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&tu_ngay=khong-phai-ngay")
+        self.assertEqual(st, 400, "ngày sai định dạng phải bị TỪ CHỐI, không lặng lẽ bỏ qua")
+
+        # `q` ở MÁY CHỦ tìm 5 cột, gồm `hang_hoa` — giao diện cũ chỉ tìm 4 cột TẠI TRANG. Chuyển
+        # lên máy chủ là MỞ RỘNG phạm vi tìm, và điều đó phải đo được chứ không chỉ nói.
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&q=" +
+                               urllib.parse.quote("Kiện G22-M1-3"))
+        self.assertEqual([d["cod"] for d in kq["dong"]], [703000],
+                         "`q` ở máy chủ phải tìm được trong `hang_hoa`")
+
+        # `hang` đi qua `carrier_accounts` CỦA CHÍNH TENANT; `carrier_account_id` là cột thật.
+        # Dựng một đơn ĐÃ GỬI HÃNG (adapter mock, không ra mạng) để hai trường này có dữ liệu.
+        ds = self._don_g22(1, 750000, "G22-M1B")
+        don_gui = ds[0]
+        self.assertEqual(self.a.goi("/api/v2/don/%d/duyet" % don_gui["id"], "POST", {})[0], 200)
+        st, kq, _ = self.a.goi("/api/v2/don/%d/gui" % don_gui["id"], "POST",
+                               {"carrier_account_id": self.tk["id"]})
+        self.assertEqual(st, 200, kq)
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&q=G22-M1B-0&carrier_account_id=%d"
+                               % self.tk["id"])
+        self.assertEqual([d["id"] for d in kq["dong"]], [don_gui["id"]],
+                         "carrier_account_id không lọc đúng tài khoản hãng của đơn")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&q=G22-M1B-0&carrier_account_id=999999")
+        self.assertEqual(len(kq["dong"]), 0, "carrier_account_id không tồn tại mà vẫn trả dòng")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&q=G22-M1B-0&hang=vtp")
+        self.assertEqual([d["id"] for d in kq["dong"]], [don_gui["id"]],
+                         "`hang` không lọc được qua bảng tài khoản hãng")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&q=G22-M1B-0&hang=khong_co_hang")
+        self.assertEqual(len(kq["dong"]), 0)
+
+        # `trang_thai` / `trang_thai_giao`: giá trị THẬT của đơn vừa gửi phải tìm lại được, và
+        # mọi dòng trả về phải mang đúng giá trị ấy (không phải "lọc gần đúng").
+        st, d1, _ = self.a.goi("/api/v2/don/%d" % don_gui["id"])
+        tt, ttg = d1["don"]["trang_thai"], d1["don"]["trang_thai_giao"]
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&trang_thai=" + urllib.parse.quote(tt))
+        self.assertIn(don_gui["id"], [d["id"] for d in kq["dong"]])
+        self.assertTrue(all(d["trang_thai"] == tt for d in kq["dong"]))
+        if ttg:
+            st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&trang_thai_giao=" +
+                                   urllib.parse.quote(ttg))
+            self.assertIn(don_gui["id"], [d["id"] for d in kq["dong"]])
+
+        # `can_doi_soat` là CỜ 0/1: cả hai chiều đều phải đúng trên chính dữ liệu trả về.
+        for gt, mong in (("0", False), ("1", True)):
+            st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&can_doi_soat=" + gt)
+            self.assertEqual(st, 200, kq)
+            self.assertTrue(all(bool(d["can_doi_soat_ket_qua"]) is mong for d in kq["dong"]),
+                            "can_doi_soat=%s trả về dòng có cờ khác" % gt)
+
+        # `sap_xep`: danh sách trắng, và chiều sắp xếp phải ĐO ĐƯỢC (không chỉ "không lỗi").
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&sap_xep=cod_cao")
+        cods = [d["cod"] for d in kq["dong"]]
+        self.assertEqual(cods, sorted(cods, reverse=True), "sap_xep=cod_cao không sắp giảm dần")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + q + "&sap_xep=cod_thap")
+        cods = [d["cod"] for d in kq["dong"]]
+        self.assertEqual(cods, sorted(cods), "sap_xep=cod_thap không sắp tăng dần")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&sap_xep=khong_co_khoa_nay")
+        self.assertEqual(st, 400, "khoá sắp xếp lạ phải bị TỪ CHỐI, không rơi về mặc định im lặng")
+        print("\n      [MẶT 1 · ngữ nghĩa lọc] cod 2 đầu bao gồm · ngày bao gồm cả ngày · "
+              "q tìm cả hang_hoa · hang/carrier_account_id · trang_thai(_giao) · can_doi_soat · sap_xep")
+
+    def test_38_phan_trang_khong_lap_khong_mat_tong_on_dinh(self):
+        """MẶT 2 — PHÂN TRANG. Ba điều phải đo được, không suy ra từ "thấy ít dòng hơn":
+          * `tong` ỔN ĐỊNH giữa các trang (đổi theo trang thì số trang vô nghĩa);
+          * các trang KHÔNG lặp dòng và KHÔNG mất dòng (ghép trang = một lượt lấy đủ);
+          * `con_nua` nói đúng, và `gioi_han` vượt trần bị KẸP **và trả ra giá trị thật**.
+        """
+        ds = self._don_g22(5, 800000, "G22-M2")
+        ma = "q=G22-M2-&sap_xep=cod_cao"
+        st1, t1, _ = self.a.goi("/api/v2/don?gioi_han=2&trang=1&" + ma)
+        st2, t2, _ = self.a.goi("/api/v2/don?gioi_han=2&trang=2&" + ma)
+        st3, t3, _ = self.a.goi("/api/v2/don?gioi_han=2&trang=3&" + ma)
+        self.assertEqual([st1, st2, st3], [200, 200, 200], (t1, t2, t3))
+        self.assertEqual([t1["tong"], t2["tong"], t3["tong"]], [5, 5, 5],
+                         "`tong` đổi theo trang ⇒ số trang hiện trên giao diện là số bịa")
+        ids1 = [d["id"] for d in t1["dong"]]
+        ids2 = [d["id"] for d in t2["dong"]]
+        ids3 = [d["id"] for d in t3["dong"]]
+        self.assertEqual([len(ids1), len(ids2), len(ids3)], [2, 2, 1],
+                         "chia trang sai số dòng (2/2/1 cho 5 đơn, mỗi trang 2)")
+        self.assertEqual(set(ids1) & set(ids2), set(), "trang 1 và trang 2 LẶP dòng")
+        self.assertEqual(set(ids1) & set(ids3), set(), "trang 1 và trang 3 LẶP dòng")
+        self.assertEqual(sorted(ids1 + ids2 + ids3), sorted(d["id"] for d in ds),
+                         "ba trang KHÔNG phủ đủ 5 đơn — phân trang làm MẤT dòng")
+        self.assertTrue(t1["con_nua"] and t2["con_nua"], "còn trang sau mà `con_nua` nói không")
+        self.assertFalse(t3["con_nua"], "trang cuối mà `con_nua` vẫn nói còn trang sau")
+        # Ghép trang phải TRÙNG với một lượt lấy đủ: sắp xếp có khoá phá hoà nên thứ tự tất
+        # định; nếu không, OFFSET cho ra lặp ở trang này và mất ở trang kia — hỏng im lặng
+        # kinh điển của phân trang.
+        st, t_all, _ = self.a.goi("/api/v2/don?gioi_han=5&trang=1&" + ma)
+        self.assertEqual([d["id"] for d in t_all["dong"]], ids1 + ids2 + ids3,
+                         "ghép ba trang LỆCH so với một lượt lấy đủ ⇒ thứ tự không tất định")
+        # Hai cách đánh số cùng lúc là hai kết quả khác nhau ⇒ phải bị từ chối.
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=2&trang=1&lech=2")
+        self.assertEqual(st, 400, "gửi cả `trang` lẫn `lech` phải bị từ chối: %s" % (kq,))
+        # Trần `gioi_han`: KẸP (không phạt 400 — bấm quá đà là chuyện thường) nhưng giá trị
+        # THẬT phải trả ra, nếu không giao diện tưởng mình đã xin 99 999 đơn.
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=99999")
+        self.assertEqual(st, 200)
+        self.assertEqual(kq["gioi_han"], 500,
+                         "gioi_han vượt trần phải bị kẹp về 500 VÀ trả ra giá trị thật")
+        print("\n      [MẶT 2 · phân trang] 3 trang (2/2/1) · tong=5 ổn định · không lặp không "
+              "mất · con_nua đúng · gioi_han kẹp 99999→500")
+
+    def test_39_loc_nang_cao_khong_ro_du_lieu_tenant_khac(self):
+        """MẶT 3 — TENANT. Bộ lọc nâng cao chạy ở máy chủ, nên nó là chỗ MỚI để rò dữ liệu
+        tenant khác: `hang` đi qua một câu con (`carrier_account_id IN (SELECT … WHERE
+        tenant_id=?)`) và quên `tenant_id` ở đó là rò qua đường vòng — nhìn kết quả không
+        thấy gì bất thường.
+
+        Đối chứng đường BẮT BUỘC: cùng bộ lọc ấy, chạy trên tenant SỞ HỮU, phải RA đơn đó.
+        Không có vế này thì "A thấy 0 dòng" cũng đúng khi bộ lọc hỏng hoàn toàn.
+        """
+        b = self._phien("fb-owner")
+        # tài khoản hãng của B dùng CÙNG mã hãng "vtp" với A: nếu câu con thiếu tenant_id thì
+        # nó khớp tài khoản của A và kéo đơn của B vào kết quả của A (hoặc ngược lại).
+        st, tkb, _ = b.goi("/api/v2/tai-khoan-hang", "POST",
+                           {"hang": "vtp", "ten": "VTP mock của B",
+                            "credentials": {"api_key": "demo-key-B-chi-de-thu"}})
+        self.assertEqual(st, 201, tkb)
+        st, kqb, _ = b.goi("/api/v2/don", "POST",
+                           dict(DON_MAU, cod=987654321, nguoi_nhan_ten="G22-M3-CUA-B",
+                                hang_hoa="Kiện G22-M3 của B"))
+        self.assertEqual(st, 201, kqb)
+        don_b = kqb["don"]
+        self.assertEqual(b.goi("/api/v2/don/%d/duyet" % don_b["id"], "POST", {})[0], 200)
+        st, kq, _ = b.goi("/api/v2/don/%d/gui" % don_b["id"], "POST",
+                          {"carrier_account_id": tkb["id"]})
+        self.assertEqual(st, 200, kq)
+
+        # (a) ĐỐI CHỨNG ĐƯỜNG — trên tenant sở hữu, bộ lọc PHẢI ra đơn đó
+        st, kq, _ = b.goi("/api/v2/don?gioi_han=500&q=G22-M3-CUA-B")
+        self.assertEqual([d["id"] for d in kq["dong"]], [don_b["id"]],
+                         "bộ lọc không chạy ngay trên tenant sở hữu ⇒ mọi phép đo dưới vô nghĩa")
+        # (b) A: cùng bộ lọc ⇒ 0, và `tong` cũng 0 (đếm rò còn khó thấy hơn danh sách rò)
+        for truy_van in ("q=G22-M3-CUA-B",
+                         "q=G22-M3&cod_tu=987000000",
+                         "carrier_account_id=%d" % tkb["id"],
+                         "q=G22-M3-CUA-B&hang=vtp"):
+            st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&" + truy_van)
+            self.assertEqual(st, 200, kq)
+            self.assertEqual(len(kq["dong"]), 0, "A thấy đơn của B qua bộ lọc %r" % truy_van)
+            self.assertEqual(kq["tong"], 0, "`tong` của A đếm cả đơn của B (%r)" % truy_van)
+        # (c) và đơn của B không lọt vào trang nào của A, kể cả khi A lọc theo hãng "vtp"
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500")
+        self.assertNotIn(don_b["id"], [d["id"] for d in kq["dong"]],
+                         "đơn của tenant khác nằm trong danh sách của A")
+        st, kq, _ = self.a.goi("/api/v2/don?gioi_han=500&hang=vtp")
+        self.assertEqual(st, 200, kq)
+        self.assertNotIn(don_b["id"], [d["id"] for d in kq["dong"]],
+                         "lọc `hang=vtp` của A kéo về đơn của B")
+        print("\n      [MẶT 3 · tenant] 4 bộ lọc của A → 0 dòng · đối chứng trên B → đúng 1 đơn "
+              "(id %d) · hang=vtp của A không chứa đơn của B" % don_b["id"])
+
+    def test_40_hop_dong_giao_dien_va_may_chu_khop_va_khong_loc_hai_cho(self):
+        """MẶT 4 — PHẠM VI GIAO DIỆN. Dòng "phạm vi lọc" chỉ nói thật được nếu HAI danh sách
+        khớp nhau: danh sách giao diện khai (`admin/logic.js`) và danh sách máy chủ nhận
+        (`GET /api/v2/don/loc-mo-ta`). Ca này đo cả hai chiều:
+
+          * mọi tham số giao diện khai là gửi lên máy chủ ⇒ máy chủ PHẢI nhận (bắn thật từng
+            tham số, không tin lời tự mô tả);
+          * mọi khoá sắp xếp giao diện khai ⇒ phải nằm trong danh sách trắng của máy chủ;
+          * mọi ô lọc trên màn (`docDieuKien()` trong admin.js) ⇒ phải được khai ở MỘT trong
+            hai danh sách, nếu không `chiaDieuKien()` bỏ nó vào túi `la` và điều kiện người
+            dùng chọn biến mất im lặng;
+          * điều kiện "lọc tại trang" phải KHÔNG nằm trong danh sách máy chủ nhận — lọc hai
+            chỗ là kết quả đúng một cách tình cờ.
+        """
+        # (a) máy chủ TỰ MÔ TẢ bộ lọc
+        st, mt, _ = self.a.goi("/api/v2/don/loc-mo-ta")
+        self.assertEqual(st, 200, "máy chủ phải tự mô tả được bộ lọc: %s" % (mt,))
+        ten_loc = set(t["ten"] for t in mt["truong"])
+        self.assertGreaterEqual(len(ten_loc), 8, "máy chủ mô tả quá ít trường — phép đo rỗng")
+        DieuKhien = set(["sap_xep", "gioi_han", "trang"])
+
+        # (b) giao diện khai gì ⇒ máy chủ phải nhận cái đó
+        khai = ds_tham_so_may_chu()
+        self.assertGreaterEqual(len(khai), 8, "đọc được quá ít tham số từ admin/logic.js")
+        thua = sorted(set(khai) - ten_loc - DieuKhien)
+        self.assertEqual(thua, [], "giao diện khai %s là gửi lên máy chủ nhưng máy chủ KHÔNG "
+                                   "nhận ⇒ người dùng bấm là 400" % thua)
+        hom_nay = datetime.date.today().isoformat()
+        gia_tri = {"q": "G22-M4", "trang_thai": "nhap", "trang_thai_giao": "cho_lay",
+                   "hang": "vtp", "carrier_account_id": str(self.tk["id"]),
+                   "cod_tu": "1", "cod_den": "999999999", "tu_ngay": hom_nay,
+                   "den_ngay": hom_nay, "can_doi_soat": "1", "sap_xep": "cod_cao",
+                   "gioi_han": "10", "trang": "1"}
+        for ten in khai:
+            self.assertIn(ten, gia_tri, "chưa có giá trị thử cho tham số %r" % ten)
+            st, kq, _ = self.a.goi("/api/v2/don?" +
+                                   urllib.parse.urlencode({ten: gia_tri[ten]}))
+            self.assertEqual(st, 200, "giao diện gửi %r=%r nhưng máy chủ trả %s: %s"
+                             % (ten, gia_tri[ten], st, kq))
+
+        # (c) khoá sắp xếp của giao diện ⊆ danh sách trắng của máy chủ
+        sx = ds_sap_xep_giao_dien()
+        self.assertGreaterEqual(len(sx), 4, "đọc được quá ít khoá sắp xếp")
+        self.assertEqual(sorted(set(sx) - set(mt["sap_xep_duoc"])), [],
+                         "khoá sắp xếp giao diện khai mà máy chủ không nhận ⇒ chọn là 400")
+
+        # (d) KHÔNG LỌC HAI CHỖ
+        tt = ds_loc_tai_trang()
+        self.assertEqual(tt, ["co_van_don"],
+                         "danh sách 'lọc tại trang' đổi ⇒ dòng phạm vi của màn phải đổi theo")
+        self.assertEqual(sorted(set(tt) & (ten_loc | DieuKhien)), [],
+                         "một điều kiện vừa gửi lên máy chủ vừa lọc tại trang = LỌC HAI CHỖ")
+
+        # (e) mọi ô lọc trên màn phải được khai ở một trong hai danh sách
+        khoa = ds_dieu_kien_man_don()
+        self.assertGreaterEqual(len(khoa), 10, "đọc được quá ít khoá từ admin.js")
+        self.assertEqual(sorted(set(khoa) - set(khai) - set(tt)), [],
+                         "ô lọc trên màn không được khai ở admin/logic.js ⇒ chiaDieuKien bỏ nó "
+                         "vào túi `la` và điều kiện người dùng chọn biến mất")
+
+        # (f) dòng "phạm vi" của màn phải nói bất biến MỚI, không còn câu của bản cũ
+        with open(os.path.join(GOC_DU_AN, "admin", "admin.js"), encoding="utf-8") as f:
+            ma_admin = f.read()
+        self.assertNotIn("Giao diện lọc thêm", ma_admin,
+                         "màn Đơn hàng còn câu 'Giao diện lọc thêm' của bản cũ")
+        self.assertIn("không lọc gì thêm tại trang", ma_admin)
+        self.assertIn("Máy chủ lọc trên", ma_admin)
+
+        # (g) nhãn "một phần / CHỜ BACKEND" cho `/api/v2/don` phải đã được gỡ
+        self.assertNotIn("/api/v2/don", bang_mot_phan(),
+                         "giao diện vẫn dán nhãn 'một phần' cho route đã đủ")
+        print("\n      [MẶT 4 · phạm vi giao diện] máy chủ tự mô tả %d trường · giao diện khai "
+              "%d tham số + %d khoá sắp xếp, bắn thật từng cái: 200 · lọc tại trang = %s"
+              % (len(ten_loc), len(khai), len(sx), tt))
+
+
+# ============================================================================
+# ĐỐI CHỨNG ÂM — chứng minh phép đo BẮT ĐƯỢC, không chỉ khẳng định
+# ============================================================================
+
+def doi_chung_am(duong_server_cu):
+    """Dựng CÂY SAO CHÉP mang `app/server.py` ĐÚNG BẢN TRƯỚC AG-02 rồi chạy lại CHÍNH bộ thử này.
+
+    Vì sao phải có: một ca khẳng định "máy chủ lọc nâng cao" mà chỉ được chạy trên cây ĐÃ có
+    bản vá thì nó không phân biệt được "phép đo bắt được lỗi" với "phép đo luôn đạt". Vế đối
+    chứng âm là thứ phân biệt hai khả năng ấy: đặt lại máy chủ cũ ⇒ ca PHẢI ĐỎ, và phải đỏ
+    ĐÚNG câu "máy chủ BỎ QUA điều kiện" — chứ không phải đỏ vì lỗi nạp mô-đun (đỏ vì lý do
+    khác là một phép đo khác, không phải phép đo này).
+
+    Trả 0 khi đối chứng âm ĐẠT (ca đã bắt được), 1 khi nó KHÔNG bắt được.
+    """
+    if not os.path.isfile(duong_server_cu):
+        print("KHÔNG ĐỐI CHỨNG ÂM ĐƯỢC: không có tệp %r" % duong_server_cu)
+        return 1
+    tam = tempfile.mkdtemp(prefix="thu-http-doi-chung-am-")
+    dich = os.path.join(tam, "cay")
+    shutil.copytree(GOC_DU_AN, dich,
+                    ignore=shutil.ignore_patterns("node_modules", ".git", "__pycache__",
+                                                  "*.pyc", "_bao-cao", "_ket-qua"))
+    shutil.copyfile(duong_server_cu, os.path.join(dich, "app", "server.py"))
+    print("ĐỐI CHỨNG ÂM — cây sao chép: %s" % dich)
+    print("  app/server.py := %s   (bản TRƯỚC AG-02)" % duong_server_cu)
+    r = subprocess.run([sys.executable, os.path.join(dich, "thu_frontend", "thu_http.py"), "-v"],
+                       cwd=dich, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    ra = r.stdout.decode("utf-8", "replace")
+    hong = re.findall(r"^(?:FAIL|ERROR): (test_\w+)", ra, re.M)
+    tom_tat = [d for d in ra.splitlines() if d.startswith("Ran ") or d.startswith("FAILED")
+               or d.startswith("OK")]
+    print("  mã thoát bộ thử trên cây cũ: %s" % r.returncode)
+    for d in tom_tat:
+        print("  %s" % d)
+    print("  ca ĐỎ trên cây cũ: %s" % (", ".join(sorted(set(hong))) or "KHÔNG CÓ"))
+    bat_duoc = "test_10" in " ".join(hong)
+    dung_ly_do = "BỎ QUA điều kiện" in ra
+    print("  test_10 có ĐỎ không: %s · đỏ ĐÚNG lý do ('máy chủ BỎ QUA điều kiện'): %s"
+          % (bat_duoc, dung_ly_do))
+    if bat_duoc and dung_ly_do:
+        print("ĐỐI CHỨNG ÂM ĐẠT: đặt lại máy chủ không lọc nâng cao ⇒ test_10 ĐỎ LẠI, đúng "
+              "câu khẳng định của nó.")
+        return 0
+    print("ĐỐI CHỨNG ÂM KHÔNG ĐẠT: ca này KHÔNG bắt được cái nó khẳng định — sửa ca thử, "
+          "đừng sửa kết luận.")
+    return 1
+
+
 if __name__ == "__main__":
+    if "--doi-chung-am" in sys.argv:
+        i = sys.argv.index("--doi-chung-am")
+        if i + 1 >= len(sys.argv):
+            print("Dùng: python3 thu_frontend/thu_http.py --doi-chung-am <app/server.py BẢN CŨ>")
+            sys.exit(2)
+        sys.exit(doi_chung_am(sys.argv[i + 1]))
     unittest.main(verbosity=2)

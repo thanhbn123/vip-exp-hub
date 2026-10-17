@@ -33,7 +33,7 @@ test("02 — mọi màn trên menu mở được, có tiêu đề, không lỗi 
   expect(loi, "lỗi console khi đi hết menu").toEqual([]);
 });
 
-test("03 — bộ lọc nâng cao lọc THẬT: số đơn đếm từ DOM phải đổi đúng chiều", async ({ page }) => {
+test("03 — bộ lọc nâng cao LỌC Ở MÁY CHỦ, và dòng 'phạm vi' nói đúng chỗ lọc từng điều kiện", async ({ page }) => {
   await U.dangNhap(page, "shopa-owner");
   await U.moMan(page, "don");
   const demDong = () => page.locator("#d-bang tr td[colspan]").count()
@@ -42,8 +42,14 @@ test("03 — bộ lọc nâng cao lọc THẬT: số đơn đếm từ DOM phả
   const tong = await demDong();
   expect(tong, "nền chưa có đơn nào ⇒ ca lọc không chứng minh được gì").toBeGreaterThan(0);
 
+  // Khung lọc phải KHAI nó gửi điều kiện lên máy chủ — câu "máy chủ chỉ nhận q · trang_thai ·
+  // gioi_han" của bản trước là câu SAI sau G22 (AG-02 đã cắm route vào `app/truy_van.py`).
   await page.locator("#d-nang-cao").click();
   await expect(page.locator("#d-bang-loc")).toBeVisible();
+  const khai = await page.locator("#d-bang-loc").textContent();
+  expect(khai, "khung lọc không nói điều kiện được gửi lên máy chủ").toContain("máy chủ");
+  expect(khai, "khung lọc không nói máy chủ TỪ CHỐI tham số lạ thay vì bỏ qua im lặng")
+    .toContain("TỪ CHỐI (400)");
 
   // COD >= 300.000 — `chuan_bi.py` tạo 4 đơn ở mỗi phía, nhưng ca này KHÔNG chốt con số 4:
   // nó chốt QUAN HỆ (lọc ra ít hơn tổng, và > 0). Chốt con số là khoá bộ thử vào dữ liệu mẫu.
@@ -52,18 +58,43 @@ test("03 — bộ lọc nâng cao lọc THẬT: số đơn đếm từ DOM phả
   await page.waitForFunction((t) => {
     const n = document.querySelectorAll("#d-bang tr").length;
     return n !== t;
-  }, tong, { timeout: 5000 });
+  }, tong, { timeout: 10000 });
   const sau = await demDong();
   expect(sau, "lọc COD không giảm số dòng ⇒ bộ lọc không chạy").toBeLessThan(tong);
   expect(sau).toBeGreaterThan(0);
 
-  // Dòng "phạm vi lọc" phải nói đúng số điều kiện lọc tại giao diện.
-  const pv = await page.locator("#d-pham-vi").textContent();
-  expect(pv, "dòng phạm vi lọc không cập nhật").toContain("Giao diện lọc thêm");
+  // ĐIỀU KIỆN NÀY ĐÃ ĐI LÊN MÁY CHỦ ⇒ dòng phạm vi phải nói thế, và phải có `tong` của máy chủ
+  // (thiếu `tong` thì không phân trang đúng được — đó là lý do `tong` nằm trong hợp đồng).
+  const pv1 = await page.locator("#d-pham-vi").textContent();
+  expect(pv1, "dòng phạm vi không nói điều kiện được lọc ở máy chủ").toContain("Máy chủ lọc trên");
+  expect(pv1, "dòng phạm vi không nhắc cod_tu là điều kiện của máy chủ").toContain("cod_tu");
+  expect(pv1, "chỉ có điều kiện máy chủ mà dòng phạm vi vẫn khai lọc thêm tại trang")
+    .toContain("không lọc gì thêm tại trang");
+  expect(pv1, "không thấy con số `tong` của máy chủ ⇒ phân trang không thể đúng").toMatch(/khớp\s*\d+/);
+  await expect(page.locator("#d-dem"), "ô đếm không nói con số khớp của máy chủ")
+    .toContainText("đơn khớp ở máy chủ");
+
+  // ĐIỀU KIỆN TẠI TRANG (`co_van_don` — điều kiện DUY NHẤT máy chủ không có phép lọc tương ứng):
+  // dòng phạm vi phải đổi sang "lọc thêm tại trang", và con số của nó TÁCH khỏi con số máy chủ
+  // (x/y). Gộp hai con số làm một là để người đọc tưởng cả hai đều lọc toàn CSDL.
+  await page.locator("#l-vd").selectOption("khong");
+  await page.waitForFunction(() => {
+    const p = document.getElementById("d-pham-vi");
+    return !!p && p.textContent.indexOf("lọc thêm") >= 0;
+  }, null, { timeout: 10000 });
+  const pv2 = await page.locator("#d-pham-vi").textContent();
+  expect(pv2, "điều kiện tại trang không được khai đúng tên").toContain("co_van_don");
+  expect(pv2, "hai con số (máy chủ / tại trang) bị gộp làm một").toMatch(/\d+\s*\/\s*\d+/);
 
   await page.locator("#l-xoa").click();
-  await page.waitForFunction((t) => document.querySelectorAll("#d-bang tr").length === t, tong, { timeout: 5000 });
-  expect(await demDong(), "xóa lọc không trả về đủ đơn").toBe(tong);
+  // "Xóa bộ lọc" phải trả về ÍT NHẤT số dòng ban đầu. KHÔNG đòi BẰNG ĐÚNG: CSDL của lượt này
+  // là nền dùng chung cho mọi ca trong cùng tệp (ca 05 TẠO đơn), nên đòi bằng đúng là đo công
+  // việc của ca khác chứ không đo việc xóa lọc. Vế thứ hai mới là vế đo việc xóa lọc: dòng
+  // phạm vi phải hết khai "lọc thêm tại trang".
+  await page.waitForFunction((t) => document.querySelectorAll("#d-bang tr").length >= t, tong, { timeout: 10000 });
+  expect(await demDong(), "xóa lọc không trả về đủ đơn").toBeGreaterThanOrEqual(tong);
+  await expect(page.locator("#d-pham-vi"), "xóa lọc mà dòng phạm vi vẫn khai lọc tại trang")
+    .toContainText("không lọc gì thêm tại trang");
 });
 
 test("04 — form tạo đơn trống báo lỗi TẠI CHỖ và KHÔNG gọi API", async ({ page }) => {
@@ -203,7 +234,7 @@ test("08 — webhook monitor: KPI là số, trạng thái lạ hiện NGUYÊN V�
   expect(loi, "lỗi console ở màn webhook").toEqual([]);
 });
 
-test("09 — chuyển doanh nghiệp: vai trò và phạm vi dữ liệu đổi hẳn", async ({ page }) => {
+test("09 — chuyển doanh nghiệp: vai trò, PHẠM VI DỮ LIỆU và BIÊN TENANT đổi hẳn", async ({ page }) => {
   await U.dangNhap(page, "da-tenant");
   const chon = page.locator("#chon-tenant");
   await expect(chon, "tài khoản đa tenant không thấy ô chọn doanh nghiệp").toBeVisible();
@@ -221,6 +252,80 @@ test("09 — chuyển doanh nghiệp: vai trò và phạm vi dữ liệu đổi 
   }, chan_truoc, { timeout: 10000 });
   const chan_sau = (await page.locator(".sidebar .chan").textContent()).trim();
   expect(chan_sau, "đổi doanh nghiệp mà chân trang không đổi ⇒ chưa nạp lại").not.toBe(chan_truoc);
+
+  /* ── MẶT 3 · TENANT — GHIM MÃ TRẠNG THÁI CỤ THỂ, không phải một khoảng ──────────────────
+     Tên ca này hứa "phạm vi dữ liệu đổi hẳn" nhưng bản trước chỉ đo chân trang đổi chữ: một
+     nhãn đổi mà dữ liệu KHÔNG đổi vẫn qua sạch. Đoạn dưới đo đúng chỗ ấy, bằng ba con số GHIM
+     theo hợp đồng §1.4 (không dùng "200 hoặc 400" — một câu chấp nhận cả hai thì không đo gì):
+       · tenant SỞ HỮU đọc dữ liệu của chính nó  → **200** (đối chứng DƯƠNG, có dữ liệu thật);
+       · tenant khác đọc MỘT BẢN GHI của A       → **404** (không phải 200, không phải 403);
+       · ai đó tự chọn tenant bằng `tenant_id` trong query → **400** (tham số lạ; tenant lấy
+         từ PHIÊN, không bao giờ từ client).
+     Gọi bằng CHÍNH phiên của trang (`page.request` dùng chung cookie), nên phép đo đi qua
+     đúng con đường giao diện đi. */
+  const goi = async (duong) => {
+    const ph = await page.request.get(duong);
+    let than = null;
+    try { than = await ph.json(); } catch { than = null; }
+    return { ma: ph.status(), than: than };
+  };
+  const doi_sang = async (tid) => {
+    if (Number(await chon.inputValue()) === Number(tid)) return;
+    await chon.selectOption(String(tid));
+    // Chờ bằng NGỮ CẢNH PHIÊN THẬT của máy chủ, không bằng một khoảng sleep: `doi-tenant` xong
+    // thì `/auth/toi` mới trả tenant mới, và mọi phép đo sau đó mới nói về tenant mới.
+    await expect.poll(async () => {
+      const r = await goi("/api/v2/auth/toi");
+      return r.than && r.than.tenant ? r.than.tenant.id : null;
+    }, { timeout: 10000, message: "đổi doanh nghiệp mà ngữ cảnh phiên không đổi theo" })
+      .toBe(Number(tid));
+  };
+
+  const doDuLieu = {};
+  for (const tid of cac) {
+    await doi_sang(tid);
+    const r = await goi("/api/v2/don?gioi_han=500");
+    expect(r.ma, `danh sách đơn của tenant ${tid} phải là 200, đo được ${r.ma}`).toBe(200);
+    // HÌNH DẠNG phản hồi là một phần của hợp đồng (§1.4): `dong` = danh sách trang hiện tại,
+    // `tong` = số dòng KHỚP điều kiện. Máy chủ cũ chỉ trả `don` và không trả `tong` — chốt
+    // trước hai trường này để cái ĐỎ nói đúng chỗ lệch, không đổ vỡ ở dòng dưới bằng một
+    // `TypeError` khó đọc.
+    expect(Array.isArray(r.than.dong),
+           "phản hồi 200 thiếu `dong` — hình dạng phản hồi đã lệch hợp đồng §1.4").toBe(true);
+    expect(typeof r.than.tong, "phản hồi 200 thiếu `tong` — không đo được tổng để đối chiếu")
+      .toBe("number");
+    doDuLieu[tid] = { tong: r.than.tong, ids: r.than.dong.map((d) => d.id) };
+  }
+  const coDon = cac.filter((t) => doDuLieu[t].tong > 0);
+  expect(coDon.length, "không tenant nào có đơn ⇒ phép đo cách ly tenant không chứng minh được gì")
+    .toBeGreaterThan(0);
+  const A = coDon[0];
+  const B = cac.find((v) => v !== A);
+  expect(B, "cần HAI doanh nghiệp mới đo được biên giới giữa chúng").toBeTruthy();
+  const idA = doDuLieu[A].ids[0];
+
+  // B không được thấy bất kỳ dòng nào của A — kể cả khi A lọc theo hãng mà cả hai cùng dùng.
+  for (const id of doDuLieu[A].ids) {
+    expect(doDuLieu[B].ids.includes(id), `tenant B thấy đơn ${id} của tenant A`).toBe(false);
+  }
+
+  await doi_sang(B);
+  const cheo = await goi(`/api/v2/don/${idA}`);
+  expect(cheo.ma, `tenant B đọc bản ghi ${idA} của A: hợp đồng ghim 404, đo được ${cheo.ma}`).toBe(404);
+  const tuChon = await goi(`/api/v2/don?gioi_han=500&tenant_id=${A}`);
+  expect(tuChon.ma, "tự chọn tenant bằng `tenant_id` trong query: hợp đồng ghim 400, đo được "
+    + tuChon.ma).toBe(400);
+  expect(String((tuChon.than && tuChon.than.loi) || ""),
+         "400 phải kèm câu đọc được và NÊU TÊN tham số lạ").toContain("tenant_id");
+
+  await doi_sang(A);
+  const lai = await goi(`/api/v2/don/${idA}`);
+  expect(lai.ma, `quay lại tenant sở hữu phải đọc được chính bản ghi ấy (200), đo được ${lai.ma}`)
+    .toBe(200);
+  expect(lai.than.don.id, "đọc được nhưng KHÔNG phải bản ghi đã hỏi").toBe(idA);
+  console.log(`      [MẶT 3 · tenant] A=${A} (${doDuLieu[A].tong} đơn) · B=${B} `
+    + `(${doDuLieu[B].tong} đơn) · B đọc bản ghi của A → ${cheo.ma} · tenant_id trong query → `
+    + `${tuChon.ma} · A đọc lại → ${lai.ma}`);
 });
 
 test("10 — 401 giữa chừng: hiện màn phiên hết hạn, hứa mở lại đúng màn", async ({ page }) => {

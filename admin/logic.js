@@ -158,55 +158,90 @@
     return co_live ? CHE_DO.LIVE : CHE_DO.MOCK;
   }
 
-  /* ===== 6. Bộ lọc nâng cao cho màn Đơn hàng =====
-     Máy chủ hiện CHỈ nhận q · trang_thai · gioi_han (đo ở app/server.py, 15/10/2026).
-     Mọi điều kiện còn lại phải lọc tại giao diện TRÊN TẬP ĐÃ TẢI — nên giao diện phải
-     nói rõ phạm vi, không được để người đọc tưởng đang lọc toàn bộ CSDL. */
-  const THAM_SO_MAY_CHU = ["q", "trang_thai", "gioi_han"];
-  const THAM_SO_LOC_TAI_GIAO_DIEN = [
-    "trang_thai_giao", "hang", "tai_khoan_id", "cod_tu", "cod_den",
-    "tu_ngay", "den_ngay", "can_doi_soat", "co_van_don",
+  /* ===== 6. Bộ lọc nâng cao màn Đơn hàng — LỌC Ở MÁY CHỦ (G22/AG-06) =====
+     Trước G22, máy chủ chỉ nhận `q` · `trang_thai` · `gioi_han`; mọi điều kiện khác lọc tại
+     giao diện TRÊN TẬP ĐÃ TẢI. Nay máy chủ đã lọc nâng cao (AG-02 cắm `GET /api/v2/don` vào
+     `app/truy_van.py::BANG_DON`), nên phép lọc dời hẳn lên đó và giao diện KHÔNG lọc lại.
+     Hợp đồng đóng băng: `docs/G22_HOPDONG_FRONTEND.md`; nguồn sự thật: `app/truy_van.py`.
+
+     Ba luật của khối này, viết ra để người sửa sau không phá:
+     1. Tên tham số CHÉP ĐÚNG tên máy chủ nhận, KHÔNG dịch lại. Ca thử tầng 2 đối chiếu danh
+        sách này với chính `GET /api/v2/don/loc-mo-ta` (máy chủ tự mô tả bộ lọc của nó), nên
+        một cái tên lệch là ĐỎ ngay — không nằm im trong một dòng chú thích.
+     2. Một điều kiện chỉ được lọc ở MỘT chỗ. Điều kiện đã gửi lên máy chủ thì không lọc lại
+        tại trang: lọc hai chỗ cho ra kết quả đúng một cách TÌNH CỜ (và sai khi máy chủ đổi
+        cách hiểu), lại còn giấu mất chỗ hỏng thật.
+     3. `co_van_don` ("đã có / chưa có mã vận đơn") là điều kiện DUY NHẤT còn lọc tại trang:
+        máy chủ không có phép lọc "có/không", chỉ có `ma_van_don` khớp ĐÚNG một mã. Nó nằm
+        trong THAM_SO_LOC_TAI_GIAO_DIEN, và dòng "phạm vi lọc" ở màn Đơn hàng PHẢI nói ra. */
+  const THAM_SO_MAY_CHU = [
+    "q", "trang_thai", "trang_thai_giao", "hang", "carrier_account_id",
+    "cod_tu", "cod_den", "tu_ngay", "den_ngay", "can_doi_soat",
+    "gioi_han", "trang", "sap_xep",
+  ];
+  const THAM_SO_LOC_TAI_GIAO_DIEN = ["co_van_don"];
+
+  /* Khoá sắp xếp — chép đúng `BANG_DON.sap_xep_duoc`. Máy chủ TỪ CHỐI (400) khoá lạ, nên
+     một khoá gõ sai ở đây là màn Đơn hàng trắng bảng chứ không phải "sắp xếp hơi khác". */
+  const SAP_XEP_DON = [
+    ["moi_nhat", "Mới nhất"], ["cu_nhat", "Cũ nhất"],
+    ["cap_nhat_moi", "Vừa cập nhật gần đây"], ["cap_nhat_cu", "Lâu rồi chưa cập nhật"],
+    ["cod_cao", "COD cao → thấp"], ["cod_thap", "COD thấp → cao"],
+    ["nang_nhat", "Nặng nhất trước"], ["ma_don", "Theo mã đơn (A→Z)"],
   ];
 
+  /* Chia điều kiện của màn Đơn hàng thành ba túi. `la` KHÔNG bị nuốt im lặng: tên nào không
+     thuộc hai danh sách trên thì màn hình phải nói ra (§12.2 — bỏ qua im lặng một điều kiện
+     lọc là trả về nhiều hơn người hỏi tưởng, và không có gì báo). */
   function chiaDieuKien(dk) {
-    const may_chu = {}, giao_dien = {};
+    const may_chu = {}, giao_dien = {}, la = [];
     Object.keys(dk || {}).forEach((k) => {
       const v = dk[k];
       if (v === "" || v == null || v === false) return;
       if (THAM_SO_MAY_CHU.indexOf(k) >= 0) may_chu[k] = v;
-      else giao_dien[k] = v;
+      else if (THAM_SO_LOC_TAI_GIAO_DIEN.indexOf(k) >= 0) giao_dien[k] = v;
+      else la.push(k);
     });
-    return { may_chu: may_chu, giao_dien: giao_dien };
+    return { may_chu: may_chu, giao_dien: giao_dien, la: la };
   }
 
-  function _ngay(x) { return String(x || "").slice(0, 10); }
-
+  /* Lọc TRÊN TRANG. Chỉ nhận điều kiện tại trang; nhận được điều kiện của máy chủ là LỖI LẬP
+     TRÌNH và hàm NÓI RA, không lặng lẽ lọc chồng lên kết quả máy chủ đã lọc. */
   function locDon(ds, dk, tk_theo_id) {
     dk = dk || {};
-    tk_theo_id = tk_theo_id || {};
-    const q = String(dk.q || "").trim().toLowerCase();
+    const cua_may_chu = Object.keys(dk).filter((k) => THAM_SO_LOC_TAI_GIAO_DIEN.indexOf(k) < 0);
+    if (cua_may_chu.length) {
+      throw new Error("locDon chỉ lọc điều kiện tại trang (" +
+        THAM_SO_LOC_TAI_GIAO_DIEN.join(", ") + "); nhận được điều kiện của máy chủ: " +
+        cua_may_chu.join(", "));
+    }
     return (ds || []).filter((d) => {
-      if (q) {
-        const kho = [d.ma_don, d.ma_van_don, d.nguoi_nhan_ten, d.nguoi_nhan_sdt]
-          .map((x) => String(x == null ? "" : x).toLowerCase()).join(" ");
-        if (kho.indexOf(q) < 0) return false;
-      }
-      if (dk.trang_thai && d.trang_thai !== dk.trang_thai) return false;
-      if (dk.trang_thai_giao && (d.trang_thai_giao || "") !== dk.trang_thai_giao) return false;
-      if (dk.tai_khoan_id && String(d.carrier_account_id || "") !== String(dk.tai_khoan_id)) return false;
-      if (dk.hang) {
-        const tk = tk_theo_id[d.carrier_account_id];
-        if (!tk || tk.hang !== dk.hang) return false;
-      }
-      if (dk.cod_tu !== undefined && dk.cod_tu !== "" && +(d.cod || 0) < +dk.cod_tu) return false;
-      if (dk.cod_den !== undefined && dk.cod_den !== "" && +(d.cod || 0) > +dk.cod_den) return false;
-      if (dk.tu_ngay && _ngay(d.tao_luc) < dk.tu_ngay) return false;
-      if (dk.den_ngay && _ngay(d.tao_luc) > dk.den_ngay) return false;
-      if (dk.can_doi_soat && !d.can_doi_soat_ket_qua) return false;
       if (dk.co_van_don === "co" && !d.ma_van_don) return false;
       if (dk.co_van_don === "khong" && d.ma_van_don) return false;
       return true;
     });
+  }
+
+  /* Dòng "phạm vi lọc" của màn Đơn hàng — MỘT chỗ dựng câu, để màn hình và bộ thử đọc cùng
+     một nguồn. Trả về DỮ LIỆU, không trả HTML (luật của file này).
+     `kq` là thân phản hồi của `GET /api/v2/don`: có `tong`, `trang`, `gioi_han`, `con_nua`,
+     `tong_chinh_xac`. Thiếu trường (máy chủ cũ) thì nói thẳng là CHƯA ĐO ĐƯỢC, không suy ra. */
+  function phamViLoc(kq, dk_giao_dien, so_dong_trang) {
+    kq = kq || {};
+    const co_tong = typeof kq.tong === "number";
+    const chinh_xac = kq.tong_chinh_xac !== false;
+    return {
+      loc_may_chu: THAM_SO_MAY_CHU.slice(),
+      loc_tai_trang: Object.keys(dk_giao_dien || {}),
+      tong: co_tong ? kq.tong : null,
+      tong_chinh_xac: co_tong ? chinh_xac : null,
+      trang: typeof kq.trang === "number" ? kq.trang : null,
+      gioi_han: typeof kq.gioi_han === "number" ? kq.gioi_han : null,
+      con_nua: kq.con_nua === true,
+      so_dong_trang: so_dong_trang == null ? (kq.dong || kq.don || []).length : so_dong_trang,
+      loc_bo_qua: (kq.loc_bo_qua || []).slice(),
+      sap_xep: kq.sap_xep || null,
+    };
   }
 
   /* ===== 7. Dòng thời gian giao vận (tracking timeline) =====
@@ -419,20 +454,13 @@
                "Khi nào mở live thì mới có byte nhãn, lúc đó mới gỡ nhãn chờ-backend.",
       mot_phan: true,
     },
-    {
-      ten: "Tìm đơn nâng cao ở máy chủ",
-      duong: "/api/v2/don", method: "GET",
-      mong_doi_vao: {
-        tu_ngay: "YYYY-MM-DD", den_ngay: "YYYY-MM-DD", trang_thai_giao: "string",
-        hang: "mã hãng", carrier_account_id: "int", cod_tu: "int", cod_den: "int",
-        can_doi_soat: "0|1", sap_xep: "tao_luc|cod|ma_don", trang: "int",
-      },
-      mong_doi_ra: { don: "[]", tong: "int (tổng khớp điều kiện, để phân trang đúng)" },
-      man: "Đơn hàng → Bộ lọc nâng cao",
-      ghi_chu: "Máy chủ hiện chỉ nhận q · trang_thai · gioi_han. Các điều kiện còn lại đang " +
-               "lọc TẠI GIAO DIỆN trên tập đã tải — giao diện ghi rõ phạm vi này.",
-      mot_phan: true,
-    },
+    /* G22/AG-06 — ĐÃ GỠ mục "Tìm đơn nâng cao ở máy chủ" (`GET /api/v2/don`, mot_phan: true).
+       Máy chủ nay lọc nâng cao thật (AG-02 cắm route vào `app/truy_van.py::BANG_DON`), nên
+       nhãn "một phần / CHỜ BACKEND" ở đây là một câu nói dối: ca thử tầng 2 bắn chính đường
+       này và đòi nó trả 404/405 — nay nó trả 200 kèm `tong` + phân trang.
+       Đường KHÔNG bị bỏ rơi: `GET /api/v2/don` vẫn nằm trong `API_DANG_DUNG` ngay dưới, nên
+       ca thử tầng 2 vẫn bắn thật nó mỗi lượt (§: một đường biến mất khỏi CẢ HAI danh sách là
+       một đường không ai còn canh). Hợp đồng đầy đủ: `docs/G22_HOPDONG_FRONTEND.md`. */
     {
       ten: "Chi tiết một sự kiện webhook",
       duong: "/api/v2/webhook/su-kien/<id>", method: "GET",
@@ -559,7 +587,8 @@
     nhanWebhook: nhanWebhook, lopDongBang: lopDongBang,
     CHE_DO: CHE_DO, cheDoDon: cheDoDon, cheDoHeThong: cheDoHeThong,
     THAM_SO_MAY_CHU: THAM_SO_MAY_CHU, THAM_SO_LOC_TAI_GIAO_DIEN: THAM_SO_LOC_TAI_GIAO_DIEN,
-    chiaDieuKien: chiaDieuKien, locDon: locDon,
+    SAP_XEP_DON: SAP_XEP_DON,
+    chiaDieuKien: chiaDieuKien, locDon: locDon, phamViLoc: phamViLoc,
     dienGiaiNguon: dienGiaiNguon, dungTimeline: dungTimeline,
     TRUONG_BAT_BUOC_DON: TRUONG_BAT_BUOC_DON, kiemTraDon: kiemTraDon,
     chonTaiKhoanGui: chonTaiKhoanGui, metaNhan: metaNhan, nhomWebhook: nhomWebhook,

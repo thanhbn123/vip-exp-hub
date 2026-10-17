@@ -4,21 +4,28 @@
 
 NỀN ĐO — ĐỌC KỸ, NHÃN VÀ SHA KHÔNG KHỚP NHAU:
 
-    Đề bài ghi  : `integration/g21 @ 7344c02`
-    ĐO ĐƯỢC    : ref `refs/heads/integration/g21` = `218fec408741a5c3e0d5c9cb558725cbb36ecd43`
-                 (7 commit SAU `7344c02`, KHÔNG chứa `7344c02`)
-                 ref `refs/heads/integration/g20` = `7344c020abad562dafb593c4234d5e1f9ecfd18c`
-    ⇒ SHA LÀ THẨM QUYỀN, NHÃN THÌ KHÔNG. Bộ kiểm này đo trên **`7344c02`**, và nó CHỨNG MINH
-      điều đó bằng `git write-tree` == `8fc624deb0330dc8846a3337bf9a76fc90e253b0`
-      (`7344c02^{tree}`), chứ không bằng một cái tên nhánh. Xem `docs/QA_G22.md` §0 `L-G22-A`.
+    LƯỢT NÀY (`N-G22-01`, AG-01 G22): worktree `g21-ag01-qa` có `HEAD = 85e0a6c`
+    (`AG-1 (G22) ket qua luot G22` — AG-00 chốt lượt trước) và cây chỉ mục `1340029a`
+    (`85e0a6c^{tree}`). Cây tích hợp mà AG-00 đang gộp vào là `integration/g20 @ 3b7e93b`
+    (`AG-00: dua bo kiem G20 vao cay tich hop`).
+    Ghim `NEN_SHA=7344c02` / `TREE_NEN=8fc624de` vẫn là mốc của LƯỢT TRƯỚC, KHÔNG được sửa cho
+    khớp lượt này: sửa ghim cho vừa mắt là đúng thứ wave này đang diệt. Hệ quả ĐO ĐƯỢC và NÓI
+    THẲNG: `A1` ĐỎ và `E1` BỎ QUA vì lý do MÔI TRƯỜNG ĐO — xem §1.2 `docs/QA_G22.md`.
 
 TRẠNG THÁI GIT CỦA WORKTREE NÀY — KHAI THẲNG, VÌ NÓ ẢNH HƯỞNG TỚI MỌI CỔNG "CÂY SẠCH":
 
-    Sandbox CHẶN ghi `.git` (`index.lock`: `Operation not permitted`), nên KHÔNG thể
-    `git checkout 7344c02` ⇒ `HEAD` đứng yên ở `601718e` (commit lượt trước của tôi) trong khi
-    CÂY đã được đưa về đúng nội dung `7344c02`.
-    Hệ quả ĐO ĐƯỢC (`qa_g22_lan1_nhiem.log`): cổng "cây sạch" thấy 13 đường NGOÀI vùng đỏ lên —
-    **một cái ĐỎ GIẢ của môi trường, không phải của sản phẩm**.
+    Sandbox CHẶN ghi `.git`: `git write-tree` trả `rc=128`
+    (`Unable to create .../worktrees/g21-ag01-qa/index.lock: Operation not permitted`) — đo lại
+    trong chính lượt này. Nên `tree_hien_tai()` KHÔNG đọc được cây chỉ mục, và `A1` không thể
+    xanh ở đây dù cây có đúng nền hay không.
+    Hệ quả ĐO ĐƯỢC (`qa_g22_lan1_nhiem.log`, lượt trước): cổng "cây sạch" thấy 13 đường NGOÀI
+    vùng đỏ lên — **một cái ĐỎ GIẢ của môi trường, không phải của sản phẩm**.
+
+    LƯỢT NÀY thêm một nguyên nhân ĐỎ-GIẢ nữa, cũng phải NÓI RA: cây thợ có 4 tệp CHƯA COMMIT
+    (`app/thu/thu_qa_g20.py` mới, `app/thu/thu_qa_g21.py` vá `G7`, `app/thu/thu_qa_g22.py`,
+    `docs/QA_G22.md`) — `E1` gọi ba cổng "cây sạch" của wave TRƯỚC, và cổng nào có danh sách
+    trắng HẸP (chỉ nhận tệp của làn mình) thì thấy chúng là "ngoài phép". Trên cây ĐÃ COMMIT
+    (tích hợp) thì `git status` sạch và ba cổng đó xanh.
 
     HAI ĐƯỜNG "CHỮA" ĐÃ THỬ VÀ ĐÃ HỎNG — ghi lại vì chúng là bằng chứng, không phải lời kể:
 
@@ -91,11 +98,24 @@ GOC_APP = os.path.join(GOC_CAY, "app")
 GOC_THU = os.path.join(GOC_CAY, "app", "thu")
 
 # NỀN: SHA, không phải nhãn. `TREE_NEN` là thứ được CANH, vì nó là thứ thật sự được đo.
-NEN_SHA = "7344c020abad562dafb593c4234d5e1f9ecfd18c"
-TREE_NEN = "8fc624deb0330dc8846a3337bf9a76fc90e253b0"
-NEN_LUOT_TRUOC = "601718e42ea23a30b849d606890070d4816cbf0b"   # HEAD thật của worktree này
+#
+# NỀN CỦA LƯỢT `N-G22-01` = **CÂY TÍCH HỢP** `integration/g20 @ 3b7e93b` — đúng cái cây mà AG-00
+# đã đưa `app/thu/thu_qa_g20.py` + `docs/QA_G20.md` vào, và là cây mà bản giao của lượt này sẽ
+# được GỘP VÀO. Đo trên cây nào thì GHIM CÂY ĐÓ — ghim cũ `7344c02`/`8fc624de` là mốc của LƯỢT
+# TRƯỚC (cây đó KHÔNG có `thu_qa_g20.py` lẫn `thu_qa_g19_tich_hop.py`, nên `C5`/`G7` không thể
+# xanh ở đó — xem `docs/QA_G22.md` §9.3 và §10).
+NEN_SHA = "3b7e93b59b70449b8306eb4fa374dd1e97a8e7af"
+TREE_NEN = "37079aa83f2ad62c2862f2eb7ce1c809c24570fb"
+# HAI MỐC CỦA LƯỢT TRƯỚC — giữ lại làm LỊCH SỬ, KHÔNG dùng để phán quyết nữa:
+NEN_LUOT_TRUOC = "601718e42ea23a30b849d606890070d4816cbf0b"    # HEAD worktree đầu lượt trước
+NEN_LUOT_TRUOC_2 = "7344c020abad562dafb593c4234d5e1f9ecfd18c"  # ghim nền của lượt trước
 
-TEP_DUOC_PHEP = ("docs/QA_G22.md", "app/thu/thu_qa_g22.py")
+TEP_DUOC_PHEP = ("docs/QA_G22.md", "app/thu/thu_qa_g22.py", "app/thu/thu_qa_g21.py",
+                 "app/thu/thu_qa_g20.py")
+# `app/thu/thu_qa_g21.py` được THÊM vào danh sách này ở dispatch `N-G22-01`: AG-00 cấp quyền
+# sửa HAI bản sao của bộ đếm `bo-g19-tong-hop` (bàn đo G20 gọi là `C5`, bàn đo G21 gọi là `G7`),
+# và bản sao thứ hai nằm trong tệp đó. Không thêm thì `A2`/`_kiem_tra_pham_vi` gọi chính bản vá
+# đó là "thay đổi ngoài phép" — một cái ĐỎ GIẢ của phạm vi, không phải của sản phẩm.
 
 CHE_DO = os.environ.get("VIP_G22_CHE_DO", "nen")
 if CHE_DO not in ("nen", "gop"):
@@ -129,13 +149,16 @@ PW_REVISION_DOI = "1194"
 LOG_CHAY_TAT_CA = os.environ.get("VIP_G22_LOG_TAT_CA") or os.path.join(
     TMP_GOC, "qa_g22_lan2_sach.log")
 
-# Bàn đo G20: KHÔNG nằm trong cây này (đo được: `git log --all -- '*thu_qa_g20.py'` RỖNG).
-# Nó chỉ tồn tại như tệp CHƯA COMMIT trong worktree `g20-ag01-qa`. AG-00 cho phép CHÉP TẠM vào
-# đây để đo rồi XOÁ trước khi kết thúc — xem `docs/QA_G22.md` §3.
-BAN_DO_G20_NGUON = os.path.expanduser(
-    "~/orca/workspaces/vip-express-hub/g20-ag01-qa/app/thu/thu_qa_g20.py")
-BAN_DO_G20_SHA = "5a4b3c83c45f2f2c465d2eed380f1f6f69583878ca9e3a5f910bd01c1a0ddcd0"
-BAN_DO_G20_TAM = os.path.join(GOC_THU, "thu_qa_g20.py")
+# Bàn đo G20 (`C5`) và bàn đo G21 (`G7`) — TỆP NGUỒN TRONG CÂY, **KHÔNG** qua bản chép tạm.
+# Dispatch `N-G22-01` vá THẲNG hai khối bộ đếm vào hai tệp này; đường tạm
+# `g20_cop_tam()`/`g20_va_c5()` đã bị XOÁ HẲN (xem `docs/QA_G22.md` §7).
+BAN_DO_G20 = os.path.join(GOC_THU, "thu_qa_g20.py")
+BAN_DO_G21 = os.path.join(GOC_THU, "thu_qa_g21.py")
+# sha256 của bản GỐC (TRƯỚC khi vá). Đây là CHỐT CHỐNG TRÔI: hoàn vá tệp đang có trong cây rồi
+# băm, phải ra ĐÚNG hai giá trị này — nếu không thì cây đang đo KHÔNG PHẢI "bản gốc + đúng hai
+# khối vá", và mọi con số dưới đây không đối chiếu được.
+BAN_DO_G20_GOC_SHA = "5a4b3c83c45f2f2c465d2eed380f1f6f69583878ca9e3a5f910bd01c1a0ddcd0"
+BAN_DO_G21_GOC_SHA = "4ebf21e8804246bda315fbe9bc1721625fad0ec2130c5036f235d4e04ca40700"
 
 PY = sys.executable or "python3"
 
@@ -269,6 +292,7 @@ CA_PHU_DINH = {
     "nua-voi": ("Z_ChotChan.test_z4_gia_tri_nua_voi_luon_la_DO",),
     "cay-sach-bo-do": ("Z_ChotChan.test_z3_bo_do_bat_duoc_khi_bi_tiem",),
     "tien-trinh-con": ("Z_ChotChan.test_z2_tu_kiem_chay_trong_tien_trinh_con",),
+    "c5-tru-bo-qua": ("I_TiemLoiC5.test_i1_nam_di_dang_tiem_loi",),
 }
 
 # ĐỐI CHỨNG DƯƠNG: mỗi nhóm phủ định PHẢI có một ca chạy ĐÚNG đường đó và cho kết quả KHÁC.
@@ -299,6 +323,13 @@ DOI_CHUNG = {
     "tien-trinh-con":
         "cùng ca tự kiểm chạy ở tiến trình CHA: biến toàn cục PHẢI nhìn thấy được (đối chứng âm "
         "của vế 'không nhìn thấy ở cha').",
+    "c5-tru-bo-qua":
+        "DỰNG THẬT cả năm dị dạng rồi chạy CHÍNH hai cổng của HAI TỆP NGUỒN (`C5` trong "
+        "`thu_qa_g20.py`, `G7` trong `thu_qa_g21.py`) trên cây gương: bốn dị dạng đầu ĐỎ ở CẢ HAI "
+        "cột, dị dạng thứ năm (`MOI CA BO QUA o muc PHUONG THUC`) XANH ở cột TRƯỚC và ĐỎ ở cột "
+        "SAU — ở CẢ HAI cổng. Không có vế 'TRƯỚC' thì không chứng minh được lỗ hổng CÓ THẬT; "
+        "không có vế SAU thì không chứng minh được nó ĐÃ ĐÓNG — và `I2` chứng minh bản vá không "
+        "quá tay (vẫn XANH trước một bộ CHẠY THẬT).",
 }
 
 DA_CHAY = {}     # nhóm → True khi đối chứng dương THẬT SỰ chạy
@@ -475,24 +506,115 @@ def doc_so_chay_tat_ca(text):
     return ra if "ca" in ra else None
 
 
-def g20_cop_tam():
-    """Chép TẠM bàn đo G20 vào cây để đo. Trả (đường_dẫn, sha256, ghi_chú)."""
-    if not os.path.exists(BAN_DO_G20_NGUON):
-        return None, None, "KHÔNG có nguồn `%s`" % BAN_DO_G20_NGUON
-    with open(BAN_DO_G20_NGUON, "rb") as f:
-        bam = hashlib.sha256(f.read()).hexdigest()
-    if bam != BAN_DO_G20_SHA:
-        return None, bam, ("SHA LỆCH: đo được %s, `QA_G20.md` ghim %s ⇒ KHÔNG chép (một bàn đo "
-                           "đã trôi thì số của nó không đối chiếu được)" % (bam[:16], BAN_DO_G20_SHA[:16]))
-    shutil.copy2(BAN_DO_G20_NGUON, BAN_DO_G20_TAM)
-    return BAN_DO_G20_TAM, bam, "đã chép tạm (sẽ XOÁ trước khi kết thúc)"
+def _bam(duong):
+    with open(duong, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
-def g20_xoa_tam():
-    if os.path.exists(BAN_DO_G20_TAM):
-        os.remove(BAN_DO_G20_TAM)
-        return True
-    return False
+def _hoan_va(than, cap):
+    """Thay NGƯỢC: khối SAU khi vá → khối TRƯỚC khi vá. `None` nếu có khối không khớp đúng 1 lần."""
+    for cu, moi in cap:
+        if than.count(moi) != 1:
+            return None
+        than = than.replace(moi, cu)
+    return than
+
+
+def nguon_goc(duong, cap, sha_goc):
+    """Nội dung GỐC (trước khi vá) của tệp nguồn `duong`, KIỂM BẰNG sha256. Trả `(nội_dung, ghi_chú)`.
+
+    `nội_dung is None` nghĩa là KHÔNG chứng minh được "bản gốc đã ghim + ĐÚNG hai khối vá" ⇒ người
+    gọi DỪNG, chứ không đo bằng một bàn đo đã trôi. Đây là chốt thay cho `BAN_DO_G20_SHA` cũ: bản
+    vá nay nằm TRONG tệp nguồn, nên "gốc" được dựng lại bằng HOÀN VÁ rồi băm — không cần bản sao.
+    """
+    if not os.path.exists(duong):
+        return None, "KHÔNG có tệp nguồn `%s`" % duong
+    with open(duong, encoding="utf-8") as f:
+        than = f.read()
+    goc = _hoan_va(than, cap)
+    if goc is None:
+        return None, ("KHÔNG hoàn vá được `%s`: khối vá không còn khớp nguyên văn ⇒ tệp trong cây "
+                      "KHÔNG PHẢI 'bản gốc + đúng hai khối vá'" % os.path.basename(duong))
+    ra = hashlib.sha256(goc.encode("utf-8")).hexdigest()
+    if ra != sha_goc:
+        return None, ("hoàn vá xong, sha256 = %s ≠ ghim %s ⇒ tệp nguồn `%s` đã TRÔI khỏi bản gốc "
+                      "(không đo bằng một bàn đo đã trôi)"
+                      % (ra[:16], sha_goc[:16], os.path.basename(duong)))
+    return goc, ("`%s`: gốc ghim %s ✓ + đúng %d khối vá"
+                 % (os.path.basename(duong), sha_goc[:12], len(cap)))
+
+
+def nguon_da_va(duong, cap, sha_goc):
+    """Xác nhận tệp TRONG CÂY = bản gốc đã ghim + đúng hai khối vá. Trả `(ok, ghi_chú)`."""
+    goc, ghi_chu = nguon_goc(duong, cap, sha_goc)
+    if goc is None:
+        return False, ghi_chu
+    with open(duong, encoding="utf-8") as f:
+        than = f.read()
+    if "nc > 0" not in than or "skipped=(\\d+)" not in than:
+        return False, "`%s` thiếu dấu vết bản vá (`skipped=`/`nc > 0`)" % os.path.basename(duong)
+    if cap[1][0] in than:
+        return False, "`%s` còn nguyên văn CŨ của khối quyết định" % os.path.basename(duong)
+    return True, ghi_chu + " · bản trong cây ĐÃ VÁ"
+
+
+# ── BẢN VÁ `N-G22-01` — HAI KHỐI BỘ ĐẾM, VÁ **THẲNG Ở TỆP NGUỒN** ─────────────────────────────
+#
+# BÀI HỌC (giữ nguyên — nó là lý do bộ đếm này tồn tại): bàn đo G20 kiểm "có bộ G19-tổng-hợp CHẠY
+# THẬT" bằng `Ran N tests` với `N > 0`. Nhưng `unittest` KỂ CẢ ca BỎ QUA trong `N`: một bộ mà MỌI
+# ca đều `@unittest.skip` in `Ran 3 tests` + `OK (skipped=3)` rồi thoát 0 — ĐÚNG khuôn một lượt
+# chạy tốt — nên `C5` báo `1/2 · ĐÓNG` (XANH) dù KHÔNG ca nào chạy. Bốn dị dạng khác thì `C5` bắt
+# được; dị dạng thứ NĂM này thì không. Xem `docs/QA_G22.md` §7 `N-G22-01`.
+#
+# LƯỢT NÀY VÁ Ở ĐÂU: **THẲNG trong `app/thu/thu_qa_g20.py` (`C5`) và `app/thu/thu_qa_g21.py`
+# (`G7`)**. KHÔNG còn `g20_cop_tam()`/`g20_va_c5()`: một bản chép tạm có thể XANH trong khi NGUỒN
+# vẫn lỗ, và đó đúng là loại lỗi wave này đang diệt.
+#
+# Hai tuple dưới đây là ĐỊNH NGHĨA của bản vá, dùng theo cả HAI CHIỀU:
+#   · chiều thuận (cũ → mới) để biết bản trong cây ĐÃ VÁ đúng chưa;
+#   · chiều NGƯỢC (mới → cũ) để dựng lại BẢN GỐC cho cột "TRƯỚC" của bảng §7 — rồi BĂM, phải ra
+#     đúng `BAN_DO_G20_GOC_SHA`/`BAN_DO_G21_GOC_SHA`. Không khớp ⇒ DỪNG, không đo.
+G20_C5_VA = (
+    # (nguyên văn trong bản gốc, nguyên văn sau khi vá)
+    ('            m = re.findall(r"Ran (\\d+) tests?", ra)\n'
+     '            n = int(m[-1]) if m else 0\n'
+     '            chi_tiet.append((t, ma, n))\n'
+     '            print("       %s → mã thoát %s · %d ca" % (t, ma, n))\n',
+
+     '            m = re.findall(r"Ran (\\d+) tests?", ra)\n'
+     '            n = int(m[-1]) if m else 0\n'
+     '            # VÁ `N-G22-01`: `Ran N` KỂ ca BỎ QUA ⇒ phải TRỪ ra mới biết có ca nào CHẠY.\n'
+     '            bq = int((re.findall(r"skipped=(\\d+)", ra) or ["0"])[-1])\n'
+     '            chi_tiet.append((t, ma, n, bq, max(n - bq, 0)))\n'
+     '            print("       %s → mã thoát %s · %d ca · %d BỎ QUA · %d CHẠY THẬT"\n'
+     '                  % (t, ma, n, bq, max(n - bq, 0)))\n'),
+
+    ('        chay = min(sum(1 for _, ma, n in chi_tiet if ma == 0 and n > 0), 1)\n',
+
+     '        # XANH chỉ khi có ca THẬT SỰ CHẠY và ĐẠT: `nc > 0` (ĐÃ TRỪ bỏ qua), không phải `n > 0`.\n'
+     '        chay = min(sum(1 for _, ma, n, bq, nc in chi_tiet\n'
+     '                       if ma == 0 and n > 0 and nc > 0), 1)\n'),
+)
+
+
+# Cổng `G7` của bàn đo G21 (`app/thu/thu_qa_g21.py`) là BẢN SAO của cùng bộ đếm đó. Khối 1 KHÁC
+# đúng một chỗ: vòng lặp của `G7` không in trong vòng lặp (nó in ở cuối). Hai khối CÒN LẠI GIỐNG
+# HỆT TỪNG KÝ TỰ — và điều đó được BẢO ĐẢM BẰNG MÃ chứ không bằng lời khai: `G21_G7_VA` lấy thẳng
+# hai khối của `G20_C5_VA`.
+_C1_CU_G21 = ('            m = re.findall(r"Ran (\\d+) tests?", ra)\n'
+              '            n = int(m[-1]) if m else 0\n'
+              '            chi_tiet.append((t, ma, n))\n')
+_C3_CU_G21 = ('        for t, ma, n in chi_tiet:\n'
+              '            print("       %s → mã thoát %s · %d ca" % (t, ma, n))\n')
+_C3_MOI_G21 = ('        for t, ma, n, bq, nc in chi_tiet:\n'
+               '            print("       %s → mã thoát %s · %d ca · %d BỎ QUA · %d CHẠY THẬT"\n'
+               '                  % (t, ma, n, bq, nc))\n')
+
+G21_G7_VA = (
+    (_C1_CU_G21, G20_C5_VA[0][1]),   # khối ĐẾM — nguyên văn SAU khi vá GIỐNG HỆT khối của `C5`
+    G20_C5_VA[1],                    # khối QUYẾT ĐỊNH — GIỐNG HỆT từng ký tự
+    (_C3_CU_G21, _C3_MOI_G21),       # khối TRÌNH BÀY — chỉ `G7` có, vì nó in ở vòng riêng
+)
 
 
 # ── E3: ĐỒNG HỒ ĐÓNG BĂNG + ĐỐI CHỨNG ĐƯỜNG BẰNG BẢN ĐÃ VÁ ───────────────────────────────────
@@ -765,55 +887,55 @@ class D_BanDoG20(unittest.TestCase):
 
     def test_d1_nam_cong_g20(self):
         DA_CHAY["g20-c1-cay-sach"] = True
-        p, bam, ghi_chu = g20_cop_tam()
-        print("\n  [D1] bàn đo G20: %s" % ghi_chu)
-        if p is None:
-            self.fail("KHÔNG CHẠY ĐƯỢC bàn đo G20: %s. Đây là KẾT QUẢ, không phải chỗ bỏ qua."
-                      % ghi_chu)
-        try:
-            env = {"VIP_G20_CHE_DO": "gop"}
-            t0 = time.time()
-            rc, out = chay([PY, "app/thu/thu_qa_g20.py"], giay=900, env_them=env)
-            giay = round(time.time() - t0, 1)
-            with open(os.path.join(LOG_DIR, "g20_gop.txt"), "w", encoding="utf-8") as f:
-                f.write(out)
-            m = re.search(r"Ran (\d+) tests? in [\d.]+s\s*\n\s*(OK|FAILED[^\n]*)", out)
-            print("       LỆNH: VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py")
-            print("       sha256 bản chép = %s" % bam)
-            print("       mã thoát THẬT = %d · %.1f giây · %s"
-                  % (rc, giay, (m.group(0).replace("\n", " ") if m else "không thấy dòng tổng kết")))
-            if m is None:
-                self.fail("không đọc được dòng tổng kết của bàn đo G20:\n%s"
-                          % "\n".join(out.splitlines()[-40:]))
-            # C1..C5: đọc NGUYÊN VĂN dòng phán quyết của CHÍNH bàn đo — không suy diễn lại.
-            # Nhãn in ra của bàn đo là `[G1]` (C1), `[B1]` (C2), `[C2]` (C3), `[C4]`, `[C5]`;
-            # `SO_DO_G20[...]["ten_do"]` là KHÓA NỘI BỘ của nó, không phải nhãn in ra.
-            MAU = (("C1 cổng cây sạch wave trước", r"\[G1\] cổng cây sạch[^\n]*"),
-                   ("C2 bàn phím TRONG màn (tầng 3)", r"\[B1\] nhị phân[^\n]*"),
-                   ("C3 git với môi trường NGUYÊN BẢN", r"\[C2\] GIT_CONFIG[^\n]*"),
-                   ("C4 route truy_van + migration v9", r"\[C4\][^\n]*"),
-                   ("C5 có bộ G19-tổng-hợp chạy được", r"\[C5\][^\n]*"))
-            for ten, mau in MAU:
-                mm = re.search(mau, out)
-                print("       %-34s %s" % (ten, mm.group(0).strip() if mm else "KHÔNG THẤY DÒNG ĐO"))
-            # VÀ mỗi cổng còn được ĐO ĐỘC LẬP ở đây, không chỉ đọc lời bàn đo kia:
-            ma_git, _ = chay(["git", "rev-parse", "HEAD"])          # môi trường NGUYÊN BẢN
-            print("       ĐO ĐỘC LẬP C3: `git rev-parse HEAD` môi trường NGUYÊN BẢN → mã thoát %d "
-                  "(nền=%d, đóng=%d)" % (ma_git, SO_DO_G20["C3 git với môi trường NGUYÊN BẢN"]["nen"],
-                                         SO_DO_G20["C3 git với môi trường NGUYÊN BẢN"]["dong"]))
-            self.__class__._kq = {"chay_duoc": True, "rc": rc, "out": out}
-            # ĐỐI CHỨNG DƯƠNG của nhóm này: C2 phải ĐO ĐƯỢC (bảy ca tầng 3 chạy thật).
-            co_c2 = "tang3-ban-phim" in out or "tầng 3" in out
-            print("       đối chứng dương: bàn đo có chạm tầng 3 (C2) = %s" % co_c2)
-            self.assertTrue(co_c2, "bàn đo G20 chết toàn bộ — C1 đỏ không phân biệt được với "
-                                   "'bàn đo không chạy'")
-            _dc_duong("g20-c1-cay-sach")
-        finally:
-            da_xoa = g20_xoa_tam()
-            print("       dọn: đã XOÁ bản chép tạm `app/thu/thu_qa_g20.py` = %s · còn tồn tại = %s"
-                  % (da_xoa, os.path.exists(BAN_DO_G20_TAM)))
-            self.assertFalse(os.path.exists(BAN_DO_G20_TAM),
-                             "bản chép TẠM còn nằm trong cây ⇒ vi phạm phạm vi được ghi")
+        # KHÔNG chép, KHÔNG vá một bản sao: TỆP NGUỒN trong cây phải ĐÃ VÁ, và phải CHỨNG MINH được
+        # nó là "bản gốc đã ghim + đúng hai khối vá" — bằng cách HOÀN VÁ rồi băm (`nguon_da_va`).
+        ok, ghi_chu = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
+        print("\n  [D1] bàn đo G20 = TỆP NGUỒN trong cây `app/thu/thu_qa_g20.py`: %s" % ghi_chu)
+        if not ok:
+            self.fail("TỆP NGUỒN `app/thu/thu_qa_g20.py` KHÔNG PHẢI 'bản gốc đã ghim + đúng hai "
+                      "khối vá': %s. Đây là KẾT QUẢ, không phải chỗ bỏ qua." % ghi_chu)
+        env = {"VIP_G20_CHE_DO": "gop"}
+        t0 = time.time()
+        rc, out = chay([PY, "app/thu/thu_qa_g20.py"], giay=900, env_them=env)
+        giay = round(time.time() - t0, 1)
+        with open(os.path.join(LOG_DIR, "g20_gop.txt"), "w", encoding="utf-8") as f:
+            f.write(out)
+        m = re.search(r"Ran (\d+) tests? in [\d.]+s\s*\n\s*(OK|FAILED[^\n]*)", out)
+        print("       LỆNH: VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py")
+        print("       sha256 tệp nguồn TRONG CÂY = %s (gốc ghim %s + 2 khối vá)"
+              % (_bam(BAN_DO_G20)[:16], BAN_DO_G20_GOC_SHA[:16]))
+        print("       mã thoát THẬT = %d · %.1f giây · %s"
+              % (rc, giay, (m.group(0).replace("\n", " ") if m else "không thấy dòng tổng kết")))
+        if m is None:
+            self.fail("không đọc được dòng tổng kết của bàn đo G20:\n%s"
+                      % "\n".join(out.splitlines()[-40:]))
+        # C1..C5: đọc NGUYÊN VĂN dòng phán quyết của CHÍNH bàn đo — không suy diễn lại.
+        # Nhãn in ra của bàn đo là `[G1]` (C1), `[B1]` (C2), `[C2]` (C3), `[C4]`, `[C5]`;
+        # `SO_DO_G20[...]["ten_do"]` là KHÓA NỘI BỘ của nó, không phải nhãn in ra.
+        MAU = (("C1 cổng cây sạch wave trước", r"\[G1\] cổng cây sạch[^\n]*"),
+               ("C2 bàn phím TRONG màn (tầng 3)", r"\[B1\] nhị phân[^\n]*"),
+               ("C3 git với môi trường NGUYÊN BẢN", r"\[C2\] GIT_CONFIG[^\n]*"),
+               ("C4 route truy_van + migration v9", r"\[C4\][^\n]*"),
+               ("C5 có bộ G19-tổng-hợp chạy được", r"\[C5\][^\n]*"))
+        for ten, mau in MAU:
+            mm = re.search(mau, out)
+            print("       %-34s %s" % (ten, mm.group(0).strip() if mm else "KHÔNG THẤY DÒNG ĐO"))
+        # VÀ mỗi cổng còn được ĐO ĐỘC LẬP ở đây, không chỉ đọc lời bàn đo kia:
+        ma_git, _ = chay(["git", "rev-parse", "HEAD"])          # môi trường NGUYÊN BẢN
+        print("       ĐO ĐỘC LẬP C3: `git rev-parse HEAD` môi trường NGUYÊN BẢN → mã thoát %d "
+              "(nền=%d, đóng=%d)" % (ma_git, SO_DO_G20["C3 git với môi trường NGUYÊN BẢN"]["nen"],
+                                     SO_DO_G20["C3 git với môi trường NGUYÊN BẢN"]["dong"]))
+        self.__class__._kq = {"chay_duoc": True, "rc": rc, "out": out}
+        # ĐỐI CHỨNG DƯƠNG của nhóm này: C2 phải ĐO ĐƯỢC (bảy ca tầng 3 chạy thật).
+        co_c2 = "tang3-ban-phim" in out or "tầng 3" in out
+        print("       đối chứng dương: bàn đo có chạm tầng 3 (C2) = %s" % co_c2)
+        self.assertTrue(co_c2, "bàn đo G20 chết toàn bộ — C1 đỏ không phân biệt được với "
+                               "'bàn đo không chạy'")
+        # VÀ tệp nguồn KHÔNG được đổi bởi chính lượt đo này (không ai chép/xoá nó nữa).
+        ok2, ghi_chu2 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
+        print("       sau lượt đo, tệp nguồn vẫn là 'gốc + 2 khối vá' = %s" % ok2)
+        self.assertTrue(ok2, "lượt đo đã ĐỔI tệp nguồn: %s" % ghi_chu2)
+        _dc_duong("g20-c1-cay-sach")
 
 
 class E_CaySach(unittest.TestCase):
@@ -1243,6 +1365,306 @@ class Z_ChotChan(unittest.TestCase):
         self.assertRegex(out, r"skipped=0|Ran 1 test", "không thấy dấu vết ca mồi đã CHẠY")
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7b. `N-G22-01` — NĂM DỊ DẠNG TIỀM LỖI CỦA BỘ ĐẾM `C5`/`G7`: TRƯỚC **và** SAU KHI VÁ
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# KHÔNG khẳng định suông. Mỗi dị dạng được DỰNG THẬT — một bộ `unittest` thật, chạy thật bằng
+# `subprocess`, cho ra output THẬT — rồi CHÍNH cổng `C5` (bàn đo G20) VÀ cổng `G7` (bàn đo G21)
+# được chạy trên một CÂY GƯƠNG trong `TMP` có chứa dị dạng đó:
+#
+#   · cột "TRƯỚC" = tệp nguồn trong cây, HOÀN VÁ hai khối bộ đếm, rồi BĂM — phải ra đúng
+#                   `BAN_DO_G20_GOC_SHA`/`BAN_DO_G21_GOC_SHA`;
+#   · cột "SAU"   = CHÍNH tệp nguồn trong cây (`app/thu/thu_qa_g20.py`, `app/thu/thu_qa_g21.py`),
+#                   chép nguyên byte và KIỂM LẠI sha256 sau khi chép.
+#
+# Cùng một dị dạng, cùng một lệnh, cùng một cây — chỉ khác hai khối bộ đếm. Nên chênh lệch giữa
+# hai cột KHÔNG THỂ là do dị dạng; nó chỉ có thể là do bản vá. VÀ cả hai cột đều là BẢN NGUỒN:
+# không còn đường chép tạm nào để một bộ đo xanh nhờ bản tạm trong khi nguồn vẫn lỗ.
+#
+# Cây gương luôn có HAI bộ `thu_qa_g19*.py` (trừ dị dạng ii, cố ý để RỖNG): bộ TIÊM đang đo và
+# một bộ HỎNG CHẮC CHẮN. Mẫu số vì thế là 2, và con số đọc ra so thẳng được với `0/2` · `1/2`
+# mà AG-04 đã đo.
+# `unittest.main()` ở ĐUÔI là BẮT BUỘC: thiếu nó thì chạy tệp KHÔNG in gì và thoát 0 — một dị
+# dạng "im lặng" KHÁC, không phải dị dạng đang muốn đo (đã vấp đúng chỗ này ở lượt chạy đầu).
+_DUOI = '\n\nunittest.main(verbosity=2)\n'
+
+_TIEM_HONG = '''\
+import unittest
+
+
+class T(unittest.TestCase):
+    def test_hong(self):
+        self.assertEqual(1, 2, "ca co y hong")
+''' + _DUOI
+
+_TIEM_RONG = '''\
+import unittest
+
+
+class T(unittest.TestCase):
+    """KHONG co phuong thuc `test_*` nao => `Ran 0 tests` + `OK` + thoat 0."""
+''' + _DUOI
+
+_TIEM_BO_QUA_MODUN = '''\
+import unittest
+
+
+def setUpModule():
+    raise unittest.SkipTest("bo qua o muc MO-DUN")
+
+
+class T(unittest.TestCase):
+    def test_a(self):
+        self.assertTrue(True)
+
+    def test_b(self):
+        self.assertTrue(True)
+''' + _DUOI
+
+_TIEM_BO_QUA_PHUONG_THUC = '''\
+import unittest
+
+
+class T(unittest.TestCase):
+    @unittest.skip("bo qua o muc PHUONG THUC")
+    def test_a(self):
+        self.assertTrue(True)
+
+    @unittest.skip("bo qua o muc PHUONG THUC")
+    def test_b(self):
+        self.assertTrue(True)
+
+    @unittest.skip("bo qua o muc PHUONG THUC")
+    def test_c(self):
+        self.assertTrue(True)
+''' + _DUOI
+
+_TIEM_DAT_THAT = '''\
+import unittest
+
+
+class T(unittest.TestCase):
+    def test_a(self):
+        self.assertTrue(True)
+
+    def test_b(self):
+        self.assertTrue(True)
+''' + _DUOI
+
+# (nhãn, mã nguồn bộ TIÊM, mã nguồn bộ THỨ HAI). `None` = KHÔNG đặt tệp đó.
+# Dị dạng ii đặt `None` cho CẢ HAI ⇒ cây gương KHÔNG có bộ `thu_qa_g19*.py` nào, đúng nghĩa
+# "không còn bộ gốc". Bốn dị dạng còn lại có ĐÚNG HAI bộ ⇒ mẫu số là 2, so thẳng được với `1/2`.
+TIEM_LOI = (
+    ("i-ma-thoat-khac-0", _TIEM_HONG, _TIEM_HONG),
+    ("ii-khong-con-bo-goc", None, None),
+    ("iii-suite-rong-0-ca", _TIEM_RONG, _TIEM_HONG),
+    ("iv-bo-qua-muc-MO-DUN", _TIEM_BO_QUA_MODUN, _TIEM_HONG),
+    ("v-bo-qua-muc-PHUONG-THUC", _TIEM_BO_QUA_PHUONG_THUC, _TIEM_HONG),
+)
+CA_C5 = "C4_C5_NoKhac.test_c5_co_bo_thu_g19_tong_hop_chay_duoc"
+CA_G7 = "G7_BoG19TongHop.test_g7_co_bo_g19_tong_hop_chay_duoc"
+
+
+def dem_ca_ran(ra):
+    """Bản sao ĐỘC LẬP của phép đếm `unittest`: trả `(chạy_thật, bỏ_qua, tổng)`.
+
+    Cố ý viết lại thay vì gọi `thu_qa_g21.dem_ca_chay_that`: nếu hai bên dùng CHUNG một hàm thì
+    một lỗi trong hàm đó sẽ không bao giờ lộ ra ở đây.
+    """
+    m = re.findall(r"Ran (\d+) tests?", ra)
+    n = int(m[-1]) if m else 0
+    bq = int((re.findall(r"skipped=(\d+)", ra) or ["0"])[-1])
+    return max(n - bq, 0), bq, n
+
+
+def _dung_cay_guong(ten, tep_tiem, cot, tep_hai=_TIEM_HONG):
+    """Dựng cây GƯƠNG trong `TMP`. KHÔNG ghi một byte nào vào cây thật. Trả gốc cây.
+
+    `cot="sau"`   = CHÉP NGUYÊN hai TỆP NGUỒN trong cây (`app/thu/thu_qa_g20.py`,
+                    `app/thu/thu_qa_g21.py`) rồi KIỂM LẠI sha256 sau khi chép — bản trong cây
+                    gương phải byte-đối-byte với tệp nguồn.
+    `cot="truoc"` = HOÀN VÁ hai tệp nguồn đó (mới → cũ) rồi BĂM, phải ra đúng sha ghim. "Trước khi
+                    vá" vì thế được DỰNG LẠI TỪ CHÍNH TỆP NGUỒN, không cần bản sao nào khác.
+    """
+    goc = os.path.join(TMP_GOC, "veh_g22_tiem_loi", ten)
+    if os.path.isdir(goc):
+        shutil.rmtree(goc)
+    os.makedirs(os.path.join(goc, "app", "thu"))
+    for duong, cap, sha_goc in ((BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA),
+                                (BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA)):
+        dich = os.path.join(goc, "app", "thu", os.path.basename(duong))
+        if cot == "sau":
+            shutil.copy2(duong, dich)
+            if _bam(dich) != _bam(duong):
+                raise AssertionError("cây gương `%s`: bản chép KHÔNG khớp byte với tệp nguồn `%s`"
+                                     % (ten, duong))
+        else:
+            than, ghi_chu = nguon_goc(duong, cap, sha_goc)
+            if than is None:
+                raise AssertionError("cây gương `%s`: KHÔNG dựng được cột TRƯỚC — %s"
+                                     % (ten, ghi_chu))
+            with open(dich, "w", encoding="utf-8") as f:
+                f.write(than)
+            if _bam(dich) != sha_goc:
+                raise AssertionError("cây gương `%s`: bản HOÀN VÁ không ra đúng sha ghim %s"
+                                     % (ten, sha_goc[:16]))
+    for ten_tep, noi_dung in (("thu_qa_g19_tiem.py", tep_tiem), ("thu_qa_g19_nen.py", tep_hai)):
+        if noi_dung is not None:
+            with open(os.path.join(goc, "app", "thu", ten_tep), "w", encoding="utf-8") as f:
+                f.write(noi_dung)
+    return goc
+
+
+def _chay_cong_c5(goc):
+    """Chạy CHÍNH cổng `C5` trên cây gương. Trả `(rc, đạt, tổng, phán_quyết, out)`."""
+    rc, out = chay([PY, os.path.join("app", "thu", "thu_qa_g20.py"), CA_C5], giay=600,
+                   env_them={"VIP_G20_CHE_DO": "gop"}, cwd=goc)
+    # Phán quyết có thể CHỨA DẤU CÁCH ("chế độ GỘP: khoản nợ 0 VẪN CÒN NGUYÊN") ⇒ đọc tới cuối
+    # dòng, KHÔNG dùng `\S+`.
+    m = re.search(r"\[C5\][^\n]*?:\s*(\d+)/(\d+)\s*·\s*phán quyết=([^\n]+)", out)
+    if not m:
+        return rc, None, None, None, out
+    return rc, int(m.group(1)), int(m.group(2)), m.group(3).strip(), out
+
+
+def _chay_cong_g7(goc):
+    """Chạy CHÍNH cổng `G7` của bàn đo G21 trên cây gương. Trả `(rc, đạt, tổng, phán_quyết, out)`.
+
+    Đây là vế thứ HAI của cùng một bản vá: `G7` nằm trong `app/thu/thu_qa_g21.py`, một tệp nguồn
+    KHÁC. Đo cả hai trên CÙNG một cây gương là cách chứng minh "hai khối giống hệt" bằng kết quả,
+    không bằng lời khai.
+    """
+    rc, out = chay([PY, os.path.join("app", "thu", "thu_qa_g21.py"), CA_G7], giay=600,
+                   env_them={"VIP_G21_CHE_DO": "gop"}, cwd=goc)
+    m = re.search(r"\[G7\][^\n]*?:\s*(\d+)/(\d+)\s*·[^\n]*?phán quyết=([^\n]+)", out)
+    if not m:
+        return rc, None, None, None, out
+    return rc, int(m.group(1)), int(m.group(2)), m.group(3).strip(), out
+
+
+def _mo_ta_c5(r, nhan="C5"):
+    rc, dat, tong, pq, _ = r
+    if dat is None:
+        return "thoát %s · KHÔNG có dòng [%s]" % (rc, nhan)
+    return "thoát %s · %d/%d · %s ⇒ %s" % (rc, dat, tong, pq, "XANH" if rc == 0 else "ĐỎ")
+
+
+class I_TiemLoiC5(unittest.TestCase):
+    """`N-G22-01` — NĂM dị dạng tiềm lỗi của bộ đếm `C5`/`G7`, đo TRƯỚC và SAU khi vá."""
+
+    def test_i1_nam_di_dang_tiem_loi(self):
+        hang = []
+        for ten, tep, tep_hai in TIEM_LOI:
+            goc_truoc = _dung_cay_guong(ten + "-truoc", tep, "truoc", tep_hai=tep_hai)
+            goc_sau = _dung_cay_guong(ten + "-sau", tep, "sau", tep_hai=tep_hai)
+            # Bằng chứng THÔ của chính bộ tiêm: mã thoát + số ca chạy thật / bỏ qua / tổng.
+            if tep is not None:
+                rc_t, out_t = chay([PY, os.path.join("app", "thu", "thu_qa_g19_tiem.py")],
+                                   giay=120, cwd=goc_sau)
+                tho = (rc_t,) + dem_ca_ran(out_t)
+            else:
+                tho = None
+            hang.append({"ten": ten, "tho": tho,
+                         "c5": (_chay_cong_c5(goc_truoc), _chay_cong_c5(goc_sau)),
+                         "g7": (_chay_cong_g7(goc_truoc), _chay_cong_g7(goc_sau))})
+
+        dong = ["cổng | dị dạng | bộ tiêm (thoát/chạy thật/bỏ qua/tổng) | TRƯỚC khi vá | SAU khi vá"]
+        print("\n  [I1] `N-G22-01` — NĂM DỊ DẠNG TIỀM LỖI, ĐO TRÊN **HAI TỆP NGUỒN**:")
+        print("       `C5` trong `%s` (gốc ghim %s) · `G7` trong `%s` (gốc ghim %s)"
+              % (os.path.basename(BAN_DO_G20), BAN_DO_G20_GOC_SHA[:12],
+                 os.path.basename(BAN_DO_G21), BAN_DO_G21_GOC_SHA[:12]))
+        for nhan_cot, tep_cong in (("C5", "thu_qa_g20.py"), ("G7", "thu_qa_g21.py")):
+            print("       ── cổng %s (`app/thu/%s`) ──" % (nhan_cot, tep_cong))
+            print("       %-27s %-24s %-32s %s" % ("dị dạng", "bộ TIÊM (thoát/thật/bỏ/tổng)",
+                                                   "TRƯỚC khi vá", "SAU khi vá"))
+            for h in hang:
+                tt = ("%d · %d/%d/%d" % h["tho"]) if h["tho"] else "KHÔNG đặt bộ nào"
+                r_t, r_s = h[nhan_cot.lower()]
+                print("       %-27s %-24s %-32s %s"
+                      % (h["ten"], tt, _mo_ta_c5(r_t, nhan_cot), _mo_ta_c5(r_s, nhan_cot)))
+                dong.append("%s | %s | %s | %s | %s"
+                            % (nhan_cot, h["ten"], tt, _mo_ta_c5(r_t, nhan_cot),
+                               _mo_ta_c5(r_s, nhan_cot)))
+        print("       cây gương nằm ở %s (ngoài cây thật)"
+              % os.path.join(TMP_GOC, "veh_g22_tiem_loi"))
+
+        # (1) SAU khi vá: CẢ NĂM dị dạng phải ĐỎ — ở CẢ HAI cổng. Đây là điều `N-G22-01` đòi.
+        for nhan_cot in ("C5", "G7"):
+            for h in hang:
+                r_sau = h[nhan_cot.lower()][1]
+                with self.subTest(cong=nhan_cot, di_dang=h["ten"], cot="sau"):
+                    self.assertNotEqual(r_sau[0], 0,
+                                        "SAU khi vá, cổng %s: dị dạng `%s` vẫn ĐẠT (mã thoát 0) ⇒ "
+                                        "`N-G22-01` CHƯA đóng" % (nhan_cot, h["ten"]))
+                    if r_sau[1] is not None:
+                        self.assertEqual(r_sau[1], 0,
+                                         "SAU khi vá, cổng %s: `%s` vẫn đếm ra bộ CHẠY THẬT"
+                                         % (nhan_cot, h["ten"]))
+        # (2) TRƯỚC khi vá: BỐN dị dạng đầu đã ĐỎ — chúng KHÔNG phải lỗ hổng.
+        for nhan_cot in ("C5", "G7"):
+            for h in hang[:4]:
+                r_truoc = h[nhan_cot.lower()][0]
+                with self.subTest(cong=nhan_cot, di_dang=h["ten"], cot="truoc"):
+                    self.assertNotEqual(r_truoc[0], 0,
+                                        "TRƯỚC khi vá, cổng %s: `%s` lẽ ra đã phải ĐỎ"
+                                        % (nhan_cot, h["ten"]))
+        # (2b) Dị dạng ii phải ĐỎ vì ĐÚNG cái chốt của nó ("không còn bộ gốc"), KHÔNG phải vì
+        # một lỗi bất kỳ — và đúng ở CẢ HAI cổng. Không kiểm vế này thì "ĐỎ" có thể là đỏ vì lý do
+        # khác.
+        for nhan_cot in ("C5", "G7"):
+            r_ii = hang[1][nhan_cot.lower()][1]
+            self.assertIn("không còn tệp", r_ii[4],
+                          "cổng %s: dị dạng ii đỏ nhưng KHÔNG phải vì chốt 'không còn bộ gốc'"
+                          % nhan_cot)
+            self.assertIsNone(r_ii[1],
+                              "cổng %s: cây gương ii vẫn in ra dòng phán quyết ⇒ nó còn bộ để đo, "
+                              "không phải 'không còn bộ gốc'" % nhan_cot)
+        # (3) TRƯỚC khi vá: dị dạng thứ NĂM LỌT — đây là lỗ hổng, phải TÁI HIỆN được ở CẢ HAI cổng.
+        ten_v = hang[4]["ten"]
+        self.assertEqual(hang[4]["tho"], (0, 0, 3, 3),
+                         "bộ tiêm `%s` phải cho `thoát 0` + `Ran 3 tests` + `skipped=3` + 0 ca "
+                         "CHẠY THẬT; đo được `%r` ⇒ dị dạng không đúng như mô tả"
+                         % (ten_v, hang[4]["tho"]))
+        for nhan_cot in ("C5", "G7"):
+            r_truoc_v = hang[4][nhan_cot.lower()][0]
+            with self.subTest(cong=nhan_cot, di_dang=ten_v, cot="truoc"):
+                self.assertEqual(r_truoc_v[0], 0,
+                                 "TRƯỚC khi vá, cổng %s: `%s` lẽ ra phải LỌT (đó chính là lỗ hổng "
+                                 "phải tái hiện); đo được: %s"
+                                 % (nhan_cot, ten_v, _mo_ta_c5(r_truoc_v, nhan_cot)))
+                self.assertEqual((r_truoc_v[1], r_truoc_v[2]), (1, 2),
+                                 "TRƯỚC khi vá, cổng %s: `%s` lẽ ra phải đọc ra `1/2`; đo được: %s"
+                                 % (nhan_cot, ten_v, _mo_ta_c5(r_truoc_v, nhan_cot)))
+        with open(os.path.join(LOG_DIR, "n_g22_01_nam_di_dang.txt"), "w",
+                  encoding="utf-8") as f:
+            f.write("\n".join(dong) + "\n")
+        _dc_duong("c5-tru-bo-qua")
+
+    def test_i2_doi_chung_duong_ban_va_khong_qua_tay(self):
+        """ĐỐI CHỨNG DƯƠNG hai vế, ở CẢ HAI cổng: bản ĐÃ VÁ phải còn XANH trước một bộ CHẠY THẬT.
+
+        Vế (a): bộ ĐẠT THẬT + bộ HỎNG ⇒ `1/2 · ĐÓNG`, mã thoát 0. Không có vế này thì bản vá chỉ
+        là "luôn luôn đỏ" và không đo được gì.
+        Vế (b): bộ ĐẠT THẬT + bộ MỌI CA BỎ QUA ⇒ VẪN `1/2 · ĐÓNG`. Vế này chứng minh bản vá
+        KHÔNG quá tay: nó TRỪ ca bỏ qua, chứ không CẤM bỏ qua.
+        """
+        for nhan, tep_hai in (("(a) bạn-hỏng", _TIEM_HONG),
+                              ("(b) bạn-mọi-ca-bỏ-qua", _TIEM_BO_QUA_PHUONG_THUC)):
+            goc = _dung_cay_guong("dat-that-" + nhan.split()[0].strip("()"), _TIEM_DAT_THAT,
+                                  "sau", tep_hai=tep_hai)
+            for nhan_cot, ham in (("C5", _chay_cong_c5), ("G7", _chay_cong_g7)):
+                r = ham(goc)
+                print("\n  [I2] ĐỐI CHỨNG DƯƠNG %s · cổng %s → %s"
+                      % (nhan, nhan_cot, _mo_ta_c5(r, nhan_cot)))
+                with self.subTest(ve=nhan, cong=nhan_cot):
+                    self.assertEqual(r[0], 0, "cổng %s: bản ĐÃ VÁ đỏ trước một bộ CHẠY THẬT: %s"
+                                     % (nhan_cot, _mo_ta_c5(r, nhan_cot)))
+                    self.assertEqual((r[1], r[2]), (1, 2),
+                                     "cổng %s: phải đọc ra `1/2`: %s"
+                                     % (nhan_cot, _mo_ta_c5(r, nhan_cot)))
+
+
 class Y_Bang(unittest.TestCase):
     """Bảng phán quyết — in ra ở CUỐI, sau khi mọi ca đã chạy."""
 
@@ -1265,6 +1687,15 @@ class Y_Bang(unittest.TestCase):
 def _dc_duong(nhom):
     """Bật cờ 'đối chứng dương của nhóm này ĐÃ CHẠY THẬT'."""
     DA_CHAY[nhom] = True
+
+
+def _khoa_tam():
+    """Khóa nhận diện đường tạm, GHÉP TỪ HAI MẢNH.
+
+    Ghép từ hai mảnh là CỐ Ý: nếu viết liền thì chính dòng kiểm tra này chứa khóa đó, và phép
+    kiểm tự bắt chính nó — đã đo được ở lượt chạy đầu (`CÒN — VI PHẠM` dù đường tạm đã xoá).
+    """
+    return "def g20_" + "cop_tam("
 
 
 def _kiem_tra_pham_vi():
@@ -1319,7 +1750,7 @@ def main():
     # Thứ tự CỐ Ý: `Y_Bang` in sổ trước; `Z_ChotChan` CUỐI, vì `Z1` chỉ phán được sau khi mọi
     # nhóm phủ định đã chạy đối chứng dương.
     mac_dinh = ["Y_Bang", "A_Nen", "C_BanPhim", "D_BanDoG20", "E_CaySach", "F_DongHo",
-                "G_NG2103", "H_C4", "Z_ChotChan"]
+                "G_NG2103", "H_C4", "I_TiemLoiC5", "Z_ChotChan"]
     danh_sach = sys.argv[1:] or mac_dinh          # cho phép lọc ca (dùng bởi `Z5`)
     # `module=sys.modules['__main__']`, KHÔNG phải `module=None`: `None` làm bộ nạp đi
     # `__import__` từng TÊN LỚP như một mô-đun, và cả chín lớp cùng lỗi `ModuleNotFoundError`
@@ -1336,8 +1767,14 @@ def main():
     pv = _kiem_tra_pham_vi()
     print("    phạm vi ghi: %d đường trong `status`; ngoài hai tệp được phép: %s"
           % (pv["so_duong"], pv["ngoai"] or "KHÔNG"))
-    print("    tệp chép TẠM của bàn đo G20 còn lại trong cây: %s"
-          % ("CÓ — VI PHẠM" if os.path.exists(BAN_DO_G20_TAM) else "không"))
+    ok20, gc20 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
+    ok21, gc21 = nguon_da_va(BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA)
+    print("    TỆP NGUỒN `app/thu/thu_qa_g20.py` (C5): ĐÃ VÁ = %s" % ok20)
+    print("    TỆP NGUỒN `app/thu/thu_qa_g21.py` (G7): ĐÃ VÁ = %s" % ok21)
+    print("    đường chép tạm `g20_cop_tam()`/`g20_va_c5()`: %s"
+          % ("CÒN — VI PHẠM" if (_khoa_tam() in open(__file__, encoding="utf-8").read()
+                                 or os.path.exists(os.path.join(GOC_THU, "thu_qa_g20_tam.py")))
+             else "KHÔNG còn (đã xoá hẳn)"))
     r = prog.result
     print("    ca: %d · hỏng/loi: %d · bỏ qua: %d · MÃ THOÁT = %d"
           % (r.testsRun, len(r.failures) + len(r.errors), len(r.skipped),

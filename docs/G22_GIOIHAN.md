@@ -3,13 +3,16 @@
 Làn **AG-04** · wave **G22** · cây `g21-ag04-gioihan`
 Nền: `integration/g21` · **HEAD đo được: `9ded4a5cee269c02998a0d0181051e3ed1de720b`**
 `main` = `de740dc` (**KHÔNG** chứa G13–G22) — không dùng.
+Lượt **AG-04 MỚI** (§8): **HEAD `44314301ed01223bb15108e2685aff8878802cc2`** + 2 tệp của lượt này (chưa commit)
+— cây này **CHƯA** gộp hợp đồng §1 của AG-02 (xem §8.7).
 
 | Tệp | sha256 | Vai |
 |---|---|---|
 | `app/thu/thu_g19_tich_hop.py` | `ea0fe8646714de67fa2a7be1fd19993c237cc8cd992ba86e6352248ebfc4b86c` | **MỘT bản logic** — cổng tổng hợp G19 (8 ca tự kiểm + gọi runner thật) |
 | `app/thu/thu_qa_g19_tich_hop.py` | `bcd440e34d292d6d519b5291b253193f24849baa4b05bf4bd5db571856d6eeea` | **Bản uỷ quyền MỎNG** — tên tệp khớp khuôn C5/G7, **không** chứa logic thứ hai |
-| `app/thu/thu_g22_gioihan.py` | `775b860092127389bf4310fb62ee9500b1f61b9925dc41203b148352f5a506d5` | Cổng G22 — đo hai chiều **qua chính C5** |
+| `app/thu/thu_g22_gioihan.py` | `a4191fa41c9be50f6e4f8bb518598fbfb502ae80cbdb4206a54f6ef107cdbade` | Cổng G22 — đo hai chiều **qua chính C5**, + khối `B7` (hợp đồng tenant · phủ tuyến · phân trang — §8) |
 | `trien_khai/g21-gioihan/chay_g22.sh` | `e392c1daa1b53b58dce424eb2f8a2ddc0f74c1202a948f52417fcfad350aee39` | Bộ chạy G22 (log ra thư mục tạm · in mã thoát trước mọi pipe) |
+| `trien_khai/g21-gioihan/chay_hopdong.sh` | `09439ca17d758713851c768540b0511963dc07e81b84f7213e96f220fcf76d4c` | Bộ chạy khối `B7` trên **HAI CÂY** (đối chứng ÂM/DƯƠNG) — §8 |
 | `docs/G22_GIOIHAN.md` | *(tệp này)* | Báo cáo |
 
 ---
@@ -332,3 +335,166 @@ tự làm.
 `0/1` → `1/2 · DONG`, và bốn hình dạng tiêm lỗi làm nó ĐỎ lại, tất cả **qua chính C5**. Chỗ
 **chưa xanh** là `N-G22-01`, một **lỗ hổng của bộ đếm AG-01** mà tôi **không có quyền sửa**; cổng
 G22 vì thế **cố ý thoát 1** thay vì tự nới điều kiện cho qua.
+
+---
+
+## 8. LƯỢT AG-04 MỚI — HỢP ĐỒNG TENANT + PHỦ TUYẾN + PHÂN TRANG (khối `B7`)
+
+> Supervisor giao thẳng: **KHÔNG nhận `assertIn(200, 400)`**. Một điều kiện nhận cả `200` LẪN `400`
+> là điều kiện **không phân biệt được hai hành vi trái ngược nhau** — trong đó một hành vi
+> (`200` = máy chủ **bỏ qua im lặng** tham số chọn tenant) chính là dạng hỏng mà cả nhiệm vụ G12
+> sinh ra để diệt. Nên lượt này mỗi vế là **MỘT mã**, và mỗi vế ÂM đều có vế DƯƠNG.
+
+Hợp đồng đóng băng của AG-02: `docs/G22_TRUYVAN.md` §1 (bản ở làn `g21-ag02-backup` — làn này
+**chưa** có tệp đó; xem §8.7). Cây đo: HEAD **`4431430`** + hai tệp của lượt này (chưa commit).
+
+### 8.1 Fixture và cách đo — ba thứ KHÔNG được lẫn
+
+| Thành phần | Làm thế nào | Vì sao không được làm khác |
+|---|---|---|
+| **CSDL** | SQLite trong thư mục `tempfile` do chính bộ đo dựng; `python3 app/migrate.py` chạy THẬT trên thư mục đó | **D-8**: KHÔNG migration CSDL nghiệp vụ. Bộ đo **TỪ CHỐI ĐO (mã thoát 9)** nếu `cau_hinh.DUONG_DAN_CSDL` không nằm trong thư mục tạm |
+| **Dữ liệu** | Hai tenant A/B dựng bằng **CHÍNH `don_hang.tao_don`** của sản phẩm: A = 60 đơn (một **đơn MỐC** `cod=900000111`, `nguoi_nhan_ten` chứa `A-MOC`), B = 1 đơn | `don_hang` có 40 cột sau v7 — fixture tự chế ba cột thì không bắt được lỗi nào thuộc cột thứ tư |
+| **Phủ tuyến** | Bộ đếm cắm vào `truy_van.chay` / `truy_van.tim_don` **TRONG CHÍNH TIẾN TRÌNH CÓ MÁY CHỦ**, rồi bắn HTTP thật (`127.0.0.1`, cổng do hệ điều hành cấp) | Đọc mã nguồn chỉ nói tên mô-đun **có xuất hiện**; nó không chứng minh đường ấy **đi qua**. Tệp nguồn chỉ dùng để biết CẦN DÒ những đường nào |
+
+CSDL nghiệp vụ được **đọc dấu vân tay** (`sha256` · `mtime` · cỡ) TRƯỚC và SAU; lệch là HỎNG (ca
+`B7o`). Cây đối chứng được đo **CHỈ ĐỌC** (`PYTHONDONTWRITEBYTECODE=1`) — đã kiểm: **không** rơi
+`__pycache__` vào cây AG-02.
+
+Lệnh chạy lại (hai cây, một lệnh):
+
+```sh
+sh trien_khai/g21-gioihan/chay_hopdong.sh        # cây nhà (ÂM) + cây AG-02 (DƯƠNG), in cả hai bảng
+python3 app/thu/thu_g22_gioihan.py               # cây nhà, đầy đủ B0…B7
+VIP_G22_CAY_APP=<cây>/app python3 app/thu/thu_g22_gioihan.py   # đo CHỈ ĐỌC trên cây khác
+```
+
+### 8.2 Bằng chứng: **mã thoát · số ca · số bỏ qua** — HAI CÂY
+
+| Cây đo | Lệnh | **Mã thoát** | Số ca | ĐẠT | HỎNG | **BỎ QUA** | KHUYẾT | Thời gian |
+|---|---|---|---|---|---|---|---|---|
+| **Cây nhà** (`4431430` + 2 tệp lượt này) | `python3 app/thu/thu_g22_gioihan.py` | **1** | **32** | 22 | **8** | **0** | **2** | 168,4 s |
+| **Cây đối chứng** (làn AG-02, tuyến đã cắm) | `VIP_G22_CAY_APP=…/g21-ag02-backup/app python3 …` | **0** | **20** | **19** | **0** | **1** | **0** | 1,0 s |
+
+* **8 HỎNG ở cây nhà = 8 GHIM HỢP ĐỒNG** (`B7c`·`B7d`·`B7e`·`B7f`·`B7g`·`B7h`·`B7i`·`B7p`), và cả 8
+  đều **XANH trên cây đối chứng** ⇒ chúng đo **đúng thứ cần đo**, không phải cổng đỏ mù.
+* **2 KHUYẾT**: `B3.d` (**`N-G22-01`** — lỗ hổng bộ đếm của AG-01, đã ghi ở §3) và `B7n`
+  (**hợp đồng §1 chưa được cắm vào cây này** — xem §8.6/§8.7).
+* **1 BỎ QUA ở cây đối chứng** là `B.cay-khac`: lượt đo cây khác **cố ý** không chạy lại B1–B5
+  (C5/G7 là phép đo của **cây này**; chạy lại trên cây khác là đo nhầm đối tượng). Nó **không**
+  phải một ca đạt — và vì thế nó nằm ở cột BỎ QUA, không nằm ở cột ĐẠT.
+* `sh trien_khai/g21-gioihan/chay_hopdong.sh` → **`exit 0`**: runner chỉ xanh khi cặp kết quả ĐÚNG
+  kỳ vọng (nhà `1` · đối chứng `0`). Một cây đối chứng đỏ = phép đo sai **hoặc** hợp đồng bị vi
+  phạm — cả hai đều phải đỏ, nên runner không được phép xanh. Log: `${TMPDIR}/veh_g22_ag04/`.
+* **Vá thêm trong lượt này (đã vấp thật):** hai lượt chạy ĐỒNG THỜI trên cùng một cây tranh nhau
+  tệp mượn `app/thu/thu_qa_g20.py` ⇒ lượt tới muộn chết vì `FileNotFoundError` **trước khi** tới
+  `B7`. Nay chỗ mượn tệp ném `LoiMuonBanSao` **nói rõ nguyên nhân**, phần B1–B5 được bọc lại
+  (một sự cố MÔI TRƯỜNG ở đó ghi thành KHUYẾT rồi **vẫn chạy tiếp `B7`**), và bản sao DỞ bị xoá
+  thay vì để lại rác.
+
+### 8.3 BẢNG TENANT A/B (fixture SQLite TẠM — không dữ liệu thật)
+
+```
+  ┌ BẢNG TENANT A/B — fixture SQLite TẠM (`…/T/g22-ag04-hopdong-<ngẫu nhiên>/hub.db`)
+  │ tenant mã        id   người dùng       số đơn   cod mốc      dấu vết mốc
+  │ A    g22hd-a   1    g22hd-a-owner    60       900000111    nguoi_nhan_ten ~ 'A-MOC'
+  │ B    g22hd-b   2    g22hd-b-owner    1        1000         nguoi_nhan_ten ~ 'B-MOC'
+  └ phiên đăng nhập: A 200 · B 200 · mã đơn MỐC của A: T1-000001
+```
+
+### 8.4 ĐỐI CHỨNG DƯƠNG (A đọc A) + CROSS-TENANT (B đòi dữ liệu của A)
+
+Vế **DƯƠNG** — A đọc dữ liệu của A, ghim **đúng `200`** *kèm hình dạng phản hồi*, vì một `200`
+suông không phân biệt được đường mới với đường cũ:
+
+| | Cây nhà (chưa gộp tuyến) | Cây đối chứng (AG-02) |
+|---|---|---|
+| mã | `200` | `200` |
+| bảng khoá | `['don']` — **LỆCH** (thiếu 10 khoá §1.5) | **11/11 khoá KHỚP** |
+| khoá dữ liệu | `don` (đường cũ) | `dong` (§1.5) |
+| `gioi_han` · `trang` · `lech` | `None` · `None` · `None` | `50` · `1` · `0` |
+| số dòng · `tong` · `con_nua` | 0 (không có khoá `dong`) · `None` · `None` | 50 · 60 · `True` |
+
+Vế **ÂM** — B đòi dữ liệu của A:
+
+```
+  ┌ BẢNG CROSS-TENANT — B đòi dữ liệu của A (kèm vế DƯƠNG của chính A)
+  │                                            CÂY NHÀ (chưa gộp)        CÂY ĐỐI CHỨNG (AG-02)
+  │ B: ?tenant_id=<A> (tự chọn tenant)         200 · don · KHÔNG mốc A   400 · —   · KHÔNG mốc A
+  │ B: ?ma_don=<đơn MỐC của A>                 200 · don · KHÔNG mốc A   200 · dong · KHÔNG mốc A
+  │ A: ?ma_don=<đơn MỐC của A>  (DƯƠNG)        200 · don · CÓ mốc A      200 · dong · CÓ mốc A
+  └
+```
+
+Ba điều **đo được**, không suy diễn:
+
+1. **Cách ly dữ liệu VẪN GIỮ trên đường cũ** — B không nhận được dòng nào của A (thân phản hồi
+   không chứa mã đơn lẫn `cod` mốc của A; `?q=A-MOC` ⇒ 0 dòng; danh sách B chỉ có 1 đơn của B).
+   Đây là vế **DƯƠNG** của chính phép đo cách ly: nếu nó cũng đỏ thì "B không thấy dữ liệu A" chỉ
+   là hệ quả của một máy chủ hỏng.
+2. **Nhưng đường cũ BỎ QUA IM LẶNG tham số chọn tenant** — `?tenant_id=<A>` trả `200`. Đó **đúng
+   là lý do `assertIn(200, 400)` bị bác**: điều kiện ấy gộp "từ chối tường minh" với "im lặng nhận
+   rồi tự lọc hộ" thành một màu xanh, và người gọi không có cách nào biết tham số của mình bị nuốt.
+3. **Hợp đồng ghim `400`** (`§1.4`: *không có đường nào để client chọn tenant*), cây đối chứng trả
+   `400` + `loi` nêu **danh sách tên được nhận** — tức máy chủ **nói ra** thay vì nuốt.
+
+### 8.5 PHÂN TRANG — mặc định 50 · trần 500 bị KẸP · **trang 2 KHÔNG lặp trang 1**
+
+```
+  ┌ BẢNG PHÂN TRANG (§1.3) — fixture 60 đơn của A
+  │ yêu cầu                          CÂY NHÀ: gioi_han/lech/trang/số dòng/tong/con_nua (khoá)
+  │ GET /api/v2/don (mặc định)       None/None/None/60/None/None (don)   ← 0 dòng ở khoá `dong`
+  │ ?gioi_han=100000 (vượt trần)     None/None/None/60/None/None (don)
+  │ ?gioi_han=25&trang=1             None/None/None/25/None/None (don)
+  │ ?gioi_han=25&trang=2             None/None/None/25/None/None (don)
+  │ ?gioi_han=25&trang=3             None/None/None/25/None/None (don)
+  └ id trang 1 ∩ trang 2 = 25 id (36…60) · hợp trang 1+2 = 25 id  ⇒ **LẶP TRANG**
+```
+
+| | Cây nhà (đường cũ) | Cây đối chứng (AG-02) |
+|---|---|---|
+| mặc định | không khai `gioi_han`; trả **60** dòng (mặc định cũ **100**) | `gioi_han=50` · trang 1 · `lech=0` · **50** dòng · `tong=60` · `con_nua=True` |
+| xin `gioi_han=100000` | trả **60** dòng, không khai giá trị thật | **kẹp về 500** và **trả ra** `gioi_han=500` (không 400) |
+| trang 2 vs trang 1 | **giống hệt trang 1** (25/25 id trùng) — đường cũ không biết `trang`/`lech` | **giao = RỖNG**, hợp = 50 id khác nhau |
+| trang 3 | 25 dòng (lặp) | **10** dòng · `con_nua=False` (60 = 25+25+10) |
+
+Đây là lỗi **hỏng im lặng của phân trang** mà hợp đồng §1.3 nói tới: người dùng bấm "trang sau" và
+nhận lại đúng những dòng vừa xem, không có gì báo.
+
+### 8.6 PHỦ TUYẾN `/api/v2/don*` — bộ đếm trong tiến trình máy chủ
+
+Cây nhà: **12 tuyến tồn tại · 0 đi qua `truy_van.chay()`**. Cây đối chứng (AG-02): **13 tuyến tồn
+tại · 1 đi qua `truy_van.chay()`** — và tuyến ấy **đúng là `GET /api/v2/don`** (Δchay=1, Δtim_don=1).
+
+```
+  ┌ BẢNG PHỦ TUYẾN (cây đối chứng AG-02) — cột Δ là BỘ ĐẾM, không phải suy luận
+  │  #  method tuyến                                    mã   Δchay Δtim  phán quyết ĐO ĐƯỢC
+  │  1  GET   /api/v2/don                               200   1     1    ĐI QUA `truy_van.chay()`   ← TRONG §1
+  │  2  POST  /api/v2/don                               400   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  3  GET   /api/v2/don/(\d+)                         200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  4  POST  /api/v2/don/(\d+)                         200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  5  POST  /api/v2/don/(\d+)/(duyet|gui|huy)         200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  6  GET   /api/v2/don/(\d+)/(hanh-trinh|…-hang)     200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  7  POST  /api/v2/don/(\d+)/(tu-choi|doi-soat…)     400   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  8  GET   /api/v2/don/(\d+)/mat-hang                200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │  9  GET   /api/v2/don/can-doi-soat                  200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │ 10  POST  /api/v2/don/kiem                          200   0     0    KHÔNG ĐI QUA — LỖ HỔNG
+  │ 11  GET   /api/v2/don/loc-mo-ta                     200   0     0    KHÔNG chạy truy vấn — ĐÚNG §1.7 (ghim B7p)
+  │ 12  POST  /api/v2/don/tim                           200   0     0    KHÔNG ĐI QUA — LỖ HỔNG   (§1.8.5 khai ngoài phạm vi)
+  │ 13  GET   /api/v2/don/xuat-csv                      200   0     0    KHÔNG ĐI QUA — LỖ HỔNG   (§1.8.5 khai ngoài phạm vi)
+  └ tuyến TỒN TẠI: 13 · ĐI QUA `truy_van.chay()`: 1 · ĐÚNG §1.7 (mô tả, không chạy truy vấn): 1 · LỖ HỔNG (Δchay=0): 11
+```
+
+**Không giấu tuyến nào**: cả 13 tuyến đều nằm trong bảng với Δ in ra bằng số. Cột *phạm vi hợp đồng
+§1* chỉ nói thêm rằng §1.8 đã **khai trước** 11 tuyến là ngoài phạm vi (CRUD theo id, cửa cũ
+`POST /don/tim`, xuất CSV) — đó là **nợ đã biết**, không phải bất ngờ; còn tuyến `loc-mo-ta` **đứng
+Δ=0 là ĐÚNG thiết kế** (§1.7: đường mô tả trả `mo_ta_bo_loc()`, không chạy truy vấn) và được ghim
+bằng **đẳng thức** với chính hàm mô-đun ở `B7p`, không bằng lời.
+
+### 8.7 Phát hiện của lượt này
+
+| # | Phát hiện | Mức | Chủ |
+|---|---|---|---|
+| **TRẠNG THÁI** | **Hợp đồng §1 của AG-02 CHƯA được gộp vào làn này**: `PHIEN_BAN_SCHEMA=9` (AG-02: 10), `grep -c 'truy_van\.' app/server.py` = **0**, không có tuyến `loc-mo-ta`. Vì thế 8 ghim hợp đồng ĐỎ **trên cây nhà** — đỏ vì **cây thiếu tuyến**, và chúng XANH trên cây AG-02 (đối chứng). Việc cần: AG-00 gộp nhánh AG-02 rồi chạy lại `chay_hopdong.sh` (kỳ vọng khi đó: **nhà = 0**, và `B7n` chuyển ĐẠT) | — | **AG-00** |
+| **`N-G22-04`** | **Câu chữ hợp đồng §1.5**: viết *"`200` trả về **đúng 10 khoá**"* nhưng bảng ngay dưới liệt kê **11** dòng, và §3.3 cũng liệt kê **11**. Đo được: `truy_van.chay()` trả **10** khoá (`B7m`), phản hồi HTTP trả **11** vì máy chủ thêm bí danh `don` (`B7c`). **Mã đúng, câu chữ lệch một khoá** ⇒ sửa câu thành *"10 khoá của lớp truy vấn + bí danh `don`"* | THẤP | **AG-02** |
+| **PHỦ TUYẾN** | **1/13** tuyến `/api/v2/don*` đi qua lớp truy vấn. Trong 12 tuyến còn lại: **1** là đường mô tả §1.7 (đúng thiết kế), **11** là CRUD/ghi/cửa cũ mà §1.8 **đã khai** ngoài phạm vi. Không tuyến nào **âm thầm** nằm ngoài: cả 12 đều Δ=0 và in rõ | THẤP (nợ đã biết) | ghi nhận |
+| **PHÂN TRANG ĐƯỜNG CŨ** | `?trang=2&gioi_han=25` trả về **đúng 25 dòng đầu** (trùng trang 1) vì đường cũ chỉ đọc `gioi_han`; `?gioi_han` mặc định cũ là **100**, hợp đồng mới là **50** | — | đóng khi gộp AG-02 |

@@ -2,45 +2,34 @@
 # -*- coding: utf-8 -*-
 """AG-01 (G22) — BỘ KIỂM ĐỘC LẬP cho wave G22. VAI: NGƯỜI KIỂM, KHÔNG PHẢI NGƯỜI VIẾT.
 
-NỀN ĐO — ĐỌC KỸ, NHÃN VÀ SHA KHÔNG KHỚP NHAU:
+NỀN ĐO — VÒNG 2 (`ctx_ca352ff451e7`, sau khi 5 agent xong vòng 1):
 
-    LƯỢT NÀY (`N-G22-01`, AG-01 G22): worktree `g21-ag01-qa` có `HEAD = 85e0a6c`
-    (`AG-1 (G22) ket qua luot G22` — AG-00 chốt lượt trước) và cây chỉ mục `1340029a`
-    (`85e0a6c^{tree}`). Cây tích hợp mà AG-00 đang gộp vào là `integration/g20 @ 3b7e93b`
-    (`AG-00: dua bo kiem G20 vao cay tich hop`).
-    Ghim `NEN_SHA=7344c02` / `TREE_NEN=8fc624de` vẫn là mốc của LƯỢT TRƯỚC, KHÔNG được sửa cho
-    khớp lượt này: sửa ghim cho vừa mắt là đúng thứ wave này đang diệt. Hệ quả ĐO ĐƯỢC và NÓI
-    THẲNG: `A1` ĐỎ và `E1` BỎ QUA vì lý do MÔI TRƯỜNG ĐO — xem §1.2 `docs/QA_G22.md`.
+    Worktree `g22-a2-contract` đang ở `HEAD = dd788fc` — commit gộp CHÍNH bản vá vòng 1 của
+    AGENT 02 vào `integration/g20` (cha: `a76ec51`), cây của HEAD = `9628587`.
+    Hai ghim của vòng 1 (`NEN_SHA=3b7e93b` / `TREE_NEN=37079aa8`) đã STALE: đó là cây của LƯỢT
+    TRƯỚC. Vòng 2 cập nhật ghim theo ĐÚNG nền hiện tại; `A1` tự kiểm `NEN_SHA^{tree}` ==
+    `TREE_NEN` nên ghim lệch nổ ra như lỗi GHIM, không bị báo nhầm thành lỗi MÔI TRƯỜNG.
+    Lịch sử ghim: `7344c02/8fc624de` → `3b7e93b/37079aa8` → **`dd788fc/9628587`**.
 
-TRẠNG THÁI GIT CỦA WORKTREE NÀY — KHAI THẲNG, VÌ NÓ ẢNH HƯỞNG TỚI MỌI CỔNG "CÂY SẠCH":
+GIT SANDBOX — HAI NGUYÊN NHÂN ĐỎ CỦA `A1`, CẢ HAI ĐÃ ĐƯỢC XỬ LÝ (AGENT 03 · `docs/G22_A1_GIT.md`):
 
-    Sandbox CHẶN ghi `.git`: `git write-tree` trả `rc=128`
-    (`Unable to create .../worktrees/g21-ag01-qa/index.lock: Operation not permitted`) — đo lại
-    trong chính lượt này. Nên `tree_hien_tai()` KHÔNG đọc được cây chỉ mục, và `A1` không thể
-    xanh ở đây dù cây có đúng nền hay không.
-    Hệ quả ĐO ĐƯỢC (`qa_g22_lan1_nhiem.log`, lượt trước): cổng "cây sạch" thấy 13 đường NGOÀI
-    vùng đỏ lên — **một cái ĐỎ GIẢ của môi trường, không phải của sản phẩm**.
+    (a) MÔI TRƯỜNG: `git write-tree` TRẦN bị chặn ghi `gitdir/index.lock` (`Operation not
+        permitted`, `rc=128`) vì gitdir nằm NGOÀI vùng sandbox cho ghi. Vòng 2 thay
+        `tree_hien_tai()` bằng phép đo TƯƠNG ĐƯƠNG ở mục 3.3 của tài liệu AGENT 03: BẢN SAO
+        index + ODB tạm + alternates CHỈ ĐỌC — mọi thứ cần GHI rơi vào TMP, mọi thứ cần ĐỌC lấy
+        từ kho thật; index thật KHÔNG đổi sha256, KHÔNG có `index.lock`.
+        ĐỐI CHỨNG DƯƠNG nhúng ngay trong `A1`: tiêm 1 mục vào BẢN SAO index ⇒ tree ĐỔI
+        (`9628587` → `44025342f53b`), còn index thật giữ nguyên sha256. Phép đo vì thế KHÔNG mù.
+    (b) GHIM CŨ: chỉ sửa môi trường mà giữ ghim cũ thì `A1` VẪN ĐỎ — đo được ở `docs/G22_A1_GIT.md`
+        §4.3/§5. Vòng 2 cập nhật ghim theo HEAD hiện tại VÀ thêm vế tự kiểm ghim ở trên.
 
-    LƯỢT NÀY thêm một nguyên nhân ĐỎ-GIẢ nữa, cũng phải NÓI RA: cây thợ có 4 tệp CHƯA COMMIT
-    (`app/thu/thu_qa_g20.py` mới, `app/thu/thu_qa_g21.py` vá `G7`, `app/thu/thu_qa_g22.py`,
-    `docs/QA_G22.md`) — `E1` gọi ba cổng "cây sạch" của wave TRƯỚC, và cổng nào có danh sách
-    trắng HẸP (chỉ nhận tệp của làn mình) thì thấy chúng là "ngoài phép". Trên cây ĐÃ COMMIT
-    (tích hợp) thì `git status` sạch và ba cổng đó xanh.
+    Một lỗi MÔI TRƯỜNG ĐỘC LẬP đã có từ trước: `GIT_CONFIG_COUNT=2` thiếu `GIT_CONFIG_KEY_*`
+    làm MỌI lệnh git thoát 128. `_git_env()` gỡ gia đình biến dị dạng để ĐO ĐƯỢC — không phải
+    để "cho xanh"; ca `C3` của bàn đo G20 mới là ca đo môi trường NGUYÊN BẢN.
 
-    HAI ĐƯỜNG "CHỮA" ĐÃ THỬ VÀ ĐÃ HỎNG — ghi lại vì chúng là bằng chứng, không phải lời kể:
-
-      (1) `GIT_DIR` BÓNG trong `TMP` (HEAD=nền, index=nền, mượn `refs/` kho chung). Chạy tốt cho
-          tới khi một bộ thử KHÁC gọi `git init <thư-mục-tạm>` — `GIT_DIR` ĐÈ lên đích của
-          `git init`, nên nó init thẳng vào `GIT_DIR` bóng và ghi `bare = true` vào đó. Từ phút
-          16:34 của lượt `qa_g22_lan4`, MỌI `git ls-files --others` trả 128 và
-          `thu_g21_chotcay.py` lỗ 8/13 ca — ĐỎ GIẢ hoàn toàn do môi trường đo.
-      (2) Bản sao THẬT: `git clone --shared --no-checkout <kho> $CP && git checkout --detach
-          7344c02` — một kho BÌNH THƯỜNG, `HEAD` = nền, cây SẠCH, và `git init` của bộ khác
-          không chạm tới nó. **Đây là cách chạy ĐÚNG của bộ kiểm này.**
-
-    ⇒ Bộ kiểm TỰ ĐO môi trường (`write-tree` == `TREE_NEN`; `HEAD` == nền) và, khi `HEAD` không
-      phải nền, nó TỪ CHỐI phán quyết trên ba cổng "cây sạch" kèm lý do — thay vì bỏ qua im lặng
-      hoặc báo đỏ giả. Không một byte nào ghi vào `.git` thật.
+    ⇒ Bộ kiểm TỰ ĐO môi trường (`write-tree` tương đương == `TREE_NEN`; `HEAD` == nền) và, khi
+      `HEAD` không phải nền, nó TỪ CHỐI phán quyết trên ba cổng "cây sạch" kèm lý do — thay vì
+      bỏ qua im lặng hoặc báo đỏ giả. Không một byte nào ghi vào `.git` thật.
 
 LỆNH CHẠY:
 
@@ -96,19 +85,21 @@ import unittest
 GOC_CAY = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 GOC_APP = os.path.join(GOC_CAY, "app")
 GOC_THU = os.path.join(GOC_CAY, "app", "thu")
+GOC_SPEC = os.path.join(GOC_CAY, "thu_giao_dien")
 
 # NỀN: SHA, không phải nhãn. `TREE_NEN` là thứ được CANH, vì nó là thứ thật sự được đo.
 #
-# NỀN CỦA LƯỢT `N-G22-01` = **CÂY TÍCH HỢP** `integration/g20 @ 3b7e93b` — đúng cái cây mà AG-00
-# đã đưa `app/thu/thu_qa_g20.py` + `docs/QA_G20.md` vào, và là cây mà bản giao của lượt này sẽ
-# được GỘP VÀO. Đo trên cây nào thì GHIM CÂY ĐÓ — ghim cũ `7344c02`/`8fc624de` là mốc của LƯỢT
-# TRƯỚC (cây đó KHÔNG có `thu_qa_g20.py` lẫn `thu_qa_g19_tich_hop.py`, nên `C5`/`G7` không thể
-# xanh ở đó — xem `docs/QA_G22.md` §9.3 và §10).
-NEN_SHA = "3b7e93b59b70449b8306eb4fa374dd1e97a8e7af"
-TREE_NEN = "37079aa83f2ad62c2862f2eb7ce1c809c24570fb"
-# HAI MỐC CỦA LƯỢT TRƯỚC — giữ lại làm LỊCH SỬ, KHÔNG dùng để phán quyết nữa:
+# NỀN CỦA VÒNG 2 = **HEAD HIỆN TẠI** của worktree `g22-a2-contract`: `dd788fc` (commit gộp bản
+# vá vòng 1 của AGENT 02 vào `integration/g20`), cây `9628587`. Đây là cây mà bản giao của vòng
+# 2 sẽ được gộp vào, nên đo trên cây nào thì GHIM CÂY ĐÓ.
+# GHIM CŨ `3b7e93b`/`37079aa8` (vòng 1) và `7344c02`/`8fc624de` (trước nữa) chỉ còn là LỊCH SỬ.
+NEN_SHA = "dd788fc01c5c7e7b4da93e2a216aa5d4fe251d0b"
+TREE_NEN = "96285874039248115549c647caa168ec615ce7f2"
+# CÁC MỐC CỦA LƯỢT TRƯỚC — giữ lại làm LỊCH SỬ, KHÔNG dùng để phán quyết nữa:
 NEN_LUOT_TRUOC = "601718e42ea23a30b849d606890070d4816cbf0b"    # HEAD worktree đầu lượt trước
 NEN_LUOT_TRUOC_2 = "7344c020abad562dafb593c4234d5e1f9ecfd18c"  # ghim nền của lượt trước
+NEN_LUOT_TRUOC_3 = "3b7e93b59b70449b8306eb4fa374dd1e97a8e7af"  # ghim nền vòng 1 (cây 37079aa8)
+TREE_LUOT_TRUOC_3 = "37079aa83f2ad62c2862f2eb7ce1c809c24570fb"
 
 TEP_DUOC_PHEP = ("docs/QA_G22.md", "docs/G22_CONTRACT.md", "app/thu/thu_qa_g22.py",
                  "app/thu/thu_qa_g21.py", "app/thu/thu_qa_g20.py")
@@ -146,6 +137,11 @@ PW_BROWSERS_CHI_DINH = os.path.expanduser(
     "~/code/veh4-g12-playwright/node_modules/playwright-core/.local-browsers")
 PW_CHROMIUM_TUONG_DOI = ("chromium-1194", "chrome-mac", "Chromium.app", "Contents", "MacOS",
                          "Chromium")
+# Nhị phân mà `chay.sh` THẬT SỰ dùng khi headless — đường mà đề bài đã ghim.
+PW_HEADLESS_TUONG_DOI = ("chromium_headless_shell-1194", "chrome-mac", "headless_shell")
+# sha256 của headless_shell revision 1194 (Chromium 141.0.7390.37) — CHỐT NỘI DUNG, không phải
+# "thấy tệp là tin". Lệch ⇒ revision/nhị phân đã đổi, phải cập nhật ghim có ý thức.
+PW_HEADLESS_SHA256 = "a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040"
 PW_REVISION_DOI = "1194"
 
 # Log `chay_tat_ca.sh` của lượt đo này — dùng khi KHÔNG bật `VIP_G22_DAY_DU`.
@@ -221,18 +217,101 @@ def chay_con(ma, giay=900, env_them=None):
 # "dong" = giá trị phải có khi khoản nợ đã đóng.
 # Giá trị KHÁC CẢ HAI ⇒ NUA_VOI ⇒ ĐỎ ở MỌI chế độ. Ở chế độ `gop` thì "nen" CŨNG ĐỎ.
 
+# SỐ CA E2E — ĐẾM BẰNG CHÍNH PLAYWRIGHT, KHÔNG GHIM MỘT CON SỐ.
+#
+# Vòng 1 ghim số ca của một lượt chạy CŨ: `(51,0,0)` và `(7,0,0)`. Cây hiện tại có 65 ca / 8 ca
+# bàn phím; ghim cũ là một SỰ THẬT MÔI TRƯỜNG ĐÃ TRÔI — đúng họ H5/N-G19-04. Vòng 2 đếm số ca
+# bằng `npx playwright test --list` (nạp config + liệt kê ca, KHÔNG chạy trình duyệt): đây là
+# nguồn sự thật vì nó TÍNH cả ca sinh trong vòng lặp (`02_bo_cuc` × 3 bề rộng, `03_quyen` × 3
+# vai trò) mà đếm chuỗi `test(` sẽ đếm sai. ĐỐI CHỨNG ÂM nằm trong `B2`/`B3`: bỏ ĐÚNG một ca
+# khai báo trong bản sao TẠM ⇒ bộ đếm tĩnh giảm đúng 1; và hạ 1 ca trong báo cáo ⇒ cổng PHẢI ĐỎ.
+MAU_CA_SPEC = re.compile(r"^\s*test(?:\.(?:only|skip|fixme))?\s*\(", re.M)
+
+
+def dem_ca_spec_mot_tep(duong):
+    """Đếm số DÒNG khai ca trong MỘT tệp spec. Đọc NỘI DUNG, không đoán.
+
+    Chỉ dùng cho `06_ban_phim.spec.js` (tệp này KHÔNG sinh ca trong vòng lặp) làm ĐỐI CHỨNG ÂM
+    cho bộ đếm; số ca CHÍNH THỨC lấy từ `so_ca_playwright()`.
+    """
+    with open(duong, encoding="utf-8") as f:
+        return len(MAU_CA_SPEC.findall(f.read()))
+
+
+def so_ca_playwright(bo_loc=""):
+    """ĐẾM CA BẰNG CHÍNH PLAYWRIGHT: `npx playwright test --list` — KHÔNG chạy trình duyệt.
+
+    Vì sao không đếm `test(` bằng regex: `02_bo_cuc.spec.js` khai MỘT ca trong vòng lặp 3 bề
+    rộng, `03_quyen.spec.js` khai MỘT ca trong vòng lặp 3 vai trò — Playwright tính 3+3, regex
+    chỉ đếm 1+1. `--list` nạp chính config của cây và liệt kê đúng những ca runner sẽ chạy.
+    `VIP_GD_GOC` chỉ để config nạp được; `--list` KHÔNG mở kết nối nào.
+    """
+    env_them = {"PLAYWRIGHT_BROWSERS_PATH": "0",
+                "VIP_GD_GOC": "http://127.0.0.1:1",
+                "VIP_GD_NEN": os.path.join(TMP_GOC, "g22-list")}
+    lenh = ["npx", "playwright", "test", "--list"] + ([bo_loc] if bo_loc else [])
+    rc, out = chay(lenh, giay=300, env_them=env_them)
+    theo_tep = {}
+    for dong in out.splitlines():
+        m = re.search(r"›\s+(\S+\.spec\.js):\d+:\d+\s+›", dong)
+        if m:
+            theo_tep[m.group(1)] = theo_tep.get(m.group(1), 0) + 1
+    m = re.search(r"Total:\s+(\d+)\s+tests?\s+in\s+(\d+)\s+files?", out)
+    tong = int(m.group(1)) if m else sum(theo_tep.values())
+    return {"toan_bo": tong,
+            "ban_phim": theo_tep.get("06_ban_phim.spec.js", 0),
+            "so_tep": (int(m.group(2)) if m else len(theo_tep)),
+            "theo_tep": theo_tep, "rc": rc,
+            "loi": "" if rc == 0 and tong else "\n".join(out.splitlines()[-25:])}
+
+
+SO_CA = so_ca_playwright()
+
+
+def doi_chung_am_dem_ca(ten_tep="06_ban_phim.spec.js"):
+    """Bỏ ĐÚNG MỘT dòng khai ca trong bản sao TẠM ⇒ bộ đếm phải giảm ĐÚNG 1.
+
+    Chứng minh số ca là ĐẾM TỪ NỘI DUNG tệp, không phải một hằng số được dán vào cho khớp
+    (H5/N-G19-04). Bản sao nằm trong `TMP`; tệp trong cây không bị chạm (sha256 kiểm ở `B3`).
+    """
+    goc = os.path.join(GOC_SPEC, ten_tep)
+    with open(goc, encoding="utf-8") as f:
+        than = f.read()
+    n_goc = len(MAU_CA_SPEC.findall(than))
+    dong = than.splitlines(True)
+    bo = None
+    for i, d in enumerate(dong):
+        if MAU_CA_SPEC.match(d):
+            bo = dong.pop(i)
+            break
+    if bo is None:
+        return {"rc": 1, "loi": "không tìm được dòng khai ca để bỏ", "n_goc": n_goc}
+    tmp = tempfile.mkdtemp(prefix="g22-dem-ca-")
+    try:
+        p = os.path.join(tmp, ten_tep)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("".join(dong))
+        return {"rc": 0, "n_goc": n_goc, "n_tam": dem_ca_spec_mot_tep(p),
+                "dong_bo": bo.strip()[:90]}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 SO_DO = {
     # Điểm 1 Supervisor giao — tầng 3 Chromium. Bộ ba (ĐẠT, HỎNG, KHÔNG CHẠY).
-    # Nền: (0, 7, 44) — `browserType.launch` chết vì THIẾU NHỊ PHÂN. Đóng: (51, 0, 0).
+    # "nen" = hình dạng khi THIẾU NHỊ PHÂN (mọi ca bàn phím hỏng, phần còn lại không chạy), suy
+    #         từ số đo G21 (0, 7, 44) quy theo số ca HIỆN TẠI — không phải một con số mới bịa ra.
+    # "dong" = cả bộ chạy sạch, suy TRỰC TIẾP từ số ca Playwright liệt kê (`--list`).
     #
     # HAI CỔNG, KHÔNG PHẢI MỘT — và đây KHÔNG phải "chạy lại cho xanh":
-    #   · `e2e-ban-phim-7` = `06_ban_phim.spec.js` (ĐÚNG 7 ca) — đây là "E2E 7/7" mà Supervisor
-    #     giao, và là thứ AG-06 đã chạy. ĐO ĐƯỢC: 3/3 lượt riêng đều (7, 0, 0), TẤT ĐỊNH.
-    #   · `e2e-toan-bo` = cả bộ 51 ca. ĐO ĐƯỢC: 4 lượt ⇒ 3 lượt (51,0,0,0) + 1 lượt (49,1,1,0)
-    #     ⇒ **CHẬP CHỜN**, xem `N-G22-01`. Giữ nó làm cổng RIÊNG để chỗ chập chờn không bị
-    #     trộn lẫn với chỗ tất định.
-    "e2e-ban-phim-7": {"nen": (0, 7, 0), "dong": (7, 0, 0)},
-    "e2e-toan-bo": {"nen": (0, 7, 44), "dong": (51, 0, 0)},
+    #   · `e2e-ban-phim` = `06_ban_phim.spec.js` (8 ca ở cây này) — đúng "E2E bàn phím" mà
+    #     Supervisor giao. Tách riêng để chỗ tất định không bị trộn với cổng toàn bộ.
+    #   · `e2e-toan-bo` = cả bộ (65 ca ở cây này). ĐO ĐƯỢC ở vòng 1: 4 lượt ⇒ 3 lượt sạch +
+    #     1 lượt (49,1,1), tức **CHẬP CHỜN** — xem `N-G22-01`.
+    "e2e-ban-phim": {"nen": (0, SO_CA["ban_phim"], 0),
+                     "dong": (SO_CA["ban_phim"], 0, 0)},
+    "e2e-toan-bo": {"nen": (0, SO_CA["ban_phim"], SO_CA["toan_bo"] - SO_CA["ban_phim"]),
+                    "dong": (SO_CA["toan_bo"], 0, 0)},
 
     # Điểm 2 — cổng "cây sạch" của wave TRƯỚC. Số cổng XANH trên cây chỉ có tệp AG-01 hợp lệ.
     # Nền: 0/3 (cả ba ĐỎ). Đóng: 3/3.
@@ -287,7 +366,7 @@ def dat_cong(ten_cong, do_duoc):
 
 # Nhóm ca PHỦ ĐỊNH → tên các ca. Một ca phủ định là ca khẳng định "hệ TỪ CHỐI / KHÔNG làm gì".
 CA_PHU_DINH = {
-    "e2e-ban-phim-7": ("C_BanPhim.test_b3_e2e_bay_ca_ban_phim_chay_that",),
+    "e2e-ban-phim": ("C_BanPhim.test_b3_e2e_tam_ca_ban_phim_chay_that",),
     "e2e-toan-bo": ("C_BanPhim.test_b2_chay_e2e_toan_bo_that",),
     "cay-sach-3-ban-sao": ("E_CaySach.test_e1_ba_cong_cay_sach_chay_that"),
     "e3-ba-luot-cung-giay": ("F_DongHo.test_f1_do_that_bang_dong_ho_dong_bang",),
@@ -301,8 +380,8 @@ CA_PHU_DINH = {
 
 # ĐỐI CHỨNG DƯƠNG: mỗi nhóm phủ định PHẢI có một ca chạy ĐÚNG đường đó và cho kết quả KHÁC.
 DOI_CHUNG = {
-    "e2e-ban-phim-7":
-        "chính bảy ca đó phải ĐẠT HẾT; nếu 0 đạt thì 'hỏng' không phân biệt được "
+    "e2e-ban-phim":
+        "chính tám ca đó phải ĐẠT HẾT; nếu 0 đạt thì 'hỏng' không phân biệt được "
         "với 'KHÔNG CHẠY ĐƯỢC vì thiếu nhị phân' — đúng thứ đã xảy ra ở lượt G21 (7 hỏng + "
         "44 không chạy, 0 tín hiệu).",
     "e2e-toan-bo":
@@ -388,9 +467,105 @@ def head_hien_tai():
     return out.strip() if rc == 0 else ""
 
 
+def _git_dir_va_common():
+    """→ `(gitdir tuyệt đối, git-common-dir tuyệt đối)`. `(None, None)` nếu không đọc được."""
+    def _doc(*tham_so):
+        rc, out = _git(*tham_so)
+        dong = [d.strip() for d in out.splitlines() if d.strip()]
+        return dong[-1] if rc == 0 and dong else ""
+
+    git_dir = _doc("rev-parse", "--git-dir")
+    common = _doc("rev-parse", "--git-common-dir")
+    if not git_dir or not common:
+        return None, None
+    if not os.path.isabs(git_dir):
+        git_dir = os.path.join(GOC_CAY, git_dir)
+    if not os.path.isabs(common):
+        common = os.path.join(GOC_CAY, common)
+    return git_dir, common
+
+
 def tree_hien_tai():
-    rc, out = _git("write-tree")
-    return out.strip() if rc == 0 else "LỖI(rc=%d)" % rc
+    """`write-tree` TƯƠNG ĐƯƠNG — KHÔNG ghi `.git` của worktree chính (AGENT 03 · §3.3).
+
+    Sandbox chỉ cho ghi dưới workspace + TMP; gitdir của worktree nằm NGOÀI vùng đó, nên
+    `git write-tree` TRẦN trả `rc=128` (`index.lock: Operation not permitted`). Phép đo này:
+      (1) COPY index thật sang TMP;
+      (2) `write-tree` trên bản sao (`GIT_INDEX_FILE`), ghi object mới vào ODB TẠM
+          (`GIT_OBJECT_DIRECTORY`);
+      (3) đọc object cũ qua alternates CHỈ ĐỌC (`GIT_ALTERNATE_OBJECT_DIRECTORIES`).
+    Cây trả về là cây của ĐÚNG index đang có; index thật không đổi sha256, không có lock.
+    """
+    git_dir, common = _git_dir_va_common()
+    if not git_dir or not common:
+        return "LỖI(rc=128)"
+    tmp = tempfile.mkdtemp(prefix="g22-a1-")
+    try:
+        os.makedirs(os.path.join(tmp, "objects"), exist_ok=True)
+        index_tam = os.path.join(tmp, "index")
+        shutil.copy2(os.path.join(git_dir, "index"), index_tam)
+        rc, out = chay(["git", "write-tree"], env_them={
+            "GIT_INDEX_FILE": index_tam,
+            "GIT_OBJECT_DIRECTORY": os.path.join(tmp, "objects"),
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": os.path.join(common, "objects"),
+        })
+        dong = [d.strip() for d in out.splitlines() if d.strip()]
+        return dong[-1] if rc == 0 and dong else "LỖI(rc=%d)" % rc
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def tiem_index_ban_sao():
+    """ĐỐI CHỨNG DƯƠNG cho `tree_hien_tai()`: tiêm 1 mục vào BẢN SAO index.
+
+    Không có vế này thì "write-tree == TREE_NEN" có thể chỉ là một phép đo MÙ. Ở đây:
+      · bản sao index nhận thêm một mục mới (`__tiem_g22.txt`) với blob ghi vào ODB TẠM;
+      · tree của bản sao PHẢI ĐỔI;
+      · index THẬT phải giữ nguyên sha256 và KHÔNG sinh `index.lock`.
+    Trả dict — mọi giá trị đọc từ lệnh thật.
+    """
+    git_dir, common = _git_dir_va_common()
+    if not git_dir or not common:
+        return {"rc": 128, "loi": "không đọc được gitdir/git-common-dir"}
+    index_that = os.path.join(git_dir, "index")
+    lock = os.path.join(git_dir, "index.lock")
+    ra = {"rc": 1, "co_lock_truoc": os.path.exists(lock),
+          "index_sha256_truoc": _bam(index_that)}
+    tmp = tempfile.mkdtemp(prefix="g22-a1-tiem-")
+    env_tam = None
+    try:
+        objects = os.path.join(tmp, "objects")
+        os.makedirs(objects, exist_ok=True)
+        index_tam = os.path.join(tmp, "index")
+        shutil.copy2(index_that, index_tam)
+        env_tam = {"GIT_INDEX_FILE": index_tam,
+                   "GIT_OBJECT_DIRECTORY": objects,
+                   "GIT_ALTERNATE_OBJECT_DIRECTORIES": os.path.join(common, "objects")}
+
+        def _tree():
+            rc, out = chay(["git", "write-tree"], env_them=env_tam)
+            dong = [d.strip() for d in out.splitlines() if d.strip()]
+            return rc, (dong[-1] if rc == 0 and dong else ""), out
+
+        rc0, tree_truoc, out0 = _tree()
+        tep = os.path.join(tmp, "tep_tiem.txt")
+        with open(tep, "w", encoding="utf-8") as f:
+            f.write("tiem-loi-doi-chung-duong-cua-G22-AGENT-02\n")
+        rc1, out1 = chay(["git", "hash-object", "-w", tep],
+                         env_them={"GIT_OBJECT_DIRECTORY": objects})
+        blob = [d.strip() for d in out1.splitlines() if d.strip()][-1] if rc1 == 0 else ""
+        rc2, out2 = chay(["git", "update-index", "--add", "--cacheinfo",
+                          "100644,%s,__tiem_g22.txt" % blob], env_them=env_tam)
+        rc3, tree_sau, out3 = _tree()
+        ra.update({"rc": 0 if (rc0 == rc1 == rc2 == rc3 == 0) else max(rc0, rc1, rc2, rc3),
+                   "tree_truoc": tree_truoc, "tree_sau": tree_sau, "blob": blob,
+                   "co_lock_sau": os.path.exists(lock),
+                   "index_sha256_sau": _bam(index_that),
+                   "loi": "" if (rc0 == rc1 == rc2 == rc3 == 0) else (out0 + out1 + out2 + out3)[-600:]})
+        return ra
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        ra["co_lock_cuoi"] = os.path.exists(lock)
 
 
 def delta_head_voi_nen():
@@ -409,13 +584,17 @@ def delta_head_voi_nen():
 
 
 def van_tay(env_git_dir=None):
-    """Vân tay cây: HEAD, tree, và băm danh sách tệp theo dõi. Trả dict."""
+    """Vân tay cây: HEAD, tree, và băm danh sách tệp theo dõi. Trả dict.
+
+    `tree` lấy từ `tree_hien_tai()` — phép đo TƯƠNG ĐƯƠNG bằng index tạm, nên vân tay đọc được
+    cả khi sandbox chặn ghi `.git` (AGENT 03 · `docs/G22_A1_GIT.md` §3.3).
+    """
     env_them = {"GIT_DIR": env_git_dir} if env_git_dir else {}
     ra = {}
-    for ten, tham in (("head", ("rev-parse", "HEAD")), ("tree", ("write-tree",)),
-                      ("so_tep", ("ls-files",))):
+    for ten, tham in (("head", ("rev-parse", "HEAD")), ("so_tep", ("ls-files",))):
         rc, out = chay(["git"] + list(tham), env_them=env_them)
         ra[ten] = out.strip() if rc == 0 else "LỖI(rc=%d)" % rc
+    ra["tree"] = tree_hien_tai()
     rc, out = chay(["git", "ls-files", "-s"], env_them=env_them)
     ra["bam_danh_sach"] = hashlib.sha256(out.encode()).hexdigest() if rc == 0 else "LỖI"
     ra["so_tep"] = str(len([x for x in ra["so_tep"].splitlines() if x.strip()]))
@@ -449,20 +628,30 @@ def dem_playwright(text):
             _so(r"(\d+) did not run"))
 
 
-def chromium_duong_dan():
-    """→ (đường_dẫn, nguồn) của nhị phân Chromium CHỈ ĐỊNH. `None` nếu không có."""
+def _nhi_phan_theo_duong(*tuong_doi):
+    """→ (đường_dẫn, nguồn) của một nhị phân trong ba gốc `.local-browsers` đã biết."""
     ung_vien = [
-        (os.path.join(PW_BROWSERS_REPO, *PW_CHROMIUM_TUONG_DOI),
+        (os.path.join(PW_BROWSERS_REPO, *tuong_doi),
          "trong repo (chay.sh ghim PLAYWRIGHT_BROWSERS_PATH=0)"),
-        (os.path.join(PW_BROWSERS_G17, *PW_CHROMIUM_TUONG_DOI),
+        (os.path.join(PW_BROWSERS_G17, *tuong_doi),
          "BAN_GIAO §1 / AG-06 đã chạy thành công"),
-        (os.path.join(PW_BROWSERS_CHI_DINH, *PW_CHROMIUM_TUONG_DOI),
+        (os.path.join(PW_BROWSERS_CHI_DINH, *tuong_doi),
          "cùng nhị phân qua worktree g12-playwright"),
     ]
     for p, nguon in ung_vien:
         if os.path.exists(p):
             return p, nguon
     return None, None
+
+
+def chromium_duong_dan():
+    """→ (đường_dẫn, nguồn) của Chromium đầy đủ (`chromium-1194`). `None` nếu không có."""
+    return _nhi_phan_theo_duong(*PW_CHROMIUM_TUONG_DOI)
+
+
+def headless_duong_dan():
+    """→ (đường_dẫn, nguồn) của `headless_shell-1194` — nhị phân `chay.sh` THẬT SỰ chạy."""
+    return _nhi_phan_theo_duong(*PW_HEADLESS_TUONG_DOI)
 
 
 def phien_ban_chromium(p):
@@ -802,15 +991,51 @@ class A_Nen(unittest.TestCase):
     """NỀN — cây nào đang được đo. Sai nền thì mọi số dưới đây vô nghĩa."""
 
     def test_a1_cay_dung_bang_cay_cua_nen(self):
-        """CÂY (không phải nhãn) phải bằng cây `7344c02`.
+        """CÂY (không phải nhãn) phải bằng cây của nền ĐANG ĐO — `dd788fc`/`9628587`.
 
-        Đây là ca trả lời đúng câu hỏi "anh đo trên cái gì", và nó trả lời bằng `write-tree`,
-        một giá trị nội dung — không bằng tên nhánh.
+        BA vế, cả ba đọc từ lệnh thật:
+          (i)   GHIM không stale: `NEN_SHA^{tree}` phải đúng `TREE_NEN` — nếu không, lỗi là GHIM,
+                không phải môi trường (AGENT 03 §5);
+          (ii)  PHÉP ĐO không mù: tiêm 1 mục vào BẢN SAO index ⇒ tree ĐỔI, index THẬT giữ nguyên
+                sha256, không có `index.lock` (AGENT 03 §3.4);
+          (iii) cây đo được bằng phép đo tương đương phải bằng `TREE_NEN`.
         """
         vt = van_tay()
-        print("\n  [A1] HEAD=%s · write-tree=%s · %s tệp theo dõi · băm danh sách=%s"
+        self.assertRegex(vt["head"], r"^[0-9a-f]{40}$", "không đọc được HEAD")
+        print("\n  [A1] HEAD=%s · write-tree (index tạm)=%s · %s tệp theo dõi · băm danh sách=%s"
               % (vt["head"][:12], vt["tree"][:12], vt["so_tep"], vt["bam_danh_sach"][:16]))
-        print("       nền đề bài: SHA=%s · tree=%s" % (NEN_SHA[:12], TREE_NEN[:12]))
+        print("       nền: SHA=%s · tree=%s" % (NEN_SHA[:12], TREE_NEN[:12]))
+
+        # (i) GHIM — `TREE_NEN` có thật là cây của `NEN_SHA` không.
+        rc_pin, out_pin = _git("rev-parse", NEN_SHA + "^{tree}")
+        dong_pin = [d.strip() for d in out_pin.splitlines() if d.strip()]
+        tree_ghim = dong_pin[-1] if rc_pin == 0 and dong_pin else ""
+        print("       GHIM: `git rev-parse %s^{tree}` → rc=%d · %s"
+              % (NEN_SHA[:12], rc_pin, tree_ghim[:12] or "KHÔNG ĐỌC ĐƯỢC"))
+        self.assertEqual(rc_pin, 0, "KHÔNG đọc được cây của NEN_SHA — ghim trỏ vào commit lạ: %s"
+                         % out_pin[-300:])
+        self.assertEqual(tree_ghim, TREE_NEN,
+                         "GHIM STALE: `TREE_NEN=%s` KHÔNG phải cây của `NEN_SHA=%s` (cây thật "
+                         "của commit ghim = `%s`). Đây là lỗi GHIM, không phải lỗi môi trường."
+                         % (TREE_NEN[:12], NEN_SHA[:12], tree_ghim[:12] or "?"))
+
+        # (ii) ĐỐI CHỨNG DƯƠNG — phép đo phải NHÌN THẤY thay đổi, và không làm bẩn index thật.
+        doi = tiem_index_ban_sao()
+        print("       ĐỐI CHỨNG DƯƠNG: tiêm `__tiem_g22.txt` vào BẢN SAO index → "
+              "tree %s → %s · rc=%s"
+              % (str(doi.get("tree_truoc"))[:12], str(doi.get("tree_sau"))[:12], doi.get("rc")))
+        print("       index THẬT: sha256 trước=%s · sau=%s · index.lock trước=%s sau=%s"
+              % (str(doi.get("index_sha256_truoc"))[:16], str(doi.get("index_sha256_sau"))[:16],
+                 doi.get("co_lock_truoc"), doi.get("co_lock_sau")))
+        self.assertEqual(doi.get("rc"), 0, "KHÔNG tiêm được vào bản sao index: %s"
+                         % doi.get("loi", "")[-600:])
+        self.assertNotEqual(doi.get("tree_sau"), doi.get("tree_truoc"),
+                            "PHÉP ĐO MÙ: tiêm một mục vào bản sao index mà cây KHÔNG đổi")
+        self.assertEqual(doi.get("index_sha256_sau"), doi.get("index_sha256_truoc"),
+                         "index THẬT bị đổi bởi phép đo — vi phạm 'không ghi .git thật'")
+        self.assertFalse(doi.get("co_lock_sau"), "phép đo làm sót `index.lock` trong gitdir thật")
+
+        # (iii) CÂY ĐANG ĐO.
         self.assertEqual(
             vt["tree"], TREE_NEN,
             "CÂY ĐANG ĐO KHÔNG PHẢI CÂY CỦA `%s`. Mọi con số của bộ kiểm này chỉ có nghĩa trên "
@@ -887,24 +1112,65 @@ class C_BanPhim(unittest.TestCase):
                       "Đây là KẾT QUẢ, không phải chỗ để bỏ qua.")
         rc, ver = phien_ban_chromium(p)
         self.assertEqual(rc, 0, "nhị phân không thi hành được (rc=%d): %s" % (rc, ver))
+        p_ghim = os.path.join(PW_BROWSERS_REPO, *PW_CHROMIUM_TUONG_DOI)
         print("       ĐƯỜNG DẪN: %s" % p)
         print("       realpath : %s" % os.path.realpath(p))
+        print("       ĐƯỜNG GHIM TRONG CÂY: %s → %s"
+              % (p_ghim, "CÓ" if os.path.exists(p_ghim) else "KHÔNG CÓ (dùng đường dự phòng)"))
+        print("       SHA-256  : %s" % _bam(p))
         print("       PHIÊN BẢN: %s" % ver)
         print("       NGUỒN    : %s" % nguon)
         self.assertRegex(ver, r"Chromium \d+\.\d+\.\d+\.\d+", "không đọc được phiên bản Chromium")
         self.assertEqual(rev, PW_REVISION_DOI,
                          "`browsers.json` đổi revision ⇒ nhị phân chỉ định có thể đã lạc hậu")
+        # NHỊ PHÂN MÀ `chay.sh` THẬT SỰ DÙNG khi headless: `headless_shell-1194`. Đây là đường
+        # đề bài đã ghim; thiếu nó thì B2/B3 "KHÔNG CHẠY ĐƯỢC" — một KẾT QUẢ, không phải skip.
+        ph, nguon_h = headless_duong_dan()
+        if ph is None:
+            self.fail("KHÔNG CHẠY ĐƯỢC: thiếu `chromium_headless_shell-1194/chrome-mac/"
+                      "headless_shell` ở cả ba gốc `.local-browsers`. Đây là KẾT QUẢ, không phải "
+                      "chỗ để bỏ qua.")
+        rc_h, ver_h = phien_ban_chromium(ph)
+        sha_h = _bam(ph)
+        print("       HEADLESS (chay.sh dùng): %s" % ph)
+        print("       HEADLESS realpath      : %s" % os.path.realpath(ph))
+        print("       HEADLESS SHA-256       : %s" % sha_h)
+        print("       HEADLESS PHIÊN BẢN     : %s · nguồn: %s" % (ver_h, nguon_h))
+        self.assertEqual(rc_h, 0, "headless_shell không thi hành được (rc=%d): %s" % (rc_h, ver_h))
+        self.assertRegex(ver_h, r"Chromium \d+\.\d+\.\d+\.\d+",
+                         "không đọc được phiên bản headless Chromium")
+        self.assertEqual(sha_h, PW_HEADLESS_SHA256,
+                         "GHIM NỘI DUNG LỆCH: `headless_shell` sha256=%s ≠ ghim %s. Nhị phân đã "
+                         "đổi ⇒ phải cập nhật ghim có ý thức, không im lặng cho qua."
+                         % (sha_h, PW_HEADLESS_SHA256))
 
     def test_b2_chay_e2e_toan_bo_that(self):
-        """CHẠY THẬT `sh thu_giao_dien/chay.sh`. HỎNG nếu không chạy được — KHÔNG bỏ qua."""
+        """CHẠY THẬT `sh thu_giao_dien/chay.sh`. HỎNG nếu không chạy được — KHÔNG bỏ qua.
+
+        SỐ CA DO CHÍNH PLAYWRIGHT LIỆT KÊ (`--list`, KHÔNG chạy trình duyệt), không ghim con số
+        của một lượt chạy cũ. Báo cáo Playwright phải phủ ĐÚNG số ca đó; hạ một ca trong báo
+        cáo ⇒ cổng PHẢI ĐỎ.
+        """
         DA_CHAY["e2e-toan-bo"] = True
+        so_ca = SO_CA["toan_bo"]
+        print("\n  [B2] số ca DO PLAYWRIGHT LIỆT KÊ (`--list`): %d ca / %d tệp spec · bàn phím=%d ca"
+              % (so_ca, SO_CA["so_tep"], SO_CA["ban_phim"]))
+        self.assertGreater(so_ca, 0, "KHÔNG đếm được ca nào bằng `npx playwright test --list`: %s"
+                         % SO_CA.get("loi", "")[-600:])
         kq = chay_e2e(giay=1200)
         dat, hong, bo, khong_chay = kq["dem"]
-        print("\n  [B2] LỆNH: %s" % kq["lenh"])
+        print("       LỆNH: %s" % kq["lenh"])
         print("       mã thoát THẬT = %d · %.1f giây" % (kq["rc"], kq["giay"]))
-        print("       (đạt, hỏng, bỏ qua, KHÔNG CHẠY) = (%d, %d, %d, %d)" % (dat, hong, bo, khong_chay))
+        print("       (đạt, hỏng, bỏ qua, KHÔNG CHẠY) = (%d, %d, %d, %d)"
+              % (dat, hong, bo, khong_chay))
+        print("       tổng báo cáo = %d · số ca `--list` = %d" % (dat + hong + bo + khong_chay, so_ca))
         with open(os.path.join(LOG_DIR, "e2e_lan_nay.txt"), "w", encoding="utf-8") as f:
             f.write(kq["out"])
+        # ĐỐI CHỨNG ÂM của CỔNG: hạ ĐÚNG một ca (65→64) thì phân quyết PHẢI là ĐỎ.
+        dat_gia, vi_gia = dat_cong("e2e-toan-bo", (so_ca - 1, 0, 0))
+        print("       đối chứng âm: hạ 1 ca → (%d, 0, 0) → %s (đòi ĐỎ)"
+              % (so_ca - 1, "ĐỎ" if not dat_gia else "ĐẠT-SAI"))
+        self.assertFalse(dat_gia, "CỔNG MÙ: hạ một ca xuống mà cổng vẫn ĐẠT — %s" % vi_gia)
         if dat == 0:
             self.fail("KHÔNG CHẠY ĐƯỢC: 0 ca ĐẠT. Đây là KẾT QUẢ (thiếu nhị phân / máy chủ không "
                       "lên), KHÔNG phải chỗ để `skipTest`. 60 dòng cuối:\n%s"
@@ -912,37 +1178,69 @@ class C_BanPhim(unittest.TestCase):
         # ĐỐI CHỨNG DƯƠNG: ≥1 ca đạt ⇒ "hỏng" phân biệt được với "không chạy được".
         self.assertGreater(dat, 0)
         _dc_duong("e2e-toan-bo")
+        self.assertEqual(dat + hong + bo + khong_chay, so_ca,
+                         "BÁO CÁO KHÔNG PHỦ SỐ CA `--list`: chạy %d ca / liệt kê %d ca ⇒ một ca "
+                         "đã bị rơi khỏi báo cáo (H5/N-G19-04)"
+                         % (dat + hong + bo + khong_chay, so_ca))
         do_duoc = (dat, hong, khong_chay)
         dat_cong_, vi = dat_cong("e2e-toan-bo", do_duoc)
         print("       phân quyết: %s" % phan_quyet("e2e-toan-bo", do_duoc))
         self.assertTrue(dat_cong_, "CỔNG `e2e-toan-bo` ĐỎ: %s" % vi)
 
 
-    def test_b3_e2e_bay_ca_ban_phim_chay_that(self):
-        """ĐIỂM 1 SUPERVISOR GIAO, ĐO RIÊNG: `06_ban_phim.spec.js` — ĐÚNG 7 CA.
+    def test_b3_e2e_tam_ca_ban_phim_chay_that(self):
+        """ĐIỂM 1 SUPERVISOR GIAO, ĐO RIÊNG: `06_ban_phim.spec.js` — ĐÚNG 8 CA Ở CÂY NÀY.
 
-        Vì sao tách khỏi `test_b2`: bộ 51 ca **CHẬP CHỜN** (đo được: 4 lượt ⇒ 3 lượt 51/0/0/0 và
-        1 lượt 49/1/1/0 — xem `N-G22-01`). Trộn hai phép đo vào một cổng là để chỗ chập chờn che
-        chỗ tất định. Đây **KHÔNG** phải "chạy lại cho xanh": đây là **một phép đo KHÁC** — đúng
-        bảy ca mà AG-06 đã chạy và đúng cái "E2E 7/7" mà đề bài hỏi.
+        Vì sao tách khỏi `test_b2`: bộ toàn bộ **CHẬP CHỜN** (đo được vòng 1: 3 lượt sạch +
+        1 lượt (49,1,1) — xem `N-G22-01`). Trộn hai phép đo vào một cổng là để chỗ chập chờn che
+        chỗ tất định. Đây **KHÔNG** phải "chạy lại cho xanh": đây là **một phép đo KHÁC**.
+
+        Số ca đếm từ chính tệp spec; hai đối chứng âm: (a) bỏ 1 dòng khai ca trong bản sao TẠM ⇒
+        bộ đếm giảm đúng 1; (b) hạ 1 ca trong báo cáo ⇒ cổng PHẢI ĐỎ.
         """
-        DA_CHAY["e2e-ban-phim-7"] = True
+        DA_CHAY["e2e-ban-phim"] = True
+        so_ca = SO_CA["ban_phim"]
+        print("\n  [B3] số ca DO PLAYWRIGHT LIỆT KÊ cho `06_ban_phim.spec.js`: %d ca" % so_ca)
+        self.assertGreater(so_ca, 0, "KHÔNG đếm được ca nào từ `06_ban_phim.spec.js`: %s"
+                         % SO_CA.get("loi", "")[-600:])
+        # Bộ đếm TĨNH chỉ dùng làm đối chứng âm; nó phải KHỚP số `--list` trước khi được tin.
+        so_tinh = dem_ca_spec_mot_tep(os.path.join(GOC_SPEC, "06_ban_phim.spec.js"))
+        print("       đối chiếu bộ đếm: `--list`=%d ca · đếm dòng khai ca=%d ca" % (so_ca, so_tinh))
+        self.assertEqual(so_tinh, so_ca,
+                         "bộ đếm tĩnh và `--list` LỆCH NHAU ⇒ đối chứng âm bên dưới không còn "
+                         "đại diện cho số ca thật")
+        am = doi_chung_am_dem_ca()
+        print("       đối chứng âm bộ đếm: bỏ 1 dòng khai ca trong BẢN SAO TẠM → %s → %s ca "
+              "(đòi giảm đúng 1)" % (am.get("n_goc"), am.get("n_tam")))
+        self.assertEqual(am.get("rc"), 0, "không dựng được đối chứng âm bộ đếm: %s"
+                         % am.get("loi"))
+        self.assertEqual(am.get("n_tam"), am.get("n_goc") - 1,
+                         "BỘ ĐẾM KHÔNG ĐẾM TỪ NỘI DUNG: bỏ một ca mà số ca không giảm đúng 1")
         kq = chay_e2e("06_ban_phim.spec.js", giay=600)
         dat, hong, bo, khong_chay = kq["dem"]
-        print("\n  [B3] LỆNH: %s" % kq["lenh"])
+        print("       LỆNH: %s" % kq["lenh"])
         print("       mã thoát THẬT = %d · %.1f giây" % (kq["rc"], kq["giay"]))
-        print("       (đạt, hỏng, bỏ qua, KHÔNG CHẠY) = (%d, %d, %d, %d)" % (dat, hong, bo, khong_chay))
-        with open(os.path.join(LOG_DIR, "e2e_ban_phim_7.txt"), "w", encoding="utf-8") as f:
+        print("       (đạt, hỏng, bỏ qua, KHÔNG CHẠY) = (%d, %d, %d, %d)"
+              % (dat, hong, bo, khong_chay))
+        print("       tổng báo cáo = %d · số ca `--list` = %d" % (dat + hong + bo + khong_chay, so_ca))
+        with open(os.path.join(LOG_DIR, "e2e_ban_phim.txt"), "w", encoding="utf-8") as f:
             f.write(kq["out"])
+        dat_gia, vi_gia = dat_cong("e2e-ban-phim", (so_ca - 1, 0, 0))
+        print("       đối chứng âm: hạ 1 ca → (%d, 0, 0) → %s (đòi ĐỎ)"
+              % (so_ca - 1, "ĐỎ" if not dat_gia else "ĐẠT-SAI"))
+        self.assertFalse(dat_gia, "CỔNG MÙ: hạ một ca xuống mà cổng vẫn ĐẠT — %s" % vi_gia)
         self.assertGreater(dat, 0,
                            "KHÔNG CHẠY ĐƯỢC: 0 ca ĐẠT. Đây là KẾT QUẢ, KHÔNG phải chỗ để "
                            "`skipTest`. 40 dòng cuối:\n%s"
                            % "\n".join(kq["out"].splitlines()[-40:]))
-        _dc_duong("e2e-ban-phim-7")
+        _dc_duong("e2e-ban-phim")
+        self.assertEqual(dat + hong + bo + khong_chay, so_ca,
+                         "BÁO CÁO KHÔNG PHỦ SỐ CA `--list`: chạy %d ca / liệt kê %d ca"
+                         % (dat + hong + bo + khong_chay, so_ca))
         do_duoc = (dat, hong, khong_chay)
-        dat_cong_, vi = dat_cong("e2e-ban-phim-7", do_duoc)
-        print("       phân quyết: %s" % phan_quyet("e2e-ban-phim-7", do_duoc))
-        self.assertTrue(dat_cong_, "CỔNG `e2e-ban-phim-7` ĐỎ: %s" % vi)
+        dat_cong_, vi = dat_cong("e2e-ban-phim", do_duoc)
+        print("       phân quyết: %s" % phan_quyet("e2e-ban-phim", do_duoc))
+        self.assertTrue(dat_cong_, "CỔNG `e2e-ban-phim` ĐỎ: %s" % vi)
 
 
 class D_BanDoG20(unittest.TestCase):
@@ -1962,6 +2260,8 @@ class Y_Bang(unittest.TestCase):
         print("  BẢNG PHÁN QUYẾT — chế độ=%s%s" % (CHE_DO,
               "  (ô 'nen' CŨNG ĐỎ: nghiệm thu bản ĐÃ GỘP)" if CHE_DO == "gop" else "  (đo nợ trên nền)"))
         print("  nền: SHA=%s · tree=%s" % (NEN_SHA[:12], TREE_NEN[:12]))
+        print("  số ca E2E DO PLAYWRIGHT LIỆT KÊ (`--list`): toàn bộ=%d · bàn phím=%d "
+              "· %d tệp spec" % (SO_CA["toan_bo"], SO_CA["ban_phim"], SO_CA["so_tep"]))
         print("=" * 92)
         for ten in sorted(SO_DO):
             print("  %-30s nền=%-14r đóng=%-14r" % (ten, SO_DO[ten]["nen"], SO_DO[ten]["dong"]))
@@ -2034,6 +2334,16 @@ def main():
     if not dung_cay:
         print("  ⚠ CÂY ĐANG ĐO KHÔNG PHẢI CÂY CỦA NỀN: write-tree=%s · nền=%s"
               % (tree[:12], TREE_NEN[:12]))
+    # GHIM phải là CÂY CỦA CHÍNH COMMIT GHIM — tách "lỗi ghim" khỏi "lỗi môi trường".
+    rc_ghim, out_ghim = _git("rev-parse", NEN_SHA + "^{tree}")
+    dong_ghim = [d.strip() for d in out_ghim.splitlines() if d.strip()]
+    tree_ghim = dong_ghim[-1] if rc_ghim == 0 and dong_ghim else ""
+    print("  GHIM: `%s^{tree}` = %s %s"
+          % (NEN_SHA[:12], tree_ghim[:12] or "KHÔNG ĐỌC ĐƯỢC",
+             "= TREE_NEN ✓" if tree_ghim == TREE_NEN
+             else "≠ TREE_NEN — GHIM STALE, sửa ghim trước khi đọc số"))
+    print("  số ca E2E do Playwright liệt kê (`--list`): toàn bộ=%d · bàn phím=%d"
+          % (SO_CA["toan_bo"], SO_CA["ban_phim"]))
 
     import unittest as _u
     # Thứ tự CỐ Ý: `Y_Bang` in sổ trước; `Z_ChotChan` CUỐI, vì `Z1` chỉ phán được sau khi mọi

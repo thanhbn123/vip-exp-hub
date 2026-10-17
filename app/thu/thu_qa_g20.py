@@ -716,9 +716,14 @@ class C4_C5_NoKhac(unittest.TestCase):
             ma, ra, _ = _chay(["python3", os.path.join("app", "thu", t)], giay=1200)
             m = re.findall(r"Ran (\d+) tests?", ra)
             n = int(m[-1]) if m else 0
-            chi_tiet.append((t, ma, n))
-            print("       %s → mã thoát %s · %d ca" % (t, ma, n))
-        chay = min(sum(1 for _, ma, n in chi_tiet if ma == 0 and n > 0), 1)
+            # VÁ `N-G22-01`: `Ran N` KỂ ca BỎ QUA ⇒ phải TRỪ ra mới biết có ca nào CHẠY.
+            bq = int((re.findall(r"skipped=(\d+)", ra) or ["0"])[-1])
+            chi_tiet.append((t, ma, n, bq, max(n - bq, 0)))
+            print("       %s → mã thoát %s · %d ca · %d BỎ QUA · %d CHẠY THẬT"
+                  % (t, ma, n, bq, max(n - bq, 0)))
+        # XANH chỉ khi có ca THẬT SỰ CHẠY và ĐẠT: `nc > 0` (ĐÃ TRỪ bỏ qua), không phải `n > 0`.
+        chay = min(sum(1 for _, ma, n, bq, nc in chi_tiet
+                       if ma == 0 and n > 0 and nc > 0), 1)
         dat, vi = dat_cong("bo-g19-tong-hop", chay)
         _dc_am("bo-g19-tong-hop")
         # ĐỐI CHỨNG DƯƠNG: chính bộ đếm `Ran N tests` phải đọc ra được số từ output TỔNG HỢP

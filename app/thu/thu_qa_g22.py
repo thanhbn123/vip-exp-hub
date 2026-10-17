@@ -110,8 +110,11 @@ TREE_NEN = "37079aa83f2ad62c2862f2eb7ce1c809c24570fb"
 NEN_LUOT_TRUOC = "601718e42ea23a30b849d606890070d4816cbf0b"    # HEAD worktree đầu lượt trước
 NEN_LUOT_TRUOC_2 = "7344c020abad562dafb593c4234d5e1f9ecfd18c"  # ghim nền của lượt trước
 
-TEP_DUOC_PHEP = ("docs/QA_G22.md", "app/thu/thu_qa_g22.py", "app/thu/thu_qa_g21.py",
-                 "app/thu/thu_qa_g20.py")
+TEP_DUOC_PHEP = ("docs/QA_G22.md", "docs/G22_CONTRACT.md", "app/thu/thu_qa_g22.py",
+                 "app/thu/thu_qa_g21.py", "app/thu/thu_qa_g20.py")
+# `docs/G22_CONTRACT.md` là tệp của AGENT 02 (lượt `G22 · A2 · CONTRACT`): nó ghi bảng
+# STALE/lỗi-thật và hợp đồng đã duyệt cho nhóm F/G/Z6. Thêm vào danh sách này để `A2` không gọi
+# chính bản báo cáo của lượt là "thay đổi ngoài phép" — một cái ĐỎ GIẢ của phạm vi.
 # `app/thu/thu_qa_g21.py` được THÊM vào danh sách này ở dispatch `N-G22-01`: AG-00 cấp quyền
 # sửa HAI bản sao của bộ đếm `bo-g19-tong-hop` (bàn đo G20 gọi là `C5`, bàn đo G21 gọi là `G7`),
 # và bản sao thứ hai nằm trong tệp đó. Không thêm thì `A2`/`_kiem_tra_pham_vi` gọi chính bản vá
@@ -235,8 +238,9 @@ SO_DO = {
     # Nền: 0/3 (cả ba ĐỎ). Đóng: 3/3.
     "cay-sach-3-ban-sao": {"nen": 0, "dong": 3},
 
-    # E3 (điểm 3) — số bản cất `hub-truoc-rollback-*.db` sau BA lượt `khoi_phuc()` trong CÙNG
-    # MỘT GIÂY, đo bằng ĐỒNG HỒ ĐÓNG BĂNG (không phụ thuộc tốc độ máy). Nền: 1. Đóng: ≥ 3.
+    # E3 (điểm 3) — số bản cất `hub-truoc-rollback-*.db` sau BA lượt `khoi_phuc()` CÙNG MỘT
+    # MỐC, đo bằng MỐC THỜI GIAN TRUYỀN QUA THAM SỐ `luc=` (hợp đồng G22 — docs/G22_SAOLUU.md
+    # §5), không phụ thuộc tốc độ máy. Nền (bản đóng băng, đọc giờ ngầm): 1. Đóng: 3.
     "e3-ba-luot-cung-giay": {"nen": 1, "dong": 3},
 
     # N-G21-03 (điểm 4) — `thu_g20_dahang.py::CaGanChat::test_c2a` có còn GHIM hành vi RÒ không.
@@ -305,14 +309,21 @@ DOI_CHUNG = {
         "cùng `chay.sh` phải ĐẠT ≥1 ca; nếu 0 đạt thì 'hỏng' không phân biệt được với 'không "
         "chạy được' (đúng thứ đã xảy ra ở lượt G21: 7 hỏng + 44 không chạy, 0 tín hiệu).",
     "cay-sach-3-ban-sao":
-        "TIÊM: đặt một tệp bẩn NGOÀI vùng thử (`admin/__tiem_g22.js`) rồi chạy lại cổng — cổng "
-        "phải ĐỎ. Không có vế này thì '3/3 xanh' có thể chỉ là cổng mù.",
+        "TIÊM: đặt một tệp bẩn NGOÀI vùng thử (`admin/__tiem_g22.js`) rồi chạy lại cả ba cổng — "
+        "cả ba phải ĐỎ-THẬT. Vế này chạy trong một CLONE THẬT tại nền (`git clone --shared` + "
+        "`HEAD=NEN_SHA`) để cổng không đỏ vì delta hai commit; vế xanh (cây sạch ⇒ 3/3 XANH) đi "
+        "kèm NGAY TRONG cùng phép đo. Không có cặp xanh↔đỏ này thì '3/3 xanh' có thể chỉ là cổng mù.",
     "e3-ba-luot-cung-giay":
-        "chạy CÙNG kịch bản với `G21_APP_DIR` trỏ vào bản `migrate.py` ĐÃ VÁ (thêm hậu số): số "
-        "bản cất phải ≥3. Không có vế này thì 'đỏ' không phân biệt được với 'bộ đo hỏng'.",
+        "chạy CÙNG kịch bản (cùng mốc đóng băng, cùng dữ liệu) trên BẢN ĐÓNG BĂNG TRƯỚC G22 "
+        "`trien_khai/g20-saoluu/migrate_nguyenban.py` (md5 ghim, KHÔNG nhận `luc`): phải ra đúng "
+        "**1** bản cất (đường ĐÈ còn nguyên). Bản thật + `luc=` phải ra **3**. Không có cặp 1↔3 "
+        "này thì '3 bản cất' không phân biệt được với bộ đo hỏng.",
     "ng21-03-ca-ghim-ro":
-        "chạy `thu_qa_g21.py` nhóm `G5_CredentialNgan` — một bộ đo ĐỘC LẬP với ca kia: nó phải "
-        "báo >0 tổ hợp RÒ. Không có vế này thì 'ca xanh' không phân biệt được với 'hết rò'.",
+        "HAI vế đo độc lập: (a) `thu_qa_g21.py::G5_CredentialNgan` trên cây thật phải đọc **0/5** "
+        "tổ hợp RÒ (bất biến đã đóng); (b) TIÊM lại chính sách cũ — tắt luật ECHO THEO TÊN trong "
+        "một bản sao TẠM — thì G5 phải đọc **>0** VÀ `test_c2a` đã viết lại phải ĐỎ. Không có vế "
+        "(b) thì '0 rò' không phân biệt được với 'bộ dò mù'; không có (a) thì không chứng minh "
+        "được lỗ hổng đã đóng.",
     "g20-c1-cay-sach":
         "C2 của cùng bàn đo G20 phải ĐO ĐƯỢC (7 ca tầng 3 chạy thật) — chứng minh bàn đo không "
         "chết toàn bộ khi C1 đỏ.",
@@ -617,110 +628,167 @@ G21_G7_VA = (
 )
 
 
-# ── E3: ĐỒNG HỒ ĐÓNG BĂNG + ĐỐI CHỨNG ĐƯỜNG BẰNG BẢN ĐÃ VÁ ───────────────────────────────────
+# ── E3: MỐC THỜI GIAN LÀ THAM SỐ + ĐỐI CHỨNG ĐƯỜNG BẰNG BẢN ĐÓNG BĂNG ───────────────────────
 #
-# VÌ SAO PHẢI ĐÓNG BĂNG ĐỒNG HỒ: `khoi_phuc()` đặt tên bản cất theo GIÂY
-# (`hub-truoc-rollback-%Y%m%d-%H%M%S.db`). Ba lượt gọi liền nhau trong CÙNG một giây ⇒ cùng
-# tên ⇒ lượt sau ĐÈ lượt trước. Nhưng nếu ba lượt đó VÔ TÌNH rơi vào HAI giây khác nhau thì
-# phép đếm ra ≥2 và ca thử XANH **dù lỗi còn nguyên** — một cái XANH GIẢ phụ thuộc TỐC ĐỘ MÁY.
-# Đó là "xanh khi chung, đỏ khi riêng" mà Supervisor giao kiểm chứng.
+# HỢP ĐỒNG ĐÃ DUYỆT (`docs/G22_SAOLUU.md` §5): `sao_luu(luc=)` / `khoi_phuc(..., luc=)` nhận
+# MỐC THỜI GIAN QUA THAM SỐ. Bộ đo PHẢI truyền một mốc CỐ ĐỊNH; nếu nó đọc `datetime.now()` ngầm
+# thì ba lượt có thể rơi vào hai-ba giây khác nhau, tên khác nhau, phép đếm XANH mà ĐƯỜNG ĐÈ
+# chưa hề được chạm tới — một cái XANH GIẢ phụ thuộc TỐC ĐỘ MÁY.
 #
-# Cách đo ở đây KHÔNG dựa vào may rủi và KHÔNG che bằng retry: nó TIÊM một `migrate` có
-# `datetime.now()` ĐÓNG BĂNG, nên ba lượt gọi CHẮC CHẮN cùng một giây. Kết quả vì thế TẤT ĐỊNH.
+# Vì sao vẫn phải có ĐỐI CHỨNG ĐƯỜNG: bản ĐÓNG BĂNG của lượt trước
+# (`trien_khai/g20-saoluu/migrate_nguyenban.py`, md5 ghim) KHÔNG nhận `luc` và đặt tên bản cất
+# theo GIÂY, ghi đè. Cùng kịch bản, cùng mốc: bản đó ra **1** bản cất, bản thật ra **3**.
+# Không có vế này thì "3 bản cất" không phân biệt được với "bộ đo hỏng / tự bịa số".
+
+LUC_BA_LUOT = "20261016-120000"
+MIGRATE_NGUYENBAN = os.path.join(GOC_CAY, "trien_khai", "g20-saoluu", "migrate_nguyenban.py")
+MIGRATE_NGUYENBAN_MD5 = "611182a621fd279c3816d5fc5d2785e3"
 
 MA_E3 = r'''
-import hashlib, json, os, shutil, sqlite3, sys
+import datetime as _dt
+import inspect, json, os, sqlite3, sys
+
 APP = os.environ["G22_APP"]
 sys.path.insert(0, APP)
-import datetime as _dt
+
 
 class _DongBang(_dt.datetime):
+    """Đồng hồ ĐÓNG BĂNG; `G22_LEO_THANG=1` mỗi lượt đọc nhích 1 giây (mô phỏng máy chậm)."""
     _T = _dt.datetime(2026, 10, 16, 12, 0, 0)
+    _buoc = 0
+
     @classmethod
     def now(cls, tz=None):
-        return cls._T
+        t = cls._T + _dt.timedelta(seconds=cls._buoc)
+        if os.environ.get("G22_LEO_THANG") == "1":
+            cls._buoc += 1
+        return t
+
     @classmethod
     def utcnow(cls):
-        return cls._T
+        return cls.now()
+
     @classmethod
     def today(cls):
-        return cls._T
+        return cls.now()
+
 
 import migrate
-migrate.datetime = _DongBang          # `datetime.now()` trong `migrate` nay ĐÓNG BĂNG
+migrate.datetime = _DongBang          # chỉ có hiệu lực với bản cũ (bản thật nhận `luc`)
 
+STAMP = os.environ.get("G22_LUC", "20261016-120000")
 D = os.environ["VIP_HUB_DATA"]
 os.makedirs(D, exist_ok=True)
 TL = os.path.join(D, "sao-luu")
 os.makedirs(TL, exist_ok=True)
 DB = os.path.join(D, "hub.db")
+
 c = sqlite3.connect(DB)
 c.execute("CREATE TABLE t (x INTEGER)")
 c.execute("INSERT INTO t VALUES (1)")
-c.commit(); c.close()
+c.commit()
+c.close()
 
-def dem():
-    return sorted(f for f in os.listdir(TL) if "rollback" in f and f.endswith(".db"))
+co_luc_sao_luu = "luc" in inspect.signature(migrate.sao_luu).parameters
+co_luc_khoi_phuc = "luc" in inspect.signature(migrate.khoi_phuc).parameters
 
-# (A) ĐỐI CHỨNG DƯƠNG NGAY TRONG CÙNG TIẾN TRÌNH: `sao_luu()` ĐÃ ĐƯỢC VÁ (thêm hậu số).
-#     Với CÙNG đồng hồ đóng băng, nó PHẢI ra ≥ 2 tệp khác nhau. Vế này chứng minh
-#     (i) đồng hồ đóng băng THẬT SỰ có hiệu lực, và (ii) phép đếm NHÌN THẤY được sự khác nhau.
-sl = [migrate.sao_luu() for _ in range(3)]
-so_sao_luu = len(set(sl))
-
-# (B) PHÉP ĐO: ba lượt `khoi_phuc()` với CÙNG đồng hồ đóng băng.
-ban = os.path.join(D, "nguon.db")
-shutil.copy2(DB, ban)
+# VẾ A — BA bản sao lưu CÙNG MỐC: đồng hồ đóng băng + hậu số, phải ra 3 tệp khác nhau.
+ban_sao = []
 for _ in range(3):
-    migrate.khoi_phuc(ban)
-ds = dem()
+    if co_luc_sao_luu:
+        ban_sao.append(migrate.sao_luu(luc=STAMP))
+    else:
+        ban_sao.append(migrate.sao_luu())
+
+# Dữ liệu "mới hơn bản sao lưu" mà lượt khôi phục ĐẦU TIÊN phải cất được.
+c = sqlite3.connect(DB)
+c.execute("UPDATE t SET x=2")
+c.commit()
+c.close()
+
+# VẾ B — BA lượt `khoi_phuc()` CÙNG MỐC.
+for _ in range(3):
+    if co_luc_khoi_phuc:
+        migrate.khoi_phuc(ban_sao[0], luc=STAMP)
+    else:
+        migrate.khoi_phuc(ban_sao[0])
+
+ds = sorted(f for f in os.listdir(TL) if "rollback" in f and f.endswith(".db"))
+
+
+def _gia_tri_x(ten):
+    """Đọc GIÁ TRỊ THẬT trong một bản cất; `None` nghĩa là KHÔNG MỞ ĐƯỢC."""
+    duong = os.path.join(TL, ten)
+    try:
+        kn = sqlite3.connect("file:%s?mode=ro&immutable=1" % duong.replace("?", "%3f"), uri=True)
+        try:
+            return kn.execute("SELECT MAX(x) FROM t").fetchone()[0]
+        finally:
+            kn.close()
+    except sqlite3.Error:
+        return None
+
+
+gia_tri = {ten: _gia_tri_x(ten) for ten in ds}
 print("__JSON__=" + json.dumps({
-    "so_sao_luu_khac_nhau": so_sao_luu,
+    "nhan_luc_sao_luu": co_luc_sao_luu,
+    "nhan_luc_khoi_phuc": co_luc_khoi_phuc,
+    "luc_truyen": STAMP,
+    "moc_dong_ho_goc": _DongBang._T.strftime("%Y%m%d-%H%M%S"),
+    "so_sao_luu_khac_nhau": len(set(ban_sao)),
+    "ten_ban_sao_luu": [os.path.basename(x) for x in ban_sao],
     "so_ban_cat_rollback": len(ds),
     "ten_ban_cat": ds,
-    "luc_dong_bang": _DongBang.now().strftime("%Y%m%d-%H%M%S"),
-}))
+    "cung_mot_moc": bool(ds) and all(
+        f.startswith("hub-truoc-rollback-" + STAMP) for f in ds),
+    "gia_tri_x": gia_tri,
+    "so_ban_cat_mo_duoc": sum(1 for v in gia_tri.values() if v is not None),
+    "so_ban_cat_giu_du_lieu_moi": sum(1 for v in gia_tri.values() if v == 2),
+}, ensure_ascii=False))
 '''
 
 
-def _app_tam(ten, va_khoi_phuc=False):
-    """Dựng một bản `app/` trong thư mục TẠM; tuỳ chọn VÁ `khoi_phuc()` để làm ĐỐI CHỨNG ĐƯỜNG.
+def _md5(duong):
+    with open(duong, "rb") as f:
+        return hashlib.md5(f.read()).hexdigest()
 
-    Đây là đường TIÊM LỖI/ĐỐI CHỨNG mà `trien_khai/g20-saoluu/kich_ban.py` đã mở sẵn qua
-    `G21_APP_DIR` — không sửa một byte nào của cây thật.
+
+def _app_tam(ten, migrate_cu=False):
+    """Bản `app/` trong thư mục TẠM. `migrate_cu=True` ⇒ thay `migrate.py` bằng BẢN ĐÓNG BĂNG
+    `trien_khai/g20-saoluu/migrate_nguyenban.py` (md5 ghim) — đúng bản TRƯỚC G22, không phải
+    một đoạn mã tự chế. KHÔNG sửa một byte nào của cây thật.
     """
     d = tempfile.mkdtemp(prefix="g22-app-%s-" % ten)
     shutil.copytree(GOC_APP, d, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    mg = os.path.join(d, "migrate.py")
-    with open(mg, encoding="utf-8") as f:
-        nguon = f.read()
-    if va_khoi_phuc:
-        cu = ('    cat_di = os.path.join(THU_MUC_SAO_LUU,\n'
-              '                          "hub-truoc-rollback-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".db")')
-        moi = ('    _goc = os.path.join(THU_MUC_SAO_LUU,\n'
-               '                           "hub-truoc-rollback-" + datetime.now().strftime("%Y%m%d-%H%M%S"))\n'
-               '    cat_di, _n = _goc + ".db", 1\n'
-               '    while os.path.exists(cat_di):\n'
-               '        cat_di = "%s-%d.db" % (_goc, _n)\n'
-               '        _n += 1')
-        if cu not in nguon:
-            raise RuntimeError("không vá được `khoi_phuc`: đoạn gốc không khớp nguyên văn")
-        nguon = nguon.replace(cu, moi, 1)
-    with open(mg, "w", encoding="utf-8") as f:
-        f.write(nguon)
+    if migrate_cu:
+        if not os.path.exists(MIGRATE_NGUYENBAN):
+            shutil.rmtree(d, ignore_errors=True)
+            raise RuntimeError("KHÔNG có bản đóng băng `%s`" % MIGRATE_NGUYENBAN)
+        md5 = _md5(MIGRATE_NGUYENBAN)
+        if md5 != MIGRATE_NGUYENBAN_MD5:
+            shutil.rmtree(d, ignore_errors=True)
+            raise RuntimeError("bản đóng băng đã TRÔI: md5=%s ≠ ghim %s"
+                               % (md5, MIGRATE_NGUYENBAN_MD5))
+        shutil.copy2(MIGRATE_NGUYENBAN, os.path.join(d, "migrate.py"))
     return d
 
 
-def do_e3(app_dir):
-    """Chạy phép đo E3 với một `app/` cho trước. Trả dict số đo THẬT."""
+def do_e3(app_dir, luc=LUC_BA_LUOT, leo_thang=False):
+    """Chạy phép đo E3 trên một `app/` cho trước. Trả dict số đo THẬT.
+
+    `leo_thang=True` chỉ dùng cho bản ĐÓNG BĂNG: mỗi lượt đọc đồng hồ nhích 1 giây, mô phỏng
+    "máy chậm rơi vào hai giây khác nhau" — chính cái XANH GIẢ mà `luc=` diệt.
+    """
     nen = tempfile.mkdtemp(prefix="g22-e3-")
-    rc, out, _ = chay_con(MA_E3, giay=300, env_them={"VIP_HUB_DATA": nen, "G22_APP": app_dir})
+    rc, out, _ = chay_con(MA_E3, giay=300, env_them={
+        "VIP_HUB_DATA": nen, "G22_APP": app_dir, "VIP_KHO_DANG_CHAY": "sqlite",
+        "G22_LUC": luc, "G22_LEO_THANG": "1" if leo_thang else "0"})
     m = re.search(r"__JSON__=(\{.*\})", out)
     shutil.rmtree(nen, ignore_errors=True)
     if rc != 0 or not m:
-        return {"rc": rc, "loi": out.strip()[-600:], "so_sao_luu_khac_nhau": None,
-                "so_ban_cat_rollback": None}
+        return {"rc": rc, "loi": out.strip()[-900:], "so_ban_cat_rollback": None,
+                "so_sao_luu_khac_nhau": None}
     d = json.loads(m.group(1))
     d["rc"] = rc
     return d
@@ -749,7 +817,8 @@ class A_Nen(unittest.TestCase):
             "đúng cây đó." % NEN_SHA[:12])
 
     def test_a2_khong_sua_ma_san_pham(self):
-        """Chỉ được có ĐÚNG hai tệp mới của AG-01 G22; không sửa mã sản phẩm.
+        """Chỉ được có các tệp trong `TEP_DUOC_PHEP` (hai tệp AG-01 G22 + tệp của lượt hiện
+        tại); không sửa mã sản phẩm.
 
         Miễn trừ duy nhất — và nó được TÍNH RA, không được dán vào: khi `HEAD != NEN_SHA` (chỉ
         xảy ra trong worktree bị sandbox chặn ghi `.git`), `git status` so cây với HEAD CŨ nên nó
@@ -773,9 +842,9 @@ class A_Nen(unittest.TestCase):
                   "`git diff --name-only HEAD %s`). Chạy trong cây có HEAD=nền thì delta RỖNG."
                   % (head_hien_tai()[:8], NEN_SHA[:8], len(delta), NEN_SHA[:8]))
         else:
-            print("       HEAD == nền ⇒ delta RỖNG, KHÔNG đường nào được miễn trừ ngoài hai tệp "
-                  "AG-01 G22")
-        self.assertEqual(ngoai, [], "có thay đổi NGOÀI hai tệp được phép")
+            print("       HEAD == nền ⇒ delta RỖNG, KHÔNG đường nào được miễn trừ ngoài danh sách "
+                  "được phép")
+        self.assertEqual(ngoai, [], "có thay đổi NGOÀI danh sách tệp được phép")
 
     def test_a3_csdl_nghiep_vu_van_la_sqlite_D8(self):
         """D-8: CSDL nghiệp vụ vẫn SQLite. Không một kết nối nào tới `:5432`."""
@@ -951,6 +1020,60 @@ class E_CaySach(unittest.TestCase):
                         "A_Nen.test_a1_cay_sach_theo_pham_vi_wave"]),
     )
 
+    def _doi_chung_cong_cay_sach_o_clone_nen(self):
+        """ĐỐI CHỨNG DƯƠNG cho nhóm `cay-sach-3-ban-sao` — chạy trên CLONE THẬT tại nền.
+
+        Trên cây thợ này `HEAD != NEN_SHA` và sandbox CHẶN ghi `.git`, nên ba cổng so-cây-với-HEAD
+        KHÔNG thể phán quyết ở đây. Nhưng "không phán quyết được trên cây này" KHÔNG đồng nghĩa
+        với "không cần đối chứng": một clone `--shared` trong TMP có `HEAD = NEN_SHA` và cây SẠCH,
+        nên đó là môi trường đo ĐÚNG của chính ba cổng đó (xem §3 đầu tệp).
+
+        HAI VẾ, cả hai đều ĐO ĐƯỢC:
+          (a) cây SẠCH  ⇒ CẢ BA cổng XANH (rc=0);
+          (b) TIÊM `admin/__tiem_g22.js` ⇒ CẢ BA cổng ĐỎ **và ĐỎ-THẬT** (không phải PHEP_DO_CHET).
+        Chỉ khi cả hai vế đúng thì nhóm mới được coi là "đã chạy đối chứng" — nếu không, `Z6`
+        phải tiếp tục ĐỎ chứ không được bật cờ suông.
+        """
+        goc = tempfile.mkdtemp(prefix="g22-clone-nen-")
+        try:
+            rc, out = _git("clone", "--shared", "--no-checkout", GOC_CAY, goc, giay=300)
+            self.assertEqual(rc, 0, "KHÔNG clone được nền để đối chứng: %s" % out[-500:])
+            rc, out = _git("-C", goc, "checkout", "--detach", NEN_SHA, giay=300)
+            self.assertEqual(rc, 0, "KHÔNG checkout được nền %s: %s" % (NEN_SHA[:12], out[-500:]))
+            rc, out = _git("-C", goc, "rev-parse", "HEAD")
+            self.assertEqual(out.strip(), NEN_SHA,
+                             "clone có HEAD=%r ≠ nền=%s" % (out.strip(), NEN_SHA))
+            rc, out = _git("-C", goc, "status", "--porcelain", "-uall")
+            self.assertEqual(rc, 0, "`git status` trong clone hỏng: %s" % out[-300:])
+            self.assertEqual([d for d in out.splitlines() if d.strip()], [],
+                             "clone tại nền KHÔNG sạch ⇒ đối chứng sẽ đo sai: %s"
+                             % out[-500:])
+            sach, tiem = [], []
+            for ten, lenh in self.CONG:
+                rc, out = chay(lenh, giay=600, cwd=goc)
+                sach.append((ten, rc, _phan_loai_cong_cay_sach(out, rc)))
+            tep = os.path.join(goc, "admin", "__tiem_g22.js")
+            with open(tep, "w", encoding="utf-8") as f:
+                f.write("// TIÊM LỖI của G22 AGENT 02 — chỉ trong CLONE TẠM, xoá ngay\n")
+            for ten, lenh in self.CONG:
+                rc, out = chay(lenh, giay=600, cwd=goc)
+                tiem.append((ten, rc, _phan_loai_cong_cay_sach(out, rc)))
+            print("\n  [E1†] ĐỐI CHỨNG CLONE THẬT tại nền %s (HEAD=nền, cây sạch — ngoài cây thợ):"
+                  % NEN_SHA[:12])
+            for (ten, rc, loai), (_, rc_t, loai_t) in zip(sach, tiem):
+                print("       %-12s cây SẠCH rc=%-3d %-13s · TIÊM `admin/__tiem_g22.js` "
+                      "rc=%-3d %s" % (ten, rc, loai, rc_t, loai_t))
+            self.assertTrue(
+                all(rc == 0 and loai == "XANH" for _, rc, loai in sach),
+                "cây SẠCH tại nền mà cổng KHÔNG xanh ⇒ đối chứng không dựng được: %r" % (sach,))
+            self.assertTrue(
+                all(rc != 0 and loai == "DO_THAT" for _, rc, loai in tiem),
+                "TIÊM tệp bẩn mà có cổng KHÔNG ĐỎ-THẬT ⇒ cổng MÙ: %r" % (tiem,))
+        finally:
+            shutil.rmtree(goc, ignore_errors=True)
+        DA_CHAY["cay-sach-3-ban-sao"] = True
+        DA_TIEM["cay-sach-3-ban-sao"] = True
+
     def test_e1_ba_cong_cay_sach_chay_that(self):
         """Chạy CẢ BA cổng trong TIẾN TRÌNH CON, và phân loại từng cổng.
 
@@ -958,12 +1081,16 @@ class E_CaySach(unittest.TestCase):
         một cây có `HEAD` cũ hơn sẽ ra ĐỎ vì delta hai commit — ĐỎ GIẢ của môi trường, và lượt
         `qa_g22_lan1_nhiem.log` đã đo đúng cái ĐỎ GIẢ đó (13 đường). Bộ kiểm vì thế TỪ CHỐI phán
         quyết ở đây khi `HEAD` không phải nền, và NÓI RA — chứ không bỏ qua im lặng.
+
+        DÙ có skip phần "3/3 trên cây này", ĐỐI CHỨNG DƯƠNG vẫn phải CHẠY THẬT: nó được đo trong
+        một clone tại nền (`_doi_chung_cong_cay_sach_o_clone_nen`) TRƯỚC khi skip. `Z6` vì thế
+        chỉ xanh khi phép tiêm thật sự bắt được lỗi, không phải khi có một lời khai.
         """
+        self._doi_chung_cong_cay_sach_o_clone_nen()
         if head_hien_tai() != NEN_SHA:
             self.skipTest("MÔI TRƯỜNG ĐO KHÔNG TRÙNG: HEAD=%s ≠ nền=%s. Ba cổng này so cây với "
                           "HEAD nên sẽ ĐỎ GIẢ. Chạy bộ kiểm trong cây có HEAD=nền (xem §3)."
                           % (head_hien_tai()[:12], NEN_SHA[:12]))
-        DA_CHAY["cay-sach-3-ban-sao"] = True
         xanh, chi_tiet = 0, []
         for ten, lenh in self.CONG:
             # DÙNG `.format()`, KHÔNG DÙNG `%`: đoạn mã con có chứa `%d`/`%r` của CHÍNH NÓ, và
@@ -1058,24 +1185,43 @@ def _phan_loai_cong_cay_sach(out, rc):
 
 
 class F_DongHo(unittest.TestCase):
-    """ĐIỂM 3 Supervisor giao — ca E3 phụ thuộc ĐỒNG HỒ. Đo bằng ĐỒNG HỒ ĐÓNG BĂNG, có ĐỐI
-    CHỨNG ĐƯỜNG; KHÔNG che bằng retry."""
+    """ĐIỂM 3 Supervisor giao — ca E3 phụ thuộc ĐỒNG HỒ.
+
+    HỢP ĐỒNG ĐÃ DUYỆT (`docs/G22_SAOLUU.md` §5): mốc thời gian là THAM SỐ `luc=`. Bản ĐÓNG BĂNG
+    `migrate_nguyenban.py` (md5 ghim) là vế TRƯỚC; `app/migrate.py` hiện tại là vế SAU.
+    KHÔNG retry, KHÔNG để phép đo đọc giờ hệ thống.
+    """
 
     def test_f1_do_that_bang_dong_ho_dong_bang(self):
         DA_CHAY["e3-ba-luot-cung-giay"] = True
         that = do_e3(GOC_APP)
         if that.get("so_ban_cat_rollback") is None:
             self.fail("KHÔNG ĐO ĐƯỢC E3 (rc=%s): %s" % (that.get("rc"), that.get("loi")))
-        print("\n  [F1] đồng hồ ĐÓNG BĂNG tại %s — ba lượt `khoi_phuc()` CHẮC CHẮN cùng một giây"
-              % that.get("luc_dong_bang"))
-        print("       ĐỐI CHỨNG DƯƠNG trong cùng tiến trình: `sao_luu()` (ĐÃ VÁ) → %s tệp khác "
-              "nhau" % that["so_sao_luu_khac_nhau"])
-        print("       PHÉP ĐO: `khoi_phuc()` (CHƯA VÁ) → %s bản cất rollback: %s"
-              % (that["so_ban_cat_rollback"], that["ten_ban_cat"]))
+        print("\n  [F1] MỐC CỐ ĐỊNH truyền qua `luc=` = %s — ba lượt `khoi_phuc(luc=)` CÙNG MỐC"
+              % that["luc_truyen"])
+        print("       `sao_luu(luc=)` → %s tệp khác nhau: %s"
+              % (that["so_sao_luu_khac_nhau"], ", ".join(that["ten_ban_sao_luu"])))
+        print("       `khoi_phuc(luc=)` → %s bản cất: %s"
+              % (that["so_ban_cat_rollback"], ", ".join(that["ten_ban_cat"])))
+        print("       bản cất MỞ ĐƯỢC=%s · giữ dữ liệu mới hơn (x=2)=%s · cùng mốc=%s"
+              % (that["so_ban_cat_mo_duoc"], that["so_ban_cat_giu_du_lieu_moi"],
+                 that["cung_mot_moc"]))
+        self.assertTrue(that["nhan_luc_sao_luu"],
+                        "`sao_luu()` KHÔNG nhận `luc=` ⇒ phép đo về mốc không dựng được")
+        self.assertTrue(that["nhan_luc_khoi_phuc"],
+                        "`khoi_phuc()` KHÔNG nhận `luc=` ⇒ phép đo về mốc không dựng được")
         self.assertGreaterEqual(
             that["so_sao_luu_khac_nhau"], 2,
-            "đồng hồ đóng băng KHÔNG có hiệu lực HOẶC phép đếm mù: `sao_luu()` đã được vá mà chỉ "
-            "ra %s tệp ⇒ mọi kết luận dưới đây vô nghĩa" % that["so_sao_luu_khac_nhau"])
+            "mốc cố định + hậu số KHÔNG có hiệu lực HOẶC phép đếm mù: `sao_luu()` chỉ ra %s tệp"
+            % that["so_sao_luu_khac_nhau"])
+        self.assertTrue(that["cung_mot_moc"],
+                        "ba bản cất KHÔNG cùng mang mốc %s: %s"
+                        % (that["luc_truyen"], that["ten_ban_cat"]))
+        self.assertEqual(that["so_ban_cat_mo_duoc"], that["so_ban_cat_rollback"],
+                         "có bản cất KHÔNG mở được: %r" % (that["gia_tri_x"],))
+        self.assertGreaterEqual(that["so_ban_cat_giu_du_lieu_moi"], 1,
+                                "không bản cất nào giữ dữ liệu mới hơn (x=2) — phép đếm chỉ "
+                                "đếm tệp rỗng: %r" % (that["gia_tri_x"],))
         _dc_duong("e3-ba-luot-cung-giay")
         do_duoc = that["so_ban_cat_rollback"]
         dat, vi = dat_cong("e3-ba-luot-cung-giay", do_duoc)
@@ -1083,78 +1229,221 @@ class F_DongHo(unittest.TestCase):
         self.assertTrue(dat, "CỔNG `e3-ba-luot-cung-giay` ĐỎ: %s" % vi)
 
     def test_f2_doi_chung_duong_ban_da_va(self):
-        """ĐỐI CHỨNG ĐƯỜNG: CÙNG kịch bản, CÙNG đồng hồ đóng băng, nhưng `khoi_phuc()` ĐÃ VÁ.
+        """ĐỐI CHỨNG ĐƯỜNG: bản ĐÓNG BĂNG (TRƯỚC G22) và bản ĐÃ VÁ phải cho KẾT QUẢ KHÁC NHAU.
 
-        Không có vế này thì "1 bản cất" không phân biệt được với "bộ đo hỏng".
+        Cùng đồng hồ đóng băng, cùng mốc, cùng kịch bản:
+          · `migrate_nguyenban.py` (md5 ghim, KHÔNG nhận `luc`) → 1 bản cất (ĐÈ);
+          · `app/migrate.py` hiện tại (`luc=`) → 3 bản cất.
+        Không có vế này thì "3 bản cất" của `F1` không phân biệt được với một bộ đo hỏng.
         """
-        app_va = _app_tam("da-va", va_khoi_phuc=True)
+        app_cu = _app_tam("dong-bang", migrate_cu=True)
         try:
-            kq = do_e3(app_va)
+            kq_cu = do_e3(app_cu, leo_thang=False)
         finally:
-            shutil.rmtree(app_va, ignore_errors=True)
-        if kq.get("so_ban_cat_rollback") is None:
-            self.fail("KHÔNG ĐO ĐƯỢC bản đã vá (rc=%s): %s" % (kq.get("rc"), kq.get("loi")))
-        print("\n  [F2] ĐỐI CHỨNG ĐƯỜNG — cùng đồng hồ đóng băng, `khoi_phuc()` ĐÃ VÁ:")
-        print("       sao_luu() → %s tệp khác nhau · khoi_phuc() → %s bản cất"
-              % (kq["so_sao_luu_khac_nhau"], kq["so_ban_cat_rollback"]))
-        self.assertGreaterEqual(
-            kq["so_ban_cat_rollback"], 3,
-            "bản ĐÃ VÁ vẫn chỉ để lại %s bản cất ⇒ phép đo của tôi KHÔNG phân biệt được bản vá "
-            "với bản chưa vá, nên `F1` không chứng minh được gì" % kq["so_ban_cat_rollback"])
+            shutil.rmtree(app_cu, ignore_errors=True)
+        self.assertIsNotNone(kq_cu.get("so_ban_cat_rollback"),
+                             "KHÔNG ĐO ĐƯỢC bản đóng băng (rc=%s): %s"
+                             % (kq_cu.get("rc"), kq_cu.get("loi")))
+        kq_moi = do_e3(GOC_APP)
+        self.assertIsNotNone(kq_moi.get("so_ban_cat_rollback"),
+                             "KHÔNG ĐO ĐƯỢC bản đã vá (rc=%s): %s"
+                             % (kq_moi.get("rc"), kq_moi.get("loi")))
+        print("\n  [F2] ĐỐI CHỨNG ĐƯỜNG — TRƯỚC (đóng băng md5=%s) vs SAU (`luc=`)"
+              % MIGRATE_NGUYENBAN_MD5[:12])
+        print("       TRƯỚC: nhận `luc`=%s · sao_luu=%s tệp · khoi_phuc=%s bản cất"
+              % (kq_cu["nhan_luc_khoi_phuc"], kq_cu["so_sao_luu_khac_nhau"],
+                 kq_cu["so_ban_cat_rollback"]))
+        print("       SAU  : nhận `luc`=%s · sao_luu=%s tệp · khoi_phuc=%s bản cất"
+              % (kq_moi["nhan_luc_khoi_phuc"], kq_moi["so_sao_luu_khac_nhau"],
+                 kq_moi["so_ban_cat_rollback"]))
+        self.assertFalse(kq_cu["nhan_luc_khoi_phuc"],
+                         "bản đóng băng NHẬN `luc` ⇒ nó không phải bản TRƯỚC G22")
+        self.assertGreaterEqual(kq_cu["so_sao_luu_khac_nhau"], 2,
+                                "đồng hồ đóng băng không có hiệu lực trên bản cũ")
+        self.assertEqual(kq_cu["so_ban_cat_rollback"], 1,
+                         "bản TRƯỚC G22 phải ĐÈ còn 1 bản cất; đo được %s"
+                         % kq_cu["so_ban_cat_rollback"])
+        self.assertEqual(kq_moi["so_ban_cat_rollback"], 3,
+                         "bản ĐÃ VÁ phải để lại 3 bản cất; đo được %s"
+                         % kq_moi["so_ban_cat_rollback"])
+        self.assertGreater(kq_moi["so_ban_cat_rollback"], kq_cu["so_ban_cat_rollback"],
+                           "hai bản cho CÙNG kết quả ⇒ phép đo không phân biệt được bản vá")
         DA_TIEM["e3-ba-luot-cung-giay"] = True
         _dc_duong("e3-ba-luot-cung-giay")
-        print("       ⇒ phép đo PHÂN BIỆT ĐƯỢC: chưa vá → 1 · đã vá → %s"
-              % kq["so_ban_cat_rollback"])
+        print("       ⇒ phép đo PHÂN BIỆT ĐƯỢC: TRƯỚC → 1 · SAU → 3")
 
     def test_f3_vi_sao_phai_dong_bang_dong_ho(self):
-        """Vì sao không được chấp nhận một lượt chạy "may mắn": ĐO ĐƯỢC rằng `khoi_phuc()` đặt
-        tên theo GIÂY, nên ba lượt rơi vào hai giây khác nhau sẽ ra ≥2 tệp DÙ LỖI CÒN NGUYÊN."""
-        mg = os.path.join(GOC_APP, "migrate.py")
-        with open(mg, encoding="utf-8") as f:
+        """Vì sao phép đo KHÔNG được đọc giờ hệ thống — đo trên chính bản ĐÓNG BĂNG.
+
+        Cùng bản cũ, cùng lỗi ĐÈ: ba lượt trong CÙNG một giây → 1 bản cất; nếu đồng hồ nhích
+        (máy chậm / chạy chung) → 3 bản cất DÙ ĐƯỜNG ĐÈ CÒN NGUYÊN. Đó là XANH GIẢ. Vì thế phép
+        đo phải truyền `luc=` CỐ ĐỊNH — và `F1` đòi `cung_mot_moc`.
+        """
+        app_cu = _app_tam("dong-bang-leo-thang", migrate_cu=True)
+        try:
+            cung_giay = do_e3(app_cu, leo_thang=False)
+            leo_thang = do_e3(app_cu, leo_thang=True)
+        finally:
+            shutil.rmtree(app_cu, ignore_errors=True)
+        self.assertIsNotNone(cung_giay.get("so_ban_cat_rollback"),
+                             "KHÔNG ĐO ĐƯỢC bản cũ cùng giây: %s" % cung_giay.get("loi"))
+        self.assertIsNotNone(leo_thang.get("so_ban_cat_rollback"),
+                             "KHÔNG ĐO ĐƯỢC bản cũ nhích giây: %s" % leo_thang.get("loi"))
+        # Vế SOURCE trên sản phẩm THẬT: `khoi_phuc` nhận `luc` và CHUYỂN nó xuống nơi đặt tên.
+        with open(os.path.join(GOC_APP, "migrate.py"), encoding="utf-8") as f:
             nguon = f.read()
-        m = re.search(r'"hub-truoc-rollback-"\s*\+\s*datetime\.now\(\)\.strftime\("([^"]+)"\)',
-                      nguon)
-        self.assertIsNotNone(m, "không còn tìm thấy cách đặt tên bản cất của `khoi_phuc()`")
-        khuon = m.group(1)
-        co_hau_so = "_n" in nguon.split("def khoi_phuc", 1)[1].split("def ", 1)[0]
-        print("\n  [F3] khuôn tên bản cất của `khoi_phuc()`: `%s` (độ phân giải: GIÂY)" % khuon)
-        print("       có vòng thêm hậu số chống đè: %s" % co_hau_so)
-        print("       ⇒ ba lượt rơi vào HAI giây khác nhau cho ≥2 tệp mà KHÔNG cần sửa gì ⇒ lượt "
-              "chạy 'may mắn' là một cái XANH GIẢ. Vì thế `F1` ĐÓNG BĂNG đồng hồ.")
-        self.assertIn("%Y%m%d-%H%M%S", khuon,
-                      "khuôn tên đã đổi độ phân giải ⇒ ca `F1`/`F2` phải được thiết kế lại")
+        chu_ky = nguon.split("def khoi_phuc", 1)[1].split(")", 1)[0]
+        than = nguon.split("def khoi_phuc", 1)[1].split("\ndef ", 1)[0]
+        print("\n  [F3] vì sao phải truyền MỐC CỐ ĐỊNH — đo trên bản ĐÓNG BĂNG TRƯỚC G22:")
+        print("       ba lượt CÙNG một giây → %s bản cất · đồng hồ NHÍCH mỗi lượt → %s bản cất"
+              % (cung_giay["so_ban_cat_rollback"], leo_thang["so_ban_cat_rollback"]))
+        print("       (cùng lỗi ĐÈ; chỉ khác tốc độ máy ⇒ 'may mắn' là XANH GIẢ)")
+        print("       sản phẩm thật: chữ ký `khoi_phuc` có `luc=` = %s · chuyển `luc` xuống "
+              "`_duong_chua_dung` = %s"
+              % ("luc=None" in chu_ky,
+                 '_duong_chua_dung("hub-truoc-rollback", ".db", luc)' in than))
+        self.assertIn("luc=None", chu_ky,
+                      "`khoi_phuc()` mất tham số `luc=` ⇒ mốc lại bị đọc ngầm")
+        self.assertIn('_duong_chua_dung("hub-truoc-rollback", ".db", luc)', than,
+                      "`khoi_phuc()` không chuyển `luc` xuống `_duong_chua_dung`")
+        self.assertNotIn('"hub-truoc-rollback-" + datetime.now()', than,
+                         "`khoi_phuc()` lại đọc `datetime.now()` ngầm")
+        self.assertEqual(cung_giay["so_ban_cat_rollback"], 1,
+                         "bản cũ, CÙNG giây: phải còn 1 bản cất; đo được %s"
+                         % cung_giay["so_ban_cat_rollback"])
+        self.assertEqual(leo_thang["so_ban_cat_rollback"], 3,
+                         "bản cũ, đồng hồ NHÍCH: phải ra 3 bản cất DÙ lỗi còn nguyên — đó chính "
+                         "là XANH GIẢ cần chặn; đo được %s"
+                         % leo_thang["so_ban_cat_rollback"])
+        self.assertFalse(leo_thang["cung_mot_moc"],
+                         "ba bản cất của lượt nhích giây KHÔNG được cùng mốc: %s"
+                         % leo_thang["ten_ban_cat"])
+        # Vế SAU: bản thật + `luc=` phải TẤT ĐỊNH kể cả khi đồng hồ nhích.
+        kq_moi = do_e3(GOC_APP, leo_thang=True)
+        self.assertIsNotNone(kq_moi.get("so_ban_cat_rollback"),
+                             "KHÔNG ĐO ĐƯỢC bản thật khi đồng hồ nhích: %s" % kq_moi.get("loi"))
+        self.assertEqual(kq_moi["so_ban_cat_rollback"], 3,
+                         "bản thật + `luc=` phải ra 3 bản cất bất kể đồng hồ; đo được %s"
+                         % kq_moi["so_ban_cat_rollback"])
+        self.assertTrue(kq_moi["cung_mot_moc"],
+                        "bản thật + `luc=` mà tên KHÔNG mang mốc đã truyền: %s"
+                        % kq_moi["ten_ban_cat"])
+        print("       bản thật + `luc=`, đồng hồ NHÍCH → %s bản cất, cùng mốc=%s"
+              % (kq_moi["so_ban_cat_rollback"], kq_moi["cung_mot_moc"]))
 
 
 class G_NG2103(unittest.TestCase):
-    """ĐIỂM 4 Supervisor giao — `thu_g20_dahang.py::CaGanChat::test_c2a` có còn GHIM hành vi RÒ."""
+    """ĐIỂM 4 Supervisor giao — `N-G21-03`: ca `test_c2a` KHÔNG được GHIM hành vi RÒ.
+
+    HỢP ĐỒNG ĐÃ DUYỆT (G22 đã sửa ở `thu_g20_dahang.py`): credential NGẮN của BẤT KỲ hãng nào
+    cũng không được rò. Vì thế:
+      · ca trong cây phải KHẲNG ĐỊNH `assertFalse` (không rò), không còn `assertTrue` (ghim rò);
+      · ca phải CHẠY ĐƯỢC (rc=0), không phải một phép đo chết;
+      · bộ đo ĐỘC LẬP `thu_qa_g21.py::G5_CredentialNgan` phải đọc **0/5** trên cây thật;
+      · ĐỐI CHỨNG ĐƯỜNG: tắt luật ECHO THEO TÊN trên một bản sao TẠM ⇒ G5 phải đọc >0 VÀ ca
+        `test_c2a` đã viết lại phải ĐỎ. Không có vế này thì "0 rò" không phân biệt được với
+        "bộ dò mù".
+    """
 
     CA = ("app/thu/thu_g20_dahang.py",
           "CaGanChat.test_c2a_bang_2x2_che_theo_TEN_khong_chuyen_sang_hang_gia")
+
+    def _tiem_echo_cu(self):
+        """Bản sao TẠM của `app/` với luật ECHO THEO TÊN bị TẮT (hành vi trước G22).
+
+        Trả gốc thư mục tạm; người gọi PHẢI xoá. KHÔNG ghi một byte nào vào cây thật.
+        """
+        d = tempfile.mkdtemp(prefix="g22-tiem-echo-")
+        shutil.copytree(GOC_APP, os.path.join(d, "app"),
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        shutil.copytree(os.path.join(GOC_CAY, "trien_khai", "g20-dahang"),
+                        os.path.join(d, "trien_khai", "g20-dahang"),
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        p = os.path.join(d, "app", "http_jt.py")
+        with open(p, encoding="utf-8") as f:
+            nguon = f.read()
+        dau = "def _gia_tri_echo_theo_ten(than, headers_tra_loi, ten_ta_gui):\n"
+        if nguon.count(dau) != 1:
+            shutil.rmtree(d, ignore_errors=True)
+            raise RuntimeError("không tiêm được: luật ECHO THEO TÊN không còn đúng MỘT chỗ")
+        nguon = nguon.replace(
+            dau, dau + "    return set()  # TIÊM: tắt luật ECHO THEO TÊN (chính sách trước G22)\n", 1)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(nguon)
+        return d
 
     def test_g1_ca_thu_con_ghim_ro(self):
         DA_CHAY["ng21-03-ca-ghim-ro"] = True
         with open(os.path.join(GOC_CAY, self.CA[0]), encoding="utf-8") as f:
             nguon = f.read()
-        con_khang_dinh = 'self.assertTrue(ket_qua["gia_ngan"]' in nguon
+        con_ghim = ('self.assertTrue(ket_qua["gia_ngan"]' in nguon
+                    or 'self.assertTrue(ket_qua["gia_ngan_2"]' in nguon)
+        da_sua = ('self.assertFalse(ket_qua["gia_ngan"]' in nguon
+                  and 'self.assertFalse(ket_qua["gia_ngan_2"]' in nguon)
         rc, out = chay([PY, self.CA[0], self.CA[1]], giay=300)
+        chay_duoc = (rc == 0 and "Ran 1 test" in out and "OK" in out
+                     and "skipped=" not in out)
         print("\n  [G1] LỆNH: python3 %s %s" % self.CA)
-        print("       mã thoát THẬT = %d · %s" % (rc, out.strip().splitlines()[-1] if out.strip() else ""))
-        print("       còn khẳng định `assertTrue(ket_qua[\"gia_ngan\"])` (tức CÒN GHIM RÒ): %s"
-              % con_khang_dinh)
-        gia_tri = 1 if (rc == 0 and con_khang_dinh) else 0
-        # ĐỐI CHỨNG DƯƠNG BẮT BUỘC: một bộ đo ĐỘC LẬP phải THẤY được sự rò mà ca kia đang ghim.
+        print("       mã thoát THẬT = %d · %s"
+              % (rc, out.strip().splitlines()[-1] if out.strip() else ""))
+        print("       còn khẳng định CŨ `assertTrue(ket_qua[\"gia_ngan\"])` (ghim RÒ) = %s · "
+              "đã có `assertFalse(...)` (bất biến ĐÚNG) = %s" % (con_ghim, da_sua))
+        self.assertFalse(con_ghim,
+                         "ca `test_c2a` VẪN GHIM hành vi RÒ (`assertTrue`) ⇒ `N-G21-03` chưa đóng")
+        self.assertTrue(da_sua,
+                        "ca `test_c2a` KHÔNG khẳng định bất biến ĐÚNG (`assertFalse`) ⇒ nó không "
+                        "còn đo 'credential NGẮN không được rò'")
+        self.assertTrue(chay_duoc,
+                        "ca `test_c2a` KHÔNG CHẠY ĐƯỢC (rc=%d, 'OK'=%s, 'skipped='=%s) — một phép "
+                        "đo chết không được tính là 'hết ghim rò':\n%s"
+                        % (rc, "OK" in out, "skipped=" in out,
+                           "\n".join(out.splitlines()[-25:])))
+        # ĐỐI CHỨNG (a): bộ đo ĐỘC LẬP trên cây THẬT phải đọc 0/5 — lỗ rò đã đóng.
         rc2, out2 = chay([PY, "app/thu/thu_qa_g21.py", "G5_CredentialNgan"], giay=900)
         m = re.search(r"tổ hợp RÒ=(\d+)/(\d+)", out2)
         so_ro = int(m.group(1)) if m else None
-        print("       ĐỐI CHỨNG DƯƠNG (bộ đo ĐỘC LẬP `thu_qa_g21.py::G5_CredentialNgan`): "
-              "rc=%d · tổ hợp RÒ=%s" % (rc2, ("%s/%s" % (m.group(1), m.group(2))) if m else "?"))
+        chay_duoc_g5 = (rc2 == 0 and "Ran 1 test" in out2 and "OK" in out2
+                        and "skipped=" not in out2)
+        print("       ĐỐI CHỨNG (a) — bộ đo ĐỘC LẬP `thu_qa_g21.py::G5_CredentialNgan` trên cây "
+              "thật: rc=%d · tổ hợp RÒ=%s"
+              % (rc2, ("%s/%s" % (m.group(1), m.group(2))) if m else "?"))
         self.assertIsNotNone(
-            so_ro, "bộ đo độc lập không cho ra số ⇒ 'ca xanh' không phân biệt được với 'hết rò':\n%s"
+            so_ro, "bộ đo độc lập không cho ra số ⇒ '0 rò' không phân biệt được với 'bộ dò mù':\n%s"
                    % "\n".join(out2.splitlines()[-25:]))
-        self.assertGreater(
-            so_ro, 0, "bộ đo độc lập báo 0 tổ hợp rò ⇒ nó mù, và kết luận 'ca còn ghim rò' vô nghĩa")
+        self.assertTrue(chay_duoc_g5,
+                        "bộ đo độc lập KHÔNG chạy được (rc=%d) ⇒ con số vô nghĩa:\n%s"
+                        % (rc2, "\n".join(out2.splitlines()[-25:])))
+        self.assertEqual(so_ro, 0,
+                         "bộ đo độc lập còn thấy %s tổ hợp RÒ trên cây thật ⇒ bất biến "
+                         "'credential NGẮN không được rò' đang MỞ" % so_ro)
+        # ĐỐI CHỨNG (b): TIÊM lại chính sách cũ — tắt luật ECHO THEO TÊN — G5 phải thấy rò VÀ
+        # ca `test_c2a` đã viết lại phải ĐỎ. Đây là vế chứng minh bộ dò KHÔNG mù.
+        goc_tiem = self._tiem_echo_cu()
+        try:
+            rc3, out3 = chay([PY, "app/thu/thu_qa_g21.py", "G5_CredentialNgan"], giay=900,
+                             cwd=goc_tiem)
+            rc4, out4 = chay([PY, self.CA[0], self.CA[1]], giay=300, cwd=goc_tiem)
+        finally:
+            shutil.rmtree(goc_tiem, ignore_errors=True)
+        m3 = re.search(r"tổ hợp RÒ=(\d+)/(\d+)", out3)
+        so_ro_tiem = int(m3.group(1)) if m3 else None
+        print("       ĐỐI CHỨNG (b) — TIÊM tắt luật ECHO THEO TÊN: G5 đọc tổ hợp RÒ=%s · `test_c2a` "
+              "rc=%d (%s)" % (("%s/%s" % (m3.group(1), m3.group(2))) if m3 else "?",
+                             rc4, "ĐỎ ✓" if rc4 != 0 else "VẪN XANH ✗"))
+        self.assertIsNotNone(so_ro_tiem,
+                             "bản tiêm không cho ra số ⇒ phép tiêm hỏng, không kết luận được")
+        self.assertGreater(so_ro_tiem, 0,
+                           "tắt luật ECHO THEO TÊN mà G5 vẫn 0 rò ⇒ bộ dò MÙ, '0/5' trên cây thật "
+                           "không chứng minh được gì")
+        self.assertNotEqual(rc4, 0,
+                            "bản tiêm chính sách cũ mà `test_c2a` VẪN XANH ⇒ ca không bắt được "
+                            "hồi quy; nó chỉ 'xanh vì sản phẩm xanh'")
+        self.assertIn("RÒ", out4,
+                      "`test_c2a` đỏ nhưng KHÔNG phải vì RÒ ⇒ đỏ do lý do khác:\n%s"
+                      % "\n".join(out4.splitlines()[-25:]))
         _dc_duong("ng21-03-ca-ghim-ro")
         DA_TIEM["ng21-03-ca-ghim-ro"] = True
+        gia_tri = 1 if con_ghim else 0
         dat, vi = dat_cong("ng21-03-ca-ghim-ro", gia_tri)
         print("       phân quyết: %s" % phan_quyet("ng21-03-ca-ghim-ro", gia_tri))
         self.assertTrue(dat, "CỔNG `ng21-03-ca-ghim-ro` ĐỎ: %s" % vi)
@@ -1699,7 +1988,7 @@ def _khoa_tam():
 
 
 def _kiem_tra_pham_vi():
-    """Bộ kiểm TỰ KIỂM phạm vi ghi: ngoài hai tệp được phép, cây phải sạch.
+    """Bộ kiểm TỰ KIỂM phạm vi ghi: ngoài danh sách tệp được phép, cây phải sạch.
 
     Miễn trừ delta HEAD↔nền dùng CÙNG hàm `delta_head_voi_nen()` như `A2` — một luật, một chỗ.
     """
@@ -1765,7 +2054,7 @@ def main():
     print("    HEAD=%s · write-tree=%s · %s tệp · băm danh sách=%s"
           % (vt["head"][:12], vt["tree"][:12], vt["so_tep"], vt["bam_danh_sach"][:16]))
     pv = _kiem_tra_pham_vi()
-    print("    phạm vi ghi: %d đường trong `status`; ngoài hai tệp được phép: %s"
+    print("    phạm vi ghi: %d đường trong `status`; ngoài danh sách được phép: %s"
           % (pv["so_duong"], pv["ngoai"] or "KHÔNG"))
     ok20, gc20 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
     ok21, gc21 = nguon_da_va(BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA)

@@ -175,11 +175,47 @@ LOG_CHAY_TAT_CA = os.environ.get("VIP_G22_LOG_TAT_CA") or os.path.join(
 # `g20_cop_tam()`/`g20_va_c5()` đã bị XOÁ HẲN (xem `docs/QA_G22.md` §7).
 BAN_DO_G20 = os.path.join(GOC_THU, "thu_qa_g20.py")
 BAN_DO_G21 = os.path.join(GOC_THU, "thu_qa_g21.py")
-# sha256 của bản GỐC (TRƯỚC khi vá). Đây là CHỐT CHỐNG TRÔI: hoàn vá tệp đang có trong cây rồi
-# băm, phải ra ĐÚNG hai giá trị này — nếu không thì cây đang đo KHÔNG PHẢI "bản gốc + đúng hai
-# khối vá", và mọi con số dưới đây không đối chiếu được.
-BAN_DO_G20_GOC_SHA = "5a4b3c83c45f2f2c465d2eed380f1f6f69583878ca9e3a5f910bd01c1a0ddcd0"
-BAN_DO_G21_GOC_SHA = "4ebf21e8804246bda315fbe9bc1721625fad0ec2130c5036f235d4e04ca40700"
+# ── GHIM HAI BÀN ĐO — CẬP NHẬT SAU KHI GỘP U1..U5 (`task_889a1ddeccdb`, cây `5fc5f6f`) ─────────
+#
+# HAI ô cho MỖI tệp, vì chúng chặn HAI kiểu trôi KHÁC NHAU — cả hai đều là đối tượng của vòng này
+# (`msg_0b757445cfb8`: *"G22 `nguon_da_va`/`D1` và `I_TiemLoiC5` đang ghim hash G20/G21 cũ"*):
+#
+#   · `..._SHA_TRONG_CAY` — sha256 của ĐÚNG tệp đang nằm trong cây. Đổi MỘT byte (kể cả bên
+#     trong khối vá) ⇒ `nguon_da_va()` ĐỎ NGAY và nói ra "tệp TRONG CÂY đã bị đổi". Đây là chốt
+#     "bộ đo bị đổi giữa lượt".
+#   · `..._GOC_SHA` — sha256 của nội dung SAU KHI HOÀN VÁ hai khối bộ đếm ⇒ chứng minh tệp trong
+#     cây đúng là "bản gốc đã chốt + ĐÚNG hai khối vá", không phải bản bị sửa tay ở chỗ khác.
+#
+# **GHIM NÀY KHÔNG PHẢI ĐỂ BÁO XANH.** Giá trị mới được TÍNH TẠI CHỖ từ chính hai tệp, KHÔNG chép
+# từ log của lượt trước, và KHÔNG suy ra từ việc "cổng đang đỏ nên đổi số cho khớp". Lệnh đã
+# chạy (ở gốc cây, sau khi gộp `5fc5f6f`; `_hoan_va` dựng lại bản không vá rồi băm):
+#
+#   $ python3 - <<'EOF'
+#   import hashlib, importlib.util, sys
+#   spec = importlib.util.spec_from_file_location("g22", "app/thu/thu_qa_g22.py")
+#   m = importlib.util.module_from_spec(spec); sys.modules["g22"] = m
+#   spec.loader.exec_module(m)
+#   for p, cap in ((m.BAN_DO_G20, m.G20_C5_VA), (m.BAN_DO_G21, m.G21_G7_VA)):
+#       than = open(p, encoding="utf-8").read()
+#       print(hashlib.sha256(than.encode()).hexdigest(),
+#             hashlib.sha256(m._hoan_va(than, cap).encode()).hexdigest())
+#   EOF
+#
+#   b56062bc928f16f0db13eb4b806b20ad342c992f224ad4df70f6c446710b48dc  6a96e294066abdd0be1c824a8f292df913d7344cb74b3b62463c9dcc13fe818f
+#   4e730aac79cbb4f7bc541d151e9d423a616635a4707cfce4c2e602fa9520d0a2  6a97ef519b3433bfbf105048721bbd743354fc014e6d541efc4bc2364a9982be
+#
+# VÌ SAO CẢ HAI GIÁ TRỊ ĐỀU ĐỔI (không phải "nới cổng"): U2 đã sửa THẬT `thu_qa_g20.py` (bỏ ghim
+# stale C1/C4, import `thu_g21_chotcay` cho phép đo tầng 3) và U3 đã sửa THẬT `thu_qa_g21.py`
+# (bỏ ghim stale). Tệp đo đổi ⇒ ghim phải đổi THEO, có ý thức — và ĐỐI CHỨNG ÂM chứng minh ghim
+# vẫn có răng: đổi một byte trong tệp G20/G21 ⇒ `nguon_da_va()` PHẢI ĐỎ (`D1`, đối chứng (e)-(g)).
+#
+# Lịch sử ghim (CHỈ ĐỂ ĐỌC — một bản sao thứ hai là một bản sẽ trôi):
+#   G20 gốc: 5a4b3c83c45f… (đến `5fc5f6f`) → 6a96e294066a… (bản này)
+#   G21 gốc: 4ebf21e88042… (đến `5fc5f6f`) → 6a97ef519b34… (bản này)
+BAN_DO_G20_SHA_TRONG_CAY = "b56062bc928f16f0db13eb4b806b20ad342c992f224ad4df70f6c446710b48dc"
+BAN_DO_G20_GOC_SHA = "6a96e294066abdd0be1c824a8f292df913d7344cb74b3b62463c9dcc13fe818f"
+BAN_DO_G21_SHA_TRONG_CAY = "4e730aac79cbb4f7bc541d151e9d423a616635a4707cfce4c2e602fa9520d0a2"
+BAN_DO_G21_GOC_SHA = "6a97ef519b3433bfbf105048721bbd743354fc014e6d541efc4bc2364a9982be"
 
 PY = sys.executable or "python3"
 
@@ -362,6 +398,17 @@ SO_DO = {
     # N-G21-03 (điểm 4) — `thu_g20_dahang.py::CaGanChat::test_c2a` có còn GHIM hành vi RÒ không.
     # Nền: 1 (còn ghim). Đóng: 0.
     "ng21-03-ca-ghim-ro": {"nen": 1, "dong": 0},
+
+    # C4 = `G19-C6` (KHÁC `OWNER_ACTIONS C4` = D-8/BLOCKED OWNER). Cập nhật theo THỰC TẾ ở
+    # `5fc5f6f`: việc này có HAI tầng, đóng ở hai mốc khác nhau, nay ĐÓNG CẢ HAI — nên sổ ghi
+    # BỘ BA thay vì cặp boolean (một cặp không phân biệt được "thiếu tuyến" với "thiếu chỉ mục"):
+    #   (1) `schema_ok`  — `PHIEN_BAN_SCHEMA >= MỐC` migration áp `truy_van.DDL_G12Q` (=v10 hiện
+    #                      tại), MỐC đọc tại chỗ từ `app/migrate.py`, KHÔNG ghim số;
+    #   (2) `chi_muc_ok` — hằng `truy_van.DDL_G12Q` có thật (khác rỗng) + mốc được `chay()` GỌI;
+    #   (3) `tuyen_ok`   — có tệp SẢN XUẤT vừa import vừa DÙNG `truy_van` cho tuyến.
+    # Nền `a6b5b73` (schema 9, chưa có mốc DDL, chưa nối tuyến): (False, False, False).
+    # Đóng (đo trên cây này): (True, True, True).
+    "c4-route-va-moc-ddl": {"nen": (False, False, False), "dong": (True, True, True)},
 }
 
 # Năm cổng C1..C5 của bàn đo G20 — nguyên văn `SO_DO` của nó, KHÔNG sửa.
@@ -448,13 +495,23 @@ DOI_CHUNG = {
         "LÀM THẬT (mỗi cái một tiến trình con chạy qua đúng hàm `_phan_quyet_ban_do_g20`) — "
         "(a) thoát != 0 dù chữ nói `OK` ⇒ ĐỎ; (b) thoát 0 nhưng có dòng `FAIL` ⇒ ĐỎ; "
         "(c) `Ran 0 tests` ⇒ ĐỎ; (d) bàn đo không tồn tại ⇒ ĐỎ và nói rõ 'KHÔNG CHẠY ĐƯỢC' — "
-        "kèm một đối chứng DƯƠNG (bàn đo giả XANH ⇒ ĐẠT) để chặn kiểu hỏng 'cổng luôn Đỏ'.",
+        "kèm một đối chứng DƯƠNG (bàn đo giả XANH ⇒ ĐẠT) để chặn kiểu hỏng 'cổng luôn Đỏ'. "
+        "VÀ ba đối chứng âm của CHÍNH CÁI GHIM (e)-(g) LÀM THẬT trên bản sao TMP: đổi một chữ "
+        "NGOÀI khối vá G20 ⇒ vế 'tệp trong cây' phải ĐỎ; đổi một chữ TRONG khối vá ⇒ phép hoàn "
+        "vá phải ĐỎ; đổi một chữ ngoài khối vá G21 ⇒ ghim G21 phải ĐỎ — kèm đối chứng DƯƠNG "
+        "(bản sao y nguyên ⇒ ĐẠT). Ghim phục vụ phát hiện 'bộ đo bị đổi giữa lượt', nên phải "
+        "chứng minh nó NHÌN THẤY thay đổi.",
     "c4-go-route":
-        "CÙNG phép đo `_do_c4()` trên HAI bản: (a) bản sao `app/` Y NGUYÊN phải cho đúng cặp "
-        "(True, True) như cây thật; (b) CHÍNH bản sao đó sau khi GỠ TUYẾN bằng AST (mọi "
-        "`import truy_van` + mọi khối `if` DÙNG nó) phải cho (True, False) và cổng PHẢI ĐỎ. "
-        "Không có (a) thì 'đỏ khi gỡ' có thể chỉ là 'bản sao hỏng sẵn'; không có (b) thì 'đã "
-        "đóng' không phân biệt được với một bộ đo MÙ.",
+        "CÙNG phép đo `_do_c4()` trên BA bản, mỗi bản chứng minh MỘT tầng của `G19-C6`: (a) bản "
+        "sao `app/` Y NGUYÊN phải cho đúng bộ ba (True, True, True) như cây thật + đúng danh sách "
+        "tham chiếu; (b) CHÍNH bản sao đó sau khi GỠ TUYẾN bằng AST (mọi `import truy_van` + mọi "
+        "khối `if` DÙNG nó, trên MỌI tệp sản xuất có tham chiếu TUYẾN) phải cho (True, True, "
+        "False) — tầng CHỈ MỤC không bị chạm — và `dat_cong` PHẢI ĐỎ; (c) một bản sao KHÁC bị HẠ "
+        "`PHIEN_BAN_SCHEMA` xuống `MỐC − 1` phải cho `schema_ok` False và `dat_cong` PHẢI ĐỎ, "
+        "kèm đối chứng DƯƠNG nâng lên `MỐC + 3` thì VẪN ĐẠT (chứng minh `>=`, không ghim đúng "
+        "một số). Không có (a) thì 'đỏ khi tiêm' có thể chỉ là 'bản sao hỏng sẵn'; không có (b) "
+        "thì 'tuyến đã nối' không phân biệt được với bộ đo MÙ; không có (c) thì 'schema tối "
+        "thiểu' chỉ là lời khai.",
     "nua-voi":
         "bơm giá trị nằm GIỮA nền và đóng; `phan_quyet` phải trả NUA_VOI và cổng phải ĐỎ.",
     "cay-sach-bo-do":
@@ -974,17 +1031,27 @@ def _hoan_va(than, cap):
     return than
 
 
-def nguon_goc(duong, cap, sha_goc):
+def nguon_goc(duong, cap, sha_goc, sha_trong_cay=None):
     """Nội dung GỐC (trước khi vá) của tệp nguồn `duong`, KIỂM BẰNG sha256. Trả `(nội_dung, ghi_chú)`.
 
     `nội_dung is None` nghĩa là KHÔNG chứng minh được "bản gốc đã ghim + ĐÚNG hai khối vá" ⇒ người
     gọi DỪNG, chứ không đo bằng một bàn đo đã trôi. Đây là chốt thay cho `BAN_DO_G20_SHA` cũ: bản
     vá nay nằm TRONG tệp nguồn, nên "gốc" được dựng lại bằng HOÀN VÁ rồi băm — không cần bản sao.
+
+    `sha_trong_cay` (tuỳ chọn) = sha256 của ĐÚNG tệp trong cây. Kiểm TRƯỚC khi hoàn vá, nên một
+    thay đổi bất kỳ — kể cả bên trong khối vá — bị bắt ở đây với thông điệp nói rõ "TỆP TRONG CÂY
+    ĐÃ BỊ ĐỔI", thay vì đổ lỗi mơ hồ cho "khối vá không khớp". `None` = không kiểm (dùng cho tệp
+    dựng trong TMP ở các đối chứng âm).
     """
     if not os.path.exists(duong):
         return None, "KHÔNG có tệp nguồn `%s`" % duong
     with open(duong, encoding="utf-8") as f:
         than = f.read()
+    bam_that = hashlib.sha256(than.encode("utf-8")).hexdigest()
+    if sha_trong_cay is not None and bam_that != sha_trong_cay:
+        return None, ("sha256 TỆP TRONG CÂY = %s ≠ ghim %s ⇒ `%s` ĐÃ BỊ ĐỔI (bộ đo trôi trong lượt); "
+                      "không đo bằng một bàn đo đã trôi"
+                      % (bam_that[:16], sha_trong_cay[:16], os.path.basename(duong)))
     goc = _hoan_va(than, cap)
     if goc is None:
         return None, ("KHÔNG hoàn vá được `%s`: khối vá không còn khớp nguyên văn ⇒ tệp trong cây "
@@ -994,13 +1061,13 @@ def nguon_goc(duong, cap, sha_goc):
         return None, ("hoàn vá xong, sha256 = %s ≠ ghim %s ⇒ tệp nguồn `%s` đã TRÔI khỏi bản gốc "
                       "(không đo bằng một bàn đo đã trôi)"
                       % (ra[:16], sha_goc[:16], os.path.basename(duong)))
-    return goc, ("`%s`: gốc ghim %s ✓ + đúng %d khối vá"
-                 % (os.path.basename(duong), sha_goc[:12], len(cap)))
+    return goc, ("`%s`: tệp trong cây %s ✓ · gốc ghim %s ✓ + đúng %d khối vá"
+                 % (os.path.basename(duong), (sha_trong_cay or bam_that)[:12], sha_goc[:12], len(cap)))
 
 
-def nguon_da_va(duong, cap, sha_goc):
+def nguon_da_va(duong, cap, sha_goc, sha_trong_cay=None):
     """Xác nhận tệp TRONG CÂY = bản gốc đã ghim + đúng hai khối vá. Trả `(ok, ghi_chú)`."""
-    goc, ghi_chu = nguon_goc(duong, cap, sha_goc)
+    goc, ghi_chu = nguon_goc(duong, cap, sha_goc, sha_trong_cay)
     if goc is None:
         return False, ghi_chu
     with open(duong, encoding="utf-8") as f:
@@ -1010,6 +1077,29 @@ def nguon_da_va(duong, cap, sha_goc):
     if cap[1][0] in than:
         return False, "`%s` còn nguyên văn CŨ của khối quyết định" % os.path.basename(duong)
     return True, ghi_chu + " · bản trong cây ĐÃ VÁ"
+
+
+def ban_sao_tiem(duong, bien_doi):
+    """BẢN SAO trong `TMP` của `duong` sau khi áp `bien_doi` — dùng cho ĐỐI CHỨNG ÂM của GHIM.
+
+    Trả `(thư_mục_tạm, đường_dẫn_bản_sao, mô_tả)`. Ném nếu phép tiêm KHÔNG đổi được byte nào (khi
+    đó "đối chứng đỏ" sẽ là một lời khai rỗng). `bien_doi=None` = chép Y NGUYÊN (dùng cho ĐỐI
+    CHỨNG DƯƠNG: bản sao không tiêm phải ĐẠT). KHÔNG ghi một byte nào vào cây thật.
+    """
+    with open(duong, encoding="utf-8") as f:
+        than = f.read()
+    if bien_doi is None:
+        moi, mo_ta = than, "bản sao Y NGUYÊN (không tiêm)"
+    else:
+        moi, mo_ta = bien_doi(than)
+        if moi == than:
+            raise AssertionError("phép TIÊM vào `%s` không đổi được byte nào ⇒ đối chứng vô nghĩa"
+                                 % os.path.basename(duong))
+    d = tempfile.mkdtemp(prefix="g22-tiem-ghim-")
+    p = os.path.join(d, os.path.basename(duong))
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(moi)
+    return d, p, mo_ta
 
 
 # ── BẢN VÁ `N-G22-01` — HAI KHỐI BỘ ĐẾM, VÁ **THẲNG Ở TỆP NGUỒN** ─────────────────────────────
@@ -1707,7 +1797,13 @@ class D_BanDoG20(unittest.TestCase):
             có dòng `FAIL`/`ERROR` ⇒ ĐỎ (kể cả khi `rc == 0`);
           · bàn đo không tồn tại / không chạy được ⇒ ĐỎ và in rõ, KHÔNG được coi là đạt;
           · BỐN ĐỐI CHỨNG ÂM BẮT BUỘC (a)–(d) + một ĐỐI CHỨNG DƯƠNG, mỗi cái là một TIẾN TRÌNH
-            CON THẬT đi qua ĐÚNG hàm `_phan_quyet_ban_do_g20()` mà ca thật dùng.
+            CON THẬT đi qua ĐÚNG hàm `_phan_quyet_ban_do_g20()` mà ca thật dùng;
+          · BA ĐỐI CHỨNG ÂM CỦA CHÍNH CÁI GHIM (e)–(g) + một ĐỐI CHỨNG DƯƠNG, LÀM THẬT trên bản
+            sao trong `TMP`: đổi một chữ NGOÀI khối vá G20 (e) ⇒ ghim "tệp trong cây" phải ĐỎ;
+            đổi một chữ TRONG khối vá (f) ⇒ phép hoàn vá phải ĐỎ; đổi một chữ ngoài khối vá G21
+            (g) ⇒ ghim G21 cũng phải ĐỎ; bản sao Y NGUYÊN ⇒ phải ĐẠT (ghim không "luôn Đỏ").
+            Ghim ở đây KHÔNG phục vụ báo xanh — nó phục vụ phát hiện "bộ đo bị đổi giữa lượt",
+            nên phải chứng minh nó NHÌN THẤY thay đổi, không phải chỉ khai là có ghim.
 
         KHÔNG xoá ca, KHÔNG hạ ngưỡng, KHÔNG ép PASS: nếu G20 còn hỏng thì ca này ĐỎ và đó là
         ĐÚNG — nó đang phản ánh lỗi thật của bàn đo G20 (chủ `thu_qa_g20.py`), không phải lỗi
@@ -1716,7 +1812,10 @@ class D_BanDoG20(unittest.TestCase):
         DA_CHAY["g20-c1-cay-sach"] = True
         # KHÔNG chép, KHÔNG vá một bản sao: TỆP NGUỒN trong cây phải ĐÃ VÁ, và phải CHỨNG MINH được
         # nó là "bản gốc đã ghim + đúng hai khối vá" — bằng cách HOÀN VÁ rồi băm (`nguon_da_va`).
-        ok, ghi_chu = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
+        # HAI ghim, HAI câu hỏi: tệp trong cây còn ĐÚNG sha đã chốt? và sau khi hoàn vá nó ra ĐÚNG
+        # bản gốc đã chốt? Đổi bất kỳ byte nào cũng làm vế đầu ĐỎ — đó là "bộ đo bị đổi giữa lượt".
+        ok, ghi_chu = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA,
+                                  BAN_DO_G20_SHA_TRONG_CAY)
         print("\n  [D1] bàn đo G20 = TỆP NGUỒN trong cây `app/thu/thu_qa_g20.py`: %s" % ghi_chu)
         if not ok:
             self.fail("TỆP NGUỒN `app/thu/thu_qa_g20.py` KHÔNG PHẢI 'bản gốc đã ghim + đúng hai "
@@ -1743,16 +1842,22 @@ class D_BanDoG20(unittest.TestCase):
         self.__class__._kq = {"chay_duoc": rc is not None, "rc": rc, "out": out, "pq": pq}
 
         # C1..C5: đọc NGUYÊN VĂN dòng phán quyết của CHÍNH bàn đo — không suy diễn lại.
-        # Nhãn in ra của bàn đo là `[G1]` (C1), `[B1]` (C2), `[C2]` (C3), `[C4]`, `[C5]`;
+        # Nhãn in ra của bàn đo là `[G1]` (C1), `[B1]` (C2), `[C1]` (C3), `[C4]`, `[C5]`;
         # `SO_DO_G20[...]["ten_do"]` là KHÓA NỘI BỘ của nó, không phải nhãn in ra.
         #
         # MẪU CHỈ GHIM **NHÃN**, KHÔNG GHIM PHẦN CÒN LẠI CỦA DÒNG: mẫu cũ (`\[B1\] nhị phân…`,
         # `\[C2\] GIT_CONFIG…`) ghim nguyên văn nội dung, nên khi bàn đo đổi câu chữ (đo được:
         # `[B1] nền không dựng được …`) thì `D1` in "KHÔNG THẤY DÒNG ĐO" trong khi dòng đó CÓ —
         # đúng họ H5/N-G19-04 (ghim sự thật môi trường) và nó che mất thông tin khi báo cáo.
+        # VÒNG NÀY: U2 đã đổi nhãn C3 từ `[C2]` → `[C1]` khi bỏ ghim stale của bàn đo G20; mẫu
+        # `\[C2\]` vì thế lại in "KHÔNG THẤY DÒNG ĐO" dù dòng CÓ (đo trên `g20_gop.txt` dòng 31:
+        # `[C1] git thô=0 (OK) …`). Đây là lần THỨ HAI cùng một kiểu trôi — nên nhãn được cặp
+        # thêm TỪ KHOÁ nội dung (`git`) để nếu bàn đo đổi nhãn lần nữa mà vẫn nói về git thì
+        # vẫn đọc được, thay vì im lặng.
         MAU = (("C1 cổng cây sạch wave trước", r"^\s*\[G1\][^\n]*"),
                ("C2 bàn phím TRONG màn (tầng 3)", r"^\s*\[B1\][^\n]*"),
-               ("C3 git với môi trường NGUYÊN BẢN", r"^\s*\[C2\][^\n]*"),
+               ("C3 git với môi trường NGUYÊN BẢN",
+                r"^\s*\[C[12]\][^\n]*\bgit\b[^\n]*|^\s*\[C2\][^\n]*"),
                ("C4 route truy_van + migration v9", r"^\s*\[C4\][^\n]*"),
                ("C5 có bộ G19-tổng-hợp chạy được", r"^\s*\[C5\][^\n]*"))
         for ten, mau in MAU:
@@ -1816,9 +1921,75 @@ class D_BanDoG20(unittest.TestCase):
         self.assertTrue(co_c2, "bàn đo G20 chết toàn bộ — C1 đỏ không phân biệt được với "
                                "'bàn đo không chạy'")
         # VÀ tệp nguồn KHÔNG được đổi bởi chính lượt đo này (không ai chép/xoá nó nữa).
-        ok2, ghi_chu2 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
+        ok2, ghi_chu2 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA,
+                                    BAN_DO_G20_SHA_TRONG_CAY)
         print("       sau lượt đo, tệp nguồn vẫn là 'gốc + 2 khối vá' = %s" % ok2)
         self.assertTrue(ok2, "lượt đo đã ĐỔI tệp nguồn: %s" % ghi_chu2)
+
+        # ── ĐỐI CHỨNG ÂM CỦA CHÍNH CÁI GHIM — LÀM THẬT TRÊN BẢN SAO TRONG `TMP` ───────────────
+        # Ghim chỉ có nghĩa nếu nó ĐỎ khi bộ đo bị đổi. Ba phép tiêm + một phép DƯƠNG, mỗi phép
+        # nhắm ĐÚNG MỘT trong HAI ô ghim:
+        #   (e) đổi một chữ NGOÀI khối vá G20, KIỂM CẢ HAI ô  ⇒ ô "tệp TRONG CÂY" phải bắt;
+        #   (f) đổi một chữ TRONG khối vá G20, CHỈ KIỂM ô GỐC (`sha_trong_cay=None`) ⇒ phép HOÀN
+        #       VÁ phải bắt — nếu vẫn kiểm ô cây thì (e) và (f) sẽ cùng một đường, và ô "gốc" sẽ
+        #       không bao giờ được chứng minh là có răng;
+        #   (g) đổi một chữ ngoài khối vá G21  ⇒ ghim G21 cũng phải có răng;
+        #   (+) bản sao Y NGUYÊN (không tiêm)  ⇒ phải ĐẠT, chặn kiểu hỏng "ghim luôn Đỏ".
+        def _tieu_de(ten_cu, ten_moi):
+            def _f(t):
+                if t.count(ten_cu) < 1:
+                    raise AssertionError("không tìm được `%s` để tiêm" % ten_cu)
+                return t.replace(ten_cu, ten_moi, 1), "đổi dòng tiêu đề (NGOÀI khối vá)"
+            return _f
+
+        def _trong_khoi_va(t):
+            cu = G20_C5_VA[1][1]
+            if t.count(cu) != 1:
+                raise AssertionError("khối quyết định của bản vá không còn đúng MỘT chỗ")
+            moi = cu.replace("XANH chỉ khi", "XANH chỉ khi (TIÊM-GHIM)", 1)
+            if moi == cu:
+                raise AssertionError("không tiêm được vào khối quyết định")
+            return t.replace(cu, moi, 1), "đổi một chữ BÊN TRONG khối quyết định (khối vá)"
+
+        ds_am = (
+            ("(e) G20 — đổi 1 chữ NGOÀI khối vá", BAN_DO_G20, G20_C5_VA,
+             BAN_DO_G20_GOC_SHA, BAN_DO_G20_SHA_TRONG_CAY,
+             _tieu_de("AG-01 (G20) — BỘ KIỂM ĐỘC LẬP", "AG-01 (G20) — BỘ KIỂM ĐỘC LẬP [TIÊM]"),
+             True, None),
+            ("(f) G20 — đổi 1 chữ TRONG khối vá", BAN_DO_G20, G20_C5_VA,
+             BAN_DO_G20_GOC_SHA, BAN_DO_G20_SHA_TRONG_CAY, _trong_khoi_va,
+             False, "KHÔNG hoàn vá được"),
+            ("(g) G21 — đổi 1 chữ NGOÀI khối vá", BAN_DO_G21, G21_G7_VA,
+             BAN_DO_G21_GOC_SHA, BAN_DO_G21_SHA_TRONG_CAY,
+             _tieu_de("AG-01 (G21) — BỘ KIỂM ĐỘC LẬP", "AG-01 (G21) — BỘ KIỂM ĐỘC LẬP [TIÊM]"),
+             True, None),
+        )
+        print("       ĐỐI CHỨNG ÂM CỦA GHIM — tiêm vào BẢN SAO trong TMP, cây thật KHÔNG bị chạm:")
+        for nhan, duong, cap, sha_goc, sha_cay, bien_doi, kiem_cay, phai_gap in ds_am:
+            d, p, mo_ta = ban_sao_tiem(duong, bien_doi)
+            try:
+                ok_a, gc_a = nguon_da_va(p, cap, sha_goc, sha_cay if kiem_cay else None)
+                print("       %-38s → %s (đòi ĐỎ) · %s"
+                      % (nhan, "ĐỎ ✓" if not ok_a else "ĐẠT-SAI ✗", gc_a[:150]))
+                self.assertFalse(ok_a, "CỔNG MÙ: tiêm `%s` mà vẫn xác nhận là bản gốc (%s)"
+                                 % (mo_ta, gc_a))
+                if phai_gap:
+                    self.assertIn(phai_gap, gc_a,
+                                  "phép tiêm `%s` bị bắt, nhưng KHÔNG phải bởi chốt `%s` (lý do "
+                                  "thật: %s) ⇒ đối chứng không chứng minh đúng ô ghim"
+                                  % (mo_ta, phai_gap, gc_a))
+            finally:
+                shutil.rmtree(d, ignore_errors=True)
+        # (+) ĐỐI CHỨNG DƯƠNG: bản sao KHÔNG tiêm phải ĐẠT — nếu không thì "ĐỎ khi tiêm" có thể
+        # chỉ là "hàm luôn trả Đỏ", và ghim chẳng chứng minh được gì.
+        d, p, mo_ta = ban_sao_tiem(BAN_DO_G20, None)
+        try:
+            ok_p, gc_p = nguon_da_va(p, G20_C5_VA, BAN_DO_G20_GOC_SHA, BAN_DO_G20_SHA_TRONG_CAY)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        print("       %-38s → %s (đòi ĐẠT) · %s"
+              % ("(+) G20 — bản sao Y NGUYÊN", "ĐẠT ✓" if ok_p else "ĐỎ-SAI ✗", gc_p[:150]))
+        self.assertTrue(ok_p, "GHIM LUÔN ĐỎ: bản sao y nguyên bị từ chối (%s)" % gc_p)
         _dc_duong("g20-c1-cay-sach")
 
         # ── PHÁN QUYẾT CUỐI — THEO MÃ THOÁT THẬT, KHÔNG THEO DÒNG CHỮ ────────────────────────
@@ -2290,20 +2461,37 @@ class G_NG2103(unittest.TestCase):
 #
 # HAI THỨ TRÙNG NHÃN "C4" — TUYỆT ĐỐI KHÔNG ĐÁNH ĐỒNG:
 #
-#   (1) `C4` trong sổ của `thu_qa_g20.py` = **C6 của G19** (`G19-C6`): "route `truy_van.py` +
-#       `DDL_G12Q` vào migration v9". Việc này ĐÃ CÓ CHỦ và PHẦN TUYẾN ĐÃ ĐÓNG — AG-06 port khối
-#       route vào `app/server.py` (commit `146500b`). Ca `H1` dưới đây gác phần đó.
+#   (1) `C4` trong sổ của `thu_qa_g20.py` = **C6 của G19** (`G19-C6`): route `truy_van.py` +
+#       `DDL_G12Q` vào migration. Từ `5fc5f6f` việc này ĐÃ ĐÓNG **CẢ HAI TẦNG**: AG-06 nối route
+#       vào `app/server.py` (`146500b`), và U4 áp `truy_van.DDL_G12Q` bằng `migrate.nang_len_v10`
+#       (`csdl.PHIEN_BAN_SCHEMA = 10`) cho CSDL ĐANG Ở v9. Ca `H1` gác CẢ HAI tầng.
 #   (2) `OWNER_ACTIONS C4` = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = **D-8, BLOCKED OWNER**.
 #       TUYỆT ĐỐI không thực hiện trong wave này, không ép cổng xanh, không đụng cụm `:5432`.
 #
-# Vì sao phép đo phải ĐỌC TẠI CHỖ (không ghim số): trên nền `a6b5b73`, `app/server.py` KHÔNG có
-# `import truy_van` ⇒ cặp đo được là `(True, False)` (đúng ô "nền" của `SO_DO_G20`). Từ `146500b`
-# (AG-06 vá B2), `app/server.py` import `truy_van` và đưa `/api/v2/don` đi qua `tim_don()` ⇒ cặp
-# đo được là `(True, True)` (đúng ô "đóng"). Ghim bất kỳ con số/dòng/tên tệp nào ở đây là tái
-# sinh đúng họ lỗi H5/N-G19-04 mà cả wave đang diệt. Đếm THAM CHIẾU THẬT, mỗi lượt chạy.
+# PHÉP ĐO VẪN ĐỌC TẠI CHỖ (không ghim số/dòng/tên tệp) — nhưng TỪ VÒNG NÀY ĐO **BA VẾ**, vì
+# `G19-C6` có HAI tầng đóng ở hai mốc khác nhau và một cặp boolean không phân biệt được "thiếu
+# tầng chỉ mục" với "thiếu tầng tuyến":
+#
+#   vế 1 `schema_ok`   — `csdl.PHIEN_BAN_SCHEMA >= MỐC`, với `MỐC` = số N của hàm `nang_len_vN`
+#                        áp `truy_van.DDL_G12Q` trong `app/migrate.py`, ĐỌC TẠI CHỖ. So `>=` chứ
+#                        KHÔNG `==`: `v11` sau này không làm cổng đỏ vĩnh viễn. Đây CHÍNH LÀ
+#                        "SCHEMA TỐI THIỂU" mà `thu_qa_g22.py` cần — không phải con số 9/10 viết
+#                        tay: nếu ai bỏ mốc v10 thì `MỐC` không đọc được ⇒ vế này ĐỎ, chứ không
+#                        âm thầm tụt xuống 9.
+#   vế 2 `chi_muc_ok`  — `truy_van.DDL_G12Q` có THẬT (hằng literal khác rỗng) VÀ mốc migration
+#                        được `migrate.chay()` GỌI (`nang_len_vN(...)`). Một hàm không ai gọi
+#                        không nâng cấp gì; một hằng rỗng không tạo chỉ mục nào.
+#   vế 3 `tuyen_ok`    — có tệp SẢN XUẤT vừa `import truy_van` vừa DÙNG nó cho việc KHÁC
+#                        `DDL_G12Q` (tức tuyến `tim_don`/`mo_ta_bo_loc`).
+#
+# VÌ SAO KHÔNG `PHIEN_BAN_SCHEMA == 9` (ghim cũ) VÀ CŨNG KHÔNG `== 10`: 9/10 là SỰ THẬT CỦA MÔI
+# TRƯỜNG, nhích ở mỗi lần nâng cấp — đúng họ H5/N-G19-04. `msg_0b757445cfb8` yêu cầu đổi sang
+# "SCHEMA TỐI THIỂU" theo hợp đồng, KHÔNG phải đổi 9 thành 10 đơn thuần. Vì thế `MỐC` được SUY RA
+# từ chính `app/migrate.py` (hàm `moc_ddl_migration()` trong tiến trình con), và ĐỐI CHỨNG ÂM
+# "hạ schema xuống dưới mốc ⇒ cổng PHẢI ĐỎ" chứng minh phép so có răng.
 
 MA_QUET_C4 = r'''
-import ast, json, os, sys
+import ast, json, os, re, sys
 
 goc = os.path.abspath(sys.argv[1])
 sys.path.insert(0, os.path.join(goc, "app"))
@@ -2314,6 +2502,66 @@ def _trong_vung(p):
     """Cùng luật `thu_g21_chotcay`: `docs` hoặc thư mục bắt đầu bằng `thu` KHÔNG phải sản xuất."""
     phan = p.replace(os.sep, "/").split("/")
     return any(d == "docs" or d.startswith("thu") for d in phan[:-1])
+
+
+def moc_ddl_migration(goc):
+    """MỐC migration áp `truy_van.DDL_G12Q` — ĐỌC TẠI CHỖ, KHÔNG ghim số.
+
+    Trả `(moc, ten_ham, duoc_goi, ly_do)`. `moc` = số N NHỎ NHẤT của một `nang_len_vN` có tham
+    chiếu `truy_van.DDL_G12Q`; `duoc_goi` = `migrate.py` có lời gọi `nang_len_vN(...)`.
+
+    Vì sao lấy MIN: nếu sau này `v11` cũng chạm `DDL_G12Q`, mốc tối thiểu vẫn là v10 — thêm bước
+    mới không được làm cổng đòi schema cao hơn mức HỢP ĐỒNG cần.
+    """
+    p = os.path.join(goc, "app", "migrate.py")
+    try:
+        with open(p, encoding="utf-8") as fh:
+            cay = ast.parse(fh.read())
+    except Exception as e:
+        return None, None, False, "KHÔNG đọc/parse được `app/migrate.py`: %s" % e
+    ung = {}
+    for nut in ast.walk(cay):
+        if not isinstance(nut, ast.FunctionDef):
+            continue
+        m = re.match(r"nang_len_v(\d+)$", nut.name)
+        if not m:
+            continue
+        co = any(isinstance(x, ast.Attribute) and x.attr == "DDL_G12Q" for x in ast.walk(nut))
+        if co:
+            ung.setdefault(int(m.group(1)), []).append(nut.name)
+    if not ung:
+        return None, None, False, ("KHÔNG có hàm `nang_len_vN` nào áp `truy_van.DDL_G12Q` ⇒ "
+                                   "tầng CHỈ MỤC G12 không có mốc migration")
+    moc = min(ung)
+    ten = ung[moc][0]
+    goi = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == ten
+              for n in ast.walk(cay))
+    return moc, ten, goi, ""
+
+
+def hang_ddl(goc):
+    """`truy_van.DDL_G12Q` có THẬT không — đọc hằng literal ở tầng mô-đun. Trả `(có, số_câu, lỗi)`."""
+    p = os.path.join(goc, "app", "truy_van.py")
+    try:
+        with open(p, encoding="utf-8") as fh:
+            cay = ast.parse(fh.read())
+    except Exception as e:
+        return False, 0, "KHÔNG đọc/parse được `app/truy_van.py`: %s" % e
+    for nut in cay.body:
+        if isinstance(nut, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "DDL_G12Q" for t in nut.targets):
+            try:
+                gt = ast.literal_eval(nut.value)
+            except Exception:
+                return True, -1, "`DDL_G12Q` có mặt nhưng KHÔNG phải hằng literal"
+            if isinstance(gt, str):
+                n = len([c for c in gt.split(";") if c.strip()])
+            elif isinstance(gt, (list, tuple)):
+                n = len(gt)
+            else:
+                n = 0
+            return n > 0, n, ("" if n > 0 else "`DDL_G12Q` RỖNG")
+    return False, 0, "`app/truy_van.py` KHÔNG khai hằng `DDL_G12Q`"
 
 
 tep = []
@@ -2351,8 +2599,20 @@ for g, dirs, fs in os.walk(goc):
             continue
         dung = sum(1 for nut in ast.walk(cay) if isinstance(nut, ast.Name) and nut.id in gan
                    and isinstance(nut.ctx, ast.Load))
-        tep.append({"tep": rel, "import": nhap, "dung": dung})
+        # Tách tham chiếu TẦNG CHỈ MỤC khỏi tham chiếu TUYẾN: mỗi `truy_van.DDL_G12Q` là một
+        # Attr; Name `truy_van` bên trong nó ĐÃ được tính ở `dung`, nên trừ đi để phần còn lại
+        # đúng là "dùng cho việc khác DDL" (tuyến).
+        ddl = sum(1 for nut in ast.walk(cay)
+                  if isinstance(nut, ast.Attribute) and nut.attr == "DDL_G12Q"
+                  and isinstance(nut.value, ast.Name) and nut.value.id in gan)
+        tep.append({"tep": rel, "import": nhap, "dung": dung, "ddl": ddl})
+
+moc, ten_moc, duoc_goi, loi_moc = moc_ddl_migration(goc)
+co_hang, so_cau, loi_hang = hang_ddl(goc)
 print("__C4__" + json.dumps({"schema": int(getattr(csdl, "PHIEN_BAN_SCHEMA", 0)),
+                             "moc_ddl": moc, "ten_ham_ddl": ten_moc, "duoc_goi": duoc_goi,
+                             "loi_moc": loi_moc, "hang_ddl": co_hang,
+                             "so_cau_ddl": so_cau, "loi_hang": loi_hang,
                              "tep": tep}, ensure_ascii=False))
 '''
 
@@ -2360,20 +2620,25 @@ print("__C4__" + json.dumps({"schema": int(getattr(csdl, "PHIEN_BAN_SCHEMA", 0))
 def _do_c4(goc=None):
     """ĐO `C4` (= `G19-C6`) TẠI CHỖ trên cây `goc` — KHÔNG ghim số tham chiếu, KHÔNG ghim tệp.
 
-    Trả dict; `cap` là ĐÚNG cặp mà `SO_DO_G20["C4 route truy_van + migration v9"]` ghi nền/đóng:
-      · `schema` / `schema_ok` — `csdl.PHIEN_BAN_SCHEMA` của CHÍNH cây đang đo. `v9` là **SÀN**,
-        không phải ghim: một `v10` sau này vẫn là "đã đóng", không làm cổng đỏ vĩnh viễn;
-      · `tep` — tệp SẢN XUẤT tham chiếu `truy_van`, kèm số lần `import` và số lần **DÙNG**.
-        "DÙNG" chỉ đếm `Name` trùng tên do CHÍNH tệp đó import — biến cục bộ trùng tên (đo được
-        ở `gateway/server.py`) KHÔNG bị tính là tham chiếu mô-đun;
-      · `import_ok` / `dung_ok` — phải có tệp `import` VÀ có chỗ DÙNG. Một `import` không có lời
-        gọi KHÔNG phải một tuyến — nếu chỉ đếm `import` thì "gỡ khối route" vẫn xanh (bộ đo mù);
-      · `loi` — nguyên văn khi không đo được; người gọi PHẢI coi là ĐỎ, không phải "đạt".
+    Trả dict; `cap` là BỘ BA `(schema_ok, chi_muc_ok, tuyen_ok)` khớp ô `SO_DO["c4-route-va-moc-ddl"]`:
+      · `schema` / `moc_ddl` / `schema_ok` — `csdl.PHIEN_BAN_SCHEMA` của CHÍNH cây đang đo, so
+        `>=` với **MỐC migration áp `truy_van.DDL_G12Q`** đọc từ `app/migrate.py`. `v9` KHÔNG còn
+        là sàn viết tay; mốc là "SCHEMA TỐI THIỂU" suy ra tại chỗ. Mốc không đọc được ⇒ ĐỎ;
+      · `chi_muc_ok` — hằng `truy_van.DDL_G12Q` khác rỗng VÀ mốc có lời gọi trong `migrate.py`;
+      · `tep` — tệp SẢN XUẤT tham chiếu `truy_van`, kèm `import`, số lần **DÙNG**, và số lần dùng
+        riêng cho `DDL_G12Q`. "DÙNG" chỉ đếm `Name` trùng tên do CHÍNH tệp đó import — biến cục
+        bộ trùng tên (đo được ở `gateway/server.py`) KHÔNG bị tính là tham chiếu mô-đun;
+      · `tuyen_ok` — phải có tệp vừa `import` vừa DÙNG cho việc KHÁC `DDL_G12Q`. Một `import`
+        không có lời gọi KHÔNG phải một tuyến; một tham chiếu DDL không phải tuyến;
+      · `loi` — nguyên văn khi KHÔNG ĐO ĐƯỢC; người gọi PHẢI coi là ĐỎ, không phải "đạt".
     """
     goc = os.path.abspath(goc or GOC_CAY)
-    ra = {"goc": goc, "rc": 1, "schema": None, "tep": [], "schema_ok": False,
-          "import_ok": False, "dung_ok": False, "cap": (False, False), "loi": ""}
-    rc, out = chay([PY, "-c", MA_QUET_C4, goc], giay=300, cwd=goc)
+    ra = {"goc": goc, "rc": 1, "schema": None, "tep": [], "moc_ddl": None,
+          "ten_ham_ddl": None, "duoc_goi": False, "hang_ddl": False, "so_cau_ddl": 0,
+          "loi_moc": "", "loi_hang": "", "schema_ok": False, "chi_muc_ok": False,
+          "tuyen_ok": False, "cap": (False, False, False), "loi": ""}
+    rc, out = chay([PY, "-c", MA_QUET_C4, goc], giay=300, cwd=goc,
+                   env_them={"PYTHONDONTWRITEBYTECODE": "1"})
     ra["rc"] = rc
     dong = [d for d in out.splitlines() if d.startswith("__C4__")]
     if rc != 0 or not dong:
@@ -2382,10 +2647,17 @@ def _do_c4(goc=None):
     d = json.loads(dong[-1][len("__C4__"):])
     ra["schema"] = int(d["schema"])
     ra["tep"] = d["tep"]
-    ra["schema_ok"] = ra["schema"] >= 9
-    ra["import_ok"] = any(t["import"] > 0 for t in ra["tep"])
-    ra["dung_ok"] = any(t["dung"] > 0 for t in ra["tep"])
-    ra["cap"] = (ra["schema_ok"], ra["import_ok"] and ra["dung_ok"])
+    ra["moc_ddl"] = d["moc_ddl"]
+    ra["ten_ham_ddl"] = d["ten_ham_ddl"]
+    ra["duoc_goi"] = bool(d["duoc_goi"])
+    ra["hang_ddl"] = bool(d["hang_ddl"])
+    ra["so_cau_ddl"] = int(d["so_cau_ddl"])
+    ra["loi_moc"] = d.get("loi_moc") or ""
+    ra["loi_hang"] = d.get("loi_hang") or ""
+    ra["schema_ok"] = ra["moc_ddl"] is not None and ra["schema"] >= ra["moc_ddl"]
+    ra["chi_muc_ok"] = (ra["moc_ddl"] is not None and ra["duoc_goi"] and ra["hang_ddl"])
+    ra["tuyen_ok"] = any(t["dung"] - t["ddl"] > 0 for t in ra["tep"])
+    ra["cap"] = (ra["schema_ok"], ra["chi_muc_ok"], ra["tuyen_ok"])
     return ra
 
 
@@ -2397,156 +2669,316 @@ def _chep_app_tam(nhan):
     return d
 
 
-def _go_tuyen_truy_van(goc):
-    """GỠ TUYẾN `truy_van` khỏi BẢN SAO `goc` — LÀM THẬT, bằng AST, không ghim số dòng.
+def _tep_san_xuat(goc):
+    """Mọi tệp `.py` SẢN XUẤT dưới `goc` — CÙNG luật với `MA_QUET_C4` (viết lại ĐỘC LẬP, cố ý)."""
+    ra = []
+    for g, dirs, fs in os.walk(goc):
+        dirs[:] = sorted(d for d in dirs if d not in ("node_modules", ".git", "__pycache__"))
+        for f in sorted(fs):
+            if not f.endswith(".py"):
+                continue
+            p = os.path.join(g, f)
+            rel = os.path.relpath(p, goc).replace(os.sep, "/")
+            phan = rel.split("/")
+            if any(d == "docs" or d.startswith("thu") for d in phan[:-1]):
+                continue
+            if rel == "app/truy_van.py":
+                continue
+            ra.append((rel, p))
+    return ra
 
-    Gỡ đúng hai thứ AG-06 đã nối vào `app/server.py`:
-      · mọi câu `import truy_van` (và `from truy_van import …`);
-      · mọi khối `if` có **DÙNG** `truy_van` — tức khối tuyến `/api/v2/don` và tuyến tự mô tả.
+
+def _go_tuyen_truy_van(goc):
+    """GỠ TẦNG TUYẾN `truy_van` khỏi BẢN SAO `goc` — LÀM THẬT, bằng AST, không ghim tệp/dòng.
+
+    Sửa MỌI tệp SẢN XUẤT có tham chiếu **TUYẾN** — tức `truy_van.<x>` với `<x>` KHÁC `DDL_G12Q`:
+    gỡ mọi câu `import truy_van` (và `from truy_van import …`) cùng mọi khối `if` DÙNG nó (khối
+    `/api/v2/don` và tuyến tự mô tả). Tệp chỉ chạm `truy_van.DDL_G12Q` (`app/migrate.py` từ v10)
+    được GIỮ NGUYÊN: đó là tầng CHỈ MỤC, có đối chứng âm RIÊNG là "hạ schema" — gộp hai tầng vào
+    một phép gỡ sẽ làm đối chứng mất khả năng phân biệt "thiếu tuyến" với "thiếu chỉ mục".
+
+    Vòng trước (đến `5fc5f6f`) hàm này chỉ sửa `app/server.py` và đòi `sau["tep"] == []`; U4 thêm
+    `import truy_van` vào `app/migrate.py` ⇒ đòi hỏi đó thành SAI (một ĐỎ GIẢ của đối chứng, không
+    phải của sản phẩm). Nay phép gỡ quét ĐÚNG các tệp có tham chiếu tuyến, và lời khẳng định đổi
+    thành "mọi tệp còn lại chỉ chạm `DDL_G12Q`" — mạnh hơn, và đúng bản chất hai tầng.
+
     Dùng AST chứ không ghim dòng vì dòng nhích ở mọi bản vá kế tiếp — ghim dòng chính là họ lỗi
     H5/N-G19-04. Trả dict ĐO ĐƯỢC; ném `RuntimeError` nếu không có gì để gỡ hoặc tệp sau khi gỡ
     không còn hợp lệ cú pháp — khi đó phép đối chứng KHÔNG được kết luận gì.
     """
-    p = os.path.join(goc, "app", "server.py")
+    da_go = []
+    for rel, p in _tep_san_xuat(goc):
+        with open(p, encoding="utf-8") as f:
+            dong = f.read().splitlines(keepends=True)
+        try:
+            cay = ast.parse("".join(dong))
+        except SyntaxError:
+            continue
+        gan = set()
+        for nut in ast.walk(cay):
+            if isinstance(nut, ast.Import):
+                gan.update(a.asname or "truy_van" for a in nut.names if a.name == "truy_van")
+            elif isinstance(nut, ast.ImportFrom) and nut.module == "truy_van":
+                gan.update(a.asname or a.name for a in nut.names if a.name != "*")
+        if not gan:
+            continue
+        ten_tron = {n.id for n in ast.walk(cay) if isinstance(n, ast.Name)
+                    and isinstance(n.ctx, ast.Load) and n.id in gan}
+        # MỘT `Name` KHÔNG BAO GIỜ LÀ `Attribute` — phải nhìn LÊN cha: `truy_van.DDL_G12Q` là
+        # Attribute(attr="DDL_G12Q", value=Name("truy_van")). Đếm theo Attribute và ghi nhớ
+        # ĐÚNG đối tượng `Name` bên trong, rồi mới phân loại "chỉ chạm tầng CHỈ MỤC".
+        ddl_id = {id(nut.value) for nut in ast.walk(cay)
+                  if isinstance(nut, ast.Attribute) and nut.attr == "DDL_G12Q"
+                  and isinstance(nut.value, ast.Name) and nut.value.id in gan}
+        tai = [n for n in ast.walk(cay) if isinstance(n, ast.Name)
+               and isinstance(n.ctx, ast.Load) and n.id in gan]
+        if not tai or all(id(n) in ddl_id for n in tai):
+            continue          # tầng CHỈ MỤC — không phải tầng TUYẾN
+        khoang = []
+        for nut in ast.walk(cay):
+            if isinstance(nut, ast.Import) and any(a.name == "truy_van" for a in nut.names):
+                khoang.append((nut.lineno, nut.end_lineno, "import truy_van"))
+            elif isinstance(nut, ast.ImportFrom) and nut.module == "truy_van":
+                khoang.append((nut.lineno, nut.end_lineno, "from truy_van import …"))
+            elif isinstance(nut, ast.If) and any(
+                    isinstance(x, ast.Name) and x.id in ten_tron for x in ast.walk(nut)):
+                khoang.append((nut.lineno, nut.end_lineno, "khối if DÙNG truy_van (tuyến)"))
+        if not khoang:
+            raise RuntimeError("`%s` có tham chiếu tuyến `%s` nhưng KHÔNG tìm được khối nào để gỡ "
+                               "⇒ đối chứng vô nghĩa" % (rel, ",".join(sorted(ten_tron))))
+        khoang.sort()
+        gop = []
+        for a, b, ten in khoang:
+            if gop and a <= gop[-1][1]:
+                gop[-1][1] = max(gop[-1][1], b)
+            else:
+                gop.append([a, b, ten])
+        xoa = set()
+        for a, b, _ in gop:
+            xoa.update(range(a - 1, b))
+        moi = [d for i, d in enumerate(dong) if i not in xoa]
+        try:
+            cay_moi = ast.parse("".join(moi))
+        except SyntaxError as e:
+            raise RuntimeError("gỡ tuyến xong `%s` KHÔNG còn hợp lệ cú pháp (%s) ⇒ không đối "
+                               "chứng được" % (rel, e))
+        con = {n.id for n in ast.walk(cay_moi) if isinstance(n, ast.Name)
+               and isinstance(n.ctx, ast.Load) and n.id in gan}
+        if con:
+            raise RuntimeError("gỡ tuyến xong `%s` VẪN còn DÙNG `%s` ⇒ phép gỡ CHƯA SẠCH, không "
+                               "kết luận được" % (rel, ",".join(sorted(con))))
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("".join(moi))
+        da_go.append({"tep": rel, "so_khoi": len(gop), "so_dong": len(xoa),
+                      "chi_tiet": [(ten, b - a + 1) for a, b, ten in gop]})
+    if not da_go:
+        raise RuntimeError("bản sao KHÔNG có tham chiếu TUYẾN `truy_van` nào để gỡ ⇒ đối chứng "
+                           "vô nghĩa")
+    return {"tep": [x["tep"] for x in da_go], "so_khoi": sum(x["so_khoi"] for x in da_go),
+            "so_dong": sum(x["so_dong"] for x in da_go),
+            "chi_tiet": [(x["tep"], ten, n) for x in da_go for ten, n in x["chi_tiet"]]}
+
+
+def _doi_schema_ban_sao(goc, gia_tri):
+    """Đổi `PHIEN_BAN_SCHEMA` trong `app/csdl.py` của BẢN SAO (KHÔNG chạm cây thật).
+
+    Dùng cho ĐỐI CHỨNG ÂM "hạ schema xuống dưới mốc ⇒ cổng PHẢI ĐỎ" và ĐỐI CHỨNG DƯƠNG "nâng
+    schema lên trên mốc ⇒ cổng VẪN XANH (không ghim đúng một số)". Ném nếu không sửa được ĐÚNG
+    một dòng — khi đó phép đối chứng không kết luận được gì.
+    """
+    p = os.path.join(goc, "app", "csdl.py")
     with open(p, encoding="utf-8") as f:
-        dong = f.read().splitlines(keepends=True)
-    cay = ast.parse("".join(dong))
-    khoang = []
-    for nut in ast.walk(cay):
-        if isinstance(nut, ast.Import) and any(a.name == "truy_van" for a in nut.names):
-            khoang.append((nut.lineno, nut.end_lineno, "import truy_van"))
-        elif isinstance(nut, ast.ImportFrom) and nut.module == "truy_van":
-            khoang.append((nut.lineno, nut.end_lineno, "from truy_van import …"))
-        elif isinstance(nut, ast.If) and any(
-                isinstance(x, ast.Name) and x.id == "truy_van" for x in ast.walk(nut)):
-            khoang.append((nut.lineno, nut.end_lineno, "khối if DÙNG truy_van (tuyến)"))
-    if not khoang:
-        raise RuntimeError("bản sao KHÔNG có tham chiếu `truy_van` nào để gỡ ⇒ đối chứng vô nghĩa")
-    khoang.sort()
-    gop = []
-    for a, b, ten in khoang:
-        if gop and a <= gop[-1][1]:
-            gop[-1][1] = max(gop[-1][1], b)
-        else:
-            gop.append([a, b, ten])
-    xoa = set()
-    for a, b, _ in gop:
-        xoa.update(range(a - 1, b))
-    moi = [d for i, d in enumerate(dong) if i not in xoa]
-    try:
-        ast.parse("".join(moi))
-    except SyntaxError as e:
-        raise RuntimeError("gỡ tuyến xong tệp KHÔNG còn hợp lệ cú pháp (%s) ⇒ không đối chứng "
-                           "được" % e)
+        than = f.read()
+    moi, n = re.subn(r"(?m)^PHIEN_BAN_SCHEMA\s*=\s*\d+\s*$",
+                     "PHIEN_BAN_SCHEMA = %d" % gia_tri, than)
+    if n != 1:
+        raise RuntimeError("KHÔNG sửa được đúng MỘT dòng `PHIEN_BAN_SCHEMA` trong bản sao `%s` "
+                           "(n=%d) ⇒ đối chứng vô nghĩa" % (goc, n))
     with open(p, "w", encoding="utf-8") as f:
-        f.write("".join(moi))
-    return {"tep": os.path.relpath(p, goc), "so_khoi": len(gop), "so_dong": len(xoa),
-            "chi_tiet": [(ten, b - a + 1) for a, b, ten in gop]}
+        f.write(moi)
+    return n
 
 
 class H_C4(unittest.TestCase):
-    """`C4` — việc thật tên là **`G19-C6`**, và nó **ĐÃ CÓ CHỦ SỞ HỮU + ĐÃ ĐÓNG**.
+    """`C4` — việc thật tên là **`G19-C6`**, và từ `5fc5f6f` nó **ĐÃ ĐÓNG CẢ HAI TẦNG**.
 
     ĐÍNH CHÍNH so với docstring cũ ("CHƯA CÓ CHỦ SỞ HỮU … KHÔNG nhận là đã đóng"): câu đó đúng ở
     nền `a6b5b73`, nhưng SAI từ `146500b` — AG-06 đã port khối route `truy_van` (~20 dòng) vào
-    `app/server.py`, nên cặp đo được là `(True, True)`, tức **đã đóng**. Ca cũ giữ nguyên khẳng
-    định trạng thái nền `(True, False)` nên nó ĐỎ dù sản phẩm xanh — đó là "ghim hành vi cũ".
+    `app/server.py`. ĐÍNH CHÍNH LẦN HAI (vòng này, `task_889a1ddeccdb`): câu "`nang_len_v10` CHƯA
+    được áp, `PHIEN_BAN_SCHEMA` vẫn là 9" cũng đã SAI — U4 đã đóng nốt tầng chỉ mục
+    (`migrate.nang_len_v10` + `PHIEN_BAN_SCHEMA = 10`). Vì thế phép đo nâng từ CẶP lên **BỘ BA**:
+
+        `(schema_ok, chi_muc_ok, tuyen_ok)` — khớp ô `SO_DO["c4-route-va-moc-ddl"]`.
+
+    Và `MỐC` của vế schema KHÔNG phải số 9/10 viết tay: nó được ĐỌC từ `app/migrate.py` (số N của
+    hàm `nang_len_vN` áp `truy_van.DDL_G12Q`) — tức **SCHEMA TỐI THIỂU** mà `thu_qa_g22.py` cần.
+    Đổi `== 9` thành `== 10` chỉ dời cái ghim đi một bước và sẽ STALE lần nữa; đọc mốc tại chỗ +
+    so `>=` là bất biến đúng.
 
     HAI THỨ TRÙNG NHÃN "C4" — TUYỆT ĐỐI KHÔNG ĐÁNH ĐỒNG:
       · **`G19-C6`** (việc này): route `truy_van` + `DDL_G12Q` vào migration. Chủ: **Agent 06**
-        (port khối route vào `app/server.py`, commit `146500b`) + **Agent 02** (viết lại ca này để
-        ĐO cái đã đóng và CHỨNG MINH đối chứng âm bằng cách gỡ tuyến thật).
+        (route, `146500b`) + **U4/AG-02** (mốc `nang_len_v10`) + **Agent 02** (ca đo này).
       · **`OWNER_ACTIONS C4`** = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = **D-8, BLOCKED OWNER**.
         KHÔNG thực hiện, KHÔNG ép cổng xanh, KHÔNG đụng `:5432`. Đây là việc KHÁC.
-
-    CÒN TREO (phần còn lại của `G19-C6`, KHÔNG nhận là đã xong): `PHIEN_BAN_SCHEMA` vẫn là **9**
-    và **`nang_len_v10`** — áp `truy_van.DDL_G12Q` (9 chỉ mục) cho CSDL ĐÃ Ở v9 — **CHƯA được áp**.
-    Chủ: **AG-02 backend**. Ca này chỉ gác phần TUYẾN + sàn schema, không gác phần chỉ mục.
     """
 
     def test_h1_c4_do_hay_da_dong(self):
-        """ĐO `C4`/`G19-C6` TẠI CHỖ và CHỨNG MINH RĂNG của cổng bằng ĐỐI CHỨNG ÂM LÀM THẬT.
+        """ĐO `C4`/`G19-C6` TẠI CHỖ và CHỨNG MINH RĂNG của cổng bằng BA ĐỐI CHỨNG ÂM LÀM THẬT.
 
-        BA vế, cả ba đo được:
-          (i)   cây THẬT: cặp `(schema ≥ 9, có tệp SẢN XUẤT vừa import vừa DÙNG `truy_van`)` phải
-                bằng ô "đóng" `(True, True)` của `SO_DO_G20`. Không ghim con số: đếm tham chiếu
-                mỗi lượt chạy;
-          (ii)  ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên phải cho ĐÚNG cặp đó — nếu bản sao đã
-                khác cây thật thì phép đối chứng dưới đây không nói được gì;
-          (iii) ĐỐI CHỨNG ÂM BẮT BUỘC: trên CHÍNH bản sao đó, GỠ mọi `import truy_van` và mọi
-                khối `if` DÙNG `truy_van` (bằng AST, không ghim dòng) ⇒ cặp phải thành
-                `(True, False)` và cổng phải ĐỎ. Nếu gỡ tuyến mà vẫn xanh thì cổng là bộ đo MÙ.
+        BỐN vế, cả bốn đo được:
+          (i)   cây THẬT: bộ ba `(schema ≥ MỐC DDL, tầng chỉ mục có thật + được gọi, tuyến nối
+                thật)` phải bằng ô "đóng" `(True, True, True)`. `MỐC` đọc tại chỗ từ
+                `app/migrate.py`; KHÔNG ghim con số, KHÔNG ghim tệp/dòng;
+          (ii)  ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên phải cho ĐÚNG bộ ba + ĐÚNG danh sách
+                tham chiếu — nếu bản sao đã khác cây thật thì các đối chứng dưới không nói gì;
+          (iii) ĐỐI CHỨNG ÂM "GỠ TUYẾN": gỡ mọi `import truy_van` + mọi khối `if` DÙNG nó trên
+                MỌI tệp sản xuất có tham chiếu TUYẾN ⇒ `tuyen_ok` False, tầng chỉ mục KHÔNG bị
+                chạm, bộ ba thành `(True, True, False)` và `dat_cong` PHẢI ĐỎ;
+          (iv)  ĐỐI CHỨNG ÂM "HẠ SCHEMA": hạ `PHIEN_BAN_SCHEMA` xuống `MỐC − 1` trên bản sao ⇒
+                `schema_ok` False, bộ ba ≠ ô đóng, `dat_cong` PHẢI ĐỎ. Kèm ĐỐI CHỨNG DƯƠNG "NÂNG
+                SCHEMA" lên `MỐC + 3`: cổng VẪN XANH — chứng minh `>=` chứ không phải ghim đúng
+                một số (nếu ghim `== 10` thì vế này ĐỎ, và đó là điều ta muốn bắt).
 
         Không xoá ca, không `skipTest`, không nới assert: nếu sản phẩm chưa đóng, ca này ĐỎ THẬT
         và in thẳng "C4 CHƯA ĐÓNG".
         """
-        dong = SO_DO_G20["C4 route truy_van + migration v9"]["dong"]
-        nen = SO_DO_G20["C4 route truy_van + migration v9"]["nen"]
+        dong = SO_DO["c4-route-va-moc-ddl"]["dong"]
+        nen = SO_DO["c4-route-va-moc-ddl"]["nen"]
+
+        def _mo_ta(tep):
+            return ("; ".join("%s (import %d · dùng %d · DDL %d)"
+                              % (t["tep"], t["import"], t["dung"], t["ddl"]) for t in tep)
+                    or "KHÔNG CÓ TỆP NÀO")
+
         that = _do_c4()
         print("\n  [H1] C4 = G19-C6 — ĐO TẠI CHỖ trên cây thật (%s)" % that["goc"])
         if that["loi"]:
             self.fail(that["loi"])
-        chi_tiet = "; ".join("%s (import %d · dùng %d)" % (t["tep"], t["import"], t["dung"])
-                             for t in that["tep"]) or "KHÔNG CÓ TỆP NÀO"
-        print("       `PHIEN_BAN_SCHEMA`=%d (đích: ≥9, KHÔNG ghim đúng 9) · tệp SẢN XUẤT tham "
-              "chiếu `truy_van`=%d" % (that["schema"], len(that["tep"])))
-        print("       tham chiếu ĐẾM ĐƯỢC: %s" % chi_tiet)
-        print("       cặp đo được = %r · sổ G20: nền=%r · đóng=%r · phân quyết = %s"
+        print("       `PHIEN_BAN_SCHEMA`=%d · MỐC migration áp `truy_van.DDL_G12Q`=%r (%s · được "
+              "`migrate.chay()` gọi=%s)"
+              % (that["schema"], that["moc_ddl"], that["ten_ham_ddl"], that["duoc_goi"]))
+        print("       `truy_van.DDL_G12Q`: có hằng=%s · số câu=%d%s"
+              % (that["hang_ddl"], that["so_cau_ddl"],
+                 (" · " + that["loi_hang"]) if that["loi_hang"] else ""))
+        print("       SCHEMA TỐI THIỂU = %r (đòi `schema >= mốc`, KHÔNG ghim đúng một số)"
+              % (that["moc_ddl"],))
+        print("       tham chiếu ĐẾM ĐƯỢC: %s" % _mo_ta(that["tep"]))
+        print("       bộ ba đo được = %r · sổ G22: nền=%r · đóng=%r · phân quyết = %s"
               % (that["cap"], nen, dong,
                  "DONG" if that["cap"] == dong else ("NEN" if that["cap"] == nen else "NUA_VOI")))
         self.assertEqual(that["rc"], 0, "phép đo C4 không chạy được: %s" % that["loi"])
+        self.assertIsNotNone(that["moc_ddl"],
+                             "C4 CHƯA ĐÓNG: KHÔNG đọc được MỐC migration áp `truy_van.DDL_G12Q` "
+                             "trong `app/migrate.py` (%s) — tầng CHỈ MỤC của G19-C6 chưa có mốc, "
+                             "và không có mốc thì không có 'schema tối thiểu' để so."
+                             % (that["loi_moc"] or "không rõ lý do",))
         self.assertTrue(that["schema_ok"],
-                        "C4 CHƯA ĐÓNG: `PHIEN_BAN_SCHEMA`=%r < 9 — migration v9 chưa đạt"
-                        % (that["schema"],))
-        self.assertTrue(that["import_ok"],
-                        "C4 CHƯA ĐÓNG: KHÔNG có tệp SẢN XUẤT nào import `truy_van` — đây là "
-                        "trạng thái NỀN %r, không phải đã đóng. Việc thật là G19-C6 (route "
-                        "`truy_van`), chủ: Agent 06." % (nen,))
-        self.assertTrue(that["dung_ok"],
-                        "C4 CHƯA ĐÓNG: có `import truy_van` nhưng KHÔNG có chỗ DÙNG — một câu "
-                        "import không phải một tuyến. Việc thật là G19-C6.")
+                        "C4 CHƯA ĐÓNG: `PHIEN_BAN_SCHEMA`=%r < MỐC %r — CSDL ĐANG Ở mốc trước "
+                        "sẽ KHÔNG nhận `DDL_G12Q`, tức tầng chỉ mục G12 chưa đóng"
+                        % (that["schema"], that["moc_ddl"]))
+        self.assertTrue(that["chi_muc_ok"],
+                        "C4 CHƯA ĐÓNG: tầng CHỈ MỤC không đóng — `truy_van.DDL_G12Q` có=%r "
+                        "(số câu=%d, %s) · mốc=%r · được gọi=%r"
+                        % (that["hang_ddl"], that["so_cau_ddl"],
+                           that["loi_hang"] or "không lỗi", that["moc_ddl"], that["duoc_goi"]))
+        self.assertTrue(that["tuyen_ok"],
+                        "C4 CHƯA ĐÓNG: KHÔNG có tệp SẢN XUẤT nào vừa import `truy_van` vừa DÙNG "
+                        "nó cho tuyến (khác `DDL_G12Q`) — đây là trạng thái NỀN %r, không phải đã "
+                        "đóng. Việc thật là G19-C6 (route `truy_van`), chủ: Agent 06." % (nen,))
         self.assertEqual(that["cap"], dong,
-                         "C4 CHƯA ĐÓNG: cặp đo được %r ≠ ô đóng %r của `SO_DO_G20` — ghi thẳng, "
-                         "không ép xanh" % (that["cap"], dong))
-        print("       CHỦ SỞ HỮU: Agent 06 (port khối route ~20 dòng vào `app/server.py`, commit "
-              "`146500b`) + Agent 02 (ca đo này). Việc thật tên là **G19-C6**, KHÔNG phải "
-              "`OWNER_ACTIONS C4` = D-8/BLOCKED OWNER.")
+                         "C4 CHƯA ĐÓNG: bộ ba đo được %r ≠ ô đóng %r của "
+                         "`SO_DO[\"c4-route-va-moc-ddl\"]` — ghi thẳng, không ép xanh"
+                         % (that["cap"], dong))
+        print("       CHỦ SỞ HỮU: Agent 06 (route `truy_van`, `146500b`) + U4/AG-02 (mốc "
+              "`nang_len_v10` áp `DDL_G12Q`) + Agent 02 (ca đo này). Việc thật tên là **G19-C6**, "
+              "KHÔNG phải `OWNER_ACTIONS C4` = D-8/BLOCKED OWNER.")
 
-        # ── ĐỐI CHỨNG (ii) + (iii): LÀM THẬT trên BẢN SAO của `app/` ─────────────────────────
+        # ── (ii) ĐỐI CHỨNG DƯƠNG: BẢN SAO Y NGUYÊN phải cho ĐÚNG bộ ba ──────────────────────
         tam = _chep_app_tam("doi-chung")
         try:
             truoc = _do_c4(tam)
+            print("       ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên → %r (đòi %r) ✓"
+                  % (truoc["cap"], dong))
             self.assertEqual(truoc["cap"], that["cap"],
                              "ĐỐI CHỨNG DƯƠNG HỎNG: bản sao y nguyên cho %r ≠ cây thật %r ⇒ "
                              "phép đối chứng không dùng được" % (truoc["cap"], that["cap"]))
             self.assertEqual(truoc["tep"], that["tep"],
                              "ĐỐI CHỨNG DƯƠNG HỎNG: danh sách tham chiếu của bản sao khác cây "
                              "thật: %r ≠ %r" % (truoc["tep"], that["tep"]))
+            self.assertEqual(truoc["moc_ddl"], that["moc_ddl"],
+                             "ĐỐI CHỨNG DƯƠNG HỎNG: MỐC DDL của bản sao khác cây thật")
+
+            # ── (iii) ĐỐI CHỨNG ÂM "GỠ TUYẾN" — LÀM THẬT trên CHÍNH bản sao đó ────────────────
             go = _go_tuyen_truy_van(tam)
             sau = _do_c4(tam)
-            print("       ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên → %r (đòi %r) ✓"
-                  % (truoc["cap"], dong))
-            print("       ĐỐI CHỨNG ÂM (LÀM THẬT): gỡ %d khối / %d dòng khỏi `%s` — %s"
-                  % (go["so_khoi"], go["so_dong"], go["tep"],
-                     ", ".join("%s (%d dòng)" % (t, n) for t, n in go["chi_tiet"])))
-            print("       sau khi gỡ: tệp sản xuất tham chiếu `truy_van`=%d · cặp đo được = %r"
-                  % (len(sau["tep"]), sau["cap"]))
-            self.assertEqual(sau["tep"], [],
-                             "gỡ tuyến xong vẫn còn tệp tham chiếu `truy_van`: %r ⇒ đối chứng "
-                             "gỡ chưa sạch, không kết luận được" % (sau["tep"],))
-            self.assertEqual(sau["cap"], (True, False),
-                             "GỠ TUYẾN MÀ CỔNG VẪN XANH (cặp %r) ⇒ bộ đo MÙ, 'đã đóng' trên cây "
+            print("       ĐỐI CHỨNG ÂM (LÀM THẬT): gỡ %d khối / %d dòng khỏi %s — %s"
+                  % (go["so_khoi"], go["so_dong"], ", ".join(go["tep"]),
+                     ", ".join("%s: %s (%d dòng)" % (t, ten, n) for t, ten, n in go["chi_tiet"])))
+            print("       sau khi gỡ tuyến: bộ ba = %r · tham chiếu còn lại: %s"
+                  % (sau["cap"], _mo_ta(sau["tep"])))
+            self.assertFalse(sau["tuyen_ok"],
+                             "GỠ TUYẾN MÀ `tuyen_ok` VẪN TRUE (%r) ⇒ bộ đo MÙ, 'đã đóng' trên cây "
                              "thật không chứng minh được gì" % (sau["cap"],))
+            self.assertTrue(sau["schema_ok"] and sau["chi_muc_ok"],
+                            "gỡ TUYẾN lại làm ĐỔ tầng CHỈ MỤC (bộ ba %r) ⇒ hai tầng không được "
+                            "tách đúng, đối chứng không kết luận được" % (sau["cap"],))
+            self.assertEqual(sau["cap"], (True, True, False),
+                             "sau khi gỡ tuyến, bộ ba phải là (True, True, False); đo được %r"
+                             % (sau["cap"],))
             self.assertNotEqual(sau["cap"], dong,
-                                "sau khi gỡ tuyến, cặp đo vẫn bằng ô đóng %r ⇒ cổng không có răng"
+                                "sau khi gỡ tuyến, bộ ba vẫn bằng ô đóng %r ⇒ cổng không có răng"
                                 % (dong,))
-            print("       ⇒ gỡ tuyến thì cổng ĐỎ (đòi ĐỎ) ✓ — cổng KHÔNG phải bộ đo mù.")
+            self.assertTrue(all(t["ddl"] > 0 and t["dung"] == t["ddl"] for t in sau["tep"]),
+                            "sau khi gỡ tuyến VẪN còn tham chiếu KHÔNG phải `DDL_G12Q`: %r ⇒ "
+                            "phép gỡ chưa sạch" % (sau["tep"],))
+            dat_am, vi_am = dat_cong("c4-route-va-moc-ddl", sau["cap"])
+            print("       ⇒ `dat_cong` phán: %s (đòi ĐỎ) · %s"
+                  % ("ĐỎ ✓" if not dat_am else "ĐẠT-SAI ✗", vi_am))
+            self.assertFalse(dat_am, "GỠ TUYẾN MÀ CỔNG VẪN ĐẠT: %s" % vi_am)
         finally:
             shutil.rmtree(tam, ignore_errors=True)
 
-        print("       CÒN TREO (KHÔNG nhận là đã xong): `PHIEN_BAN_SCHEMA` vẫn là 9 và "
-              "`nang_len_v10` (áp `truy_van.DDL_G12Q` cho CSDL ĐÃ Ở v9) CHƯA được áp — phần còn "
-              "lại của G19-C6, chủ: AG-02 backend.")
+        # ── (iv) ĐỐI CHỨNG ÂM "HẠ SCHEMA" + ĐỐI CHỨNG DƯƠNG "NÂNG SCHEMA" ────────────────────
+        moc = that["moc_ddl"]
+        if moc is None:
+            self.fail("không có MỐC DDL để chạy đối chứng 'hạ schema' — bản thân phép đo đã ĐỎ")
+        tam2 = _chep_app_tam("schema")
+        try:
+            _doi_schema_ban_sao(tam2, moc - 1)
+            thap = _do_c4(tam2)
+            print("       ĐỐI CHỨNG ÂM (LÀM THẬT): hạ `PHIEN_BAN_SCHEMA` %d → %d trên bản sao → "
+                  "bộ ba %r · `schema_ok`=%s"
+                  % (moc, moc - 1, thap["cap"], thap["schema_ok"]))
+            self.assertEqual(thap["schema"], moc - 1,
+                             "phép tiêm schema không tới được phép đo (đọc ra %r)" % (thap["schema"],))
+            self.assertFalse(thap["schema_ok"],
+                             "HẠ SCHEMA XUỐNG DƯỚI MỐC (%d < %d) MÀ `schema_ok` VẪN TRUE ⇒ phép "
+                             "so `>=` KHÔNG có răng" % (moc - 1, moc))
+            self.assertNotEqual(thap["cap"], dong,
+                                "hạ schema xuống dưới mốc mà bộ ba vẫn bằng ô đóng %r ⇒ cổng mù"
+                                % (dong,))
+            dat_am2, vi_am2 = dat_cong("c4-route-va-moc-ddl", thap["cap"])
+            print("       ⇒ `dat_cong` phán: %s (đòi ĐỎ) · %s"
+                  % ("ĐỎ ✓" if not dat_am2 else "ĐẠT-SAI ✗", vi_am2))
+            self.assertFalse(dat_am2, "HẠ SCHEMA MÀ CỔNG VẪN ĐẠT: %s" % vi_am2)
+
+            _doi_schema_ban_sao(tam2, moc + 3)
+            cao = _do_c4(tam2)
+            print("       ĐỐI CHỨNG DƯƠNG: nâng `PHIEN_BAN_SCHEMA` %d → %d trên CÙNG bản sao → "
+                  "bộ ba %r (đòi %r) · `schema_ok`=%s"
+                  % (moc, moc + 3, cao["cap"], dong, cao["schema_ok"]))
+            self.assertTrue(cao["schema_ok"],
+                            "NÂNG SCHEMA LÊN TRÊN MỐC MÀ VẪN ĐỎ ⇒ cổng đang GHIM ĐÚNG một con số, "
+                            "không phải 'schema tối thiểu'")
+            self.assertEqual(cao["cap"], dong,
+                             "schema cao hơn mốc mà bộ ba %r ≠ ô đóng %r" % (cao["cap"], dong))
+        finally:
+            shutil.rmtree(tam2, ignore_errors=True)
+
+        print("       CÒN TREO (KHÔNG nhận là đã xong): KHÔNG còn phần mã nào của `G19-C6` — cả "
+              "HAI tầng (tuyến + mốc `DDL_G12Q`) đã ĐO ĐƯỢC trên cây. Việc còn BLOCKED là "
+              "`OWNER_ACTIONS C4` = D-8 'chuyển CSDL nghiệp vụ sang PostgreSQL' — KHÔNG thực hiện "
+              "trong wave này, không đụng cụm `:5432`.")
         _dc_duong("c4-go-route")
         DA_TIEM["c4-go-route"] = True
 
@@ -2830,8 +3262,19 @@ def _dung_cay_guong(ten, tep_tiem, cot, tep_hai=_TIEM_HONG):
     if os.path.isdir(goc):
         shutil.rmtree(goc)
     os.makedirs(os.path.join(goc, "app", "thu"))
-    for duong, cap, sha_goc in ((BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA),
-                                (BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA)):
+    # CÁC MÔ-ĐUN HỖ TRỢ mà chính hai bàn đo import. Đo được ở `5fc5f6f`: U2 đã cho
+    # `thu_qa_g20.py` `import thu_g21_chotcay`; cây gương cũ chỉ có hai bàn đo ⇒ cột "SAU" chết
+    # với `ModuleNotFoundError`, và `I2` đỏ vì MÔI TRƯỜNG CÂY GƯƠNG, không phải vì bản vá. Chép
+    # MỌI mô-đun trong `app/thu/` TRỪ `thu_qa_g19*` (hai tệp đó do phép TIÊM viết, mẫu số phải
+    # là 2) và trừ chính hai bàn đo (ghi đè ngay dưới).
+    for ten_tep in sorted(os.listdir(GOC_THU)):
+        if (not ten_tep.endswith(".py") or ten_tep.startswith("thu_qa_g19")
+                or ten_tep in (os.path.basename(BAN_DO_G20), os.path.basename(BAN_DO_G21))):
+            continue
+        shutil.copy2(os.path.join(GOC_THU, ten_tep), os.path.join(goc, "app", "thu", ten_tep))
+    for duong, cap, sha_goc, sha_trong_cay in (
+            (BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA, BAN_DO_G20_SHA_TRONG_CAY),
+            (BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA, BAN_DO_G21_SHA_TRONG_CAY)):
         dich = os.path.join(goc, "app", "thu", os.path.basename(duong))
         if cot == "sau":
             shutil.copy2(duong, dich)
@@ -2839,7 +3282,7 @@ def _dung_cay_guong(ten, tep_tiem, cot, tep_hai=_TIEM_HONG):
                 raise AssertionError("cây gương `%s`: bản chép KHÔNG khớp byte với tệp nguồn `%s`"
                                      % (ten, duong))
         else:
-            than, ghi_chu = nguon_goc(duong, cap, sha_goc)
+            than, ghi_chu = nguon_goc(duong, cap, sha_goc, sha_trong_cay)
             if than is None:
                 raise AssertionError("cây gương `%s`: KHÔNG dựng được cột TRƯỚC — %s"
                                      % (ten, ghi_chu))
@@ -3106,10 +3549,12 @@ def main():
     pv = _kiem_tra_pham_vi()
     print("    phạm vi ghi: %d đường trong `status`; ngoài danh sách được phép: %s"
           % (pv["so_duong"], pv["ngoai"] or "KHÔNG"))
-    ok20, gc20 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA)
-    ok21, gc21 = nguon_da_va(BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA)
-    print("    TỆP NGUỒN `app/thu/thu_qa_g20.py` (C5): ĐÃ VÁ = %s" % ok20)
-    print("    TỆP NGUỒN `app/thu/thu_qa_g21.py` (G7): ĐÃ VÁ = %s" % ok21)
+    ok20, gc20 = nguon_da_va(BAN_DO_G20, G20_C5_VA, BAN_DO_G20_GOC_SHA,
+                             BAN_DO_G20_SHA_TRONG_CAY)
+    ok21, gc21 = nguon_da_va(BAN_DO_G21, G21_G7_VA, BAN_DO_G21_GOC_SHA,
+                             BAN_DO_G21_SHA_TRONG_CAY)
+    print("    TỆP NGUỒN `app/thu/thu_qa_g20.py` (C5): ĐÃ VÁ = %s · %s" % (ok20, gc20))
+    print("    TỆP NGUỒN `app/thu/thu_qa_g21.py` (G7): ĐÃ VÁ = %s · %s" % (ok21, gc21))
     print("    đường chép tạm `g20_cop_tam()`/`g20_va_c5()`: %s"
           % ("CÒN — VI PHẠM" if (_khoa_tam() in open(__file__, encoding="utf-8").read()
                                  or os.path.exists(os.path.join(GOC_THU, "thu_qa_g20_tam.py")))

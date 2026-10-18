@@ -149,10 +149,16 @@ Dòng `D-8 / OWNER_ACTIONS C4` ở đầu tài liệu là về **hàng thứ hai
      `gateway/server.py`, KHÔNG bị tính — một dương tính giả đã bị bắt tại chỗ);
    * `csdl.PHIEN_BAN_SCHEMA` của CHÍNH cây đang đo; **v9 là SÀN** (`>= 9`), không ghim đúng `9`
      — `v10` sau này không làm cổng đỏ vĩnh viễn.
+     → **THAY Ở VÒNG 6 (§9.4):** không còn `>= 9` viết tay. `MỐC` = số N của `nang_len_vN` áp
+     `truy_van.DDL_G12Q` trong `app/migrate.py`, ĐỌC TẠI CHỖ; so `schema >= MỐC`. Đây là "SCHEMA
+     TỐI THIỂU", và nó đã đóng vì `nang_len_v10` + `PHIEN_BAN_SCHEMA = 10` đã được áp.
 2. **ĐỐI CHỨNG DƯƠNG:** bản sao `app/` Y NGUYÊN phải cho đúng cặp như cây thật.
+   → **THAY Ở VÒNG 6 (§9.5):** bộ ba `(schema_ok, chi_muc_ok, tuyen_ok)`, không còn cặp.
 3. **ĐỐI CHỨNG ÂM BẮT BUỘC — LÀM THẬT:** trên CHÍNH bản sao đó, gỡ bằng AST (không ghim dòng)
    mọi `import truy_van` + mọi khối `if` DÙNG `truy_van`; tệp phải còn hợp lệ cú pháp; đo lại
    **phải** ra `(True, False)` và cổng **PHẢI ĐỎ**. Gỡ tuyến mà vẫn xanh ⇒ bộ đo MÙ.
+   → **THAY Ở VÒNG 6 (§9.5):** đòi `(True, True, False)` — tầng CHỈ MỤC không bị chạm — và thêm
+   một đối chứng âm RIÊNG cho tầng đó: hạ `PHIEN_BAN_SCHEMA` xuống `MỐC − 1` ⇒ cổng PHẢI ĐỎ.
 
 Nhóm đối chứng `c4-go-route` được ghi vào `CA_PHU_DINH`/`DOI_CHUNG` và vào danh sách **bắt buộc
 tiêm lỗi** của `Z6`: xoá đối chứng âm này thì `Z6` ĐỎ, không im lặng.
@@ -213,6 +219,9 @@ rồi chạy lại toàn bộ tại đó — kỳ vọng `24 ca · 0 hỏng · 1
    (9 chỉ mục) **chưa** được đưa vào migration cho CSDL ĐÃ Ở v9. Đây là **phần còn lại của
    `G19-C6`**, chủ **AG-02 backend**. Ca `H_C4` chỉ gác phần TUYẾN + sàn schema, **không** gác
    phần chỉ mục.
+   → **ĐÃ ĐÓNG Ở VÒNG 6 (§9.4/§9.5):** U4 đã áp `migrate.nang_len_v10` và
+   `csdl.PHIEN_BAN_SCHEMA = 10`; ca `H_C4` nay gác CẢ tầng chỉ mục (đo `truy_van.DDL_G12Q` có
+   thật + mốc `nang_len_v10` được `chay()` gọi), không chỉ "sàn schema".
 2. **Bàn đo G20 còn GHIM trạng thái nền ở chính cổng C4** — `app/thu/thu_qa_g20.py` dòng 702:
    `self.assertEqual(nhap, [], "nền đã đổi: có tệp SẢN XUẤT import truy_van")`. Đo TRỰC TIẾP trên
    cây tích hợp `146500b`: `AssertionError: ['app/server.py'] != []` ⇒ cổng C4 của G20 **ĐỎ** dù
@@ -675,22 +684,24 @@ commit.
 ## 7. CÁCH TỰ KIỂM LẠI
 
 ```sh
-# 1) Toàn bộ — kỳ vọng VÒNG 5: Ran 24 · PASS 22 · FAIL 1 (D1) · skipped=1 (Z9 mồi) · EXIT 1
-#    (D1 ĐỎ ĐÚNG vì bàn đo G20 bên trong còn hỏng — §0quater.6.)
+# 1) Toàn bộ — kỳ vọng VÒNG 6: Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0
+#    (D1 nay XANH vì bàn đo G20 đã XANH: exit 0 · Ran 21 · OK (skipped=2/3 tuỳ môi trường git).)
 python3 app/thu/thu_qa_g22.py
 
 # 2) Các nhóm quyết định:
 python3 app/thu/thu_qa_g22.py A_Nen        # Ran 4 · OK · EXIT 0 (A1 + 5 đối chứng)
-python3 app/thu/thu_qa_g22.py C_BanPhim    # B1, B2, B3 OK trên 146500b · EXIT 0
+python3 app/thu/thu_qa_g22.py C_BanPhim    # B1, B2, B3 OK khi CÓ nhị phân Chromium 1194 · EXIT 0
 python3 app/thu/thu_qa_g22.py E_CaySach    # Ran 2 · OK · skipped=0 · EXIT 0
-python3 app/thu/thu_qa_g22.py H_C4         # Ran 1 · OK · EXIT 0 (C4/G19-C6 + gỡ tuyến ⇒ ĐỎ)
-python3 app/thu/thu_qa_g22.py D_BanDoG20   # Ran 1 · FAILED (failures=1) · EXIT 1 — ĐỎ ĐÚNG (§0quater)
+python3 app/thu/thu_qa_g22.py H_C4         # Ran 1 · OK · EXIT 0 (bộ ba C4 + gỡ tuyến/hạ schema ⇒ ĐỎ)
+python3 app/thu/thu_qa_g22.py D_BanDoG20   # Ran 1 · OK · EXIT 0 (G20 exit 0) — VÒNG 6
 
 # 3) Xem đối chứng âm trong log: A1 (cây bẩn · index≠HEAD · cây không đọc được · HEAD nhích),
 #    B2/B3 (hạ 1 ca), E1 (tiêm tệp bẩn), H_C4 (GỠ `import truy_van` + khối route bằng AST
-#    trên bản sao `app/` ⇒ cặp (True, True) → (True, False) ⇒ cổng ĐỎ),
+#    trên bản sao `app/` ⇒ bộ ba (T,T,T) → (T,T,F) ⇒ cổng ĐỎ; HẠ schema 10→9 ⇒ (F,T,T) ⇒ ĐỎ;
+#    NÂNG 10→13 ⇒ (T,T,T) ⇒ XANH, chứng minh `>=` chứ không ghim đúng số),
 #    D1 (bốn bàn đo GIẢ: (a) thoát 3 dù chữ nói OK · (b) thoát 0 mà có dòng FAIL ·
-#        (c) `Ran 0 tests` · (d) tệp không tồn tại — cả bốn PHẢI ĐỎ; một bàn đo giả XANH PHẢI ĐẠT).
+#        (c) `Ran 0 tests` · (d) tệp không tồn tại — cả bốn PHẢI ĐỎ; một bàn đo giả XANH PHẢI ĐẠT;
+#        ba phép TIÊM vào GHIM (e)(f)(g) + một bản sao Y NGUYÊN — §9.3).
 # 4) Kiểm sha256 nhị phân headless:
 shasum -a 256 node_modules/playwright-core/.local-browsers/chromium_headless_shell-1194/chrome-mac/headless_shell
 # → a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040
@@ -699,7 +710,7 @@ shasum -a 256 node_modules/playwright-core/.local-browsers/chromium_headless_she
 > Số của vòng 3 (lịch sử): `Ran 24 · PASS 22 · failures=1 (B2) · skipped=1 (Z9) · EXIT 1`. Số của
 > vòng 4: `Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0` — §0ter.4. Số của **vòng 5**:
 > `Ran 24 · PASS 22 · FAIL 1 (D1 — ĐỎ ĐÚNG vì G20 còn hỏng) · SKIP 1 (Z9 mồi) · EXIT 1` —
-> §0quater.4.
+> §0quater.4. Số của **vòng 6**: `Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0` — §9.7.
 
 **Ba luật bằng chứng đã giữ:** mọi khẳng định đi kèm lệnh thật + mã thoát thật + số ca + số
 skip; không đoán mã trạng thái hãng (không có lời gọi hãng nào); mọi ca phủ định trong phạm vi
@@ -716,3 +727,251 @@ HỎNG/ERROR sang XANH bằng cách sửa **cách đo** theo hợp đồng đã 
 `docs/G22_SAOLUU.md` và log vòng 1 trên máy đo cũ (`/tmp/g22_a2/`).
 Vòng 2 không sửa lại các ca đó; chúng vẫn XANH trong lượt chạy cuối (`F1`, `F2`, `F3`, `G1`,
 `Z6` đều `ok`).
+
+---
+
+## 9. VÒNG 6 — GHIM CỦA BỘ ĐO SAU KHI GỘP U1..U5 (`task_889a1ddeccdb` · cây `5fc5f6f`)
+
+**Phạm vi ghi:** `app/thu/thu_qa_g22.py` + tài liệu này. **KHÔNG** sửa `thu_qa_g20.py`,
+`thu_qa_g21.py`, không sửa backend, không đụng cụm `:5432`. `OWNER_ACTIONS C4` = **D-8 vẫn
+BLOCKED OWNER** — không thực hiện, không ép xanh.
+
+### 9.1 Trạng thái ĐO ĐƯỢC trước khi sửa (cùng SHA `5fc5f6f`, cây SẠCH lúc bắt đầu)
+
+| Bộ | Lệnh | Kết quả THẬT |
+|---|---|---|
+| G20 | `VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py` | `Ran 21 tests in 26.1s` · `OK (skipped=2)` · **EXIT 0** |
+| G21 (cây sạch) | `VIP_G21_CHE_DO=gop python3 app/thu/thu_qa_g21.py` | `Ran 24 tests in 51.2s` · `FAILED (failures=1, skipped=3)` · **EXIT 1** — CHỈ `test_g6_harness_gioi_han_tan_suat` = lỗi thật `N-G20-01`, chủ **V1/backend** |
+| G22 | `VIP_G22_CHE_DO=gop python3 app/thu/thu_qa_g22.py` | `Ran 24 tests in 27.666s` · `FAILED (failures=8, skipped=1)` · **EXIT 1** |
+
+Tám ca ĐỎ của G22, phân loại THEO NGUYÊN NHÂN (không phải theo tên):
+
+1. **GHIM CŨ** (đối tượng của vòng này): `D1` (`BAN_DO_G20_GOC_SHA`), `I1`+`I2`(a)(b) (ghim **và**
+   cây gương thiếu mô-đun — §9.6), `H1` (đối chứng đòi `sau["tep"] == []`, SAI từ khi `migrate.py`
+   cũng chạm `truy_van`, + `== 9`/sàn v9 cũ).
+2. **HỆ QUẢ**: `Z6` — hai nhóm `c4-go-route`/`c5-tru-bo-qua` chưa kịp bật cờ vì `H1`/`I1` hỏng.
+3. **MÔI TRƯỜNG**: `B2`, `B3` — worktree này THIẾU `node_modules/playwright-core/.local-browsers/`.
+   `B1` vẫn xanh vì có đường dự phòng, nhưng `chay.sh` CHỈ tìm trong `node_modules` cục bộ ⇒
+   `Executable doesn't exist`. Đây là **hạ tầng**, không phải sản phẩm — xử lý ở §9.8.
+
+> **Số ca:** bộ tệp này có **24 ca** ở `5fc5f6f` (không phải 29). Không ca nào bị xoá trong lượt
+> này: **24 trước = 24 sau**. Mọi đối chứng mới được nhúng vào `D1`/`H1`, không thêm ca giả.
+
+### 9.2 GHIM "cũ → mới" — HAI ô cho MỖI tệp, và NGUỒN là PHÉP TÍNH TẠI CHỖ
+
+Trước vòng này mỗi tệp chỉ có MỘT ô: sha256 của bản **hoàn vá** (`..._GOC_SHA`). Nó bắt được
+"tệp khác bản gốc", nhưng KHÔNG bắt được "nội dung bị đổi rồi hoàn vá vẫn khớp" — và nó không
+nói thẳng "tệp trong cây đã bị đổi". Nay mỗi tệp có **hai** ô:
+
+* `..._SHA_TRONG_CAY` — sha256 của ĐÚNG tệp đang nằm trong cây; đổi **một byte** ⇒ ĐỎ ngay;
+* `..._GOC_SHA` — sha256 sau khi HOÀN VÁ hai/ba khối bộ đếm; chứng minh tệp đúng là
+  "bản gốc đã chốt + đúng các khối vá".
+
+| Tệp | Ô | Ghim CŨ | Ghim MỚI | Nguồn (tính tại chỗ, KHÔNG chép log) |
+|---|---|---|---|---|
+| `app/thu/thu_qa_g20.py` | `BAN_DO_G20_SHA_TRONG_CAY` | — (chưa có ô này) | `b56062bc928f16f0db13eb4b806b20ad342c992f224ad4df70f6c446710b48dc` | `sha256(open(tệp,'rb').read())` |
+| `app/thu/thu_qa_g20.py` | `BAN_DO_G20_GOC_SHA` | `5a4b3c83c45f2f2c465d2eed380f1f6f69583878ca9e3a5f910bd01c1a0ddcd0` | `6a96e294066abdd0be1c824a8f292df913d7344cb74b3b62463c9dcc13fe818f` | `sha256(_hoan_va(tệp, G20_C5_VA))` |
+| `app/thu/thu_qa_g21.py` | `BAN_DO_G21_SHA_TRONG_CAY` | — (chưa có ô này) | `4e730aac79cbb4f7bc541d151e9d423a616635a4707cfce4c2e602fa9520d0a2` | `sha256(open(tệp,'rb').read())` |
+| `app/thu/thu_qa_g21.py` | `BAN_DO_G21_GOC_SHA` | `4ebf21e8804246bda315fbe9bc1721625fad0ec2130c5036f235d4e04ca40700` | `6a97ef519b3433bfbf105048721bbd743354fc014e6d541efc4bc2364a9982be` | `sha256(_hoan_va(tệp, G21_G7_VA))` |
+
+**Vì sao CẢ HAI giá trị đều đổi:** U2 đã sửa THẬT `thu_qa_g20.py` (bỏ ghim stale C1/C4, thêm
+`import thu_g21_chotcay`) và U3 đã sửa THẬT `thu_qa_g21.py` (bỏ ghim stale). Tệp đo đổi ⇒ ghim
+phải đổi THEO, có ý thức. Lệnh + output đã chạy được ghi NGUYÊN VĂN ngay cạnh bốn hằng số trong
+`thu_qa_g22.py`; không có giá trị nào được suy ra từ "cổng đang đỏ nên đổi số cho khớp".
+
+**GHIM NÀY KHÔNG PHẢI ĐỂ BÁO XANH** — nó để phát hiện "bộ đo bị đổi giữa lượt". Vì thế nó phải
+có ĐỐI CHỨNG ÂM, và đối chứng ấy được LÀM THẬT:
+
+### 9.3 ĐỐI CHỨNG ÂM CỦA CHÍNH CÁI GHIM (LÀM THẬT trên bản sao trong `TMP`)
+
+`D1` tiêm vào **bản sao** của tệp (cây thật không bị chạm) rồi gọi ĐÚNG `nguon_da_va()` mà ca
+thật dùng. Output đo được:
+
+```
+(e) G20 — đổi 1 chữ NGOÀI khối vá   → ĐỎ ✓ · sha256 TỆP TRONG CÂY = dae351d4bf515a69 ≠ ghim
+                                     b56062bc928f16f0 ⇒ `thu_qa_g20.py` ĐÃ BỊ ĐỔI
+(f) G20 — đổi 1 chữ TRONG khối vá   → ĐỎ ✓ · KHÔNG hoàn vá được `thu_qa_g20.py`: khối vá không
+                                     còn khớp nguyên văn ⇒ tệp KHÔNG PHẢI 'bản gốc + đúng khối vá'
+(g) G21 — đổi 1 chữ NGOÀI khối vá   → ĐỎ ✓ · sha256 TỆP TRONG CÂY = c3b497d20c865782 ≠ ghim
+                                     4e730aac79cbb4f7 ⇒ `thu_qa_g21.py` ĐÃ BỊ ĐỔI
+(+) G20 — bản sao Y NGUYÊN          → ĐẠT ✓ · tệp trong cây b56062bc928f ✓ · gốc ghim
+                                     6a96e294066a ✓ + đúng 2 khối vá
+```
+
+Ba phép tiêm nhắm **hai ô ghim khác nhau**: (e)/(g) bắt bởi ô "tệp trong cây"; (f) CỐ Ý gọi với
+`sha_trong_cay=None` để chỉ kiểm ô "gốc" — nếu không, (e) và (f) sẽ cùng một đường và ô "gốc"
+không bao giờ được chứng minh là có răng. Phép (+) chặn kiểu hỏng "ghim luôn Đỏ".
+
+### 9.4 `PHIEN_BAN_SCHEMA == 9` → "SCHEMA TỐI THIỂU" (KHÔNG phải đổi 9 thành 10)
+
+Đọc `app/csdl.py` + `app/migrate.py`: `csdl.PHIEN_BAN_SCHEMA = 10`; `nang_len_v10` là bước
+DUY NHẤT áp `truy_van.DDL_G12Q` (9 câu `CREATE INDEX`), và `migrate.chay()` GỌI nó. Vậy **schema
+tối thiểu mà `thu_qa_g22.py` cần** = mốc của chính bước áp `DDL_G12Q`.
+
+Cách làm (trong tiến trình con của `_do_c4`, `MA_QUET_C4`):
+
+```python
+# moc_ddl_migration(goc): ast.parse(app/migrate.py)
+#   → mọi FunctionDef tên `nang_len_v(\d+)` có Attribute `truy_van.DDL_G12Q`
+#   → MỐC = min(N); đòi có lời gọi `nang_len_vN(...)` trong chính migrate.py
+schema_ok  = moc is not None and csdl.PHIEN_BAN_SCHEMA >= moc   # >=, KHÔNG ==
+chi_muc_ok = moc is not None and duoc_goi and hang_ddl            # hằng DDL_G12Q khác rỗng
+```
+
+Đo trên cây này: `moc_ddl=10` · `nang_len_v10` · `được gọi=True` · `DDL_G12Q` có **9 câu**.
+Nếu ai bỏ mốc v10 (hoặc bỏ hằng DDL) ⇒ `moc=None` ⇒ vế schema/chỉ mục ĐỎ — nó **không** âm thầm
+tụt về 9.
+
+**ĐỐI CHỨNG ÂM "hạ schema" + ĐỐI CHỨNG DƯƠNG "nâng schema"** (LÀM THẬT, trên bản sao `app/`
+trong TMP; sửa đúng một dòng `PHIEN_BAN_SCHEMA`):
+
+```
+hạ  10 → 9   → bộ ba (False, True, True) · schema_ok=False · dat_cong: ĐỎ ✓
+nâng 10 → 13 → bộ ba (True, True, True)  · schema_ok=True  ⇒ KHÔNG ghim đúng một số
+```
+
+Vế "nâng" là vế quan trọng: nếu ai viết `== 10` (đổi 9 thành 10 đơn thuần) thì nó ĐỎ — đúng thứ
+`msg_0b757445cfb8` cảnh báo.
+
+### 9.5 `SO_DO` C4: CẶP → **BỘ BA**, và hai đối chứng âm riêng cho hai tầng
+
+`G19-C6` có HAI tầng đóng ở hai mốc khác nhau; một cặp boolean không phân biệt được "thiếu
+tuyến" với "thiếu chỉ mục". Sổ G22 thêm dòng:
+
+```python
+"c4-route-va-moc-ddl": {"nen": (False, False, False), "dong": (True, True, True)},
+# (schema_ok, chi_muc_ok, tuyen_ok) — nền a6b5b73: schema 9, chưa có mốc DDL, chưa nối tuyến.
+```
+
+`SO_DO_G20` (sổ của bàn đo G20, ghi nguyên văn) **KHÔNG bị sửa** — nó là sổ của tệp khác.
+`H_C4` đo `cap = (schema_ok, chi_muc_ok, tuyen_ok)` và dùng chính `dat_cong()` để phán, nên
+"ĐỎ" ở đây là phán quyết của cổng, không phải của câu `assert`.
+
+Đo trên cây thật: `(True, True, True)`; tham chiếu đếm được:
+`app/migrate.py (import 1 · dùng 1 · DDL 1)`; `app/server.py (import 1 · dùng 3 · DDL 0)`.
+
+**ĐỐI CHỨNG ÂM "GỠ TUYẾN"** (LÀM THẬT bằng AST, trên MỌI tệp sản xuất có tham chiếu TUYẾN):
+
+```
+gỡ 3 khối / 21 dòng khỏi app/server.py
+  — import truy_van (1 dòng) · khối if DÙNG truy_van (tuyến) (15 dòng) · (5 dòng)
+sau khi gỡ: bộ ba = (True, True, False) · tham chiếu còn lại: app/migrate.py (import 1 · dùng 1 · DDL 1)
+dat_cong → ĐỎ (NỬA VỜI)
+```
+
+Vòng trước phép gỡ chỉ sửa `server.py` và đòi `sau["tep"] == []`; U4 thêm `import truy_van` vào
+`migrate.py` ⇒ đòi hỏi đó thành SAI. Nay phép gỡ quét mọi tệp có tham chiếu **tuyến**, GIỮ NGUYÊN
+tệp chỉ chạm `DDL_G12Q` (tầng chỉ mục có đối chứng "hạ schema" riêng), và có chốt "gỡ xong VẪN
+còn DÙNG ⇒ ném" để không bao giờ kết luận trên một phép gỡ dở.
+
+### 9.6 Hệ quả bắt buộc: cây gương của `I_TiemLoiC5` thiếu mô-đun hỗ trợ
+
+`I1`/`I2` dựng cây gương trong TMP chỉ với HAI bàn đo + hai tệp tiêm. U2 đã cho
+`thu_qa_g20.py` `import thu_g21_chotcay` ⇒ cột "SAU" chết với
+`ModuleNotFoundError: No module named 'thu_g21_chotcay'` (một ĐỎ GIẢ của **môi trường cây
+gương**, không phải của bản vá). Nay `_dung_cay_guong()` chép mọi mô-đun trong `app/thu/` **TRỪ**
+`thu_qa_g19*` (hai tệp ấy do phép TIÊM viết — mẫu số phải giữ là **2**) và trừ chính hai bàn đo
+(ghi đè ngay sau). Đo lại: mẫu số vẫn 2, và cột TRƯỚC/SAU tách đúng:
+
+```
+C5 & G7 · dị dạng v (mọi ca bỏ qua ở mức PHƯƠNG THỨC):
+  TRƯỚC khi vá: thoát 0 · 1/2 · DONG ⇒ XANH     (lỗ hổng TÁI HIỆN được)
+  SAU  khi vá: thoát 1 · 0/2 · NỬA VỜI ⇒ ĐỎ     (đã đóng)
+I2 (đối chứng dương): thoát 0 · 1/2 · DONG ⇒ XANH ở CẢ HAI cổng
+```
+
+### 9.7 Kết quả SAU khi sửa — MÃ THOÁT THẬT
+
+```
+$ VIP_G22_CHE_DO=gop python3 app/thu/thu_qa_g22.py
+Ran 24 tests in 175.358s
+OK (skipped=1)
+ca: 24 · hỏng/loi: 0 · bỏ qua: 1 · MÃ THOÁT = 0
+```
+
+**Ran 24 · PASS 23 · FAIL 0 · SKIP 1 · EXIT 0.** SKIP 1 là `Z9` — **mồi CÓ CHỦ ĐÍCH** của `Z5`
+(chạy trong tiến trình con để chứng minh bộ chạy có răng), không phải nợ và không được xoá.
+
+Sáu ca từng ĐỎ, nay XANH (đo trong cùng lượt):
+
+| Ca | Trước | Sau |
+|---|---|---|
+| `D_BanDoG20.test_d1` | FAIL (ghim G20 stale) | **ok** — G20 `exit 0 · Ran 21 · OK (skipped=3)` dưới D1 |
+| `H_C4.test_h1` | FAIL (đối chứng đòi `tep == []`) | **ok** — bộ ba `(T,T,T)`, 3 đối chứng âm + 2 dương |
+| `I_TiemLoiC5.test_i1` | FAIL (ghim stale) | **ok** — 5 dị dạng × 2 cổng × 2 cột |
+| `I_TiemLoiC5.test_i2` (a)(b) | FAIL (cây gương thiếu mô-đun) | **ok** — `1/2 · DONG ⇒ XANH` cả hai cổng |
+| `Z_ChotChan.test_z6` | FAIL (hệ quả) | **ok** — mọi nhóm phủ định có đối chứng chạy thật |
+| `C_BanPhim.test_b2/b3` | FAIL (thiếu nhị phân) | **ok** — `(65,0,0,0)` / 8 ca, exit 0 (sau §9.8) |
+
+G20 và G21 đo lại sau khi sửa (cây có `thu_qa_g22.py` đã sửa):
+
+```
+G20: Ran 21 · OK (skipped=2) · EXIT 0
+G21 (CÂY SẠCH, bản sửa G22 đã commit trong CLONE TMP):
+     Ran 24 · FAILED (failures=1, skipped=3) · EXIT 1 — CHỈ G6 (N-G20-01, V1)
+```
+
+> Vì sao G21 phải đo trên CLONE: `Z2` của `thu_qa_g21.py` đòi `git status` chỉ có các tệp của
+> CHÍNH nó; worktree đang làm việc có `M app/thu/thu_qa_g22.py` (tệp của dispatch này, chưa
+> commit) nên `Z2` ĐỎ **vì trạng thái làm việc**, không phải sản phẩm. Trên clone sạch
+> (`git clone --shared` + commit bản sửa, `.git` nằm trong TMP — KHÔNG ghi `.git` thật) `Z2` XANH
+> và chỉ còn G6. Đây cũng là bằng chứng "commit bản sửa rồi thì G21 trở lại đúng 1 đỏ".
+
+### 9.8 MÔI TRƯỜNG: nhị phân Chromium của worktree này (không phải thay đổi mã)
+
+`B2`/`B3` đỏ vì `node_modules/playwright-core/.local-browsers/chromium_headless_shell-1194/…`
+KHÔNG có trong worktree (các worktree khác có). `B1` vẫn xanh nhờ đường dự phòng
+`g17-ag06-security`, nhưng `chay.sh` ghim `PLAYWRIGHT_BROWSERS_PATH=0` nên chỉ tìm cục bộ.
+
+Xử lý: chép THẲNG thư mục nhị phân revision 1194 từ worktree bên cạnh (`g22-a2-contract`) vào
+`node_modules/…/.local-browsers/` — KHÔNG mạng, KHÔNG đổi mã. Kiểm lại:
+
+```
+$ shasum -a 256 node_modules/playwright-core/.local-browsers/chromium_headless_shell-1194/chrome-mac/headless_shell
+a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040   ← ĐÚNG `PW_HEADLESS_SHA256`
+```
+
+`node_modules/` nằm trong `.gitignore` ⇒ `A1` (write-tree == HEAD^{tree}) và `A2` (phạm vi ghi)
+KHÔNG đổi. Nói cách khác: đây là **sửa hạ tầng đo**, không phải sửa sản phẩm, và không ca nào
+được "cho qua" bằng cách này — B2 vẫn phải ĐẠT **65/65 ca** thật.
+
+### 9.9 G1/G5 — ĐO LẠI THEO HÀNH VI HIỆN TẠI, **KHÔNG SỬA**
+
+`msg_0b757445cfb8` yêu cầu đo lại G1/G5 và chỉ sửa nếu chúng ghim HÀNH VI CŨ. Đo lại:
+
+```
+[G1] `test_c2a` chạy được · `assertFalse` (bất biến ĐÚNG) · `assertTrue` (ghim RÒ) = KHÔNG
+     ĐỐI CHỨNG (a) `thu_qa_g21.py::G5_CredentialNgan` trên cây thật: rc=0 · tổ hợp RÒ=0/5
+     ĐỐI CHỨNG (b) TIÊM tắt luật ECHO THEO TÊN: G5 đọc RÒ=2/5 · `test_c2a` rc=1 (ĐỎ ✓)
+```
+
+⇒ Chúng đang đo **bất biến ĐÚNG** (credential NGẮN không được rò), có đối chứng âm thật, và
+XANH trên cây này. **Không sửa một dòng nào** — sửa sẽ là "sửa ca đang đúng". (AG-03 đã đóng
+phần này; ghi nhận, không mở lại.)
+
+`test_g5_ro_credential_ngan` trong `msg_0b757445cfb8` là ca của **bàn đo G21**, không phải của
+`thu_qa_g22.py`; G21 đo lại ở §9.7 chỉ còn G6 đỏ.
+
+### 9.10 Vì sao bản sửa này KHÔNG phải "ép PASS" / "nới cổng"
+
+* **KHÔNG xoá ca** (24 → 24), **KHÔNG `skipTest`** mới, **KHÔNG hạ ngưỡng**, **KHÔNG sửa G20/G21**.
+* `H_C4`: số vế TĂNG (2 → 3), số đối chứng âm TĂNG (1 → 3: gỡ tuyến, hạ schema; + nâng schema),
+  và mỗi đối chứng đều hỏi `dat_cong()` — tức chính cổng phải ĐỎ, không chỉ `assert`.
+* `D1`: thêm BA đối chứng âm cho GHIM (và một dương) — trước đây "ghim khớp" không phân biệt
+  được với "ghim không kiểm gì".
+* Schema: `== 9` → `>= MỐC` đọc tại chỗ; nếu ai bỏ mốc/cắt tầng chỉ mục, cổng ĐỎ — không có
+  đường "đổi số cho khớp".
+* `I1/I2`: mẫu số vẫn **2** (không nhét thêm bộ thật vào cây gương để làm loãng), chỉ chép
+  mô-đun HỖ TRỢ mà chính hai bàn đo import.
+
+### 9.11 CÒN ĐỎ / CÒN TREO — nói thẳng
+
+1. **G21 `G6`** (`test_g6_harness_gioi_han_tan_suat`) = lỗi THẬT `N-G20-01`, chủ **V1/backend**.
+   **KHÔNG sửa ở đây** (đúng đề bài). Trên cây sạch, đó là ca ĐỎ DUY NHẤT của G21.
+2. **`OWNER_ACTIONS C4` = D-8** (chuyển CSDL nghiệp vụ sang PostgreSQL) vẫn **BLOCKED OWNER** —
+   không thực hiện, không đụng `:5432`. `C4` trong tài liệu này là `G19-C6`, việc KHÁC.
+3. **Worktree này chưa commit** bản sửa (`M app/thu/thu_qa_g22.py`, `M docs/G22_CONTRACT.md`).
+   Commit/push thuộc AG-00/Controller — theo ràng buộc "không push" của dispatch.
+4. **`node_modules` của worktree này** vừa được bổ sung nhị phân Chromium (không tracked). Nếu
+   chạy ở worktree khác thiếu nhị phân, `B2/B3` sẽ đỏ vì MÔI TRƯỜNG — không phải vì bản sửa này.
+

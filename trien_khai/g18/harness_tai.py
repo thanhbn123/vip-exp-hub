@@ -63,6 +63,7 @@ for _d in (GOC_G18, GOC_APP):
         sys.path.insert(0, _d)
 
 import chot_an_toan                                                        # noqa: E402
+import cau_hinh                                                           # noqa: E402
 
 DAT, DAT_MOCK, HONG, BLOCKED, BO_QUA = "DAT", "DAT_MOCK", "HONG", "BLOCKED", "BO_QUA"
 KY_HIEU = {DAT: "✓", DAT_MOCK: "✓", HONG: "✗", BLOCKED: "⊘", BO_QUA: "–"}
@@ -623,6 +624,21 @@ def main():
           " trình · G18-10 không dính PostgreSQL · G18-11 không pkill/killall · G18-12 nền tách"
           " khỏi G17)")
 
+    # G22 — KHAI KHO ĐANG CHẠY (bắt buộc: `migrate.py` fail-closed khi chưa khai).
+    # `chay_harness.sh` dựng một nền TẠM rồi gọi `migrate.py` trong tiến trình con. Từ G22,
+    # `migrate.py` TỪ CHỐI khi `VIP_KHO_DANG_CHAY` chưa được khai — đo được: harness dừng ở đúng
+    # bước "DỰNG NỀN TẠM" với mã thoát 3 (docs/N_G20_01_FIX.md §2). Khai bằng ĐƯỜNG CHUNG
+    # `cau_hinh.khai_kho_kiem_thu()`, không viết tay một dòng `os.environ[...] = "sqlite"`:
+    # hàm đó có HAI CHỐT CÔ LẬP (từ chối khi chưa đặt `VIP_HUB_DATA`, từ chối khi thư mục dữ
+    # liệu nằm trong cây repo hoặc là volume `/du-lieu`) và đặt biến môi trường để `env` bên
+    # dưới thừa hưởng cho MỌI tiến trình con (`migrate.py`, `khoi_tao.py`, `server.py`).
+    try:
+        kho = cau_hinh.khai_kho_kiem_thu()
+    except SystemExit as e:
+        print("\n  ✗ khai kho cho nền kiểm thử hỏng: %s" % e)
+        return 3
+    print("  ✓ kho đang chạy khai cho nền TẠM: %s (qua `cau_hinh.khai_kho_kiem_thu()`)" % kho)
+
     env = dict(os.environ, VIP_HUB_DATA=nen, VIP_HUB_BIND="127.0.0.1", VIP_HUB_BACKOFF="0.01")
     for bien in (chot_an_toan.CO_GOI_HANG, chot_an_toan.BIEN_GIAY_PHEP,
                  "VIP_G17_CHO_PHEP_GOI_HANG", "VIP_G17_GIAY_PHEP"):
@@ -873,7 +889,16 @@ def main():
         # "đường khác" mà mọi bàn đo trước G18 đi — nếu hai đường cho cùng trần thì trần đúng ở
         # cả hai; lệch nghĩa là đường HTTP có chỗ cộng/không cộng lượt mà đường hàm không có.
         import gioi_han                                                     # noqa: E402
-        gioi_han.xoa_het()
+        # N-G20-01 — KHÔNG `xoa_het()` KHO ĐẾM DÙNG CHUNG từ tiến trình harness.
+        # `xoa_het()` xoá cả bảng `gioi_han_luot` + `gioi_han_chan` của CSDL mà HAI tiến trình
+        # máy chủ đang dùng. Chặng G18-05 cần bucket `webhook.chu_ky_sai` của `wh_sai` VẪN CẠN
+        # để lượt kế tiếp ra 429; xoá bảng là đổ đầy lại bucket ấy từ một TIẾN TRÌNH KHÁC — đo
+        # được: G18-05 ra 401, không `Retry-After` (docs/N_G20_01_FIX.md §2).
+        # Nay dọn ĐÚNG THEO KHOÁ CỦA CHÍNH CHẶNG NÀY. Đường gọi thẳng hàm dùng `dinh_danh`
+        # riêng `g18-do-truc-tiep`, nên chỉ khoá ấy là của harness. `dat_lai(...)` với
+        # `ip=None` chỉ chạm khoá `ip|khong-ro` (không tồn tại) và khoá `dinh_danh` này —
+        # TUYỆT ĐỐI không đụng `webhook.chu_ky_sai|ip|127.0.0.1` mà máy chủ đang dùng.
+        gioi_han.dat_lai("webhook.chu_ky_sai", dinh_danh="g18-do-truc-tiep")
         kq_ham = []
         for _ in range(14):
             kq_ham.append("cho_qua" if gioi_han.kiem(
@@ -1005,6 +1030,19 @@ def main():
 
         # -------------------------------------------------------------- G18-07 đối chứng âm
         print("\n── G18-07. ĐỐI CHỨNG ÂM: CÙNG KỊCH BẢN, MỘT LUỒNG ───────────")
+        # N-G20-01 — G18-07a TỰ GIÀNH NGÂN SÁCH CỦA MÌNH, THEO KHOÁ. Trước đây nó được hưởng
+        # lợi từ `xoa_het()` toàn cục ở G18-04b; bỏ lượt xoá sạch ấy (đối chứng B) là ca này
+        # chuyển ĐỎ với `mã={429: 50}` — đo được, không phải suy đoán. Hai khoá là NGÂN SÁCH DO
+        # CHÍNH HARNESS TIÊU, nên giành lại cũng đúng hai khoá ấy:
+        #   · `webhook.nhan|dinh_danh|wh_ma` — G18-03 đã tiêu 300 lượt vào tài khoản này;
+        #   · `webhook.chu_ky_sai|ip|127.0.0.1` — cửa webhook KIỂM TRẦN CHỮ KÝ SAI TRƯỚC KHI so
+        #     chữ ký, nên các chặng CỐ Ý sai chữ ký (G18-04a · G18-04b · G18-06a) đã tiêu hết 30
+        #     lượt IP của chính loopback; hết ngân sách là MỌI lượt sau — kể cả lượt có chữ ký
+        #     ĐÚNG — bị 429.
+        # Đây KHÔNG phải `xoa_het()`: không đụng bucket của tài khoản khác (`wh_moi`, `wh_da`,
+        # `wh_sai`), không đụng bảng, và không đụng khoá nào ngoài hai khoá kể trên.
+        gioi_han.dat_lai("webhook.nhan", dinh_danh=wh_ma)
+        gioi_han.dat_lai("webhook.chu_ky_sai", ip="127.0.0.1")
         k_mot = KhachTai("127.0.0.1", t1.cong)
         ds_mot = []
         try:

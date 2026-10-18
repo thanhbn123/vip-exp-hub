@@ -27,6 +27,17 @@ VÒNG 4 (`ctx_e398c90995a7`) — `C4`/`G19-C6`, VÀ MỘT CÁI GHIM NỮA BỊ D
     cổng PHẢI ĐỎ). `C4` ở đây là `G19-C6` (route + `DDL_G12Q` vào migration) — KHÁC hẳn
     `OWNER_ACTIONS C4` = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = D-8/BLOCKED OWNER.
 
+VÒNG 5 (`task_eaf399b954e3`) — `D1` PHẢI ĐỌC **MÃ THOÁT THẬT** CỦA BÀN ĐO G20:
+
+    `D1` chạy CẢ bàn đo G20 nhưng chỉ `re.search(r"Ran …")` trên output rồi KHÔNG đọc `rc`, nên
+    khi G20 có **6 ca hỏng** (`EXIT 1`) thì `D1` VẪN PASS. Đo được trên cây này: G20 `Ran 21 ·
+    FAILED (failures=6, skipped=3) · EXIT 1` mà `D1` `Ran 1 · OK · EXIT 0`. Một cổng báo ĐẠT
+    trong khi thứ nó đo THẤT BẠI là lỗi tệ nhất của wave — nó biến mọi báo cáo thành vô nghĩa.
+    Nay phán quyết đi qua ĐÚNG MỘT điểm vào `_phan_quyet_ban_do_g20(rc, out)`: **MÃ THOÁT là vế
+    chính**, ba vế phụ (`Ran N` đọc được và `> 0`, KHÔNG có dòng `FAIL`/`ERROR`, có dòng tổng kết
+    `OK`) chặn đúng chiều ngược lại — "tin mã thoát đơn lẻ". Bốn đối chứng âm (a)–(d) là bốn
+    TIẾN TRÌNH CON THẬT chạy qua chính hàm đó; đối chứng dương là một bàn đo giả XANH.
+
 GIT SANDBOX — HAI NGUYÊN NHÂN ĐỎ CỦA `A1`, CẢ HAI ĐÃ ĐƯỢC XỬ LÝ (AGENT 03 · `docs/G22_A1_GIT.md`):
 
     (a) MÔI TRƯỜNG: `git write-tree` TRẦN bị chặn ghi `gitdir/index.lock` (`Operation not
@@ -279,6 +290,21 @@ def so_ca_playwright(bo_loc=""):
 SO_CA = so_ca_playwright()
 
 
+def so_ca_playwright_dat_duoc():
+    """Vế **MÃ THOÁT** của bước ĐẾM CA: `npx playwright test --list` phải thoát 0.
+
+    Trước đây `rc` của bước này được TRẢ VỀ nhưng không ai đọc, nên một lượt `--list` thoát khác
+    0 mà vẫn in ra vài dòng vẫn có thể thành MẪU SỐ của cổng phủ-số-ca. Trả `(ok, ghi_chú)`; dùng
+    CHUNG cho `B2` và `B3` để hai cổng không kiểm tra mẫu số theo hai cách khác nhau.
+    """
+    if SO_CA.get("rc") == 0:
+        return True, ("`npx playwright test --list` thoát 0 · toàn bộ=%d ca · bàn phím=%d ca · "
+                      "%d tệp spec" % (SO_CA["toan_bo"], SO_CA["ban_phim"], SO_CA["so_tep"]))
+    return False, ("`npx playwright test --list` THOÁT %d ⇒ số ca liệt kê KHÔNG đáng tin, mẫu số "
+                   "hỏng thì cổng phủ-số-ca vô nghĩa: %s"
+                   % (SO_CA.get("rc"), (SO_CA.get("loi") or "")[-500:]))
+
+
 def doi_chung_am_dem_ca(ten_tep="06_ban_phim.spec.js"):
     """Bỏ ĐÚNG MỘT dòng khai ca trong bản sao TẠM ⇒ bộ đếm phải giảm ĐÚNG 1.
 
@@ -418,7 +444,11 @@ DOI_CHUNG = {
         "được lỗ hổng đã đóng.",
     "g20-c1-cay-sach":
         "C2 của cùng bàn đo G20 phải ĐO ĐƯỢC (7 ca tầng 3 chạy thật) — chứng minh bàn đo không "
-        "chết toàn bộ khi C1 đỏ.",
+        "chết toàn bộ khi C1 đỏ. VÀ phép đo `D1` tự chứng minh nó CÓ RĂNG: BỐN đối chứng âm "
+        "LÀM THẬT (mỗi cái một tiến trình con chạy qua đúng hàm `_phan_quyet_ban_do_g20`) — "
+        "(a) thoát != 0 dù chữ nói `OK` ⇒ ĐỎ; (b) thoát 0 nhưng có dòng `FAIL` ⇒ ĐỎ; "
+        "(c) `Ran 0 tests` ⇒ ĐỎ; (d) bàn đo không tồn tại ⇒ ĐỎ và nói rõ 'KHÔNG CHẠY ĐƯỢC' — "
+        "kèm một đối chứng DƯƠNG (bàn đo giả XANH ⇒ ĐẠT) để chặn kiểu hỏng 'cổng luôn Đỏ'.",
     "c4-go-route":
         "CÙNG phép đo `_do_c4()` trên HAI bản: (a) bản sao `app/` Y NGUYÊN phải cho đúng cặp "
         "(True, True) như cây thật; (b) CHÍNH bản sao đó sau khi GỠ TUYẾN bằng AST (mọi "
@@ -741,7 +771,11 @@ def _doi_chung_am_a1():
         ra["a_them"] = do_a1(goc)
         _in_a1(ra["a_them"], "A1†A2 thêm tệp")
         os.remove(tep_them)
-        _git("-C", goc, "checkout", "--", "admin/admin.js", giay=120)
+        # KHÔI PHỤC phải ĐỌC MÃ THOÁT: một `checkout`/`reset` hỏng mà im lặng thì vế sau đo trên
+        # một clone BẨN, và cái ĐỎ/ĐỎ-giả của vế sau không còn quy được cho đối chứng nào.
+        rc, out = _git("-C", goc, "checkout", "--", "admin/admin.js", giay=120)
+        if rc != 0:
+            raise RuntimeError("KHÔNG khôi phục được `admin/admin.js` trong clone: %s" % out[-300:])
 
         # (B) INDEX LỆCH HEAD: sửa rồi `git add` (KHÔNG commit).
         with open(tep_sua, "a", encoding="utf-8") as f:
@@ -751,7 +785,9 @@ def _doi_chung_am_a1():
             raise RuntimeError("KHÔNG stage được để dựng đối chứng (b): %s" % out[-300:])
         ra["b"] = do_a1(goc)
         _in_a1(ra["b"], "A1†B index lệch")
-        _git("-C", goc, "reset", "--hard", head, giay=120)
+        rc, out = _git("-C", goc, "reset", "--hard", head, giay=120)
+        if rc != 0:
+            raise RuntimeError("KHÔNG khôi phục được clone sau đối chứng (b): %s" % out[-300:])
 
         # (C1) KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX: dời index ra khỏi gitdir của clone.
         git_dir = os.path.join(goc, ".git")
@@ -784,7 +820,9 @@ def _doi_chung_am_a1():
         with open(os.path.join(goc, "admin", "__head_nhich_g22.txt"), "w",
                   encoding="utf-8") as f:
             f.write("commit de chung minh nen doc tai cho, khong ghim\n")
-        _git("-C", goc, "add", "admin/__head_nhich_g22.txt", giay=120)
+        rc, out = _git("-C", goc, "add", "admin/__head_nhich_g22.txt", giay=120)
+        if rc != 0:
+            raise RuntimeError("KHÔNG stage được tệp cho đối chứng D3: %s" % out[-300:])
         # NGÀY CỐ ĐỊNH: commit thử phải có cùng một SHA ở mọi lượt chạy, nếu không "bằng chứng D3"
         # sẽ đổi số mỗi lần và không ai đối chiếu lại được. Cùng cha + cùng cây + cùng nội dung +
         # cùng ngày ⇒ cùng commit.
@@ -1384,6 +1422,11 @@ class C_BanPhim(unittest.TestCase):
               % (so_ca, SO_CA["so_tep"], SO_CA["ban_phim"]))
         self.assertGreater(so_ca, 0, "KHÔNG đếm được ca nào bằng `npx playwright test --list`: %s"
                          % SO_CA.get("loi", "")[-600:])
+        # MÃ THOÁT của chính bước ĐẾM CA cũng là một vế: `--list` thoát khác 0 mà vẫn in ra được
+        # vài dòng thì số ca là số ĐỌC ĐƯỢC TỪ MỘT LƯỢT HỎNG — không được đem ra làm mẫu số.
+        ok_list, gc_list = so_ca_playwright_dat_duoc()
+        print("       mẫu số: %s" % gc_list)
+        self.assertTrue(ok_list, gc_list)
         kq = chay_e2e(giay=1200)
         dat, hong, bo, khong_chay = kq["dem"]
         print("       LỆNH: %s" % kq["lenh"])
@@ -1404,6 +1447,15 @@ class C_BanPhim(unittest.TestCase):
                       % "\n".join(kq["out"].splitlines()[-60:]))
         # ĐỐI CHỨNG DƯƠNG: ≥1 ca đạt ⇒ "hỏng" phân biệt được với "không chạy được".
         self.assertGreater(dat, 0)
+        # MÃ THOÁT THẬT của `chay.sh` là vế BẮT BUỘC, không phải một dòng để IN: trước đây nó
+        # chỉ được in ra rồi bỏ qua. Bộ chạy thoát khác 0 trong khi báo cáo trông đầy đủ (hỏng ở
+        # teardown, một ca `flaky`, hay mã thoát bị nuốt) vẫn phải là ĐỎ.
+        self.assertEqual(kq["rc"], 0,
+                         "BỘ CHẠY `chay.sh` THOÁT KHÁC 0 (rc=%d) dù báo cáo đọc được "
+                         "(%d đạt, %d hỏng, %d bỏ qua, %d không chạy) ⇒ mã thoát là phán quyết, "
+                         "không tin báo cáo đơn lẻ:\n%s"
+                         % (kq["rc"], dat, hong, bo, khong_chay,
+                            "\n".join(kq["out"].splitlines()[-40:])))
         _dc_duong("e2e-toan-bo")
         self.assertEqual(dat + hong + bo + khong_chay, so_ca,
                          "BÁO CÁO KHÔNG PHỦ SỐ CA `--list`: chạy %d ca / liệt kê %d ca ⇒ một ca "
@@ -1430,6 +1482,10 @@ class C_BanPhim(unittest.TestCase):
         print("\n  [B3] số ca DO PLAYWRIGHT LIỆT KÊ cho `06_ban_phim.spec.js`: %d ca" % so_ca)
         self.assertGreater(so_ca, 0, "KHÔNG đếm được ca nào từ `06_ban_phim.spec.js`: %s"
                          % SO_CA.get("loi", "")[-600:])
+        # MÃ THOÁT của bước ĐẾM CA — cùng vế bắt buộc như `B2` (dùng chung một hàm kiểm).
+        ok_list, gc_list = so_ca_playwright_dat_duoc()
+        print("       mẫu số: %s" % gc_list)
+        self.assertTrue(ok_list, gc_list)
         # Bộ đếm TĨNH chỉ dùng làm đối chứng âm; nó phải KHỚP số `--list` trước khi được tin.
         so_tinh = dem_ca_spec_mot_tep(os.path.join(GOC_SPEC, "06_ban_phim.spec.js"))
         print("       đối chiếu bộ đếm: `--list`=%d ca · đếm dòng khai ca=%d ca" % (so_ca, so_tinh))
@@ -1460,6 +1516,14 @@ class C_BanPhim(unittest.TestCase):
                            "KHÔNG CHẠY ĐƯỢC: 0 ca ĐẠT. Đây là KẾT QUẢ, KHÔNG phải chỗ để "
                            "`skipTest`. 40 dòng cuối:\n%s"
                            % "\n".join(kq["out"].splitlines()[-40:]))
+        # MÃ THOÁT THẬT của `chay.sh` — vế BẮT BUỘC, không phải một dòng để IN (cùng lỗi họ D1:
+        # mã thoát đọc ra rồi bỏ qua, phán quyết chỉ dựa vào chữ trong output).
+        self.assertEqual(kq["rc"], 0,
+                         "BỘ CHẠY `chay.sh 06_ban_phim.spec.js` THOÁT KHÁC 0 (rc=%d) dù báo cáo "
+                         "đọc được (%d đạt, %d hỏng, %d bỏ qua, %d không chạy) ⇒ mã thoát là "
+                         "phán quyết, không tin báo cáo đơn lẻ:\n%s"
+                         % (kq["rc"], dat, hong, bo, khong_chay,
+                            "\n".join(kq["out"].splitlines()[-40:])))
         _dc_duong("e2e-ban-phim")
         self.assertEqual(dat + hong + bo + khong_chay, so_ca,
                          "BÁO CÁO KHÔNG PHỦ SỐ CA `--list`: chạy %d ca / liệt kê %d ca"
@@ -1468,6 +1532,157 @@ class C_BanPhim(unittest.TestCase):
         dat_cong_, vi = dat_cong("e2e-ban-phim", do_duoc)
         print("       phân quyết: %s" % phan_quyet("e2e-ban-phim", do_duoc))
         self.assertTrue(dat_cong_, "CỔNG `e2e-ban-phim` ĐỎ: %s" % vi)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7a. `D1` — PHÁN QUYẾT BÀN ĐO G20 THEO **MÃ THOÁT THẬT**, KHÔNG THEO DÒNG CHỮ
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# LỖI THẬT (đo được, `task_eaf399b954e3`): `D1` chạy CẢ bàn đo G20 rồi chỉ regex dòng `Ran …`
+# và KHÔNG đọc `rc`. Đo trên cây này:
+#
+#     VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py   → Ran 21 · FAILED (failures=6, skipped=3) · EXIT 1
+#     python3 app/thu/thu_qa_g22.py D_BanDoG20           → Ran 1  · OK                                  · EXIT 0
+#
+# ⇒ cổng báo ĐẠT trong khi bàn đo nó canh đã ĐỎ. Một cổng báo ĐẠT khi thứ nó đo THẤT BẠI là lỗi
+# tệ nhất của wave: nó biến mọi báo cáo thành vô nghĩa. Log `full-08` của AG-00 cũng in "G20
+# exit 1" mà `D1` vẫn PASS.
+#
+# SỬA: phán quyết đi qua ĐÚNG MỘT điểm vào `_phan_quyet_ban_do_g20(rc, out)`. **MÃ THOÁT là vế
+# chính**; ba vế còn lại chặn đúng cái sai ngược lại — "tin mã thoát đơn lẻ":
+#   (1) `rc == 0`                        — mã thoát THẬT, đọc NGAY sau lệnh, KHÔNG qua ống;
+#   (2) KHÔNG có dòng `FAIL:`/`ERROR:`   — rc = 0 mà output có dòng hỏng vẫn ĐỎ;
+#   (3) `Ran N` đọc được và `N > 0`      — `Ran 0 tests` KHÔNG phải "đạt", nó là 0 ca;
+#   (4) dòng tổng kết `OK`               — thiếu dòng tổng kết ⇒ KHÔNG xác nhận được đã chạy.
+#
+# BỐN ĐỐI CHỨNG ÂM BẮT BUỘC — mỗi cái là một TIẾN TRÌNH CON THẬT chạy qua chính hàm trên:
+#   (a) bàn đo thoát != 0 (chữ vẫn nói `OK`) ⇒ ĐỎ — chứng minh MÃ THOÁT được đọc;
+#   (b) thoát 0 nhưng in dòng `FAIL`         ⇒ ĐỎ — chứng minh KHÔNG tin mã thoát đơn lẻ;
+#   (c) in `Ran 0 tests` rồi thoát 0         ⇒ ĐỎ — 0 ca không phải đạt;
+#   (d) bàn đo không tồn tại / không chạy    ⇒ ĐỎ và in rõ, KHÔNG được coi là đạt.
+# ĐỐI CHỨNG DƯƠNG đi kèm: một bàn đo giả XANH phải cho ĐẠT — không có vế này thì một cổng "luôn
+# ĐỎ" cũng qua được cả bốn vế âm ở trên.
+
+_D1_GIA_XANH = '''\
+import sys
+print("Ran 3 tests in 0.010s")
+print("")
+print("OK")
+sys.exit(0)
+'''
+
+# (a) CHỮ nói `OK`, MÃ THOÁT nói 3 — đúng khuôn "mã thoát bị nuốt". Chỉ vế (1) bắt được nó,
+# nên đây là đối chứng chứng minh `rc` THẬT SỰ là một vế của phán quyết.
+_D1_GIA_THOAT_KHAC_0 = '''\
+import sys
+print("Ran 3 tests in 0.010s")
+print("")
+print("OK")
+sys.exit(3)
+'''
+
+# (b) mã thoát = 0 nhưng output có dòng `FAIL:` + tổng kết `FAILED` — "tin mã thoát đơn lẻ" sẽ
+# cho qua chính ca này.
+_D1_GIA_CO_FAIL_DU_THOAT_0 = '''\
+import sys
+print("FAIL: test_g20_c4_route (__main__.T)")
+print("AssertionError: cổng C4 ĐỎ — nhưng mã thoát bị nuốt")
+print("")
+print("Ran 3 tests in 0.010s")
+print("")
+print("FAILED (failures=1)")
+sys.exit(0)
+'''
+
+# (c) `unittest` với 0 ca in ĐÚNG khuôn một lượt chạy tốt: `Ran 0 tests` + `OK` + thoát 0.
+_D1_GIA_RAN_0 = '''\
+import sys
+print("Ran 0 tests in 0.000s")
+print("")
+print("OK")
+sys.exit(0)
+'''
+
+
+def _phan_quyet_ban_do_g20(rc, out):
+    """PHÁN QUYẾT DUY NHẤT của `D1` trên kết quả THẬT của bàn đo G20.
+
+    `rc` là mã thoát đọc NGAY sau lệnh (`chay()` trả `p.returncode` — không qua ống); `rc=None`
+    nghĩa là KHÔNG chạy được (timeout/không tồn tại). Trả dict:
+
+      · `dat`      — CHỈ `True` khi cả bốn vế đúng (xem đầu mục 7a);
+      · `ly_do`    — danh sách lý do ĐỎ, nguyên văn, để in ra chứ không nuốt;
+      · `ran`      — số ca `unittest` khai (`None` nếu không đọc được);
+      · `fail`/`loi` — số ca hỏng / lỗi theo CHÍNH dòng tổng kết của bàn đo;
+      · `dong_fail`/`dong_loi` — số dòng `FAIL:`/`ERROR:` đếm trong output;
+      · `skip`     — số ca bỏ qua; `pass_` = `ran - fail - loi - skip` (suy ra, ghi rõ là suy ra);
+      · `tong_ket` — nguyên văn dòng tổng kết (`OK` | `FAILED (…)` | "").
+
+    Đây là chỗ DUY NHẤT phán quyết `D1`: ca thật và CẢ BỐN đối chứng âm đều gọi đúng hàm này,
+    nên không thể có chuyện "đối chứng đo một đằng, ca thật đo một nẻo" (cùng nguyên tắc với
+    `do_a1()`/`_do_c4()`).
+    """
+    out = out or ""
+    ra = {"thoat": rc, "dat": False, "ly_do": [], "ran": None, "fail": 0, "loi": 0,
+          "dong_fail": 0, "dong_loi": 0, "skip": 0, "pass_": None, "tong_ket": ""}
+    if rc is None:
+        ra["ly_do"].append("KHÔNG CHẠY ĐƯỢC: không có mã thoát — bàn đo không tồn tại, không "
+                           "chạy được, hoặc quá thời gian")
+        return ra
+
+    m_ran = re.search(r"^Ran (\d+) tests?\b", out, re.M)
+    ra["ran"] = int(m_ran.group(1)) if m_ran else None
+    ra["dong_fail"] = len(re.findall(r"^FAIL:\s", out, re.M))
+    ra["dong_loi"] = len(re.findall(r"^ERROR:\s", out, re.M))
+    m_f = re.search(r"failures=(\d+)", out)
+    m_e = re.search(r"errors=(\d+)", out)
+    ra["fail"] = max(int(m_f.group(1)) if m_f else 0, ra["dong_fail"])
+    ra["loi"] = max(int(m_e.group(1)) if m_e else 0, ra["dong_loi"])
+    m_sk = re.search(r"skipped=(\d+)", out)
+    ra["skip"] = int(m_sk.group(1)) if m_sk else 0
+    tong_ket = re.findall(r"^(?:OK[^\n]*|FAILED[^\n]*)\s*$", out, re.M)
+    ra["tong_ket"] = tong_ket[-1].strip() if tong_ket else ""
+    if ra["ran"] is not None:
+        ra["pass_"] = max(ra["ran"] - ra["fail"] - ra["loi"] - ra["skip"], 0)
+
+    # (1) MÃ THOÁT — vế CHÍNH. Đọc thẳng từ `p.returncode`, không suy từ chữ.
+    if rc != 0:
+        ra["ly_do"].append("MÃ THOÁT THẬT = %d (đòi 0)" % rc)
+    # (3) `Ran N` phải ĐỌC ĐƯỢC và > 0.
+    if ra["ran"] is None:
+        ra["ly_do"].append("KHÔNG CHẠY ĐƯỢC: output KHÔNG có dòng `Ran N tests` (mã thoát=%d) ⇒ "
+                           "không xác nhận được bàn đo đã chạy — KHÔNG được coi là đạt" % rc)
+    elif ra["ran"] == 0:
+        ra["ly_do"].append("`Ran 0 tests`: bàn đo KHÔNG chạy ca nào ⇒ 0 ca, không phải ĐẠT")
+    # (2) KHÔNG được có dòng hỏng, kể cả khi mã thoát = 0.
+    if ra["dong_fail"] or ra["dong_loi"]:
+        ra["ly_do"].append("output có %d dòng `FAIL:` + %d dòng `ERROR:` dù mã thoát=%d — KHÔNG "
+                           "tin mã thoát đơn lẻ" % (ra["dong_fail"], ra["dong_loi"], rc))
+    # (4) Phải có dòng tổng kết, và nó không được là `FAILED`.
+    if not ra["tong_ket"]:
+        ra["ly_do"].append("KHÔNG có dòng tổng kết `OK`/`FAILED (…)` ⇒ không xác nhận được kết "
+                           "quả bàn đo")
+    elif ra["tong_ket"].startswith("FAILED"):
+        ra["ly_do"].append("dòng tổng kết của bàn đo = %r" % ra["tong_ket"])
+    ra["dat"] = not ra["ly_do"]
+    return ra
+
+
+def _chay_ban_do_gia(ten, ma, giay=120):
+    """Chạy một BÀN ĐO GIẢ trong TIẾN TRÌNH CON THẬT. Trả `(rc, out, đường_dẫn)`.
+
+    Bàn đo giả nằm trong TMP, KHÔNG ghi một byte nào vào cây thật. `rc` là mã thoát THẬT của
+    tiến trình con — đây là bằng chứng phép đo `D1` có răng, không phải lời khẳng định.
+    """
+    d = tempfile.mkdtemp(prefix="g22-d1-%s-" % ten)
+    p = os.path.join(d, "ban_do_gia.py")
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(ma)
+        rc, out = chay([PY, p], giay=giay)
+        return rc, out, p
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 class D_BanDoG20(unittest.TestCase):
@@ -1480,6 +1695,24 @@ class D_BanDoG20(unittest.TestCase):
         cls._kq = {"chay_duoc": False}
 
     def test_d1_nam_cong_g20(self):
+        """CHẠY CẢ bàn đo G20 và PHÁN QUYẾT THEO **MÃ THOÁT THẬT** của nó.
+
+        TRƯỚC khi sửa (đo được, `task_eaf399b954e3`): ca này regex dòng `Ran …` rồi PASS, dù bàn
+        đo G20 thoát **1** với **6 ca hỏng**. Một cổng báo ĐẠT trong khi thứ nó đo THẤT BẠI là
+        lỗi tệ nhất của wave. NAY:
+
+          · `rc` của tiến trình con được ĐỌC NGAY sau lệnh (`chay()` trả `p.returncode`) và là
+            **vế CHÍNH** của phán quyết — `rc != 0` ⇒ ca này ĐỎ;
+          · `Ran N`/`FAIL`/`SKIP` vẫn được đọc để BÁO CÁO, nhưng làm vế PHỤ: `Ran 0 tests` ⇒ ĐỎ,
+            có dòng `FAIL`/`ERROR` ⇒ ĐỎ (kể cả khi `rc == 0`);
+          · bàn đo không tồn tại / không chạy được ⇒ ĐỎ và in rõ, KHÔNG được coi là đạt;
+          · BỐN ĐỐI CHỨNG ÂM BẮT BUỘC (a)–(d) + một ĐỐI CHỨNG DƯƠNG, mỗi cái là một TIẾN TRÌNH
+            CON THẬT đi qua ĐÚNG hàm `_phan_quyet_ban_do_g20()` mà ca thật dùng.
+
+        KHÔNG xoá ca, KHÔNG hạ ngưỡng, KHÔNG ép PASS: nếu G20 còn hỏng thì ca này ĐỎ và đó là
+        ĐÚNG — nó đang phản ánh lỗi thật của bàn đo G20 (chủ `thu_qa_g20.py`), không phải lỗi
+        của bộ kiểm này.
+        """
         DA_CHAY["g20-c1-cay-sach"] = True
         # KHÔNG chép, KHÔNG vá một bản sao: TỆP NGUỒN trong cây phải ĐÃ VÁ, và phải CHỨNG MINH được
         # nó là "bản gốc đã ghim + đúng hai khối vá" — bằng cách HOÀN VÁ rồi băm (`nguon_da_va`).
@@ -1490,38 +1723,95 @@ class D_BanDoG20(unittest.TestCase):
                       "khối vá': %s. Đây là KẾT QUẢ, không phải chỗ bỏ qua." % ghi_chu)
         env = {"VIP_G20_CHE_DO": "gop"}
         t0 = time.time()
-        rc, out = chay([PY, "app/thu/thu_qa_g20.py"], giay=900, env_them=env)
+        try:
+            rc, out = chay([PY, "app/thu/thu_qa_g20.py"], giay=900, env_them=env)
+        except subprocess.TimeoutExpired as e:
+            rc, out = None, "QUÁ THỜI GIAN %ss: %s" % (e.timeout, e)
         giay = round(time.time() - t0, 1)
         with open(os.path.join(LOG_DIR, "g20_gop.txt"), "w", encoding="utf-8") as f:
-            f.write(out)
-        m = re.search(r"Ran (\d+) tests? in [\d.]+s\s*\n\s*(OK|FAILED[^\n]*)", out)
+            f.write(out or "")
+        pq = _phan_quyet_ban_do_g20(rc, out)
         print("       LỆNH: VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py")
         print("       sha256 tệp nguồn TRONG CÂY = %s (gốc ghim %s + 2 khối vá)"
               % (_bam(BAN_DO_G20)[:16], BAN_DO_G20_GOC_SHA[:16]))
-        print("       mã thoát THẬT = %d · %.1f giây · %s"
-              % (rc, giay, (m.group(0).replace("\n", " ") if m else "không thấy dòng tổng kết")))
-        if m is None:
-            self.fail("không đọc được dòng tổng kết của bàn đo G20:\n%s"
-                      % "\n".join(out.splitlines()[-40:]))
+        print("       mã thoát THẬT = %s · %.1f giây"
+              % ("KHÔNG CHẠY ĐƯỢC" if rc is None else rc, giay))
+        print("       Ran %s · PASS %s · FAIL %d · ERROR %d · SKIP %d · tổng kết %r"
+              % ("?" if pq["ran"] is None else pq["ran"],
+                 "?" if pq["pass_"] is None else pq["pass_"],
+                 pq["fail"], pq["loi"], pq["skip"], pq["tong_ket"]))
+        self.__class__._kq = {"chay_duoc": rc is not None, "rc": rc, "out": out, "pq": pq}
+
         # C1..C5: đọc NGUYÊN VĂN dòng phán quyết của CHÍNH bàn đo — không suy diễn lại.
         # Nhãn in ra của bàn đo là `[G1]` (C1), `[B1]` (C2), `[C2]` (C3), `[C4]`, `[C5]`;
         # `SO_DO_G20[...]["ten_do"]` là KHÓA NỘI BỘ của nó, không phải nhãn in ra.
-        MAU = (("C1 cổng cây sạch wave trước", r"\[G1\] cổng cây sạch[^\n]*"),
-               ("C2 bàn phím TRONG màn (tầng 3)", r"\[B1\] nhị phân[^\n]*"),
-               ("C3 git với môi trường NGUYÊN BẢN", r"\[C2\] GIT_CONFIG[^\n]*"),
-               ("C4 route truy_van + migration v9", r"\[C4\][^\n]*"),
-               ("C5 có bộ G19-tổng-hợp chạy được", r"\[C5\][^\n]*"))
+        #
+        # MẪU CHỈ GHIM **NHÃN**, KHÔNG GHIM PHẦN CÒN LẠI CỦA DÒNG: mẫu cũ (`\[B1\] nhị phân…`,
+        # `\[C2\] GIT_CONFIG…`) ghim nguyên văn nội dung, nên khi bàn đo đổi câu chữ (đo được:
+        # `[B1] nền không dựng được …`) thì `D1` in "KHÔNG THẤY DÒNG ĐO" trong khi dòng đó CÓ —
+        # đúng họ H5/N-G19-04 (ghim sự thật môi trường) và nó che mất thông tin khi báo cáo.
+        MAU = (("C1 cổng cây sạch wave trước", r"^\s*\[G1\][^\n]*"),
+               ("C2 bàn phím TRONG màn (tầng 3)", r"^\s*\[B1\][^\n]*"),
+               ("C3 git với môi trường NGUYÊN BẢN", r"^\s*\[C2\][^\n]*"),
+               ("C4 route truy_van + migration v9", r"^\s*\[C4\][^\n]*"),
+               ("C5 có bộ G19-tổng-hợp chạy được", r"^\s*\[C5\][^\n]*"))
         for ten, mau in MAU:
-            mm = re.search(mau, out)
+            mm = re.search(mau, out or "", re.M)
             print("       %-34s %s" % (ten, mm.group(0).strip() if mm else "KHÔNG THẤY DÒNG ĐO"))
         # VÀ mỗi cổng còn được ĐO ĐỘC LẬP ở đây, không chỉ đọc lời bàn đo kia:
         ma_git, _ = chay(["git", "rev-parse", "HEAD"])          # môi trường NGUYÊN BẢN
         print("       ĐO ĐỘC LẬP C3: `git rev-parse HEAD` môi trường NGUYÊN BẢN → mã thoát %d "
               "(nền=%d, đóng=%d)" % (ma_git, SO_DO_G20["C3 git với môi trường NGUYÊN BẢN"]["nen"],
                                      SO_DO_G20["C3 git với môi trường NGUYÊN BẢN"]["dong"]))
-        self.__class__._kq = {"chay_duoc": True, "rc": rc, "out": out}
+
+        # ── BỐN ĐỐI CHỨNG ÂM BẮT BUỘC — LÀM THẬT, mỗi cái một TIẾN TRÌNH CON ──────────────────
+        print("       BỐN ĐỐI CHỨNG ÂM — bàn đo GIẢ chạy THẬT trong tiến trình con, đi qua ĐÚNG "
+              "hàm phán quyết trên:")
+        am = (
+            ("(a) thoát != 0, CHỮ vẫn nói `OK`", _D1_GIA_THOAT_KHAC_0, 3),
+            ("(b) thoát 0 nhưng in dòng `FAIL`", _D1_GIA_CO_FAIL_DU_THOAT_0, 0),
+            ("(c) in `Ran 0 tests` rồi thoát 0", _D1_GIA_RAN_0, 0),
+        )
+        for nhan, ma, rc_doi in am:
+            rc_a, out_a, _p = _chay_ban_do_gia(nhan.split()[0].strip("()"), ma)
+            pq_a = _phan_quyet_ban_do_g20(rc_a, out_a)
+            print("       %-40s rc=%-3d → %s (đòi ĐỎ) · lý do: %s"
+                  % (nhan, rc_a, "ĐỎ ✓" if not pq_a["dat"] else "ĐẠT-SAI ✗",
+                     " | ".join(pq_a["ly_do"])))
+            self.assertEqual(rc_a, rc_doi,
+                             "đối chứng âm %s: bàn đo giả phải thoát %d, đo được %d — phép "
+                             "tiêm không dựng đúng kịch bản" % (nhan, rc_doi, rc_a))
+            self.assertFalse(pq_a["dat"],
+                             "CỔNG MÙ: đối chứng âm %s mà phán quyết vẫn ĐẠT" % nhan)
+        # (d) KHÔNG TỒN TẠI / KHÔNG CHẠY ĐƯỢC: trỏ vào một tệp không có ⇒ tiến trình con thoát
+        # khác 0 và KHÔNG có dòng `Ran`. Phán quyết PHẢI ĐỎ và PHẢI nói rõ "KHÔNG CHẠY ĐƯỢC".
+        khong_co = os.path.join(TMP_GOC, "__g22_d1_khong_ton_tai__.py")
+        if os.path.exists(khong_co):
+            os.remove(khong_co)
+        rc_d, out_d = chay([PY, khong_co], giay=60)
+        pq_d = _phan_quyet_ban_do_g20(rc_d, out_d)
+        print("       %-40s rc=%-3d → %s (đòi ĐỎ) · lý do: %s"
+              % ("(d) bàn đo KHÔNG TỒN TẠI", rc_d, "ĐỎ ✓" if not pq_d["dat"] else "ĐẠT-SAI ✗",
+                 " | ".join(pq_d["ly_do"])))
+        self.assertNotEqual(rc_d, 0, "gọi một tệp KHÔNG tồn tại mà tiến trình con vẫn thoát 0")
+        self.assertFalse(pq_d["dat"],
+                         "CỔNG MÙ: bàn đo KHÔNG TỒN TẠI mà phán quyết vẫn ĐẠT")
+        self.assertTrue(any("KHÔNG CHẠY ĐƯỢC" in x for x in pq_d["ly_do"]),
+                        "phán quyết ĐỎ nhưng KHÔNG nói rõ 'KHÔNG CHẠY ĐƯỢC': %r" % (pq_d["ly_do"],))
+        # ĐỐI CHỨNG DƯƠNG: bàn đo giả XANH phải cho ĐẠT — chặn kiểu hỏng "cổng luôn Đỏ".
+        rc_p, out_p, _p = _chay_ban_do_gia("duong", _D1_GIA_XANH)
+        pq_p = _phan_quyet_ban_do_g20(rc_p, out_p)
+        print("       %-40s rc=%-3d → %s (đòi ĐẠT) · Ran %s · tổng kết %r"
+              % ("(+) bàn đo giả XANH", rc_p, "ĐẠT ✓" if pq_p["dat"] else "ĐỎ-SAI ✗",
+                 pq_p["ran"], pq_p["tong_ket"]))
+        self.assertEqual(rc_p, 0, "bàn đo giả XANH phải thoát 0, đo được %d" % rc_p)
+        self.assertTrue(pq_p["dat"],
+                        "CỔNG LUÔN ĐỎ: bàn đo giả XANH mà phán quyết vẫn ĐỎ — %r"
+                        % (pq_p["ly_do"],))
+        DA_TIEM["g20-c1-cay-sach"] = True
+
         # ĐỐI CHỨNG DƯƠNG của nhóm này: C2 phải ĐO ĐƯỢC (bảy ca tầng 3 chạy thật).
-        co_c2 = "tang3-ban-phim" in out or "tầng 3" in out
+        co_c2 = "tang3-ban-phim" in (out or "") or "tầng 3" in (out or "")
         print("       đối chứng dương: bàn đo có chạm tầng 3 (C2) = %s" % co_c2)
         self.assertTrue(co_c2, "bàn đo G20 chết toàn bộ — C1 đỏ không phân biệt được với "
                                "'bàn đo không chạy'")
@@ -1530,6 +1820,20 @@ class D_BanDoG20(unittest.TestCase):
         print("       sau lượt đo, tệp nguồn vẫn là 'gốc + 2 khối vá' = %s" % ok2)
         self.assertTrue(ok2, "lượt đo đã ĐỔI tệp nguồn: %s" % ghi_chu2)
         _dc_duong("g20-c1-cay-sach")
+
+        # ── PHÁN QUYẾT CUỐI — THEO MÃ THOÁT THẬT, KHÔNG THEO DÒNG CHỮ ────────────────────────
+        self.assertTrue(
+            pq["dat"],
+            "D1 ĐỎ — BÀN ĐO G20 THẤT BẠI: %s.\n"
+            "       Đọc được: mã thoát THẬT = %s · Ran %s · FAIL %d · ERROR %d · SKIP %d · "
+            "tổng kết %r.\n"
+            "       ĐÂY LÀ ĐỎ ĐÚNG: cổng đang phản ánh lỗi THẬT của bàn đo G20 "
+            "(`app/thu/thu_qa_g20.py`) — KHÔNG phải lỗi của bộ kiểm này, KHÔNG được sửa bằng "
+            "cách nới cổng. Chủ `thu_qa_g20.py` phải sửa các ca hỏng bên trong.\n"
+            "       40 dòng cuối của bàn đo:\n%s"
+            % (" | ".join(pq["ly_do"]), "KHÔNG CHẠY ĐƯỢC" if rc is None else rc, pq["ran"],
+               pq["fail"], pq["loi"], pq["skip"], pq["tong_ket"],
+               "\n".join((out or "").splitlines()[-40:])))
 
 
 class E_CaySach(unittest.TestCase):
@@ -1953,8 +2257,14 @@ class G_NG2103(unittest.TestCase):
         m3 = re.search(r"tổ hợp RÒ=(\d+)/(\d+)", out3)
         so_ro_tiem = int(m3.group(1)) if m3 else None
         print("       ĐỐI CHỨNG (b) — TIÊM tắt luật ECHO THEO TÊN: G5 đọc tổ hợp RÒ=%s · `test_c2a` "
-              "rc=%d (%s)" % (("%s/%s" % (m3.group(1), m3.group(2))) if m3 else "?",
-                             rc4, "ĐỎ ✓" if rc4 != 0 else "VẪN XANH ✗"))
+              "rc=%d (%s) · G5 thoát %d" % (("%s/%s" % (m3.group(1), m3.group(2))) if m3 else "?",
+                                            rc4, "ĐỎ ✓" if rc4 != 0 else "VẪN XANH ✗", rc3))
+        # MÃ THOÁT của phép đo ĐỘC LẬP trên bản tiêm cũng phải được ĐỌC: một lượt G5 thoát khác 0
+        # mà vẫn kịp in dòng `tổ hợp RÒ=…` là một phép đo HỎNG, không phải bằng chứng bộ dò có răng.
+        self.assertEqual(rc3, 0,
+                         "phép đo ĐỘC LẬP `G5_CredentialNgan` trên bản TIÊM thoát %d ⇒ con số "
+                         "`tổ hợp RÒ` không đáng tin (không chứng minh được bộ dò có răng):\n%s"
+                         % (rc3, "\n".join(out3.splitlines()[-25:])))
         self.assertIsNotNone(so_ro_tiem,
                              "bản tiêm không cho ra số ⇒ phép tiêm hỏng, không kết luận được")
         self.assertGreater(so_ro_tiem, 0,

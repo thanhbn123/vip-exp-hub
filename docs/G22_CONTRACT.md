@@ -221,8 +221,139 @@ rồi chạy lại toàn bộ tại đó — kỳ vọng `24 ca · 0 hỏng · 1
    môi trường `148ecd3`, hai ca tầng 3 `B1`/`B2`, và `A5` + `Z1`/`Z2`) **không** làm `D1` đỏ. Đây
    là tệp **ngoài phạm vi ghi của AG-02** (`thu_qa_g22.py` + tài liệu này) — **báo AG-00** để cấp
    việc cho chủ `thu_qa_g20.py`; không sửa lén.
+   → **ĐÃ SỬA Ở VÒNG 5 (§0quater):** `D1` nay đọc **mã thoát THẬT** và **ĐỎ đúng** vì G20 còn
+   hỏng; phần sửa các ca hỏng bên trong `thu_qa_g20.py` vẫn thuộc chủ tệp đó (Agent U2).
 3. **Worktree `g22-a2-contract` chưa lên `146500b`** (sandbox chặn ghi `.git`, xem §0ter.4) —
    AG-00 cần fast-forward/merge; commit hộ vẫn là AG-00/Controller như các vòng trước.
+
+---
+
+## 0quater. VÒNG 5 — `D1` CHE LỖI CỦA G20: MỘT CỔNG BÁO ĐẠT TRONG KHI BÀN ĐO ĐỎ
+
+> Dispatch `ctx_9a5bd3e3389c` · task `task_eaf399b954e3` · nền đo: `HEAD` **ĐỌC TẠI CHỖ**
+> `2f4c3d1402c1` (cây `ece2b65d4623`), cây **SẠCH**. Phạm vi ghi: `app/thu/thu_qa_g22.py` +
+> tài liệu này. Không push · không deploy · không API production · không sửa CSDL thật.
+
+### 0quater.1 Sự thật đo được — vì sao đây là ƯU TIÊN SỐ 1
+
+`D1` (`test_d1_nam_cong_g20`) chạy **CẢ** bàn đo G20 nhưng **KHÔNG ĐỌC MÃ THOÁT**: nó lấy `rc`
+rồi chỉ `re.search(r"Ran (\d+) tests? …")` trên output, và chỉ HỎNG khi **không tìm thấy dòng
+`Ran …`**. Một bàn đo G20 có 6 ca hỏng vẫn in `Ran 21 tests`, nên `m` khác `None` ⇒ cổng PASS.
+
+| | TRƯỚC khi sửa (đo được) | SAU khi sửa (đo được) |
+|---|---|---|
+| Lệnh đo G20 | `VIP_G20_CHE_DO=gop python3 app/thu/thu_qa_g20.py` | y nguyên |
+| `Ran` / `FAIL` / `SKIP` của G20 | **21 · 6 · 3** (cây SẠCH) | **21 · 7 · 3** (xem ghi chú dưới) |
+| Dòng tổng kết G20 | `FAILED (failures=6, skipped=3)` | `FAILED (failures=7, skipped=3)` |
+| **MÃ THOÁT THẬT của G20** | **1** | **1** (G20 còn hỏng — chưa ai sửa) |
+| `D1` phán | **PASS** ← SAI | **FAIL** ← ĐÚNG |
+| Nhóm `D_BanDoG20` | `Ran 1 · OK · ca: 1 · hỏng/loi: 0 · MÃ THOÁT = 0` | `Ran 1 · FAILED (failures=1) · hỏng/loi: 1 · MÃ THOÁT = 1` |
+| Log | `/tmp/u1-d1-truoc-d1.log` | `/tmp/u1-d1-sau-d1.log` |
+
+Nguyên văn dòng đo TRƯỚC khi sửa (bộ kiểm in ra `rc` rồi **bỏ qua**):
+
+```
+       mã thoát THẬT = 1 · 7.6 giây · Ran 21 tests in 7.599s  FAILED (failures=6, skipped=3)
+...
+  ca: 1 · hỏng/loi: 0 · bỏ qua: 0 · MÃ THOÁT = 0
+EXIT=0
+```
+
+Tức bàn đo nó canh đã **ĐỎ** (`EXIT 1`, 6 ca hỏng) mà cổng vẫn **XANH**. Một cổng báo ĐẠT khi
+thứ nó đo THẤT BẠI là **lỗi tệ nhất của cả wave**: nó biến mọi báo cáo thành vô nghĩa. Log
+`full-08` của AG-00 cũng in `G20 exit 1` mà `D1` vẫn PASS — đúng lỗi này.
+
+### 0quater.2 Cách sửa — MỘT điểm vào, BỐN vế, và mã thoát là vế CHÍNH
+
+`D1` (và cả bốn đối chứng âm) đi qua **đúng một** hàm `_phan_quyet_ban_do_g20(rc, out)` — cùng
+nguyên tắc "một điểm vào" đã dùng cho `do_a1()`/`_do_c4()`, nên không thể có chuyện "đối chứng
+đo một đằng, ca thật đo một nẻo".
+
+| Vế | Điều kiện ĐẠT | Nguồn của sự thật |
+|---|---|---|
+| **(1) MÃ THOÁT** — vế CHÍNH | `rc == 0` | `p.returncode` của `chay()`, đọc NGAY sau lệnh, **không qua ống** |
+| (2) không có ca hỏng | 0 dòng `FAIL:` + 0 dòng `ERROR:` | nguyên văn output của bàn đo |
+| (3) có ca thật | `Ran N` đọc được và `N > 0` | nguyên văn output |
+| (4) có kết luận | có dòng tổng kết `OK…` / `FAILED…`, và **không** là `FAILED` | nguyên văn output |
+
+`Ran N` · `PASS` · `FAIL` · `ERROR` · `SKIP` **vẫn được in ra để BÁO CÁO** (`PASS` suy ra =
+`Ran − FAIL − ERROR − SKIP`), nhưng phán quyết không còn chỉ dựa vào regex. Vế (2)(3)(4) chặn
+đúng chiều sai ngược lại: **"tin mã thoát đơn lẻ"**. Bàn đo không tồn tại / không chạy được /
+quá thời gian (`rc = None`) ⇒ **ĐỎ** và in rõ `KHÔNG CHẠY ĐƯỢC`, không bao giờ là "đạt".
+
+### 0quater.3 BỐN ĐỐI CHỨNG ÂM BẮT BUỘC + ĐỐI CHỨNG DƯƠNG — ĐO ĐƯỢC (không phải khẳng định)
+
+Mỗi đối chứng là một **TIẾN TRÌNH CON THẬT** (`subprocess` chạy một bàn đo giả trong TMP) đi qua
+**chính** hàm `_phan_quyet_ban_do_g20()`. Nguyên văn log `/tmp/u1-d1-sau-d1.log`:
+
+| Vế | Kịch bản TIÊM (thật) | Kết quả ĐO ĐƯỢC |
+|---|---|---|
+| **(a)** | bàn đo giả in `Ran 3 tests` + `OK` (chữ nói ĐẠT) nhưng `sys.exit(3)` | `rc=3 → ĐỎ ✓` · lý do: `MÃ THOÁT THẬT = 3 (đòi 0)` ⇒ **chỉ vế (1) bắt được** |
+| **(b)** | thoát **0** nhưng in `FAIL: …` + `FAILED (failures=1)` | `rc=0 → ĐỎ ✓` · lý do: `output có 1 dòng FAIL: … dù mã thoát=0 — KHÔNG tin mã thoát đơn lẻ` |
+| **(c)** | in `Ran 0 tests` + `OK` rồi thoát 0 | `rc=0 → ĐỎ ✓` · lý do: ``Ran 0 tests`: bàn đo KHÔNG chạy ca nào ⇒ 0 ca, không phải ĐẠT` |
+| **(d)** | trỏ vào tệp **không tồn tại** | `rc=2 → ĐỎ ✓` · lý do: `KHÔNG CHẠY ĐƯỢC: output KHÔNG có dòng Ran N tests … KHÔNG được coi là đạt` |
+| **(+)** dương | bàn đo giả in `Ran 3 tests` + `OK`, thoát 0 | `rc=0 → ĐẠT ✓` · `Ran 3 · tổng kết 'OK'` ⇒ chặn kiểu hỏng "cổng luôn Đỏ" |
+
+Bốn vế âm + một vế dương nghĩa là: phép đo **BẮT ĐƯỢC** cả bốn kiểu hỏng (kể cả kiểu "chữ nói
+OK, mã thoát nói hỏng" — đúng kiểu đã xảy ra), **và** không phải một cổng luôn Đỏ.
+
+### 0quater.4 KẾT QUẢ TOÀN BỘ SAU KHI SỬA (đo thật)
+
+| | Vòng 4 | **Vòng 5 (lượt này)** |
+|---|---|---|
+| `Ran` | 24 | **24** |
+| PASS (= Ran − FAIL − SKIP) | 23 | **22** |
+| FAIL | 0 | **1 (`D1`)** |
+| SKIP | 1 (`Z9` mồi) | **1 (`Z9` mồi)** |
+| **EXIT** | 0 | **1** |
+
+Nguyên văn `Ran 24 tests in 210.386s` · `FAILED (failures=1, skipped=1)` · `ca: 24 · hỏng/loi: 1 ·
+bỏ qua: 1 · MÃ THOÁT = 1` (log `/tmp/u1-d1-full-sau2.log`; lượt trước đó
+`/tmp/u1-d1-full-sau.log` cho **cùng** số). `B2`/`B3` vẫn **XANH** trong lượt này (`chay.sh` toàn
+bộ 65 ca: `mã thoát THẬT = 0`, 157.2 s; bàn phím 8 ca: `mã thoát = 0`, 13.3 s).
+
+`FAIL 1` là **`D1` ĐỎ ĐÚNG**: bàn đo G20 bên trong còn **ít nhất 6 ca hỏng** (§0quater.6). Không ca nào
+bị xoá, không ngưỡng nào bị hạ, không ca nào bị ép PASS. Khi `thu_qa_g20.py` hết hỏng, `D1` tự
+xanh trở lại — **không phải sửa cổng**.
+
+### 0quater.5 RÀ SOÁT **CẢ LỚP LỖI** — mọi cổng "chạy nhưng không đọc mã thoát"
+
+Đây là **lớp lỗi**, không phải một ca. Đã rà **từng** chỗ gọi `chay()`/`chay_con()`/`_git()` trong
+tệp: **47 chỗ** của bản trước + **2 chỗ** mới của chính đối chứng `D1` (bàn đo giả và bàn đo không
+tồn tại) = **49 chỗ**; quét lại bằng AST: **không còn biến `rc` nào bị bỏ không dùng** (trừ `_` cố
+ý của PID).
+
+| Cổng / chỗ chạy | Trước | Sửa |
+|---|---|---|
+| **`D1`** | `rc` lấy ra, **in ra, không dùng**; phán quyết bằng regex `Ran …` | **vế CHÍNH** của `_phan_quyet_ban_do_g20()`; thêm 4 đối chứng âm + 1 dương (§0quater.2/3) |
+| **`B2`** (`chay.sh` toàn bộ) | `kq["rc"]` **chỉ in**, phán quyết bằng số ca parse từ output | thêm `assertEqual(kq["rc"], 0, …)` — bộ chạy thoát khác 0 vẫn là ĐỎ dù báo cáo trông đầy đủ |
+| **`B3`** (`chay.sh 06_ban_phim`) | y như `B2` | y như `B2` |
+| **Mẫu số `--list`** (`B2`/`B3`) | `so_ca_playwright()` trả `rc` nhưng **không ai đọc** | hàm dùng chung `so_ca_playwright_dat_duoc()`; `--list` thoát khác 0 ⇒ mẫu số không đáng tin ⇒ ĐỎ |
+| **Khôi phục clone trong đối chứng âm `A1`** | 3 lệnh `git checkout/reset/add` **bỏ qua `rc`** | kiểm `rc != 0` ⇒ `RuntimeError` (vế sau không được đo trên một clone BẨN) |
+| `A1`/`A2`/`A3` · `E1`/`E2` · `F1`(`do_e3`) · `G1` · `H1`(`_do_c4`) · `I1`(`C5`/`G7`) · `Z2` · `Z5` · `Z9` | **đã đọc `rc`** trước đó | không sửa — đã đúng |
+
+### 0quater.6 CÒN LẠI — NÓI THẲNG, KHÔNG GIẢ XANH
+
+1. **`D1` đang ĐỎ vì `thu_qa_g20.py` còn hỏng** — và đó là **ĐỎ ĐÚNG**. Bàn đo G20 đo được
+   `Ran 21 · FAILED (failures=6, skipped=3) · EXIT 1` khi cây SẠCH: các ca hỏng gồm `C4` còn
+   **ghim trạng thái nền** (`assertEqual(nhap, [])`, đã báo ở §0ter.5.2), `C1`/`git-tho` ghim
+   `148ecd3`, `Z1` thiếu đối chứng dương cho `cong-cay-sach`/`git-tho`/`truy-van-C6`, `A5`, và
+   hai ca tầng 3 `B1`/`B2`. **Sửa các ca đó là việc của chủ `app/thu/thu_qa_g20.py` (Agent U2)**
+   — tệp này NGOÀI phạm vi ghi của lượt này; **không sửa lén, không nới cổng `D1`**.
+2. **Vì sao TRƯỚC đo được `failures=6`, SAU đo được `failures=7` — KHAI RÕ, không phải "chập
+   chờn":** sáu ca hỏng ĐỘC LẬP với lượt này là `A5`
+   (`test_g1_cong_cay_sach_wave_truoc…`), `B1`, `B2` (tầng 3), `C4` (`route/migration`), `C1`
+   (`git` môi trường NGUYÊN BẢN) và `Z1` (thiếu đối chứng dương). Ca thứ BẢY là `Z2` của chính
+   G20 — `test_z2_cay_khong_doi_ngoai_hai_tep_duoc_phep` — nó ĐỎ vì cây đang có **đúng hai tệp
+   của lượt này đã sửa nhưng CHƯA commit** (`M app/thu/thu_qa_g22.py`, `M docs/G22_CONTRACT.md`);
+   G20 chỉ cho phép hai tệp CỦA NÓ. Trước khi sửa, cây SẠCH nên `Z2` xanh ⇒ 6 ca. Sau khi
+   AG-00 commit hai tệp, `Z2` sẽ xanh lại ⇒ G20 về **6 ca hỏng**, mã thoát vẫn **1**, `D1` vẫn
+   **ĐỎ**. Báo cáo `D1` ghi **số đo của lượt đang chạy**, không ghim một con số.
+3. **Symlink nhị phân Chromium** `node_modules/playwright-core/.local-browsers` được **tạo lại**
+   (không được git theo dõi, đúng §2.3 / `docs/G21_BANPHIM_E2E.md` §10) để `B1`/`B2`/`B3` chạy
+   được thật trong lượt đo này. **Không phải tệp sản phẩm**, `git status` không đổi.
+4. Không sửa `thu_qa_g20.py`, `thu_qa_g21.py`, `thu_g20_dahang.py`; không đụng `:5432`; không
+   sửa `SO_DO`/`dat_cong`/`phan_quyet`.
 
 ---
 
@@ -494,6 +625,11 @@ commit.
   — khai ở §2.3.
 * `.git` của worktree **không bị ghi** bởi bộ kiểm: phép đo index dùng bản sao + ODB tạm;
   mọi thao tác phá `.git` của các đối chứng âm chỉ xảy ra trên **clone tạm trong TMP**.
+* **VÒNG 5 — KHÔNG nới cổng `D1`, KHÔNG ép xanh:** `D1` không bị xoá, `Ran` vẫn **24**, `SO_DO`/
+  `dat_cong`/`phan_quyet` **không sửa**. `D1` **ĐỎ** vì bàn đo G20 bên trong còn hỏng — đó là
+  điều ĐÚNG phải xảy ra. Bốn đối chứng âm (a)–(d) + một dương của `D1` đều **chạy thật** trên
+  tiến trình con (§0quater.3), không phải lời khai. `B2`/`B3` chỉ **THÊM** vế mã thoát, không
+  hạ ngưỡng nào; không sửa `thu_qa_g20.py`/`thu_qa_g21.py`.
 
 ---
 
@@ -523,19 +659,24 @@ commit.
    `DDL_G12Q`→`nang_len_v10` **còn treo**, chủ AG-02 backend — §0ter.5.)
 6. **`nang_len_v10` (vòng 4):** `PHIEN_BAN_SCHEMA` vẫn **9**; **chưa** áp `truy_van.DDL_G12Q`
    cho CSDL đã ở v9. **Không** nhận `G19-C6` là đã xong hoàn toàn — xem §0ter.5.1.
-7. **Bàn đo G20 (vòng 4):** cổng C4 của `thu_qa_g20.py` còn ghim trạng thái nền (`assertEqual(nhap, [])`,
-   dòng 702) ⇒ ĐỎ trên `146500b`; `D1` chạy nó mà không đọc mã thoát nên che mất. Ngoài phạm vi
-   ghi của AG-02 — báo AG-00 (§0ter.5.2).
+7. **Bàn đo G20 (vòng 4 → ĐÃ SỬA Ở VÒNG 5):** cổng C4 của `thu_qa_g20.py` còn ghim trạng thái
+   nền (`assertEqual(nhap, [])`, dòng 702) ⇒ ĐỎ trên `146500b`. **`D1` che nó** — nay `D1` đọc
+   **mã thoát THẬT** và ĐỎ đúng (§0quater). Việc còn lại: chủ `thu_qa_g20.py` (Agent U2) sửa các
+   ca hỏng bên trong; **không** sửa lén tệp đó ở đây.
 8. **Worktree (vòng 4):** `g22-a2-contract` còn ở `a6b5b73`; sandbox chặn ghi `.git` nên không
    fast-forward được lên `146500b` — bằng chứng chạy trên bản sao TMP (§0ter.4); AG-00 cần
    fast-forward/merge.
+9. **`D1` (vòng 5):** đọc mã thoát thật + 4 đối chứng âm + 1 dương (§0quater.2/3). **Đang ĐỎ**
+   vì G20 còn ít nhất 6 ca hỏng — **ĐỎ ĐÚNG**, không phải nợ của bộ kiểm. Không xoá ca, không hạ
+   ngưỡng, không ép PASS.
 
 ---
 
 ## 7. CÁCH TỰ KIỂM LẠI
 
 ```sh
-# 1) Toàn bộ — kỳ vọng VÒNG 4: Ran 24 · PASS 23 · FAIL 0 · skipped=1 (Z9 mồi) · EXIT 0
+# 1) Toàn bộ — kỳ vọng VÒNG 5: Ran 24 · PASS 22 · FAIL 1 (D1) · skipped=1 (Z9 mồi) · EXIT 1
+#    (D1 ĐỎ ĐÚNG vì bàn đo G20 bên trong còn hỏng — §0quater.6.)
 python3 app/thu/thu_qa_g22.py
 
 # 2) Các nhóm quyết định:
@@ -543,17 +684,22 @@ python3 app/thu/thu_qa_g22.py A_Nen        # Ran 4 · OK · EXIT 0 (A1 + 5 đố
 python3 app/thu/thu_qa_g22.py C_BanPhim    # B1, B2, B3 OK trên 146500b · EXIT 0
 python3 app/thu/thu_qa_g22.py E_CaySach    # Ran 2 · OK · skipped=0 · EXIT 0
 python3 app/thu/thu_qa_g22.py H_C4         # Ran 1 · OK · EXIT 0 (C4/G19-C6 + gỡ tuyến ⇒ ĐỎ)
+python3 app/thu/thu_qa_g22.py D_BanDoG20   # Ran 1 · FAILED (failures=1) · EXIT 1 — ĐỎ ĐÚNG (§0quater)
 
 # 3) Xem đối chứng âm trong log: A1 (cây bẩn · index≠HEAD · cây không đọc được · HEAD nhích),
 #    B2/B3 (hạ 1 ca), E1 (tiêm tệp bẩn), H_C4 (GỠ `import truy_van` + khối route bằng AST
-#    trên bản sao `app/` ⇒ cặp (True, True) → (True, False) ⇒ cổng ĐỎ).
+#    trên bản sao `app/` ⇒ cặp (True, True) → (True, False) ⇒ cổng ĐỎ),
+#    D1 (bốn bàn đo GIẢ: (a) thoát 3 dù chữ nói OK · (b) thoát 0 mà có dòng FAIL ·
+#        (c) `Ran 0 tests` · (d) tệp không tồn tại — cả bốn PHẢI ĐỎ; một bàn đo giả XANH PHẢI ĐẠT).
 # 4) Kiểm sha256 nhị phân headless:
 shasum -a 256 node_modules/playwright-core/.local-browsers/chromium_headless_shell-1194/chrome-mac/headless_shell
 # → a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040
 ```
 
 > Số của vòng 3 (lịch sử): `Ran 24 · PASS 22 · failures=1 (B2) · skipped=1 (Z9) · EXIT 1`. Số của
-> vòng 4: `Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0` — §0ter.4.
+> vòng 4: `Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0` — §0ter.4. Số của **vòng 5**:
+> `Ran 24 · PASS 22 · FAIL 1 (D1 — ĐỎ ĐÚNG vì G20 còn hỏng) · SKIP 1 (Z9 mồi) · EXIT 1` —
+> §0quater.4.
 
 **Ba luật bằng chứng đã giữ:** mọi khẳng định đi kèm lệnh thật + mã thoát thật + số ca + số
 skip; không đoán mã trạng thái hãng (không có lời gọi hãng nào); mọi ca phủ định trong phạm vi

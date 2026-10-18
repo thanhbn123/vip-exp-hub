@@ -62,19 +62,35 @@ khớp nhau vì cùng môi trường, nhưng **đây là giới hạn phép đo,
 ⇒ **Hợp lệ**: hoặc là **mồi cho đối chứng âm** (bỏ đi thì `T2`/`Z5` mất răng), hoặc **làn đầy đủ
 chưa bật** và **được ghi thẳng là `CHƯA ĐO`** — tức **giới hạn phạm vi, KHÔNG phải ĐẠT**.
 
-## 5. LÀN ĐẦY ĐỦ — **khoảng hở CHƯA ĐÓNG**
+## 5. LÀN ĐẦY ĐỦ — **khoảng hở CHƯA ĐÓNG, và nó có NGUYÊN NHÂN CẤU TRÚC**
 
-`VIP_G20_DAY_DU=1` chạy `test_h1_hoi_quy_toan_phan`, mà ca đó chạy **`sh app/thu/chay_tat_ca.sh`**
-(hồi quy toàn dự án). Đo được:
+`VIP_*_DAY_DU=1` bật `test_h1_hoi_quy_toan_phan`, mà ca đó chạy **`sh app/thu/chay_tat_ca.sh`**
+(hồi quy toàn dự án). **CẢ HAI BỘ** đều đỏ, **cùng một dạng**:
 
 ```
 G20 làn đầy đủ: exit=1 · Ran 21 · FAILED (failures=2, skipped=2)
-   FAIL test_h1_hoi_quy_toan_phan      ← chạy chay_tat_ca.sh, chưa xanh
-   FAIL test_z1_moi_ca_phu_dinh_deu_co_doi_chung_duong
+   FAIL test_h1_hoi_quy_toan_phan                       ← chạy chay_tat_ca.sh
+   FAIL test_z1_moi_ca_phu_dinh_deu_co_doi_chung_duong   ← sổ DOI_CHUNG
+G21 làn đầy đủ: exit=1 · Ran 24 · FAILED (failures=2, skipped=2)
+   FAIL test_h1_hoi_quy_toan_phan                       ← chạy chay_tat_ca.sh
+   FAIL test_z2_cay_khong_doi_trong_luot_do              ← vân tay cây KHÔNG ĐỔI trong lượt đo
 ```
 
-**⇒ Hồi quy TOÀN DỰ ÁN (`chay_tat_ca.sh`) CHƯA XANH.** Đây là **giới hạn thật**, không phải chi
-tiết nhỏ: ba bộ G20/G21/G22 xanh **không đồng nghĩa** toàn bộ ~1900 ca của dự án xanh.
+**Đọc ra hai điều, và chỉ hai điều này là cái tôi CHỨNG MINH được:**
+
+1. **`H_HoiQuy` chạy chính `chay_tat_ca.sh`** ⇒ hồi quy toàn dự án **CHƯA XANH**. Ba bộ
+   G20/G21/G22 xanh **không đồng nghĩa** ~1900 ca của toàn dự án xanh.
+2. **`Z1`/`Z2` là cổng TOÀN VẸN PHÉP ĐO** (sổ đối chứng dương; vân tay cây không đổi trong lượt).
+   Chúng **kêu** ngay trong làn đầy đủ ⇒ có gì đó **đổi trạng thái trong lúc lượt đo chạy**.
+
+**Điều tôi KHÔNG chứng minh được:** cơ chế chính xác làm `Z1`/`Z2` kêu. `chay_tat_ca.sh` **không**
+ghi vào cây theo `grep`, và `git status` **sạch** sau các lượt chạy (`thu_giao_dien/_bao-cao`,
+`_ket-qua` đã gitignore). **Tôi không đoán cơ chế** — tôi chỉ khẳng định hệ quả: **làn đầy đủ hiện
+tự mâu thuẫn**, vì nó vừa chạy hồi quy toàn phần vừa đòi cây không đổi trong lúc chạy.
+
+⇒ **Hai việc phải làm trước khi đóng G22:** (a) làm hồi quy toàn dự án xanh; (b) tách phép đo
+"vân tay cây không đổi" ra khỏi lượt có chạy hồi quy toàn phần — hoặc ghi rõ là làn đầy đủ **không
+dùng được** cho tới khi (a) xong.
 
 ## 6. UAT LOCAL — chạy thật, đạt
 

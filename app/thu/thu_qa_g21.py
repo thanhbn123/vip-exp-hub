@@ -76,7 +76,7 @@ GOC_THU = os.path.join(GOC_CAY, "app", "thu")
 # cổng C3, nên trên cây đã gộp nó ĐỎ vì lý do giả — xem `docs/QA_G21.md` §4.1 `L-G20-A`).
 NEN_GOC = "a3400a8f8e2ed9ec987bd4cf9c16a9f1e5fb11a1"
 
-TEP_DUOC_PHEP = ("docs/QA_G21.md", "app/thu/thu_qa_g21.py")
+TEP_DUOC_PHEP = ("docs/QA_G21.md", "app/thu/thu_qa_g21.py", "docs/G21_MEASURE_FIX.md")
 TEP_G20_TAM = "app/thu/thu_qa_g20.py"   # chỉ để ĐỐI CHIẾU CHÉO, không bắt buộc phải có
 
 CHE_DO = os.environ.get("VIP_G21_CHE_DO", "nen")
@@ -122,19 +122,25 @@ SO_DO = {
     # AG-04 — số bộ `thu_qa_g19*.py` CHẠY THẬT được ≥1 ca và thoát 0 (min(...,1)).
     "bo-g19-tong-hop": {"nen": 0, "dong": 1},
 
-    # AG-05 — số cổng "cây sạch" của wave TRƯỚC chạy XANH khi cây chỉ có tệp AG-01 G21 hợp lệ.
-    # BA cổng, không phải hai: khoản nợ này có ÍT NHẤT BA bản sao trong dự án (đo được trên
-    # `a3400a8`, xem docs/QA_G21.md §5.3 `N-G21-05`). Vá hai bản rồi để bản thứ ba đỏ là NỬA VỜI
-    # ⇒ `1` hay `2` đều KHÔNG rơi vào ô nào ⇒ ĐỎ.
-    "cong-cay-sach": {"nen": 0, "dong": 3},
+    # AG-05 — số cổng "cây sạch" của wave TRƯỚC còn ĐỎ khi cây chỉ có tệp hợp lệ của làn QA.
+    # ĐO TRÊN `a3400a8`: cả BA cổng trong `CONG_CAY_SACH` đều ĐỎ ⇒ nền = 3. Đóng = 0, và "0"
+    # là bất biến: MỌI cổng trong danh sách phải XANH. Không ghim "3" như một con số thành tích
+    # — giá trị đo là `len(CONG_CAY_SACH) - số cổng XANH`, đọc tại chỗ từ danh sách.
+    "cong-cay-sach": {"nen": 3, "dong": 0},
 
-    # AG-05 — mã thoát `git rev-parse HEAD` với môi trường NGUYÊN BẢN (không gỡ `GIT_CONFIG_*`).
+    # AG-05 — mã thoát `git rev-parse HEAD` trong môi trường ĐÃ CHUẨN HOÁ bằng bộ dùng chung
+    # (`thu_g21_chotcay.env_git`). "Nền 128" là TRIỆU CHỨNG của môi trường `GIT_CONFIG_*` dị
+    # dạng trên MÁY NÀY — lỗi MÔI TRƯỜNG, không phải lỗi sản phẩm (docs/OWNER_ACTIONS §F,
+    # docs/G22_A1_GIT.md §1.1a). Cổng đo BẤT BIẾN: sau chuẩn hoá git chạy được (0); ba vế đối
+    # chứng nằm trong `G2`.
     "git-tho": {"nen": 128, "dong": 0},
 
-    # AG-06 — tầng 3, `06_ban_phim.spec.js`: (ĐẠT, HỎNG, KHÔNG CHẠY).
-    # Nền (3, 1, 3): ca 04 chỉ vào được 1 điều khiển TRONG màn (đặc tả đòi > 10), và 3 ca sau
-    # KHÔNG HỀ CHẠY (Playwright bỏ phần đuôi tệp khi một ca hỏng). Đóng (7, 0, 0).
-    "tang3-ban-phim": {"nen": (3, 1, 3), "dong": (7, 0, 0)},
+    # AG-06 — tầng 3, `06_ban_phim.spec.js`: số ca (HỎNG + KHÔNG CHẠY).
+    # Nền = 4: ca 04 chỉ vào được 1 điều khiển TRONG màn (đặc tả đòi > 10) và 3 ca sau KHÔNG HỀ
+    # CHẠY (Playwright bỏ phần đuôi tệp khi một ca hỏng). Đóng = 0. TỔNG số ca KHÔNG ghim ở đây:
+    # nó được ĐỌC TẠI CHỖ từ chính tệp đặc tả (xem `G3`), nên thêm một ca vào spec không làm cổng
+    # ĐỎ vì lý do giả; ca ĐẠT thiếu so với spec vẫn bị bắt riêng.
+    "tang3-ban-phim": {"nen": 4, "dong": 0},
 
     # KHÔNG LÀN NÀO SỞ HỮU — C6 của G19: (schema_ok, route_ok). Nền (True, False): migration v9
     # ĐÃ gộp nhưng `app/truy_van.py` KHÔNG được tệp SẢN XUẤT nào import.
@@ -255,6 +261,42 @@ def _ghi_log(ten, ma, ra):
     return duong
 
 
+def _moi_truong_kho(data_dir):
+    """Môi trường con cho MỘT nền KIỂM THỬ CÔ LẬP — khai kho bằng ĐÚNG đường của `cau_hinh`.
+
+    G22 đổi hợp đồng: `migrate.py` TỪ CHỐI khi chưa khai kho đang chạy (`VIP_KHO_DANG_CHAY`).
+    Bộ thử phải tự khai, và cách khai AN TOÀN là `cau_hinh.khai_kho_kiem_thu()`: hàm đó từ chối
+    nếu thư mục dữ liệu không cô lập (chưa đặt `VIP_HUB_DATA`, hoặc trỏ vào cây repo / volume
+    `/du-lieu`). Vì hàm ĐẶT biến môi trường, nó được gọi trong một khối có HOÀN NGUYÊN: tiến
+    trình cha không giữ `VIP_KHO_DANG_CHAY`/`VIP_HUB_DATA` cho ca sau.
+
+    Trả `dict` môi trường ĐẦY ĐỦ (thừa hưởng `os.environ`) + `VIP_HUB_DATA` + khai kho.
+    """
+    if GOC_APP not in sys.path:
+        sys.path.insert(0, GOC_APP)
+    import cau_hinh
+    cu_hub = os.environ.get("VIP_HUB_DATA")
+    cu_kho = os.environ.get("VIP_KHO_DANG_CHAY")
+    cu_global = getattr(cau_hinh, "KHO_DANG_CHAY", None)
+    os.environ["VIP_HUB_DATA"] = data_dir
+    try:
+        kho = cau_hinh.khai_kho_kiem_thu()
+    finally:
+        if cu_hub is None:
+            os.environ.pop("VIP_HUB_DATA", None)
+        else:
+            os.environ["VIP_HUB_DATA"] = cu_hub
+        if cu_kho is None:
+            os.environ.pop("VIP_KHO_DANG_CHAY", None)
+        else:
+            os.environ["VIP_KHO_DANG_CHAY"] = cu_kho
+        cau_hinh.KHO_DANG_CHAY = cu_global
+    e = dict(os.environ)
+    e["VIP_HUB_DATA"] = data_dir
+    e["VIP_KHO_DANG_CHAY"] = kho
+    return e
+
+
 def _cay_ban():
     """Dòng `git status --porcelain` KHÔNG thuộc tệp được phép của AG-01 G21."""
     st = _git("status", "--porcelain=v1", "-uall").stdout
@@ -339,7 +381,10 @@ def do_tang_3(spec=None, giay=900):
 
     nen = tempfile.mkdtemp(prefix="veh-g21-gd-")
     cong = _cong_ranh()
-    env = dict(os.environ, VIP_HUB_DATA=nen, PLAYWRIGHT_BROWSERS_PATH=pw)
+    # Nền CÔ LẬP + KHAI KHO bằng đường chính thức của `cau_hinh` (G22): thiếu khai thì
+    # `migrate` TỪ CHỐI và tầng 3 chạy 0 ca — đó là lỗi THIẾT LẬP ĐO, không phải lỗi sản phẩm.
+    env = _moi_truong_kho(nen)
+    env["PLAYWRIGHT_BROWSERS_PATH"] = pw
     # CHỐT CỨNG: ÉP bind `127.0.0.1`, không chỉ "không đặt gì". `server.py` mặc định là
     # 127.0.0.1, nhưng một biến THỪA HƯỞNG từ phiên ngoài có thể mở cổng ra ngoài — điều bị CẤM.
     env["VIP_HUB_BIND"] = "127.0.0.1"
@@ -405,7 +450,10 @@ def do_tang_3(spec=None, giay=900):
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
 def _dung_nen_du_lieu(d):
-    env = dict(os.environ, VIP_HUB_DATA=d, PYTHONDONTWRITEBYTECODE="1")
+    # `migrate.py` (G22) TỪ CHỐI khi chưa khai kho ⇒ nền cô lập phải khai bằng ĐÚNG đường của
+    # `cau_hinh` (xem `_moi_truong_kho`), không phải bằng một dòng `export` rải rác.
+    env = _moi_truong_kho(d)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     for lenh in (["python3", "app/migrate.py"], ["python3", "app/khoi_tao.py"]):
         ma, ra, _ = _chay(lenh, env=env, giay=300)
         if ma != 0:
@@ -436,13 +484,37 @@ def _chup_csdl(duong):
         return {"so_bang": None, "tong_dong": None, "integrity": "LOI:" + type(e).__name__}
 
 
+def _sao_luu_chuan(d):
+    """Tạo bản sao lưu bằng CHÍNH `migrate.sao_luu()` (có `.sha256`). Trả `(rc, đường, output)`.
+
+    VÌ SAO KHÔNG `shutil.copy2`: từ bản vá fail-closed G21/G22, `khoi_phuc()` BẮT BUỘC có dấu
+    kiểm `<tệp>.sha256`; một bản `copy2` trần là "bản sao lưu không kiểm chứng được" và bị TỪ
+    CHỐI — đúng thiết kế. Bản cũ dùng `copy2` làm đối chứng dương nên đo ra "tệp LÀNH bị từ
+    chối"; đó là STALE của phép đo, không phải lỗi sản phẩm.
+    """
+    ma, ra, _ = _chay(
+        ["python3", "-c",
+         "import sys; sys.path.insert(0, %r); import migrate;"
+         " print('BACKUP=' + migrate.sao_luu())" % GOC_APP],
+        env=_moi_truong_kho(d), giay=300)
+    duong = ""
+    for dong in reversed(ra.splitlines()):
+        if dong.startswith("BACKUP="):
+            duong = dong.split("=", 1)[1].strip()
+            break
+    return ma, duong, ra
+
+
 def do_sao_luu_fail_closed():
     """Trả `(số đầu vào ĐỘC HẠI được NHẬN, chi tiết, đối_chứng)`.
 
     BỐN đầu vào độc hại (ánh xạ K-1/K-2/K-5 của `G20_BACKUP_RESTORE.md` §5), đi qua ĐÚNG đường
     người trực dùng: `python3 app/migrate.py --rollback <tệp>`. "NHẬN" = mã thoát 0.
-    ĐỐI CHỨNG DƯƠNG: một bản sao lưu LÀNH phải được nhận VÀ dữ liệu phải nguyên vẹn — không có
-    vế này thì "0/4 nhận" có thể chỉ là một `khoi_phuc()` hỏng sẵn.
+
+    ĐỐI CHỨNG DƯƠNG: bản sao lưu do CHÍNH `migrate.sao_luu()` tạo (có `.sha256`) phải được nhận
+    VÀ dữ liệu phải nguyên vẹn — không có vế này thì "0/4 nhận" có thể chỉ là một `khoi_phuc()`
+    hỏng sẵn. ĐỐI CHỨNG ÂM của chính bản vá: bản `copy2` KHÔNG dấu kiểm phải bị TỪ CHỐI mặc
+    định, và đường thoát tường minh (`--toi-da-biet-chua-kiem-duoc`) phải dùng được.
     """
     goc = tempfile.mkdtemp(prefix="g21-saoluu-")
     chi_tiet = []
@@ -453,23 +525,25 @@ def do_sao_luu_fail_closed():
         nen_chup = _chup_csdl(db)
         with open(db, "rb") as f:
             toan = f.read()
-        lanh = os.path.join(goc, "LANH.db")
-        shutil.copy2(db, lanh)
+        ma_sl, lanh, ra_sl = _sao_luu_chuan(goc)
+        if ma_sl != 0 or not lanh:
+            return None, [("tạo bản sao lưu chuẩn",
+                           "rc=%s · %s" % (ma_sl, ra_sl[-400:]))], None
 
         doc_hai = [("rong-0-byte", b""),
                    ("cat-cut-40-phan-tram", toan[:int(len(toan) * 0.4)]),
                    ("byte-0-magic-hong", b"\x00" + toan[1:]),
                    ("khong-phai-sqlite-PGDMP", b"PGDMP\x00\x01\x00" + b"\x00" * 60000)]
 
-        def _thu(duong_nguon):
+        def _thu(duong_nguon, them=()):
             d = tempfile.mkdtemp(prefix="g21-saoluu-con-")
             try:
                 dbc, _ = _dung_nen_du_lieu(d)
                 if dbc is None:
-                    return None, None
-                ma, _, _ = _chay(["python3", "app/migrate.py", "--rollback", duong_nguon],
-                                 env=dict(os.environ, VIP_HUB_DATA=d), giay=300)
-                return ma, _chup_csdl(dbc)
+                    return None, None, ""
+                ma, ra, _ = _chay(["python3", "app/migrate.py", "--rollback", duong_nguon]
+                                  + list(them), env=_moi_truong_kho(d), giay=300)
+                return ma, _chup_csdl(dbc), ra
             finally:
                 shutil.rmtree(d, ignore_errors=True)
 
@@ -478,13 +552,24 @@ def do_sao_luu_fail_closed():
             p = os.path.join(goc, ten + ".db")
             with open(p, "wb") as f:
                 f.write(than)
-            ma, sau = _thu(p)
+            ma, sau, _ = _thu(p)
             if ma == 0:
                 nhan += 1
             chi_tiet.append((ten, ma, sau, sau != nen_chup))
-        ma_lanh, sau_lanh = _thu(lanh)
+        ma_lanh, sau_lanh, _ = _thu(lanh)
+
+        # VẾ "STALE" ĐƯỢC SỬA: bản `copy2` trần từng được coi là LÀNH. Nay nó là đầu vào KHÔNG
+        # kiểm chứng được: phải bị TỪ CHỐI mặc định; đường thoát tường minh phải nhận nó.
+        khong_dau = os.path.join(goc, "LANH-khong-dau-kiem.db")
+        shutil.copy2(db, khong_dau)
+        ma_kd, _, ra_kd = _thu(khong_dau)
+        ma_esc, sau_esc, _ = _thu(khong_dau, them=("--toi-da-biet-chua-kiem-duoc",))
         doi_chung = {"rc": ma_lanh, "sau": sau_lanh, "nen": nen_chup,
-                     "du_lieu_nguyen": (ma_lanh == 0 and sau_lanh == nen_chup)}
+                     "du_lieu_nguyen": (ma_lanh == 0 and sau_lanh == nen_chup),
+                     "thieu_dau_kiem_rc": ma_kd,
+                     "thieu_dau_kiem_noi": "dấu kiểm" in ra_kd,
+                     "escape_rc": ma_esc,
+                     "escape_du_lieu_nguyen": (ma_esc == 0 and sau_esc == nen_chup)}
         return nhan, chi_tiet, doi_chung
     finally:
         shutil.rmtree(goc, ignore_errors=True)
@@ -716,69 +801,114 @@ class G1_CaySach(unittest.TestCase):
         chet = [t for t, _, loai in ket if loai == "PHEP_DO_CHET"]
         self.assertEqual(chet, [], "PHÉP ĐO CHẾT (tên ca không tồn tại / 0 ca chạy): %s" % chet)
         xanh = sum(1 for _, _, loai in ket if loai == "XANH")
-        dat, vi = dat_cong("cong-cay-sach", xanh)
+        con_do = len(CONG_CAY_SACH) - xanh
+        dat, vi = dat_cong("cong-cay-sach", con_do)
         _dc_am("cong-cay-sach")
-        # ĐỐI CHỨNG DƯƠNG: cơ chế miễn trừ của chính hai cổng đó phải CÒN SỐNG — nó phải nhận ra
-        # tệp của CHÍNH NÓ, và KHÔNG được nhận tệp của AG-01 G21 (đó chính là khoản nợ).
+
+        # ĐỐI CHỨNG DƯƠNG + ÂM — dùng DÒNG PORCELAIN TỔNG HỢP, không đọc trạng thái git thật.
+        # BẢN CŨ (STALE) đòi hai tệp QA phải đang là "?? …" trên cây. Sau khi gộp, chúng là tệp
+        # ĐÃ THEO DÕI và cây SẠCH, nên `q17._cay_ban()` rỗng → phép đo tự tố cáo sai. Bất biến
+        # đúng: bộ lọc của MỖI cổng miễn trừ vùng thử/tài liệu và KHÔNG miễn trừ tệp SẢN PHẨM.
         sys.path.insert(0, GOC_THU)
         import thu_qa_g17 as q17  # noqa: E402
         import thu_qa_g18 as q18  # noqa: E402
+        import thu_g20_baomat as qb  # noqa: E402
+        gia_lanh = ["?? %s" % t for t in TEP_DUOC_PHEP]
+        gia_ban = ["?? app/webhook.py"]
+        for ten, loc, mau in (
+                ("g17", lambda d: q17._loc_cay_ban(d, q17._mau_chot()), q17._mau_chot()),
+                ("g18", lambda d: q18._loc_cay_ban(d, q18._mau_chot()), q18._mau_chot()),
+                ("g20_baomat", lambda d: qb._loc_cay_ban(d, qb._mau_chot()), qb._mau_chot())):
+            self.assertTrue(mau, "%s: vùng miễn trừ RỖNG ⇒ cổng không tha gì (hướng an toàn)" % ten)
+            self.assertEqual(loc(gia_lanh), [],
+                             "%s: tệp thử/tài liệu HỢP LỆ bị coi là cây bẩn: %s"
+                             % (ten, loc(gia_lanh)))
+            self.assertEqual(loc(gia_ban), gia_ban,
+                             "%s: tệp SẢN PHẨM bị miễn trừ ⇒ cổng mù với cây bẩn thật" % ten)
+        # Và cơ chế miễn trừ của chính cổng g18 phải nhận ra tệp của CHÍNH NÓ (không phải "tha
+        # tất"): đây là vế dương hẹp của cùng bộ lọc.
         self.assertTrue(any(q18._la_tep_ag01("?? %s" % t) for t in q18.TEP_CUA_AG01_G18),
                         "cổng g18 không nhận ra tệp của chính nó ⇒ cổng hỏng sẵn, không phải nợ")
-        # Và giá trị ĐÓNG phải TỚI ĐƯỢC: đưa đúng tệp AG-01 G21 vào danh sách miễn trừ của g17
-        # thì bộ lọc của nó trả RỖNG ⇒ cổng sẽ XANH. Không kiểm được điều này thì "0/2" có thể
-        # chỉ là một cổng hỏng vĩnh viễn.
-        dang_co = [t for t in TEP_DUOC_PHEP if os.path.exists(os.path.join(GOC_CAY, t))]
-        self.assertTrue(dang_co, "không tệp AG-01 G21 nào tồn tại ⇒ cổng này chưa đo được gì")
-        ban = q17._cay_ban()
-        self.assertTrue(all(any(t in d for d in ban) for t in dang_co),
-                        "g17 không thấy tệp AG-01 G21 trong cây: %s" % ban)
-        self.assertEqual(q17._cay_ban(ngoai=TEP_DUOC_PHEP), [],
-                         "miễn trừ đúng tệp AG-01 G21 mà g17 vẫn báo bẩn ⇒ giá trị ĐÓNG bất khả thi")
-        # Và cổng thứ BA (`thu_g20_baomat.py`) cũng phải TỚI ĐƯỢC giá trị ĐÓNG: nó dùng một danh
-        # sách tên cứng KHÁC (`TEP_CUA_WAVE_G20`), nên "sửa g17+g18 là xong" sẽ để nó ĐỎ.
-        import thu_g20_baomat as qb  # noqa: E402
-        self.assertIn("app/thu/thu_g20_baomat.py", qb.TEP_CUA_WAVE_G20,
-                      "cổng của baomat đổi cấu trúc ⇒ phép đo dưới đây phải viết lại")
-        gia = ["?? %s" % t for t in TEP_DUOC_PHEP]
-        self.assertTrue(qb._loc_cay_ban(gia, qb.TEP_CUA_WAVE_G20),
-                        "baomat LẠI miễn trừ tệp AG-01 G21 ⇒ mô tả khoản nợ đã cũ")
-        self.assertEqual(qb._loc_cay_ban(gia, qb.TEP_CUA_WAVE_G20 + TEP_DUOC_PHEP), [],
-                         "thêm tệp AG-01 G21 vào phạm vi mà baomat vẫn báo bẩn ⇒ ĐÓNG bất khả thi")
         _dc_duong("cong-cay-sach")
-        print("\n  [G1] cổng cây sạch wave trước XANH: %d/%d · chủ sở hữu=%s · phán quyết=%s"
-              % (xanh, len(CONG_CAY_SACH), CHU_SO_HUU["cong-cay-sach"], vi))
+        print("\n  [G1] cổng cây sạch wave trước: %d/%d XANH · còn ĐỎ=%d"
+              " · chủ sở hữu=%s · phán quyết=%s"
+              % (xanh, len(CONG_CAY_SACH), con_do, CHU_SO_HUU["cong-cay-sach"], vi))
         self.assertTrue(dat, "CỔNG `cong-cay-sach` ĐỎ: %s" % vi)
 
 
 class G2_GitTho(unittest.TestCase):
-    """AG-05 — `git` với môi trường NGUYÊN BẢN."""
+    """AG-05 — `git` dưới môi trường `GIT_CONFIG_*` dị dạng (N-G18-00)."""
 
     def test_g2_git_voi_moi_truong_nguyen_ban(self):
-        dem = os.environ.get("GIT_CONFIG_COUNT")
-        khoa = [k for k in os.environ if k.startswith("GIT_CONFIG_KEY_")]
-        gia_tri = [k for k in os.environ if k.startswith("GIT_CONFIG_VALUE_")]
-        if not dem or int(dem) == 0:
-            self.skipTest("CHƯA ĐO: phiên này KHÔNG đặt `GIT_CONFIG_COUNT` ⇒ không có gì để đo")
-        r = _git("rev-parse", "HEAD", tho=True)
+        """Môi trường git phải được CHUẨN HOÁ **KÈM CẢNH BÁO**, và KHÔNG nuốt lỗi thật.
+
+        BẢN CŨ (STALE) đo `git rev-parse HEAD` với môi trường THỪA HƯỞNG rồi ghim mã thoát 128
+        vào cổng sản phẩm. Đo lại: `GIT_CONFIG_COUNT=2` thiếu `GIT_CONFIG_KEY_*` là lỗi MÔI
+        TRƯỜNG của MÁY (docs/OWNER_ACTIONS §F; docs/G22_A1_GIT.md §1.1a), không phải mã sản
+        phẩm; `chay_tat_ca.sh` đã tự gỡ từ G18. Bất biến đúng, ba vế:
+          (1) môi trường DỊ DẠNG ⇒ bộ chuẩn hoá DÙNG CHUNG (`thu_g21_chotcay.env_git`) gỡ cả
+              gia đình biến + CẢNH BÁO ra stderr;
+          (2) môi trường HỢP LỆ ⇒ KHÔNG được gỡ (gỡ là nuốt một cấu hình thật);
+          (3) sau chuẩn hoá, lỗi THẬT vẫn phải NỔI LÊN, kèm stderr nguyên văn.
+        """
+        sys.path.insert(0, GOC_THU)
+        import thu_g21_chotcay as chotcay  # noqa: E402
+
+        nguyen_van = dict(os.environ)
+        ban = chotcay.soi_gia_dinh_git(nguyen_van)
+        tho = subprocess.run(["git", "-C", GOC_CAY, "rev-parse", "HEAD"],
+                             capture_output=True, text=True, env=nguyen_van)
+        e_sach = {k: v for k, v in nguyen_van.items() if not k.startswith("GIT_CONFIG")}
+        e_sach["GIT_CONFIG_COUNT"] = "0"
+        sach = subprocess.run(["git", "-C", GOC_CAY, "rev-parse", "HEAD"],
+                              capture_output=True, text=True, env=e_sach)
+        da_chuan = chotcay._git("rev-parse", "HEAD")
+        self.assertEqual(sach.returncode, 0,
+                         "git với môi trường SẠCH vẫn hỏng ⇒ lỗi THẬT: %r" % sach.stderr[:200])
+        self.assertEqual(da_chuan.returncode, 0,
+                         "git sau chuẩn hoá vẫn hỏng ⇒ bộ chuẩn hoá không cứu được: %r"
+                         % da_chuan.stderr[:200])
         _dc_am("git-tho")
-        # ĐỐI CHỨNG DƯƠNG: CÙNG lệnh, chỉ khác là ĐÃ GỠ gia đình biến ⇒ phải thoát 0. KHÔNG ghim
-        # giá trị HEAD vào đối chứng (bài học `L-G20-A`): trên cây đã gộp HEAD KHÁC nền, nên một
-        # đối chứng ghim `HEAD == nền` sẽ ĐỎ vì lý do giả.
-        r2 = _git("rev-parse", "HEAD")
-        r3 = _git("status", "--porcelain=v1", "-uall")
-        self.assertEqual(r2.returncode, 0, "gỡ biến rồi mà git vẫn hỏng: %r" % r2.stderr[:200])
-        self.assertEqual(r3.returncode, 0, "gỡ biến rồi mà `git status` vẫn hỏng")
-        self.assertRegex(r2.stdout.strip(), r"^[0-9a-f]{40}$")
+        # ĐỐI CHỨNG ÂM: môi trường DỊ DẠNG ⇒ git NGUYÊN VĂN phải hỏng. Nếu nó "vẫn chạy" thì mô
+        # tả N-G18-00 sai, và phép đo dưới đây không chứng minh được gì.
+        if ban["di_dang"]:
+            self.assertNotEqual(tho.returncode, 0,
+                                "môi trường dị dạng mà git nguyên văn VẪN chạy ⇒ mô tả sai")
+        else:
+            self.assertEqual(tho.returncode, 0,
+                             "môi trường HỢP LỆ mà git nguyên văn hỏng ⇒ lỗi THẬT: %r"
+                             % tho.stderr[:200])
+        # ĐỐI CHỨNG DƯƠNG: môi trường HỢP LỆ không được bị gỡ. `COUNT=1` + đủ KEY/VALUE là cấu
+        # hình CÓ THẬT; xoá nó là nuốt một lỗi thật (luật (b) của `thu_g21_chotcay`).
+        hop_le = dict(e_sach, GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="user.name",
+                      GIT_CONFIG_VALUE_0="g21-do")
+        ban_hl = chotcay.soi_gia_dinh_git(hop_le)
+        self.assertFalse(ban_hl["di_dang"], "bộ soi báo oan môi trường HỢP LỆ")
+        e_hl = chotcay.env_git(hop_le, im_lang=True)
+        self.assertEqual(e_hl.get("GIT_CONFIG_KEY_0"), "user.name",
+                         "bộ chuẩn hoá GỠ mất cấu hình HỢP LỆ ⇒ nuốt lỗi thật")
+        self.assertEqual(e_hl.get("GIT_CONFIG_COUNT"), "1")
+        # ĐỐI CHỨNG ÂM của luật (c): lỗi THẬT sau chuẩn hoá vẫn nổi lên, kèm stderr.
+        tam = tempfile.mkdtemp(prefix="veh-g21-khong-repo-")
+        try:
+            r_ngoai = chotcay._git("rev-parse", "HEAD", goc=tam)
+        finally:
+            shutil.rmtree(tam, ignore_errors=True)
+        self.assertNotEqual(r_ngoai.returncode, 0,
+                            "git ngoài cây git LẠI thành công ⇒ bộ đo nuốt lỗi thật")
+        self.assertTrue((r_ngoai.stderr or "").strip(),
+                        "lỗi THẬT nhưng KHÔNG có stderr để đối chiếu")
         _dc_duong("git-tho")
-        dat, vi = dat_cong("git-tho", r.returncode)
-        print("\n  [G2] GIT_CONFIG_COUNT=%s · KEY_*=%d · VALUE_*=%d · git thô=%s · git đã gỡ biến=0"
-              " · chủ sở hữu=%s" % (dem, len(khoa), len(gia_tri), r.returncode, CHU_SO_HUU["git-tho"]))
-        # Chẩn đoán phải nêu ĐÚNG tên biến thiếu — nếu không thì "128" có thể do nguyên nhân khác.
-        if r.returncode != 0:
-            self.assertIn("GIT_CONFIG_KEY_0", r.stderr,
-                          "git thoát %s nhưng KHÔNG phải vì thiếu GIT_CONFIG_KEY_0: %r"
-                          % (r.returncode, r.stderr[:200]))
+        dat, vi = dat_cong("git-tho", da_chuan.returncode)
+        print("\n  [G2] môi trường máy: COUNT=%s · KEY_*=%d · VALUE_*=%d · dị dạng=%s"
+              " · git nguyên văn=%s · git đã chuẩn hoá=%s · git môi trường sạch=%s"
+              " · chủ sở hữu=%s"
+              % (ban["count"], ban["so_khoa"], ban["so_gia_tri"], ban["di_dang"],
+                 tho.returncode, da_chuan.returncode, sach.returncode,
+                 CHU_SO_HUU["git-tho"]))
+        if ban["di_dang"]:
+            print("       [N-G18-00] %s" % ban["ly_do"])
+            print("       Đây là MÔI TRƯỜNG của máy, KHÔNG phải cây hỏng — docs/OWNER_ACTIONS §F")
         self.assertTrue(dat, "CỔNG `git-tho` ĐỎ: %s" % vi)
 
 
@@ -786,10 +916,16 @@ class G3_Tang3BanPhim(unittest.TestCase):
     """AG-06 — bàn phím TRONG màn, tầng 3 Chromium thật."""
 
     def test_g3_tang_3_ban_phim_trong_man(self):
+        # TỔNG số ca ĐỌC TẠI CHỖ từ chính tệp đặc tả — KHÔNG ghim "7" của lượt trước. Spec đã
+        # thành 8 ca; một con số cứng sẽ biến việc THÊM CA (làm đúng) thành cổng ĐỎ giả.
+        spec = os.path.join(GOC_CAY, "thu_giao_dien", SPEC_BAN_PHIM)
+        so_ca_spec = len(re.findall(r"^test\(", _doc(spec), re.M))
+        self.assertGreater(so_ca_spec, 0,
+                           "không đọc được ca nào trong %s ⇒ phép đo vô nghĩa" % SPEC_BAN_PHIM)
         ma, ra, ghi = do_tang_3(spec=SPEC_BAN_PHIM)
         if ma is None:
             _ghi_log("tang3_ban_phim_CHUA_DO.txt", ma, ra)
-            self.skipTest("CHƯA ĐO: %s" % ghi)
+            self.fail("CHƯA ĐO ĐƯỢC: %s" % ghi)
         _ghi_log("tang3_ban_phim.txt", ma, ra)
         dat_, hong, bo, khong_chay = dem_playwright(ra)
         diem = dem_diem_dung_trong_man(ra)
@@ -801,10 +937,20 @@ class G3_Tang3BanPhim(unittest.TestCase):
         self.assertEqual(dem_playwright("1 failed · 3 did not run · 47 passed"), (47, 1, 0, 3),
                          "bộ đếm Playwright mù")
         self.assertEqual(dem_diem_dung_trong_man("[đo] 30 lượt Tab: 7 điểm dừng là điều khiển trong màn"), 7)
+        # BẤT BIẾN: số ca ĐẠT phải bằng ĐÚNG số ca spec khai — thiếu ca là PHÉP ĐO CHẾT, không
+        # phải đạt. Và ca 04 phải thật sự vào được > 10 điều khiển TRONG màn (đặc tả G21/AG-06).
+        self.assertEqual(dat_, so_ca_spec,
+                         "spec khai %d ca nhưng Playwright chỉ báo %d ĐẠT ⇒ mất ca"
+                         % (so_ca_spec, dat_))
+        self.assertEqual(ma, 0, "Playwright báo đủ %d ca đạt nhưng mã thoát %s" % (so_ca_spec, ma))
+        self.assertIsNotNone(diem, "không đọc được số điểm dừng TRONG màn ⇒ ca 04 không in số")
+        self.assertGreater(diem, 10,
+                           "ca 04 chỉ vào được %s điều khiển TRONG màn (đặc tả đòi > 10)" % diem)
         _dc_duong("tang3-ban-phim")
-        dat, vi = dat_cong("tang3-ban-phim", (dat_, hong, khong_chay))
-        print("\n  [G3] tầng 3 bàn phím: mã thoát=%s · (đạt, hỏng, KHÔNG CHẠY)=(%d, %d, %d) · bỏ qua=%d"
-              % (ma, dat_, hong, khong_chay, bo))
+        dat, vi = dat_cong("tang3-ban-phim", hong + khong_chay)
+        print("\n  [G3] tầng 3 bàn phím: mã thoát=%s · (đạt, hỏng, KHÔNG CHẠY)=(%d, %d, %d)"
+              " · bỏ qua=%d · spec khai %d ca"
+              % (ma, dat_, hong, khong_chay, bo, so_ca_spec))
         print("       ca 04 vào được %s điều khiển TRONG màn (đặc tả đòi > 10) · chủ sở hữu=%s"
               % (diem, CHU_SO_HUU["tang3-ban-phim"]))
         self.assertTrue(dat, "CỔNG `tang3-ban-phim` ĐỎ: %s" % vi)
@@ -826,21 +972,38 @@ class G4_SaoLuu(unittest.TestCase):
     def test_g4_sao_luu_fail_closed(self):
         nhan, chi_tiet, doi_chung = do_sao_luu_fail_closed()
         if nhan is None:
-            self.skipTest("CHƯA ĐO: %s" % chi_tiet)
+            self.fail("CHƯA ĐO ĐƯỢC: %s" % (chi_tiet,))
         _dc_am("sao-luu-fail-closed")
-        # ĐỐI CHỨNG DƯƠNG BẮT BUỘC: bản sao lưu LÀNH phải được NHẬN và dữ liệu nguyên vẹn.
+        # ĐỐI CHỨNG DƯƠNG BẮT BUỘC: bản sao lưu do CHÍNH `sao_luu()` tạo phải được NHẬN và dữ
+        # liệu nguyên vẹn. Bản cũ dùng `shutil.copy2` trần làm "LÀNH"; bản vá fail-closed
+        # G21/G22 cố ý TỪ CHỐI bản không có `.sha256` ⇒ đó là STALE của phép đo, không phải lỗi.
         self.assertIsNotNone(doi_chung, "thiếu đối chứng dương")
-        self.assertEqual(doi_chung["rc"], 0, "bản sao lưu LÀNH bị TỪ CHỐI ⇒ phép đo vô nghĩa")
+        self.assertEqual(doi_chung["rc"], 0,
+                         "bản sao lưu CHUẨN (có `.sha256`) bị TỪ CHỐI ⇒ phép đo vô nghĩa")
         self.assertTrue(doi_chung["du_lieu_nguyen"],
-                        "bản sao lưu LÀNH khôi phục ra dữ liệu KHÁC nền sạch ⇒ phép đo vô nghĩa")
+                        "bản sao lưu CHUẨN khôi phục ra dữ liệu KHÁC nền sạch ⇒ phép đo vô nghĩa")
+        # ĐỐI CHỨNG ÂM của chính bản vá: bản `copy2` KHÔNG dấu kiểm bị TỪ CHỐI mặc định; đường
+        # thoát TƯỜNG MINH (`--toi-da-biet-chua-kiem-duoc`) phải nhận nó và dữ liệu nguyên vẹn.
+        self.assertNotEqual(doi_chung["thieu_dau_kiem_rc"], 0,
+                            "bản sao lưu KHÔNG có `.sha256` lại được nhận ⇒ chốt dấu kiểm hỏng")
+        self.assertTrue(doi_chung["thieu_dau_kiem_noi"],
+                        "bị từ chối nhưng KHÔNG nêu thiếu dấu kiểm ⇒ sai lý do")
+        self.assertEqual(doi_chung["escape_rc"], 0,
+                         "đường thoát `--toi-da-biet-chua-kiem-duoc` không dùng được")
+        self.assertTrue(doi_chung["escape_du_lieu_nguyen"],
+                        "đường thoát nhận bản sao lưu nhưng dữ liệu KHÔNG nguyên vẹn")
         _dc_duong("sao-luu-fail-closed")
         dat, vi = dat_cong("sao-luu-fail-closed", nhan)
         print("\n  [G4] đầu vào ĐỘC HẠI được NHẬN (rc=0): %d/%d · chủ sở hữu=%s"
               % (nhan, len(chi_tiet), CHU_SO_HUU["sao-luu-fail-closed"]))
         for ten, ma, sau, hong in chi_tiet:
             print("       %-24s rc=%-4s CSDL sau=%s%s" % (ten, ma, sau, "   ← HỎNG" if hong else ""))
-        print("       ĐỐI CHỨNG DƯƠNG: tệp LÀNH rc=%s · dữ liệu nguyên vẹn=%s · nền sạch=%s"
+        print("       ĐỐI CHỨNG DƯƠNG: bản `sao_luu()` rc=%s · dữ liệu nguyên vẹn=%s · nền sạch=%s"
               % (doi_chung["rc"], doi_chung["du_lieu_nguyen"], doi_chung["nen"]))
+        print("       ĐỐI CHỨNG ÂM: `copy2` không dấu kiểm bị TỪ CHỐI rc=%s · đường thoát rc=%s"
+              " (dữ liệu nguyên vẹn=%s)"
+              % (doi_chung["thieu_dau_kiem_rc"], doi_chung["escape_rc"],
+                 doi_chung["escape_du_lieu_nguyen"]))
         self.assertTrue(dat, "CỔNG `sao-luu-fail-closed` ĐỎ: %s" % vi)
 
 
@@ -988,11 +1151,13 @@ class T_TuKiem(unittest.TestCase):
         self.assertEqual(_pq(2), "DONG")
         # Và luật THẬT của tệp này phải theo đúng khuôn đó.
         self.assertEqual(phan_quyet("cong-cay-sach", 1), "NUA_VOI")
+        self.assertEqual(phan_quyet("cong-cay-sach", 3), "NEN")
+        self.assertEqual(phan_quyet("cong-cay-sach", 0), "DONG")
         self.assertEqual(phan_quyet("git-tho", 128), "NEN")
         self.assertEqual(phan_quyet("git-tho", 0), "DONG")
-        self.assertEqual(phan_quyet("tang3-ban-phim", (3, 1, 3)), "NEN")
-        self.assertEqual(phan_quyet("tang3-ban-phim", (7, 0, 0)), "DONG")
-        self.assertEqual(phan_quyet("tang3-ban-phim", (6, 0, 0)), "NUA_VOI")
+        self.assertEqual(phan_quyet("tang3-ban-phim", 4), "NEN")
+        self.assertEqual(phan_quyet("tang3-ban-phim", 0), "DONG")
+        self.assertEqual(phan_quyet("tang3-ban-phim", 1), "NUA_VOI")
         print("\n  [T1] luật phán TỪ CHỐI giá trị nửa vời ở cả cổng số lẫn cổng bộ ba")
 
     def test_t2_tu_kiem_bang_TIEN_TRINH_CON(self):
@@ -1032,7 +1197,7 @@ class T_TuKiem(unittest.TestCase):
                 dat, vi = dat_cong(ten, nua_voi, che_do=che)
                 self.assertFalse(dat, "%s=%r ở chế độ %s phải ĐỎ" % (ten, nua_voi, che))
                 self.assertIn("NỬA VỜI", vi)
-            for ten, dong in (("cong-cay-sach", 3), ("git-tho", 0), ("bo-g19-tong-hop", 1),
+            for ten, dong in (("cong-cay-sach", 0), ("git-tho", 0), ("bo-g19-tong-hop", 1),
                               ("sao-luu-fail-closed", 0), ("ro-credential-ngan", 0)):
                 dat, _ = dat_cong(ten, dong, che_do=che)
                 self.assertTrue(dat, "giá trị ĐÓNG %s=%r phải qua ở chế độ %s" % (ten, dong, che))
@@ -1075,14 +1240,14 @@ class Z_ChotChan(unittest.TestCase):
               % len(DOI_CHUNG))
 
     def test_z2_cay_khong_doi_trong_luot_do(self):
-        """Vân tay cây TRƯỚC = SAU, và ngoài hai tệp được phép thì `git status` phải RỖNG."""
+        """Vân tay cây TRƯỚC = SAU, và ngoài các tệp được phép thì `git status` phải RỖNG."""
         la = _cay_ban()
         van_tay = van_tay_cay()
         self.assertRegex(van_tay, r"^[0-9a-f]{64}$")
         _dc_am("cay-sach")
-        self.assertEqual(la, [], "cây có thay đổi NGOÀI hai tệp được phép: %s" % la)
-        # ĐỐI CHỨNG DƯƠNG: bộ lọc phải BẮT ĐƯỢC một dòng KHÔNG thuộc hai tệp của tôi — nếu nó
-        # miễn trừ tất thì khẳng định "ngoài hai tệp = RỖNG" là rỗng nghĩa.
+        self.assertEqual(la, [], "cây có thay đổi NGOÀI các tệp được phép: %s" % la)
+        # ĐỐI CHỨNG DƯƠNG: bộ lọc phải BẮT ĐƯỢC một dòng KHÔNG thuộc các tệp của tôi — nếu nó
+        # miễn trừ tất thì khẳng định "ngoài các tệp = RỖNG" là rỗng nghĩa.
         gia = ["?? app/webhook.py", "?? docs/QA_G21.md"]
         loc = [d for d in gia if d[3:].strip().strip('"') not in TEP_DUOC_PHEP]
         self.assertEqual(loc, ["?? app/webhook.py"],
@@ -1092,7 +1257,7 @@ class Z_ChotChan(unittest.TestCase):
             self.assertEqual(van_tay, VAN_TAY_TRUOC,
                              "vân tay cây ĐỔI trong lượt đo ⇒ có gì đó ghi vào cây ĐƯỢC THEO DÕI")
         print("\n  [Z2] vân tay cây (được theo dõi) = %s" % van_tay)
-        print("       git status ngoài hai tệp được phép: %s" % (la or "RỖNG"))
+        print("       git status ngoài các tệp được phép: %s" % (la or "RỖNG"))
         print("       vân tay TRƯỚC=%s · SAU=%s · không đổi=%s"
               % (str(VAN_TAY_TRUOC)[:16], van_tay[:16], van_tay == VAN_TAY_TRUOC))
 
@@ -1144,10 +1309,11 @@ class X_DoiChieuG20(unittest.TestCase):
 # Nhóm hỏng ĐÃ CÓ TÊN. Một bộ đỏ chỉ được THA khi rơi vào một nhóm ở đây; bộ đỏ VÔ DANH ⇒
 # HỎNG SẢN PHẨM ⇒ `H1` ĐỎ.
 #
-# ĐO ĐƯỢC, không suy đoán: khi cây có ĐÚNG hai tệp AG-01 G21, hồi quy chung cho **3** bộ đỏ thuộc
-# khoản nợ "cây sạch" (`thu_qa_g17.py`, `thu_qa_g18.py`, `thu_g20_baomat.py`). Cả ba nằm CÙNG một
-# khoản nợ `N-G19-03` (`N-G21-05`) nên chúng được PHÂN LOẠI, không được tha: cổng riêng của khoản nợ
-# đó là `G1`, và `G1` ĐỎ ở chế độ `gop` cho tới khi **cả ba** chuyển XANH.
+# ĐO ĐƯỢC, không suy đoán: khi cây chỉ có các tệp được phép của làn QA G21, hồi quy chung cho
+# **3** bộ đỏ thuộc khoản nợ "cây sạch" (`thu_qa_g17.py`, `thu_qa_g18.py`, `thu_g20_baomat.py`).
+# Cả ba nằm CÙNG một khoản nợ `N-G19-03` (`N-G21-05`) nên chúng được PHÂN LOẠI, không được tha:
+# cổng riêng của khoản nợ đó là `G1`, và `G1` ĐỎ ở chế độ `gop` cho tới khi **cả ba** chuyển XANH.
+# (Trên cây đã gộp hiện tại cả ba đã XANH — nhóm này là lưới an toàn cho cây chưa gộp.)
 NHOM_HONG_DA_BIET = {
     "N-G19-03/N-G21-05 cổng cây sạch wave trước (3 bản sao)":
         lambda t: t in ("thu_qa_g17.py", "thu_qa_g18.py", "thu_g20_baomat.py"),

@@ -720,7 +720,11 @@ def _chuan_trang_thai(s):
 
 def chuan_hoa_dong(d, cay, log_dir, run_dir):
     """Bỏ khác biệt KHÔNG mang nghĩa sản phẩm: đường dẫn, cổng, PID, giây, mốc thời gian."""
-    for p, th in ((os.path.abspath(run_dir), "<LƯỢT>"), (os.path.abspath(cay), "<CAY>"),
+    # VÁ (AG-00): `abspath` KHÔNG giải symlink. Trên macOS `/var` -> `/private/var`, nên với bản sao
+    # trong TMP thì chuỗi trong log có tiền tố `/private` mà `abspath(cay)` không có ⇒ thay thế trượt
+    # ⇒ sinh ra một dòng "lệch" CHỈ VÌ ĐƯỜNG DẪN, và bộ đo trả 1 dù hai bên khớp hoàn toàn.
+    # Dùng `realpath` để giải symlink. Đo được: trước vá `[H1] ... (/private<CAY>)`, sau vá `(<CAY>)`.
+    for p, th in ((os.path.realpath(run_dir), "<LƯỢT>"), (os.path.realpath(cay), "<CAY>"),
                   (log_dir, "<LOG>")):
         if p:
             d = d.replace(p, th)

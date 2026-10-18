@@ -800,6 +800,42 @@ def nang_len_v9(kn):
     return buoc
 
 
+def nang_len_v10(kn):
+    """v10: 9 chỉ mục của LỚP TRUY VẤN G12 — `truy_van.DDL_G12Q` (G19/C6).
+
+    **Không viết lại DDL ở đây.** Hằng nằm trong module của chính nó (`truy_van.DDL_G12Q`) và
+    migration CHẠY ĐÚNG HẰNG ĐÓ — cùng lý do đã ghi ở `nang_len_v8`: chép sang đây là tạo bản
+    thứ hai, và hai bản nội dung là hai bản sẽ lệch nhau. Đo ở `thu_g19c6_v10` ca E: thay hằng
+    của module bằng một chỉ mục đánh dấu thì CSDL nhận đúng chỉ mục đánh dấu đó — bằng chứng
+    migration đọc hằng lúc CHẠY, không phải bản chép.
+
+    VÌ SAO BƯỚC NÀY PHẢI TỒN TẠI (đây là toàn bộ lý do của bản vá): route `GET /api/v2/don` đã
+    nối vào `truy_van`, nhưng một CSDL **ĐANG Ở v9** đã chạy xong `nang_len_v9` và sẽ KHÔNG BAO
+    GIỜ chạy lại nó (`chay()` chỉ đi các bước có `pb < n`). Nhét `DDL_G12Q` vào thân v9 chỉ giúp
+    CSDL MỚI (đi qua cả thang) và CSDL còn ở v8; CSDL đã ở v9 thì `nang_len_v9` không chạy nữa,
+    nên 9 chỉ mục KHÔNG BAO GIỜ được tạo — im lặng, vì truy vấn vẫn trả đúng kết quả, chỉ chậm.
+    Bước v10 biến trạng thái "đã ở v9" thành một mốc nâng cấp THẬT.
+
+    DDL chỉ có `CREATE INDEX IF NOT EXISTS` nên gọi lại vô hại: chạy `migrate.chay()` trên CSDL
+    đã ở v10 thì `chay()` về sớm, còn gọi THẲNG hàm này hai lượt thì lượt hai không tạo thêm đối
+    tượng nào (đo ở `thu_g19c6_v10`, ca C2).
+    """
+    buoc = []
+    # Nạp muộn, trong hàm: cùng lý do như `nang_len_v8` — module không cần có mặt lúc `migrate`
+    # được import, và một module hỏng không được làm chết cả đường migration.
+    import truy_van
+
+    truoc = {r[0] for r in kn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','index')")}
+    chay_ddl_trong_giao_dich(kn, truy_van.DDL_G12Q)
+    sau = {r[0] for r in kn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','index')")}
+    them = sorted(sau - truoc)
+    buoc.append("G19/C6 chỉ mục lớp truy vấn G12 (`truy_van.DDL_G12Q`): "
+                f"+{len(them)} đối tượng" + (f" ({', '.join(them)})" if them else " (đã có sẵn)"))
+    return buoc
+
+
 # Chờ tối đa bao lâu để lấy khoá nâng cấp. 60 giây: đủ cho một lượt nâng cấp thật
 # (lượt v1→v8 trên CSDL rỗng đo được dưới 1 giây; CSDL có dữ liệu thì lâu hơn), và ngắn hơn
 # mọi ngưỡng chờ của người. Hết giờ thì NÉM, không chạy chồng — §13 của chỉ thị G12:
@@ -892,6 +928,8 @@ def chay(im_lang=False):
             buoc += nang_len_v8(kn)
         if pb < 9:
             buoc += nang_len_v9(kn)
+        if pb < 10:
+            buoc += nang_len_v10(kn)
         kn.execute("INSERT OR REPLACE INTO schema_version (phien_ban, ap_dung_luc, ghi_chu)"
                    " VALUES (?,?,?)",
                    (csdl.PHIEN_BAN_SCHEMA, csdl.bay_gio(), "; ".join(buoc)))

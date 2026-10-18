@@ -9,7 +9,10 @@ from datetime import datetime, timezone, timedelta
 
 import cau_hinh
 
-PHIEN_BAN_SCHEMA = 9
+# v10 = v9 + 9 chỉ mục của lớp truy vấn G12 (`truy_van.DDL_G12Q`), áp ở `migrate.nang_len_v10`.
+# Vì sao phải là một MỐC MỚI chứ không nhét vào `nang_len_v9`: một CSDL ĐANG Ở v9 đã chạy xong
+# bước v9 và sẽ không bao giờ chạy lại nó, nên DDL thêm vào thân v9 chỉ tới được CSDL mới.
+PHIEN_BAN_SCHEMA = 10
 
 HAN_DOI_WAL = 40          # 40 lượt, giãn dần 50ms→2s: tổng ~41 giây
 MUI_GIO_VN = timezone(timedelta(hours=7))

@@ -1,18 +1,232 @@
-# G22 · AGENT 02 — HỢP ĐỒNG TEST (VÒNG 2 · TÍCH HỢP SAU 5 AGENT)
+# G22 · AGENT 02 — HỢP ĐỒNG TEST (VÒNG 4 · `C4`/`G19-C6` ĐÃ ĐÓNG · TÍCH HỢP `146500b`)
 
-> **Vai:** AGENT 02 · G22 TEST CONTRACT · `task_790aa6314621` · dispatch `ctx_ca352ff451e7`.
-> **Nền đo:** `HEAD = dd788fc01c5c7e7b4da93e2a216aa5d4fe251d0b` · tree
-> `96285874039248115549c647caa168ec615ce7f2` (worktree `g22-a2-contract`).
+> **Vai:** AGENT 02 · G22 TEST CONTRACT · task `task_2d2ea3e07ccc` · dispatch `ctx_e398c90995a7`
+> (vòng 4; nối tiếp vòng 3 `task_6ec3f270dffb`/`ctx_d56f10e956ad`).
+> **Nền đo:** `HEAD` **ĐỌC TẠI CHỖ** — KHÔNG còn hằng số. Vòng 4 đo trên **bản sao TMP của tích
+> hợp `146500b`** (`HEAD^{tree}` = `368664e148aa…`, cây SẠCH, có bản vá B2 của AG-06 và route
+> `truy_van`). Worktree `g22-a2-contract` đứng ở `a6b5b73` (cây `8f390317e9b7…` — thiếu B2) và
+> **sandbox chặn ghi `.git`** nên KHÔNG fast-forward được — xem §0ter.4.
 > **KHÔNG** dùng `main` (`de740dc` — không chứa G13–G22). **KHÔNG** mở G23.
 > **Phạm vi ghi:** `app/thu/thu_qa_g22.py` (sửa) · `docs/G22_CONTRACT.md` (tài liệu này).
 > **CAM KẾT:** không push · không deploy · không tunnel · không credentials thật · không API
 > production · không sửa CSDL thật · không tự bấm duyệt sandbox · không ghi `.git` của worktree.
-> **D-8 / `OWNER_ACTIONS C4` (PostgreSQL) = BLOCKED OWNER** — vòng này không đo, không sửa,
-> không ép xanh phần đó.
+> **HAI THỨ TRÙNG NHÃN "C4" — KHÔNG ĐÁNH ĐỒNG:** `C4`/`G19-C6` (route `truy_van` + `DDL_G12Q`
+> vào migration) **ĐÃ ĐÓNG phần tuyến** — chủ **Agent 06** + **Agent 02**; còn
+> **`OWNER_ACTIONS C4` = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = D-8, BLOCKED OWNER** — vòng
+> này KHÔNG đo, KHÔNG sửa, KHÔNG ép xanh phần đó.
 
 ---
 
-## 0. TÓM TẮT MỘT MÀN HÌNH
+## 0bis. VÒNG 3 — `A1` BỎ GHIM, NỀN ĐỌC TẠI CHỖ (thay §2.1(b) của vòng 2)
+
+**Vấn đề của vòng 2:** phép đo đã đúng, nhưng kết quả vẫn bị **GHIM** vào hai hằng số
+`NEN_SHA`/`TREE_NEN`. `HEAD` nhích ở **mọi** commit, nên đúng một commit sau khi gộp, cặp số đó
+thành STALE và `A1` đỏ **vĩnh viễn** cho tới khi có người sửa số. Đó là họ **H5/N-G19-04**
+("ghim SỰ THẬT MÔI TRƯỜNG") — cùng loại đã bị diệt ở C5/G7, `SO_DO`, tiêu đề F; vòng 3 diệt nốt
+ở `A1`. Đây là **lần thứ ba** cùng một kiểu lỗi, nên vòng 3 **sửa CHO BỀN**, không cập nhật số.
+
+### 0bis.1 Cách sửa (không còn số nào để cập nhật)
+
+| Thứ | Vòng 2 (ghim) | Vòng 3 (đọc tại chỗ) |
+|---|---|---|
+| nền | hằng `NEN_SHA = "dd788fc…"` | `git rev-parse HEAD` — **đọc ngay trong phép đo** |
+| cây nền | hằng `TREE_NEN = "9628587…"` | `git rev-parse HEAD^{tree}` — **đọc ngay trong phép đo** |
+| cây đang đo | `write-tree` trên bản sao index | **giữ nguyên** (bản sao index + ODB tạm + alternates chỉ-đọc, AGENT 03 §3.3) |
+| phán quyết | `vt["tree"] == TREE_NEN` + tự kiểm ghim | `write-tree(index) == HEAD^{tree}` **và** `status` không có đường ngoài `TEP_DUOC_PHEP` |
+| `NEN_SHA` dùng ở `A2`/`E1`/`main` | so với hằng | đọc `HEAD` tại chỗ; **bỏ hẳn** khái niệm "delta hai commit được miễn trừ" |
+
+Điểm vào duy nhất của phán quyết là **`do_a1(goc=None)`**: ca thật và **mọi** đối chứng âm đều
+gọi đúng hàm này, nên không thể có chuyện "đối chứng đo một đằng, ca thật đo một nẻo".
+
+```python
+# app/thu/thu_qa_g22.py — không còn dòng nào kiểu này:
+NEN_SHA  = "..."
+TREE_NEN = "..."
+# thay bằng: HEAD và HEAD^{tree} đọc tại chỗ trong do_a1(), đối chiếu với write-tree(index tạm).
+```
+
+### 0bis.2 `A1` TRƯỚC / SAU (đo thật, không khẳng định)
+
+| | TRƯỚC khi sửa | SAU khi sửa |
+|---|---|---|
+| Lệnh | `python3 app/thu/thu_qa_g22.py A_Nen` | `python3 app/thu/thu_qa_g22.py` (toàn bộ) |
+| `HEAD` | `38f806e869ae…` | `a6b5b73bf349…` (**đã nhích**, xem §0bis.4) |
+| `HEAD^{tree}` | `bf5bd4df0400…` | `8f390317e9b7…` |
+| `write-tree` (index tạm) | `bf5bd4df0400…` | `8f390317e9b7…` |
+| Ghim trong tệp | `dd788fc / 9628587` — **STALE** | **không còn ghim** |
+| `A1` | **ĐỎ** (đo đúng, ghim sai) | **XANH** |
+| Nhóm `A_Nen` | `Ran 4 · FAILED (failures=1) · EXIT 1` | `Ran 4 · OK · EXIT 0` |
+| Log | `/tmp/g22-a2-v3/a1_truoc.log` | `/tmp/g22-a2-v3/full_lan4_ban_giao.log` |
+
+Dòng đo trước khi sửa (nguyên văn): `[A1] HEAD=38f806e869ae · write-tree (index tạm)=bf5bd4df0400
+· 380 tệp theo dõi` và `GHIM: git rev-parse dd788fc01c5c^{tree} → 9628587 = TREE_NEN ✓` — tức
+**phép đo đúng, cái sai là GHIM**. Sau khi sửa, cùng phép đo so với `HEAD^{tree}` **đọc tại chỗ**.
+
+### 0bis.3 BA ĐỐI CHỨNG ÂM + BA DƯƠNG — TẤT CẢ LÀM THẬT trên clone tạm
+
+Không có phần này thì "bỏ ghim" có thể chỉ là "bỏ luôn răng". Mỗi dòng dưới đây là kết quả đo
+trong `/tmp/g22-a2-v3/full_lan4_ban_giao.log` (clone `--shared` trong TMP; `.git` của worktree thật
+không bị ghi).
+
+| Vế | Việc LÀM THẬT trên clone | Kết quả ĐO ĐƯỢC |
+|---|---|---|
+| **D** dương | clone sạch tại `HEAD` | `XANH` — `write-tree = HEAD^{tree} = 8f390317` |
+| **A1** âm | sửa `admin/admin.js` (không stage) | **ĐỎ** — `CÂY BẨN NGOÀI PHẠM VI: admin/admin.js` |
+| **A2** âm | thêm `admin/__tiem_a1_g22.js` | **ĐỎ** — `CÂY BẨN NGOÀI PHẠM VI: admin/admin.js, admin/__tiem_a1_g22.js` |
+| **B** âm | sửa rồi `git add admin/admin.js` | **ĐỎ** — `INDEX VÀ HEAD LỆCH NHAU: write-tree=46017e14a12e ≠ HEAD^{tree}=8f390317e9b7` |
+| **C1** âm | xoá `.git/index` của clone | **ĐỎ** — `KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX (… LỖI(không có index tại …/​.git/index))` |
+| **C2** âm | ghi HEAD hỏng trong clone | **ĐỎ** — `KHÔNG ĐỌC ĐƯỢC HEAD (git rev-parse HEAD rc=128)` + `KHÔNG ĐỌC ĐƯỢC CÂY CỦA HEAD` |
+| **D2** dương | trả index/HEAD lại | `XANH` — clone khôi phục sạch |
+| **D3** dương | **commit thật** trong clone | `HEAD a6b5b73 → 7887793df1b7`, cây `8f390317 → 9ebad2f29042`, **vẫn XANH** (SHA commit CỐ ĐỊNH nhờ ghim `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`, nên lượt sau đối chiếu lại được) |
+
+**D3 là vế trả lời trực tiếp yêu cầu "không còn phải cập nhật số nào khi HEAD nhích":** HEAD đổi,
+cây đổi, `A1` vẫn xanh vì nền được đọc lại tại chỗ. Đối chứng dương `D`/`D2` chặn khả năng "cổng
+luôn đỏ"; ba vế âm chặn khả năng "cổng luôn xanh".
+
+### 0bis.4 BẰNG CHỨNG CÔNG KHAI: `HEAD` NHÍCH THẬT GIỮA LƯỢT
+
+Trong lúc lượt này đang chạy, AG-00/Controller commit hộ bản đang làm: `38f806e → **a6b5b73**`
+("AGENT 02 VONG 3 (G22) A1 BEN VUNG: bo HANG SO, doc HEAD^{tree} TAI CHO"). Đây đúng là tình
+huống đã giết `A1` ba lần. Kết quả: lần chạy sau đó đo `HEAD=a6b5b73bf349 · tree=8f390317e9b7`
+và **XANH**, **không một hằng số nào được sửa**. Nếu còn ghim, `A1` sẽ đỏ ngay tại đây.
+
+### 0bis.5 KẾT QUẢ TOÀN BỘ (so với mốc 24/22/1/1)
+
+| | Mốc vòng 2 | Vòng 3 (lượt cuối) |
+|---|---|---|
+| `Ran` | 24 | **24** |
+| PASS (= Ran − FAIL − SKIP) | 22 | **22** |
+| FAIL | 1 (`B2`) | **1 (`B2`)** |
+| SKIP | 1 (`Z9` mồi) | **1 (`Z9` mồi)** |
+| **EXIT CODE** | **1** | **1** |
+
+`A1` xanh, `E1` xanh (không còn skip vì không còn trạng thái `HEAD ≠ nền`), `B2` vẫn đỏ **đúng
+lỗi có sẵn** — không sửa ca, không hạ cổng. Log: `/tmp/g22-a2-v3/full_lan4_ban_giao.log`.
+`sha256 app/thu/thu_qa_g22.py` (bản cuối): `3a971f2b6479e205e43a2307889b4395f6552f5d0b4648d342cd560c40f07821`.
+
+---
+
+## 0ter. VÒNG 4 — `C4`/`G19-C6`: SẢN PHẨM ĐÃ ĐÓNG, CỔNG ĐỎ VÌ GHIM TRẠNG THÁI NỀN
+
+> Dispatch `ctx_e398c90995a7` · task `task_2d2ea3e07ccc` · nền đo: **bản sao TMP của tích hợp
+> `146500b`** (cây SẠCH). AG-00 đã đo ở đó `Ran 24 · FAIL 1 · SKIP 1 · EXIT 1`, ca hỏng duy nhất
+> là `H_C4`. `C4` ở đây = **`G19-C6`**, KHÔNG phải `OWNER_ACTIONS C4` (D-8).
+
+### 0ter.1 Sự thật đo được — vì sao ca cũ ĐỎ dù sản phẩm xanh
+
+`SO_DO_G20` ghi C4 bằng CẶP `(schema v9 đạt?, có tệp SẢN XUẤT import truy_van?)`:
+nền `(True, False)` → đóng `(True, True)`.
+
+| Cây | `app/server.py` | cặp đo được | ca `H_C4` cũ |
+|---|---|---|---|
+| nền `a6b5b73` (worktree này) | KHÔNG có `import truy_van` | `(True, False)` = ô NỀN | XANH (vì nó ghim đúng `(True, False)`) |
+| tích hợp `146500b` | `import truy_van` + route `/api/v2/don` gọi `truy_van.tim_don(...)`, bắt `truy_van.LoiTruyVan`; route `/api/v2/don/loc-mo-ta` gọi `truy_van.mo_ta_bo_loc()` | **`(True, True)`** = ô ĐÓNG | **ĐỎ** — nó khẳng định trạng thái CŨ |
+
+Đo lại bằng **chính ca cũ** trên bản sao `146500b` (log `/tmp/g22-a2-v4/nen.log`):
+`[H1] … tệp SẢN XUẤT import truy_van: 1` · `cặp đo được = (True, True)` → `AssertionError`.
+⇒ **Không phải lỗi sản phẩm; là ca thử GHIM hành vi cũ** — đúng họ H5/N-G19-04 mà vòng 3 đã diệt
+ở `A1`, nay diệt nốt ở `H_C4`. **KHÔNG xoá ca, KHÔNG `skipTest`, KHÔNG nới assert.**
+
+### 0ter.2 Hai thứ trùng nhãn "C4" — tuyệt đối không đánh đồng
+
+| Nhãn | Nội dung | Trạng thái vòng 4 | Chủ |
+|---|---|---|---|
+| **`C4` = `G19-C6`** | route `truy_van.py` + `DDL_G12Q` vào migration v9 | **ĐÓNG phần TUYẾN**; phần `DDL_G12Q`→migration **CÒN TREO** (§0ter.5) | **Agent 06** (port khối route ~20 dòng vào `app/server.py`, `146500b`) + **Agent 02** (ca đo này) |
+| **`OWNER_ACTIONS C4`** | "Chuyển CSDL nghiệp vụ sang PostgreSQL" = **D-8** | **BLOCKED OWNER** — KHÔNG thực hiện, KHÔNG ép xanh, KHÔNG đụng `:5432` | Owner/AG-05 — ngoài phạm vi vòng này |
+
+Dòng `D-8 / OWNER_ACTIONS C4` ở đầu tài liệu là về **hàng thứ hai**; nó **không** nói gì về
+`G19-C6`. Đánh đồng hai thứ này là coi một việc đã đóng như một việc bị chặn — hoặc ngược lại.
+
+### 0ter.3 Ca viết lại — ĐO TẠI CHỖ + ĐỐI CHỨNG ÂM LÀM THẬT (không khẳng định suông)
+
+`H_C4` mới gọi **một** điểm vào `_do_c4(goc)` (giống `do_a1()`), nên ca thật và mọi đối chứng đo
+**cùng một hàm**:
+
+1. **Đọc tại chỗ, KHÔNG ghim số:** quét `app/**/*.py` (trừ `app/thu/**`, `docs/**`, chính
+   `app/truy_van.py`), `ast.parse` từng tệp, đếm **THẬT**:
+   * tệp có `import truy_van` / `from truy_van import …`;
+   * số lần **DÙNG** — `Name` trùng tên do CHÍNH tệp đó import (biến cục bộ trùng tên, đo được ở
+     `gateway/server.py`, KHÔNG bị tính — một dương tính giả đã bị bắt tại chỗ);
+   * `csdl.PHIEN_BAN_SCHEMA` của CHÍNH cây đang đo; **v9 là SÀN** (`>= 9`), không ghim đúng `9`
+     — `v10` sau này không làm cổng đỏ vĩnh viễn.
+2. **ĐỐI CHỨNG DƯƠNG:** bản sao `app/` Y NGUYÊN phải cho đúng cặp như cây thật.
+3. **ĐỐI CHỨNG ÂM BẮT BUỘC — LÀM THẬT:** trên CHÍNH bản sao đó, gỡ bằng AST (không ghim dòng)
+   mọi `import truy_van` + mọi khối `if` DÙNG `truy_van`; tệp phải còn hợp lệ cú pháp; đo lại
+   **phải** ra `(True, False)` và cổng **PHẢI ĐỎ**. Gỡ tuyến mà vẫn xanh ⇒ bộ đo MÙ.
+
+Nhóm đối chứng `c4-go-route` được ghi vào `CA_PHU_DINH`/`DOI_CHUNG` và vào danh sách **bắt buộc
+tiêm lỗi** của `Z6`: xoá đối chứng âm này thì `Z6` ĐỎ, không im lặng.
+
+**Kết quả ĐO ĐƯỢC** (`/tmp/g22-a2-v4/sau2.log`):
+
+```
+[H1] C4 = G19-C6 — ĐO TẠI CHỖ trên cây thật (/private/tmp/g22-a2-v4/clone)
+     `PHIEN_BAN_SCHEMA`=9 (đích: ≥9, KHÔNG ghim đúng 9) · tệp SẢN XUẤT tham chiếu `truy_van`=1
+     tham chiếu ĐẾM ĐƯỢC: app/server.py (import 1 · dùng 3)
+     cặp đo được = (True, True) · sổ G20: nền=(True, False) · đóng=(True, True) · phân quyết = DONG
+     ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên → (True, True) (đòi (True, True)) ✓
+     ĐỐI CHỨNG ÂM (LÀM THẬT): gỡ 3 khối / 21 dòng khỏi `app/server.py` — import truy_van (1 dòng),
+       khối if DÙNG truy_van (tuyến) (15 dòng), khối if DÙNG truy_van (tuyến) (5 dòng)
+     sau khi gỡ: tệp sản xuất tham chiếu `truy_van`=0 · cặp đo được = (True, False)
+     ⇒ gỡ tuyến thì cổng ĐỎ (đòi ĐỎ) ✓ — cổng KHÔNG phải bộ đo mù.
+```
+
+### 0ter.4 Bằng chứng chạy — số ca + mã thoát THẬT
+
+| Lượt | Lệnh (cây) | Kết quả ĐO ĐƯỢC |
+|---|---|---|
+| NỀN (ca cũ) | `python3 app/thu/thu_qa_g22.py` trên bản sao `146500b` | `Ran 24 tests in 150.571s` · `FAILED (failures=1, skipped=1)` · **EXIT 1** — ca hỏng duy nhất `H_C4` |
+| `H_C4` đơn | `python3 app/thu/thu_qa_g22.py H_C4` trên bản sao `146500b`, ca MỚI | `Ran 1 test` · `OK` · **EXIT 0** |
+| TOÀN BỘ (ca mới) | `python3 app/thu/thu_qa_g22.py` trên bản sao `146500b` | `Ran 24 tests in 147.835s` · **`OK (skipped=1)`** · **EXIT 0** · `ca: 24 · hỏng/loi: 0 · bỏ qua: 1` |
+
+`PASS = 24 − 0 − 1 = 23`. **SKIP 1 là `Z9` — MỒI CÓ CHỦ ĐÍCH của `Z5`**, không phải nợ: nó
+`skipTest` khi chạy trong làn thường và `Z5` cố ý chạy nó ở tiến trình con với
+`VIP_G22_CHAY_MOI=1` để chứng minh bộ chạy có răng. Vì thế **SKIP 0 là bất khả thi nếu không xoá
+mồi/nuốt skip — cả hai đều bị cấm.** Con số đúng phải đọc là **24 ca · 0 hỏng · 1 bỏ qua CÓ CHỦ
+ĐÍCH · EXIT 0**.
+
+`sha256 app/thu/thu_qa_g22.py` (bản vòng 4):
+`1d6f99a879a79b67e84a1905b87f0daa117fa13306e5a6fe46bccbfbf5f13880` — đúng tệp đã dùng trong
+lượt chạy toàn bộ ở trên (bản sao TMP có cùng sha256).
+
+**Vì sao chạy trên bản sao TMP chứ không phải worktree này:** worktree `g22-a2-contract` đứng ở
+`a6b5b73`, THIẾU bản vá B2 (`146500b`), và sandbox CHẶN ghi `.git`:
+
+```
+$ git update-index --really-refresh
+fatal: Unable to create '…/Projects/vip-express-hub/.git/worktrees/g22-a2-contract/index.lock':
+       Operation not permitted            (rc = 128)
+```
+
+⇒ không `merge --ff-only` được. Bằng chứng vì thế chạy trên **bản sao TMP** của `146500b`
+(`git clone --shared` + `checkout --detach 146500b` + symlink `node_modules` — đúng cách `A1`/`E1`
+đã dùng; `.git` của worktree thật KHÔNG bị ghi). Đo `H_C4` trên **chính worktree** `a6b5b73` cho
+kết quả **ĐỎ** với thông điệp `C4 CHƯA ĐÓNG: KHÔNG có tệp SẢN XUẤT nào import truy_van — đây là
+trạng thái NỀN (True, False)` (log `/tmp/g22-a2-v4/hc4_worktree_final.log`) — **đúng trạng thái
+nền, không phải ca viết sai**; đó là lý do bằng chứng phải đo trên cây đã có B2. **Việc còn lại
+của AG-00:** fast-forward `g22-a2-contract` lên `146500b` (hoặc merge bản vá này vào tích hợp)
+rồi chạy lại toàn bộ tại đó — kỳ vọng `24 ca · 0 hỏng · 1 bỏ qua (Z9) · EXIT 0`.
+
+### 0ter.5 CÒN TREO — nói thẳng, không nhận là đã xong
+
+1. **`nang_len_v10` CHƯA được áp** — `PHIEN_BAN_SCHEMA` vẫn là **9**; `truy_van.DDL_G12Q`
+   (9 chỉ mục) **chưa** được đưa vào migration cho CSDL ĐÃ Ở v9. Đây là **phần còn lại của
+   `G19-C6`**, chủ **AG-02 backend**. Ca `H_C4` chỉ gác phần TUYẾN + sàn schema, **không** gác
+   phần chỉ mục.
+2. **Bàn đo G20 còn GHIM trạng thái nền ở chính cổng C4** — `app/thu/thu_qa_g20.py` dòng 702:
+   `self.assertEqual(nhap, [], "nền đã đổi: có tệp SẢN XUẤT import truy_van")`. Đo TRỰC TIẾP trên
+   cây tích hợp `146500b`: `AssertionError: ['app/server.py'] != []` ⇒ cổng C4 của G20 **ĐỎ** dù
+   `dat_cong` nói ĐÓNG. **Và `D1` che nó:** `D1` chạy cả bàn đo G20 nhưng **không đọc mã thoát**
+   (chỉ regex dòng `Ran …`), nên các ca hỏng bên trong G20 (đo trên bản sao: 7 ca — C4, C1 ghim
+   môi trường `148ecd3`, hai ca tầng 3 `B1`/`B2`, và `A5` + `Z1`/`Z2`) **không** làm `D1` đỏ. Đây
+   là tệp **ngoài phạm vi ghi của AG-02** (`thu_qa_g22.py` + tài liệu này) — **báo AG-00** để cấp
+   việc cho chủ `thu_qa_g20.py`; không sửa lén.
+3. **Worktree `g22-a2-contract` chưa lên `146500b`** (sandbox chặn ghi `.git`, xem §0ter.4) —
+   AG-00 cần fast-forward/merge; commit hộ vẫn là AG-00/Controller như các vòng trước.
+
+---
+
+## 0. TÓM TẮT MỘT MÀN HÌNH (VÒNG 2 — GIỮ LÀM LỊCH SỬ)
 
 | | TRƯỚC — vòng 1 (tôi đo lại trên chính cây này) | SAU — vòng 2 |
 |---|---|---|
@@ -45,6 +259,9 @@ AG-06 FRONTEND**.
 ---
 
 ## 1. LỆNH THẬT + MÃ THOÁT THẬT (đọc NGAY sau lệnh, không qua ống)
+
+> Số trong mục này là **vòng 2** (giữ làm lịch sử). Số của **vòng 3** — bản đang bàn giao — ở
+> §0bis.5; log: `/tmp/g22-a2-v3/full_lan4_ban_giao.log`.
 
 ```sh
 # TRƯỚC khi sửa — tái hiện đúng mốc vòng 1:
@@ -112,6 +329,10 @@ TREE_NEN = "96285874039248115549c647caa168ec615ce7f2"
 và `A1` thêm vế **GHIM**: `git rev-parse NEN_SHA^{tree}` phải bằng `TREE_NEN`. Ghim lệch ⇒
 `A1` báo **lỗi GHIM**, không bị báo nhầm thành lỗi môi trường (đúng đề nghị §5 của AGENT 03).
 
+> **⚠ VÒNG 3 ĐÃ BỎ HẲN CÁCH NÀY — xem §0bis.** Cập nhật số là chữa TRIỆU CHỨNG: commit kế tiếp
+> lại làm ghim STALE. Vòng 3 đọc `HEAD`/`HEAD^{tree}` tại chỗ, nên đoạn `NEN_SHA`/`TREE_NEN` ở
+> trên chỉ còn là **lịch sử** (không còn trong mã).
+
 **(c) ĐỐI CHỨNG DƯƠNG — phép đo KHÔNG mù.** Nhúng ngay trong `A1` phép tiêm của AGENT 03 §3.4:
 
 ```
@@ -123,9 +344,11 @@ index THẬT: sha256 trước = sau = de647d533b039fe5 · index.lock trước=sa
 Tức là: cùng phép đo, tiêm một mục thì cây **ĐỔI**, còn index thật **KHÔNG đổi** và **KHÔNG**
 sinh lock. Nếu `tree_hien_tai()` trả hằng số hoặc đọc nhầm cây, vế này sẽ bắt được.
 
-> **Lưu ý cho lượt sau:** khi AG-00 commit hai tệp của vòng 2, `HEAD` sẽ nhích sang commit mới
-> và `A1` sẽ (ĐÚNG) báo **GHIM STALE** cho tới khi ghim được cập nhật theo nền mới. Đó là hành
-> vi mong muốn — ghim là mốc của lượt, không phải hằng số vĩnh viễn.
+> **Lưu ý cho lượt sau (ĐÃ ĐƯỢC VÒNG 3 XỬ LÝ):** nhận định dưới đây của vòng 2 đã đúng — `HEAD`
+> nhích và ghim STALE — nhưng cách chữa "cập nhật số" là vô tận. Vòng 3 bỏ ghim; xem §0bis.
+>
+> ~~khi AG-00 commit hai tệp của vòng 2, `HEAD` sẽ nhích sang commit mới và `A1` sẽ (ĐÚNG) báo
+> GHIM STALE cho tới khi ghim được cập nhật theo nền mới.~~ (lịch sử)
 
 ### 2.2 `SO_DO` của `C_BanPhim` — ghim `(51,0,0)`/`(7,0,0)` đã STALE
 
@@ -189,27 +412,68 @@ sha256 + phiên bản, không chỉ "thấy tệp là tin".
 
 ## 3. BẢNG "CA NÀO ĐỎ / VÌ SAO / AI SỞ HỮU"
 
-| Ca | Vòng 2 | Nhóm | Bằng chứng | Ai sở hữu việc sửa |
+| Ca | Vòng 3 | Nhóm | Bằng chứng | Ai sở hữu việc sửa |
 |---|---|---|---|---|
-| `A1` `test_a1_cay_dung_bang_cay_cua_nen` | **PASS** | Đã sửa trong vòng 2: **môi trường** (sandbox chặn `write-tree`) + **ghim cũ** (3b7e93b/37079aa8) | tree index tạm = `9628587` = `TREE_NEN`; GHIM `dd788fc^{tree}` = `9628587`; tiêm index ⇒ `44025342f53b`, index thật không đổi | **AGENT 02** (tệp kiểm) · **AGENT 03** (phương pháp đo, `docs/G22_A1_GIT.md`) — ĐÃ XONG |
-| `B2` `test_b2_chay_e2e_toan_bo_that` | **FAIL** | **LỖI CÓ SẴN** (không do vòng 2): ca `01_luong_chinh.spec.js:36` **03 — bộ lọc nâng cao** timeout 10 s ở `waitForFunction`; 7 ca kế tiếp `did not run` vì tệp đặt `serial` | `(57, 1, 7)` · tổng 65 = `--list`; cổng `(65,0,0)` ⇒ `NUA_VOI`; log E2E dẫn ở §1. Tệp spec + `admin/` của ca này **giống hệt HEAD** (`git status` chỉ có 2 tệp của AGENT 02) ⇒ vòng 2 không thể là nguyên nhân | **AGENT 01 / AG-06 FRONTEND** — sửa ca 03 (hoặc hành vi lọc) rồi chạy lại `01_luong_chinh.spec.js`; sau đó 7 ca `did not run` mới có số đo |
-| `B3` `test_b3_e2e_tam_ca_ban_phim_chay_that` | **PASS** | Đã sửa: **ghim cũ** `(7,0,0)` → `(8,0,0)`; số ca đếm từ `--list` | chạy thật `8/8`, `exit 0`; hai đối chứng âm ĐỎ đúng | **AGENT 02** — ĐÃ XONG |
-| `E1` `test_e1_ba_cong_cay_sach_chay_that` | **PASS** | Trước là **SKIP vì môi trường/ghim** (`HEAD ≠ nền`); nay `HEAD == nền` nên phán quyết được | cây này 3/3 XANH; clone tại nền: sạch 3/3 XANH, tiêm `admin/__tiem_g22.js` 3/3 `DO_THAT` | **AGENT 02** — ĐÃ XONG |
+| `A1` `test_a1_cay_dung_bang_cay_cua_nen` | **PASS** | Đã sửa **cho bền** ở vòng 3: bỏ hẳn hằng số, đọc `HEAD`/`HEAD^{tree}` tại chỗ (§0bis) | `write-tree(index tạm) = HEAD^{tree} = 8f390317e9b7` (HEAD `a6b5b73`); ba đối chứng âm (cây bẩn / index≠HEAD / không đọc được cây) đều **ĐỎ**, D3 commit thật làm HEAD nhích vẫn **XANH** | **AGENT 02** (tệp kiểm) · **AGENT 03** (phương pháp đo index tạm, `docs/G22_A1_GIT.md`) — ĐÃ XONG |
+| `B2` `test_b2_chay_e2e_toan_bo_that` | **FAIL** | **LỖI CÓ SẴN so với vòng 2/vòng 3**, nhưng **KHÔNG có trước wave G22** — xem bisect §3.1: ca `01_luong_chinh.spec.js` **03 — bộ lọc nâng cao** timeout 10 s ở `waitForFunction`; 7 ca kế tiếp `did not run` vì tệp đặt `serial` | `(57, 1, 7)` · tổng 65 = `--list`; cổng `(65,0,0)` ⇒ `NUA_VOI`; log E2E `/var/folders/…/veh_g22_ag01_qa/e2e_lan_nay.txt`; bisect ở §3.1 | **AGENT 01 / AG-06 FRONTEND** — sửa ca 03 (hoặc hành vi lọc) rồi chạy lại `01_luong_chinh.spec.js`; sau đó 7 ca `did not run` mới có số đo |
+| `B3` `test_b3_e2e_tam_ca_ban_phim_chay_that` | **PASS** | Đã sửa ở vòng 2: **ghim cũ** `(7,0,0)` → `(8,0,0)`; số ca đếm từ `--list` | chạy thật `8/8`, `exit 0`; hai đối chứng âm ĐỎ đúng | **AGENT 02** — ĐÃ XONG |
+| `E1` `test_e1_ba_cong_cay_sach_chay_that` | **PASS** | Vòng 3 **bỏ `skipTest`**: "nền" nay là HEAD đọc tại chỗ nên trạng thái `HEAD ≠ nền` không còn tồn tại | cây này 3/3 XANH; clone tại HEAD: sạch 3/3 XANH, tiêm `admin/__tiem_g22.js` 3/3 `DO_THAT` | **AGENT 02** — ĐÃ XONG |
 | `Z9` `test_z9_ca_CO_Y_HONG_de_tu_kiem` | **SKIP (có chủ đích)** | Không phải lỗi: đây là MỒI cho `Z5`, chỉ chạy trong tiến trình con | `Z5` đọc mã thoát con = 1 với mồi hỏng; `Z1` 10/10 nhóm đã chạy đối chứng | **AGENT 02** — thiết kế giữ nguyên |
+| `H1` `test_h1_c4_do_hay_da_dong` | **PASS (vòng 4)** | Trước vòng 4: **FAIL** — ca ghim trạng thái nền `(True, False)` trong khi sản phẩm đã đóng `(True, True)` (§0ter.1). Đã viết lại: đo tại chỗ + đối chứng âm gỡ tuyến **LÀM THẬT** | cặp `(True, True)`; bản sao `app/` y nguyên `(True, True)`; gỡ 3 khối/21 dòng ⇒ `(True, False)` ⇒ cổng ĐỎ; `Z1` 11/11 nhóm | **Agent 02** (ca) + **Agent 06** (route, `146500b`) — ĐÃ XONG **phần tuyến**; phần `DDL_G12Q`→migration còn treo (§0ter.5) |
 
-`PASS 22` gồm 19 ca vốn đã xanh ở vòng 1 + `A1` + `B3` + `E1` (E1 trước là SKIP, nay chạy và
-xanh). Không ca nào bị xoá, không ca nào bị đổi sang SKIP, không assert nào bị hạ.
+`PASS 22` của vòng 3 = `24 − 1 (B2) − 1 (Z9)`. Không ca nào bị xoá, không ca nào bị đổi sang
+SKIP, không assert nào bị hạ. `E1` không còn SKIP vì lý do môi trường đã bị loại bỏ tận gốc
+(không còn hằng số nền để lệch).
+
+**Cập nhật vòng 4:** `B2` đã **XANH** trên `146500b` (AG-06 vá backend — `57 → 65 đạt`);
+`H1`/C4 là ca đỏ duy nhất còn lại **ở thời điểm AG-00 giao việc** và đã sửa xong (§0ter). Kết quả
+toàn bộ vòng 4: `Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0` (§0ter.4).
+
+### 3.1 `B2` — "có sẵn" từ đâu? Bisect THẬT trên 7 mốc
+
+Câu hỏi của AG-00: *"nó có thật trước cả wave này không?"*. Trả lời bằng cách chạy
+`sh thu_giao_dien/chay.sh 01_luong_chinh.spec.js` trong **clone sạch** tại từng commit (cùng
+`node_modules` qua symlink, cùng Chromium; log `/tmp/g22-a2-v3/bisect_*.log`):
+
+| Commit | Vai | Spec tại commit đó | Kết quả |
+|---|---|---|---|
+| `0d55255` | **trước wave G22** (cha của `05eecf1`) | bản cũ (`cccd275`) | **10 passed · 0 failed · exit 0 (11.2 s)** |
+| `f72a52e` | AG-06 dot 3 — **spec được viết lại tại đây** | bản mới | **1 failed · 7 did not run · 2 passed (45.1 s)** |
+| `209a2e4` | merge nhánh AG-06 vào integration | bản mới | 1 failed · 7 did not run (44.7 s) |
+| `a76ec51` | merge gộp `-X ours` của AG-00 | bản mới | 1 failed · 7 did not run (44.8 s) |
+| `dd788fc` | nền vòng 2 | bản mới | 1 failed · 7 did not run (44.9 s) |
+| `38f806e` | HEAD trước mọi sửa đổi của vòng 3 | bản mới | 1 failed · 7 did not run (44.9 s) |
+| `a6b5b73` | HEAD hiện tại (đo trong làn đầy đủ) | bản mới | `(57, 1, 7)` toàn bộ 65 ca |
+
+⇒ **Kết luận phải nói thẳng:** `B2` **KHÔNG** có trước wave G22 — trên `0d55255` (trước wave) ca
+này **xanh 10/10**. Nó **sinh ra trong wave**, tại `f72a52e` (AG-06 dot 3 viết lại
+`01_luong_chinh.spec.js` + `admin/logic.js`), và **có mặt ở mọi commit từ đó tới nay**, gồm cả
+`dd788fc`/`38f806e`. Vì vậy nó là **có sẵn so với vòng 2 và vòng 3** (không do hai vòng QA này),
+nhưng **không phải "lỗi có sẵn trước wave"**. Chủ sở hữu vẫn là **AGENT 01 / AG-06 FRONTEND**.
+
+Một chi tiết đo được, để không ai dùng nó làm bằng chứng sai: chạy **spec MỚI trên cây TRƯỚC
+wave** thì nó đỏ ở một assert khác (`khung lọc không nói máy chủ TỪ CHỐI tham số lạ`, vì UI cũ
+chưa có câu đó) — tức spec mới gắn với UI của wave, nên phép so "spec mới × cây cũ" **không**
+dùng để kết luận pass/fail sản phẩm được. Bảng bisect ở trên dùng **spec cùng thời** với từng
+commit.
 
 ---
 
-## 4. BẰNG CHỨNG ĐỐI CHỨNG ÂM / DƯƠNG CỦA CHÍNH VÒNG 2
+## 4. BẰNG CHỨNG ĐỐI CHỨNG ÂM / DƯƠNG (VÒNG 3)
 
 | Phép đo | Đối chứng DƯƠNG | Đối chứng ÂM |
 |---|---|---|
-| `tree_hien_tai()` | tiêm 1 mục vào bản sao index ⇒ tree `9628587 → 44025342f53b`; index thật sha256 không đổi; không lock | nếu cây khác `TREE_NEN` ⇒ `A1` FAIL; nếu `NEN_SHA^{tree}` khác `TREE_NEN` ⇒ FAIL với thông điệp **GHIM STALE** |
+| `A1` nền đọc tại chỗ | clone sạch: `write-tree = HEAD^{tree}` ⇒ XANH; commit thật trong clone (HEAD `a6b5b73 → 7887793df1b7`, cây `8f390317 → 9ebad2f2`) ⇒ vẫn XANH | sửa/thêm tệp ngoài phạm vi ⇒ ĐỎ `CÂY BẨN NGOÀI PHẠM VI`; `git add` ⇒ ĐỎ `INDEX VÀ HEAD LỆCH NHAU` (`46017e14 ≠ 8f390317`); xoá index ⇒ ĐỎ `KHÔNG ĐỌC ĐƯỢC CÂY CỦA INDEX`; HEAD hỏng ⇒ ĐỎ `KHÔNG ĐỌC ĐƯỢC HEAD` |
+| `tree_hien_tai()` | tiêm 1 mục vào bản sao index ⇒ tree ĐỔI (`8f390317 → 867891278559`); index thật sha256 không đổi (`57d02bcbe47e2cf8` trước = sau); không lock | nếu trả hằng số/đọc nhầm cây, vế D3 ở trên sẽ lộ ra (HEAD đổi mà kết quả không đổi) |
 | số ca E2E | `--list` = 65/8 khớp báo cáo chạy thật (`65 = 57+1+7`, `8 = 8+0+0`) | bỏ 1 dòng khai ca trong bản sao TẠM: `8 → 7`; hạ 1 ca trong báo cáo: `(64,0,0)`/`(7,0,0)` ⇒ cổng ĐỎ |
-| `E1` 3 cổng cây sạch | clone tại nền: 3/3 XANH | tiêm tệp bẩn: 3/3 `DO_THAT` (không phải "phép đo chết") |
+| `E1` 3 cổng cây sạch | clone tại HEAD: 3/3 XANH; cây thật: 3/3 XANH | tiêm tệp bẩn: 3/3 `DO_THAT` (không phải "phép đo chết") |
 | `B2`/`B3` chạy thật | `B3` 8/8 đạt; `B2` 57 đạt | `B2` 1 hỏng + 7 không chạy ⇒ cổng ĐỎ, **không** bị tính là đạt |
+
+**Bổ sung VÒNG 4 — `H_C4` / `C4` = `G19-C6` (chi tiết §0ter):**
+
+| Phép đo | Đối chứng DƯƠNG | Đối chứng ÂM |
+|---|---|---|
+| `H_C4` đo tại chỗ | bản sao `app/` Y NGUYÊN ⇒ `(True, True)` đúng như cây thật; cây thật `146500b`: `app/server.py` (import 1 · dùng 3) | **GỠ TUYẾN LÀM THẬT** bằng AST trên chính bản sao: bỏ `import truy_van` + 2 khối `if` DÙNG nó (3 khối/21 dòng) ⇒ tệp sản xuất tham chiếu = **0**, cặp `(True, False)` ⇒ cổng **ĐỎ** (đòi ĐỎ) |
 
 ---
 
@@ -217,51 +481,79 @@ xanh). Không ca nào bị xoá, không ca nào bị đổi sang SKIP, không as
 
 * **Không xoá ca, không đổi ca sang SKIP, không hạ assert.** `Ran` vẫn **24**.
 * `dat_cong` / `phan_quyet`: **không sửa**. Giá trị "nửa vời" vẫn ĐỎ ở cả hai chế độ.
-* `E1` vẫn **TỪ CHỐI phán quyết** khi `HEAD ≠ NEN_SHA` — điều kiện đó không bị gỡ.
+* `E1` **không còn `skipTest`** — nhưng không phải để "cho xanh": điều kiện skip cũ
+  (`HEAD ≠ NEN_SHA`) không còn tồn tại vì `NEN_SHA` đã bị bỏ; nếu HEAD không đọc được thì `E1`
+  **ĐỎ**, không skip.
 * `B2` vẫn giữ đích `(65,0,0)`; **không** đổi thành `(57,1,7)` để lấy `EXIT 0`.
 * Không sửa mã sản phẩm: `git status` chỉ có `app/thu/thu_qa_g22.py` + `docs/G22_CONTRACT.md`.
 * Không sửa `thu_qa_g20.py`, `thu_qa_g21.py`, `thu_g20_dahang.py`; chỉ đọc/chạy.
-* Không đụng `D-8` / `C4` / `:5432`; `A3`/`A4`/`H` giữ nguyên.
+* Không đụng `OWNER_ACTIONS C4` / **D-8** / `:5432`; `A3`/`A4` giữ nguyên. `C4`/`G19-C6` là việc
+  KHÁC — vòng 4 chỉ ĐO phần TUYẾN đã đóng và **gỡ tuyến trên bản sao TMP** để chứng minh cổng có
+  răng (§0ter.2/§0ter.3).
 * Ngoài phạm vi hai tệp: chỉ tạo lại **symlink** trong `node_modules` (không được git theo dõi)
   — khai ở §2.3.
+* `.git` của worktree **không bị ghi** bởi bộ kiểm: phép đo index dùng bản sao + ODB tạm;
+  mọi thao tác phá `.git` của các đối chứng âm chỉ xảy ra trên **clone tạm trong TMP**.
 
 ---
 
 ## 6. CÒN LẠI — NÓI THẲNG, KHÔNG GIẢ XANH
 
 1. **`B2` (AGENT 01 / AG-06 FRONTEND):** ca 03 của `01_luong_chinh.spec.js` timeout ở bộ lọc
-   nâng cao; 7 ca sau `did not run` do `serial`. Đây là **lỗi có sẵn**, không phải do vòng 2.
-   Cần sửa ca/hành vi rồi chạy lại; khi đó `B2` mới có thể đạt `(65,0,0)`.
-2. **Commit:** bị chặn ghi `.git`; AG-00/Controller commit hộ **đúng hai tệp**:
-   * `app/thu/thu_qa_g22.py` — sha256 `4cf9a7325c38fe3368c860208a88570f35530c96c09c285795e7a0dcb66ffbf0`
-   * `docs/G22_CONTRACT.md` — tài liệu này
+   nâng cao; 7 ca sau `did not run` do `serial`. Nó **có sẵn so với vòng 2/vòng 3**, nhưng
+   **không có trước wave G22** — bisect đầy đủ ở §3.1 (mốc xanh gần nhất: `0d55255`). **Vòng 4:
+   `B2` ĐÃ XANH trên `146500b`** (AG-06 vá backend thật: route `/api/v2/don` đi qua
+   `app/truy_van.py`) — mục này giữ làm LỊCH SỬ BISECT, không còn là nợ. (`D1` vẫn che lỗi G20
+   bên trong — xem mục 7.)
+2. **Commit:** AG-00/Controller commit hộ. Giữa lượt vòng 3, `HEAD` đã nhích `38f806e → a6b5b73`
+   (chính là phép thử sống của §0bis.4). Bản bàn giao **vòng 4** gồm **đúng hai tệp**:
+   * `app/thu/thu_qa_g22.py` — sha256 `1d6f99a879a79b67e84a1905b87f0daa117fa13306e5a6fe46bccbfbf5f13880`
+     (bản vòng 3, giữ làm lịch sử: `3a971f2b6479…`);
+   * `docs/G22_CONTRACT.md` — tài liệu này.
    `git status` tại thời điểm bàn giao: `M app/thu/thu_qa_g22.py` + `M docs/G22_CONTRACT.md`.
    **Không push.**
 3. **Nhị phân Chromium:** symlink `.local-browsers` **không được commit** (gitignore). Trên cây
    mới, phải dựng lại theo `docs/G21_BANPHIM_E2E.md` §10, nếu không `B1`/`B2`/`B3` sẽ báo
    "KHÔNG CHẠY ĐƯỢC" — không được skip.
-4. **Ghim của lượt sau:** commit của AG-00 sẽ làm `HEAD` nhích; lượt sau phải cập nhật
-   `NEN_SHA`/`TREE_NEN` theo nền mới, và `A1` sẽ tự báo **GHIM STALE** cho tới lúc đó.
-5. **`C4` / D-8:** giữ nguyên **BLOCKED OWNER**; vòng này không đo, không sửa, không ép xanh.
+4. **Ghim của lượt sau: KHÔNG CÒN.** `HEAD` nhích bao nhiêu lần cũng không có `NEN_SHA`/
+   `TREE_NEN` nào phải cập nhật — đó là toàn bộ mục đích của vòng 3. Nếu ai đó thêm lại một cặp
+   số viết cứng vào `A1`, họ đang tái sinh H5/N-G19-04.
+5. **`OWNER_ACTIONS C4` / D-8:** giữ nguyên **BLOCKED OWNER**; không đo, không sửa, không ép
+   xanh. (KHÁC `C4`=`G19-C6` — xem §0ter.2. Phần TUYẾN của `G19-C6` đã đóng; phần
+   `DDL_G12Q`→`nang_len_v10` **còn treo**, chủ AG-02 backend — §0ter.5.)
+6. **`nang_len_v10` (vòng 4):** `PHIEN_BAN_SCHEMA` vẫn **9**; **chưa** áp `truy_van.DDL_G12Q`
+   cho CSDL đã ở v9. **Không** nhận `G19-C6` là đã xong hoàn toàn — xem §0ter.5.1.
+7. **Bàn đo G20 (vòng 4):** cổng C4 của `thu_qa_g20.py` còn ghim trạng thái nền (`assertEqual(nhap, [])`,
+   dòng 702) ⇒ ĐỎ trên `146500b`; `D1` chạy nó mà không đọc mã thoát nên che mất. Ngoài phạm vi
+   ghi của AG-02 — báo AG-00 (§0ter.5.2).
+8. **Worktree (vòng 4):** `g22-a2-contract` còn ở `a6b5b73`; sandbox chặn ghi `.git` nên không
+   fast-forward được lên `146500b` — bằng chứng chạy trên bản sao TMP (§0ter.4); AG-00 cần
+   fast-forward/merge.
 
 ---
 
 ## 7. CÁCH TỰ KIỂM LẠI
 
 ```sh
-# 1) Toàn bộ — kỳ vọng vòng 2: Ran 24 · failures=1 (B2) · skipped=1 (Z9) · EXIT 1
+# 1) Toàn bộ — kỳ vọng VÒNG 4: Ran 24 · PASS 23 · FAIL 0 · skipped=1 (Z9 mồi) · EXIT 0
 python3 app/thu/thu_qa_g22.py
 
-# 2) Ba nhóm quyết định của vòng 2:
-python3 app/thu/thu_qa_g22.py A_Nen        # Ran 4 · OK · EXIT 0
-python3 app/thu/thu_qa_g22.py C_BanPhim    # B1, B3 OK; B2 FAIL vì lỗi có sẵn · EXIT 1
+# 2) Các nhóm quyết định:
+python3 app/thu/thu_qa_g22.py A_Nen        # Ran 4 · OK · EXIT 0 (A1 + 5 đối chứng)
+python3 app/thu/thu_qa_g22.py C_BanPhim    # B1, B2, B3 OK trên 146500b · EXIT 0
 python3 app/thu/thu_qa_g22.py E_CaySach    # Ran 2 · OK · skipped=0 · EXIT 0
+python3 app/thu/thu_qa_g22.py H_C4         # Ran 1 · OK · EXIT 0 (C4/G19-C6 + gỡ tuyến ⇒ ĐỎ)
 
-# 3) Xem đối chứng âm trong log: A1 (tiêm index), B2/B3 (hạ 1 ca), E1 (tiêm tệp bẩn).
+# 3) Xem đối chứng âm trong log: A1 (cây bẩn · index≠HEAD · cây không đọc được · HEAD nhích),
+#    B2/B3 (hạ 1 ca), E1 (tiêm tệp bẩn), H_C4 (GỠ `import truy_van` + khối route bằng AST
+#    trên bản sao `app/` ⇒ cặp (True, True) → (True, False) ⇒ cổng ĐỎ).
 # 4) Kiểm sha256 nhị phân headless:
 shasum -a 256 node_modules/playwright-core/.local-browsers/chromium_headless_shell-1194/chrome-mac/headless_shell
 # → a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040
 ```
+
+> Số của vòng 3 (lịch sử): `Ran 24 · PASS 22 · failures=1 (B2) · skipped=1 (Z9) · EXIT 1`. Số của
+> vòng 4: `Ran 24 · PASS 23 · FAIL 0 · SKIP 1 (Z9 mồi) · EXIT 0` — §0ter.4.
 
 **Ba luật bằng chứng đã giữ:** mọi khẳng định đi kèm lệnh thật + mã thoát thật + số ca + số
 skip; không đoán mã trạng thái hãng (không có lời gọi hãng nào); mọi ca phủ định trong phạm vi

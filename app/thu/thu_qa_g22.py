@@ -18,6 +18,15 @@ NỀN ĐO — VÒNG 3 (`ctx_d56f10e956ad`): NỀN ĐƯỢC ĐỌC TẠI CHỖ, K
     được LÀM THẬT trên một clone tạm (`_doi_chung_am_a1`), không phải lời khai.
     Lịch sử ghim (CHỈ ĐỂ ĐỌC): `7344c02/8fc624de` → `3b7e93b/37079aa8` → `dd788fc/9628587`.
 
+VÒNG 4 (`ctx_e398c90995a7`) — `C4`/`G19-C6`, VÀ MỘT CÁI GHIM NỮA BỊ DIỆT:
+
+    `H_C4` của vòng 3 vẫn GHIM trạng thái nền `(True, False)` nên ĐỎ dù sản phẩm ĐÃ ĐÓNG:
+    AG-06 đã port route `truy_van` (~20 dòng) vào `app/server.py` (commit `146500b`). Vòng 4 viết
+    lại ca theo bất biến "ĐÃ ĐÓNG": đo TẠI CHỖ (đếm tham chiếu THẬT, không ghim số/dòng/tệp) +
+    ĐỐI CHỨNG ÂM LÀM THẬT (gỡ `import truy_van` + mọi khối `if` DÙNG nó trên bản sao `app/` ⇒
+    cổng PHẢI ĐỎ). `C4` ở đây là `G19-C6` (route + `DDL_G12Q` vào migration) — KHÁC hẳn
+    `OWNER_ACTIONS C4` = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = D-8/BLOCKED OWNER.
+
 GIT SANDBOX — HAI NGUYÊN NHÂN ĐỎ CỦA `A1`, CẢ HAI ĐÃ ĐƯỢC XỬ LÝ (AGENT 03 · `docs/G22_A1_GIT.md`):
 
     (a) MÔI TRƯỜNG: `git write-tree` TRẦN bị chặn ghi `gitdir/index.lock` (`Operation not
@@ -74,6 +83,7 @@ PHẠM VI HTTP — TUYỆT ĐỐI: không một lời gọi nào ra hãng, kể 
 OS cấp. Cụm PostgreSQL `:5432` KHÔNG bị đụng tới (D-8: CSDL nghiệp vụ vẫn SQLite).
 """
 
+import ast
 import hashlib
 import json
 import os
@@ -372,6 +382,7 @@ CA_PHU_DINH = {
     "cay-sach-3-ban-sao": ("E_CaySach.test_e1_ba_cong_cay_sach_chay_that"),
     "e3-ba-luot-cung-giay": ("F_DongHo.test_f1_do_that_bang_dong_ho_dong_bang",),
     "ng21-03-ca-ghim-ro": ("G_NG2103.test_g1_ca_thu_con_ghim_ro",),
+    "c4-go-route": ("H_C4.test_h1_c4_do_hay_da_dong",),
     "g20-c1-cay-sach": ("D_BanDoG20.test_d1_nam_cong_g20",),
     "nua-voi": ("Z_ChotChan.test_z4_gia_tri_nua_voi_luon_la_DO",),
     "cay-sach-bo-do": ("Z_ChotChan.test_z3_bo_do_bat_duoc_khi_bi_tiem",),
@@ -408,6 +419,12 @@ DOI_CHUNG = {
     "g20-c1-cay-sach":
         "C2 của cùng bàn đo G20 phải ĐO ĐƯỢC (7 ca tầng 3 chạy thật) — chứng minh bàn đo không "
         "chết toàn bộ khi C1 đỏ.",
+    "c4-go-route":
+        "CÙNG phép đo `_do_c4()` trên HAI bản: (a) bản sao `app/` Y NGUYÊN phải cho đúng cặp "
+        "(True, True) như cây thật; (b) CHÍNH bản sao đó sau khi GỠ TUYẾN bằng AST (mọi "
+        "`import truy_van` + mọi khối `if` DÙNG nó) phải cho (True, False) và cổng PHẢI ĐỎ. "
+        "Không có (a) thì 'đỏ khi gỡ' có thể chỉ là 'bản sao hỏng sẵn'; không có (b) thì 'đã "
+        "đóng' không phân biệt được với một bộ đo MÙ.",
     "nua-voi":
         "bơm giá trị nằm GIỮA nền và đóng; `phan_quyet` phải trả NUA_VOI và cổng phải ĐỎ.",
     "cay-sach-bo-do":
@@ -768,8 +785,13 @@ def _doi_chung_am_a1():
                   encoding="utf-8") as f:
             f.write("commit de chung minh nen doc tai cho, khong ghim\n")
         _git("-C", goc, "add", "admin/__head_nhich_g22.txt", giay=120)
+        # NGÀY CỐ ĐỊNH: commit thử phải có cùng một SHA ở mọi lượt chạy, nếu không "bằng chứng D3"
+        # sẽ đổi số mỗi lần và không ai đối chiếu lại được. Cùng cha + cùng cây + cùng nội dung +
+        # cùng ngày ⇒ cùng commit.
         rc, out = _git("-C", goc, "-c", "user.name=AG-02-G22", "-c", "user.email=ag02@local",
-                       "commit", "-m", "A1: HEAD nhich — khong cap nhat so nao", giay=120)
+                       "commit", "-m", "A1: HEAD nhich — khong cap nhat so nao", giay=120,
+                       env_them={"GIT_AUTHOR_DATE": "2026-01-01T00:00:00 +0000",
+                                 "GIT_COMMITTER_DATE": "2026-01-01T00:00:00 +0000"})
         if rc != 0:
             raise RuntimeError("KHÔNG commit được trong clone để thử HEAD nhích: %s" % out[-300:])
         ra["nhich"] = do_a1(goc)
@@ -1195,7 +1217,8 @@ class A_Nen(unittest.TestCase):
           (ii)  ĐỐI CHỨNG DƯƠNG phép đo index: tiêm 1 mục vào BẢN SAO index ⇒ cây ĐỔI, index
                 THẬT giữ nguyên sha256, không có `index.lock` (AGENT 03 §3.4);
           (iii) BA ĐỐI CHỨNG ÂM LÀM THẬT trên clone tạm — cây bẩn, index≠HEAD, không đọc được
-                cây — cả ba PHẢI ĐỎ, kèm đối chứng dương (clone sạch ⇒ XANH).
+                cây — cả ba PHẢI ĐỎ, kèm đối chứng dương (clone sạch ⇒ XANH) VÀ một COMMIT
+                THẬT làm HEAD nhích ⇒ vẫn XANH (không còn số nào phải cập nhật).
         """
         kq = do_a1()
         print("\n  [A1] PHÉP ĐO NỀN — HEAD và HEAD^{tree} ĐỌC TẠI CHỖ (không hằng số)")
@@ -1951,57 +1974,271 @@ class G_NG2103(unittest.TestCase):
         self.assertTrue(dat, "CỔNG `ng21-03-ca-ghim-ro` ĐỎ: %s" % vi)
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7c. C4 — VIỆC THẬT TÊN LÀ `G19-C6`; `OWNER_ACTIONS C4` LÀ D-8, KHÔNG PHẢI VIỆC NÀY
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# HAI THỨ TRÙNG NHÃN "C4" — TUYỆT ĐỐI KHÔNG ĐÁNH ĐỒNG:
+#
+#   (1) `C4` trong sổ của `thu_qa_g20.py` = **C6 của G19** (`G19-C6`): "route `truy_van.py` +
+#       `DDL_G12Q` vào migration v9". Việc này ĐÃ CÓ CHỦ và PHẦN TUYẾN ĐÃ ĐÓNG — AG-06 port khối
+#       route vào `app/server.py` (commit `146500b`). Ca `H1` dưới đây gác phần đó.
+#   (2) `OWNER_ACTIONS C4` = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = **D-8, BLOCKED OWNER**.
+#       TUYỆT ĐỐI không thực hiện trong wave này, không ép cổng xanh, không đụng cụm `:5432`.
+#
+# Vì sao phép đo phải ĐỌC TẠI CHỖ (không ghim số): trên nền `a6b5b73`, `app/server.py` KHÔNG có
+# `import truy_van` ⇒ cặp đo được là `(True, False)` (đúng ô "nền" của `SO_DO_G20`). Từ `146500b`
+# (AG-06 vá B2), `app/server.py` import `truy_van` và đưa `/api/v2/don` đi qua `tim_don()` ⇒ cặp
+# đo được là `(True, True)` (đúng ô "đóng"). Ghim bất kỳ con số/dòng/tên tệp nào ở đây là tái
+# sinh đúng họ lỗi H5/N-G19-04 mà cả wave đang diệt. Đếm THAM CHIẾU THẬT, mỗi lượt chạy.
+
+MA_QUET_C4 = r'''
+import ast, json, os, sys
+
+goc = os.path.abspath(sys.argv[1])
+sys.path.insert(0, os.path.join(goc, "app"))
+import csdl  # noqa: E402
+
+
+def _trong_vung(p):
+    """Cùng luật `thu_g21_chotcay`: `docs` hoặc thư mục bắt đầu bằng `thu` KHÔNG phải sản xuất."""
+    phan = p.replace(os.sep, "/").split("/")
+    return any(d == "docs" or d.startswith("thu") for d in phan[:-1])
+
+
+tep = []
+for g, dirs, fs in os.walk(goc):
+    dirs[:] = sorted(d for d in dirs if d not in ("node_modules", ".git", "__pycache__"))
+    for f in sorted(fs):
+        if not f.endswith(".py"):
+            continue
+        p = os.path.join(g, f)
+        rel = os.path.relpath(p, goc).replace(os.sep, "/")
+        if _trong_vung(p) or rel == "app/truy_van.py":
+            continue
+        try:
+            with open(p, encoding="utf-8") as fh:
+                cay = ast.parse(fh.read())
+        except Exception:
+            continue
+        # CHỈ đếm Name TRÙNG với thứ đã IMPORT trong CHÍNH tệp: `gateway/server.py` có biến cục
+        # bộ cũng tên `truy_van` (chuỗi query) — đếm theo tên trần sẽ tính nó là "tham chiếu mô
+        # đun", một DƯƠNG TÍNH GIẢ. Mô-đun chỉ được coi là có mặt khi tệp ĐÃ import nó.
+        gan = set()
+        nhap = 0
+        for nut in ast.walk(cay):
+            if isinstance(nut, ast.Import):
+                for a in nut.names:
+                    if a.name == "truy_van":
+                        nhap += 1
+                        gan.add(a.asname or "truy_van")
+            elif isinstance(nut, ast.ImportFrom) and nut.module == "truy_van":
+                nhap += 1
+                for a in nut.names:
+                    if a.name != "*":
+                        gan.add(a.asname or a.name)
+        if not nhap:
+            continue
+        dung = sum(1 for nut in ast.walk(cay) if isinstance(nut, ast.Name) and nut.id in gan
+                   and isinstance(nut.ctx, ast.Load))
+        tep.append({"tep": rel, "import": nhap, "dung": dung})
+print("__C4__" + json.dumps({"schema": int(getattr(csdl, "PHIEN_BAN_SCHEMA", 0)),
+                             "tep": tep}, ensure_ascii=False))
+'''
+
+
+def _do_c4(goc=None):
+    """ĐO `C4` (= `G19-C6`) TẠI CHỖ trên cây `goc` — KHÔNG ghim số tham chiếu, KHÔNG ghim tệp.
+
+    Trả dict; `cap` là ĐÚNG cặp mà `SO_DO_G20["C4 route truy_van + migration v9"]` ghi nền/đóng:
+      · `schema` / `schema_ok` — `csdl.PHIEN_BAN_SCHEMA` của CHÍNH cây đang đo. `v9` là **SÀN**,
+        không phải ghim: một `v10` sau này vẫn là "đã đóng", không làm cổng đỏ vĩnh viễn;
+      · `tep` — tệp SẢN XUẤT tham chiếu `truy_van`, kèm số lần `import` và số lần **DÙNG**.
+        "DÙNG" chỉ đếm `Name` trùng tên do CHÍNH tệp đó import — biến cục bộ trùng tên (đo được
+        ở `gateway/server.py`) KHÔNG bị tính là tham chiếu mô-đun;
+      · `import_ok` / `dung_ok` — phải có tệp `import` VÀ có chỗ DÙNG. Một `import` không có lời
+        gọi KHÔNG phải một tuyến — nếu chỉ đếm `import` thì "gỡ khối route" vẫn xanh (bộ đo mù);
+      · `loi` — nguyên văn khi không đo được; người gọi PHẢI coi là ĐỎ, không phải "đạt".
+    """
+    goc = os.path.abspath(goc or GOC_CAY)
+    ra = {"goc": goc, "rc": 1, "schema": None, "tep": [], "schema_ok": False,
+          "import_ok": False, "dung_ok": False, "cap": (False, False), "loi": ""}
+    rc, out = chay([PY, "-c", MA_QUET_C4, goc], giay=300, cwd=goc)
+    ra["rc"] = rc
+    dong = [d for d in out.splitlines() if d.startswith("__C4__")]
+    if rc != 0 or not dong:
+        ra["loi"] = "KHÔNG ĐO ĐƯỢC C4 trên %s (rc=%d): %s" % (goc, rc, out[-400:])
+        return ra
+    d = json.loads(dong[-1][len("__C4__"):])
+    ra["schema"] = int(d["schema"])
+    ra["tep"] = d["tep"]
+    ra["schema_ok"] = ra["schema"] >= 9
+    ra["import_ok"] = any(t["import"] > 0 for t in ra["tep"])
+    ra["dung_ok"] = any(t["dung"] > 0 for t in ra["tep"])
+    ra["cap"] = (ra["schema_ok"], ra["import_ok"] and ra["dung_ok"])
+    return ra
+
+
+def _chep_app_tam(nhan):
+    """BẢN SAO THẬT của `app/` trong TMP. KHÔNG ghi một byte nào vào cây thật."""
+    d = tempfile.mkdtemp(prefix="g22-c4-%s-" % nhan)
+    shutil.copytree(GOC_APP, os.path.join(d, "app"),
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"))
+    return d
+
+
+def _go_tuyen_truy_van(goc):
+    """GỠ TUYẾN `truy_van` khỏi BẢN SAO `goc` — LÀM THẬT, bằng AST, không ghim số dòng.
+
+    Gỡ đúng hai thứ AG-06 đã nối vào `app/server.py`:
+      · mọi câu `import truy_van` (và `from truy_van import …`);
+      · mọi khối `if` có **DÙNG** `truy_van` — tức khối tuyến `/api/v2/don` và tuyến tự mô tả.
+    Dùng AST chứ không ghim dòng vì dòng nhích ở mọi bản vá kế tiếp — ghim dòng chính là họ lỗi
+    H5/N-G19-04. Trả dict ĐO ĐƯỢC; ném `RuntimeError` nếu không có gì để gỡ hoặc tệp sau khi gỡ
+    không còn hợp lệ cú pháp — khi đó phép đối chứng KHÔNG được kết luận gì.
+    """
+    p = os.path.join(goc, "app", "server.py")
+    with open(p, encoding="utf-8") as f:
+        dong = f.read().splitlines(keepends=True)
+    cay = ast.parse("".join(dong))
+    khoang = []
+    for nut in ast.walk(cay):
+        if isinstance(nut, ast.Import) and any(a.name == "truy_van" for a in nut.names):
+            khoang.append((nut.lineno, nut.end_lineno, "import truy_van"))
+        elif isinstance(nut, ast.ImportFrom) and nut.module == "truy_van":
+            khoang.append((nut.lineno, nut.end_lineno, "from truy_van import …"))
+        elif isinstance(nut, ast.If) and any(
+                isinstance(x, ast.Name) and x.id == "truy_van" for x in ast.walk(nut)):
+            khoang.append((nut.lineno, nut.end_lineno, "khối if DÙNG truy_van (tuyến)"))
+    if not khoang:
+        raise RuntimeError("bản sao KHÔNG có tham chiếu `truy_van` nào để gỡ ⇒ đối chứng vô nghĩa")
+    khoang.sort()
+    gop = []
+    for a, b, ten in khoang:
+        if gop and a <= gop[-1][1]:
+            gop[-1][1] = max(gop[-1][1], b)
+        else:
+            gop.append([a, b, ten])
+    xoa = set()
+    for a, b, _ in gop:
+        xoa.update(range(a - 1, b))
+    moi = [d for i, d in enumerate(dong) if i not in xoa]
+    try:
+        ast.parse("".join(moi))
+    except SyntaxError as e:
+        raise RuntimeError("gỡ tuyến xong tệp KHÔNG còn hợp lệ cú pháp (%s) ⇒ không đối chứng "
+                           "được" % e)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("".join(moi))
+    return {"tep": os.path.relpath(p, goc), "so_khoi": len(gop), "so_dong": len(xoa),
+            "chi_tiet": [(ten, b - a + 1) for a, b, ten in gop]}
+
+
 class H_C4(unittest.TestCase):
-    """C4 (`route truy_van` cho migration v9) — **CHƯA CÓ CHỦ SỞ HỮU** (AG-00 xác nhận, ghi vào
-    backlog G22-G25). Ca này KHÔNG nhận là đã đóng; nó đo và ghi thẳng."""
+    """`C4` — việc thật tên là **`G19-C6`**, và nó **ĐÃ CÓ CHỦ SỞ HỮU + ĐÃ ĐÓNG**.
+
+    ĐÍNH CHÍNH so với docstring cũ ("CHƯA CÓ CHỦ SỞ HỮU … KHÔNG nhận là đã đóng"): câu đó đúng ở
+    nền `a6b5b73`, nhưng SAI từ `146500b` — AG-06 đã port khối route `truy_van` (~20 dòng) vào
+    `app/server.py`, nên cặp đo được là `(True, True)`, tức **đã đóng**. Ca cũ giữ nguyên khẳng
+    định trạng thái nền `(True, False)` nên nó ĐỎ dù sản phẩm xanh — đó là "ghim hành vi cũ".
+
+    HAI THỨ TRÙNG NHÃN "C4" — TUYỆT ĐỐI KHÔNG ĐÁNH ĐỒNG:
+      · **`G19-C6`** (việc này): route `truy_van` + `DDL_G12Q` vào migration. Chủ: **Agent 06**
+        (port khối route vào `app/server.py`, commit `146500b`) + **Agent 02** (viết lại ca này để
+        ĐO cái đã đóng và CHỨNG MINH đối chứng âm bằng cách gỡ tuyến thật).
+      · **`OWNER_ACTIONS C4`** = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = **D-8, BLOCKED OWNER**.
+        KHÔNG thực hiện, KHÔNG ép cổng xanh, KHÔNG đụng `:5432`. Đây là việc KHÁC.
+
+    CÒN TREO (phần còn lại của `G19-C6`, KHÔNG nhận là đã xong): `PHIEN_BAN_SCHEMA` vẫn là **9**
+    và **`nang_len_v10`** — áp `truy_van.DDL_G12Q` (9 chỉ mục) cho CSDL ĐÃ Ở v9 — **CHƯA được áp**.
+    Chủ: **AG-02 backend**. Ca này chỉ gác phần TUYẾN + sàn schema, không gác phần chỉ mục.
+    """
 
     def test_h1_c4_do_hay_da_dong(self):
-        """Cặp giá trị của C4 = (schema v9 ĐẠT?, có tệp SẢN XUẤT import `truy_van`?).
+        """ĐO `C4`/`G19-C6` TẠI CHỖ và CHỨNG MINH RĂNG của cổng bằng ĐỐI CHỨNG ÂM LÀM THẬT.
 
-        Vùng thử/tài liệu áp ĐÚNG luật của `thu_g21_chotcay`: một thư mục tên `docs` hoặc bắt
-        đầu bằng `thu`. Không có luật đó thì chính bộ kiểm này bị tính là "tệp sản xuất".
+        BA vế, cả ba đo được:
+          (i)   cây THẬT: cặp `(schema ≥ 9, có tệp SẢN XUẤT vừa import vừa DÙNG `truy_van`)` phải
+                bằng ô "đóng" `(True, True)` của `SO_DO_G20`. Không ghim con số: đếm tham chiếu
+                mỗi lượt chạy;
+          (ii)  ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên phải cho ĐÚNG cặp đó — nếu bản sao đã
+                khác cây thật thì phép đối chứng dưới đây không nói được gì;
+          (iii) ĐỐI CHỨNG ÂM BẮT BUỘC: trên CHÍNH bản sao đó, GỠ mọi `import truy_van` và mọi
+                khối `if` DÙNG `truy_van` (bằng AST, không ghim dòng) ⇒ cặp phải thành
+                `(True, False)` và cổng phải ĐỎ. Nếu gỡ tuyến mà vẫn xanh thì cổng là bộ đo MÙ.
+
+        Không xoá ca, không `skipTest`, không nới assert: nếu sản phẩm chưa đóng, ca này ĐỎ THẬT
+        và in thẳng "C4 CHƯA ĐÓNG".
         """
-        MA = (
-            "import ast, os, sys\n"
-            "sys.path.insert(0, 'app')\n"
-            "import csdl\n"
-            "def trong_vung(p):\n"
-            "    phan = p.replace(os.sep, '/').split('/')\n"
-            "    return any(d == 'docs' or d.startswith('thu') for d in phan[:-1])\n"
-            "n, ds = 0, []\n"
-            "for g, dirs, fs in os.walk('.'):\n"
-            "    dirs[:] = [d for d in dirs if d not in ('node_modules', '.git', '__pycache__')]\n"
-            "    for f in fs:\n"
-            "        if not f.endswith('.py'): continue\n"
-            "        p = os.path.join(g, f)\n"
-            "        if trong_vung(p) or p.endswith('app/truy_van.py'): continue\n"
-            "        try: cay = ast.parse(open(p, encoding='utf-8').read())\n"
-            "        except Exception: continue\n"
-            "        for nut in ast.walk(cay):\n"
-            "            if isinstance(nut, ast.Import) and any(a.name == 'truy_van' for a in nut.names):\n"
-            "                n += 1; ds.append(p)\n"
-            "            if isinstance(nut, ast.ImportFrom) and nut.module == 'truy_van':\n"
-            "                n += 1; ds.append(p)\n"
-            "print('SCHEMA', csdl.PHIEN_BAN_SCHEMA)\n"
-            "print('SO_TEP_SAN_XUAT_IMPORT', n)\n"
-            "print('DS', ds)\n")
-        rc, out = chay([PY, "-c", MA], giay=300)
-        self.assertEqual(rc, 0, "không đo được C4 (rc=%d): %s" % (rc, out[-400:]))
-        schema = int(re.search(r"SCHEMA (\d+)", out).group(1))
-        so_import = int(re.search(r"SO_TEP_SAN_XUAT_IMPORT (\d+)", out).group(1))
-        schema_ok = (schema == 9)
-        route_ok = (so_import > 0)
-        cap = (schema_ok, route_ok)
-        print("\n  [H1] C4 — `PHIEN_BAN_SCHEMA`=%d (đòi 9) · tệp SẢN XUẤT import `truy_van`: %d"
-              % (schema, so_import))
-        print("       cặp đo được = %r · nền=%r · đóng=%r"
-              % (cap, SO_DO_G20["C4 route truy_van + migration v9"]["nen"],
-                 SO_DO_G20["C4 route truy_van + migration v9"]["dong"]))
-        print("       CHỦ SỞ HỮU: **KHÔNG AI** — AG-00 đã ghi thẳng vào backlog G22-G25 (điểm C4 "
-              "trong đề bài). Bộ kiểm này **KHÔNG** nhận C4 là đã đóng.")
-        self.assertEqual(cap, (True, False),
-                         "C4 đã ĐỔI trạng thái so với nền — phải cập nhật tài liệu và nói rõ ai "
-                         "sở hữu; đo được %r" % (cap,))
+        dong = SO_DO_G20["C4 route truy_van + migration v9"]["dong"]
+        nen = SO_DO_G20["C4 route truy_van + migration v9"]["nen"]
+        that = _do_c4()
+        print("\n  [H1] C4 = G19-C6 — ĐO TẠI CHỖ trên cây thật (%s)" % that["goc"])
+        if that["loi"]:
+            self.fail(that["loi"])
+        chi_tiet = "; ".join("%s (import %d · dùng %d)" % (t["tep"], t["import"], t["dung"])
+                             for t in that["tep"]) or "KHÔNG CÓ TỆP NÀO"
+        print("       `PHIEN_BAN_SCHEMA`=%d (đích: ≥9, KHÔNG ghim đúng 9) · tệp SẢN XUẤT tham "
+              "chiếu `truy_van`=%d" % (that["schema"], len(that["tep"])))
+        print("       tham chiếu ĐẾM ĐƯỢC: %s" % chi_tiet)
+        print("       cặp đo được = %r · sổ G20: nền=%r · đóng=%r · phân quyết = %s"
+              % (that["cap"], nen, dong,
+                 "DONG" if that["cap"] == dong else ("NEN" if that["cap"] == nen else "NUA_VOI")))
+        self.assertEqual(that["rc"], 0, "phép đo C4 không chạy được: %s" % that["loi"])
+        self.assertTrue(that["schema_ok"],
+                        "C4 CHƯA ĐÓNG: `PHIEN_BAN_SCHEMA`=%r < 9 — migration v9 chưa đạt"
+                        % (that["schema"],))
+        self.assertTrue(that["import_ok"],
+                        "C4 CHƯA ĐÓNG: KHÔNG có tệp SẢN XUẤT nào import `truy_van` — đây là "
+                        "trạng thái NỀN %r, không phải đã đóng. Việc thật là G19-C6 (route "
+                        "`truy_van`), chủ: Agent 06." % (nen,))
+        self.assertTrue(that["dung_ok"],
+                        "C4 CHƯA ĐÓNG: có `import truy_van` nhưng KHÔNG có chỗ DÙNG — một câu "
+                        "import không phải một tuyến. Việc thật là G19-C6.")
+        self.assertEqual(that["cap"], dong,
+                         "C4 CHƯA ĐÓNG: cặp đo được %r ≠ ô đóng %r của `SO_DO_G20` — ghi thẳng, "
+                         "không ép xanh" % (that["cap"], dong))
+        print("       CHỦ SỞ HỮU: Agent 06 (port khối route ~20 dòng vào `app/server.py`, commit "
+              "`146500b`) + Agent 02 (ca đo này). Việc thật tên là **G19-C6**, KHÔNG phải "
+              "`OWNER_ACTIONS C4` = D-8/BLOCKED OWNER.")
+
+        # ── ĐỐI CHỨNG (ii) + (iii): LÀM THẬT trên BẢN SAO của `app/` ─────────────────────────
+        tam = _chep_app_tam("doi-chung")
+        try:
+            truoc = _do_c4(tam)
+            self.assertEqual(truoc["cap"], that["cap"],
+                             "ĐỐI CHỨNG DƯƠNG HỎNG: bản sao y nguyên cho %r ≠ cây thật %r ⇒ "
+                             "phép đối chứng không dùng được" % (truoc["cap"], that["cap"]))
+            self.assertEqual(truoc["tep"], that["tep"],
+                             "ĐỐI CHỨNG DƯƠNG HỎNG: danh sách tham chiếu của bản sao khác cây "
+                             "thật: %r ≠ %r" % (truoc["tep"], that["tep"]))
+            go = _go_tuyen_truy_van(tam)
+            sau = _do_c4(tam)
+            print("       ĐỐI CHỨNG DƯƠNG: bản sao `app/` y nguyên → %r (đòi %r) ✓"
+                  % (truoc["cap"], dong))
+            print("       ĐỐI CHỨNG ÂM (LÀM THẬT): gỡ %d khối / %d dòng khỏi `%s` — %s"
+                  % (go["so_khoi"], go["so_dong"], go["tep"],
+                     ", ".join("%s (%d dòng)" % (t, n) for t, n in go["chi_tiet"])))
+            print("       sau khi gỡ: tệp sản xuất tham chiếu `truy_van`=%d · cặp đo được = %r"
+                  % (len(sau["tep"]), sau["cap"]))
+            self.assertEqual(sau["tep"], [],
+                             "gỡ tuyến xong vẫn còn tệp tham chiếu `truy_van`: %r ⇒ đối chứng "
+                             "gỡ chưa sạch, không kết luận được" % (sau["tep"],))
+            self.assertEqual(sau["cap"], (True, False),
+                             "GỠ TUYẾN MÀ CỔNG VẪN XANH (cặp %r) ⇒ bộ đo MÙ, 'đã đóng' trên cây "
+                             "thật không chứng minh được gì" % (sau["cap"],))
+            self.assertNotEqual(sau["cap"], dong,
+                                "sau khi gỡ tuyến, cặp đo vẫn bằng ô đóng %r ⇒ cổng không có răng"
+                                % (dong,))
+            print("       ⇒ gỡ tuyến thì cổng ĐỎ (đòi ĐỎ) ✓ — cổng KHÔNG phải bộ đo mù.")
+        finally:
+            shutil.rmtree(tam, ignore_errors=True)
+
+        print("       CÒN TREO (KHÔNG nhận là đã xong): `PHIEN_BAN_SCHEMA` vẫn là 9 và "
+              "`nang_len_v10` (áp `truy_van.DDL_G12Q` cho CSDL ĐÃ Ở v9) CHƯA được áp — phần còn "
+              "lại của G19-C6, chủ: AG-02 backend.")
+        _dc_duong("c4-go-route")
+        DA_TIEM["c4-go-route"] = True
 
 
 class Z_ChotChan(unittest.TestCase):
@@ -2075,7 +2312,8 @@ class Z_ChotChan(unittest.TestCase):
         thieu_chay = sorted(n for n in CA_PHU_DINH if not DA_CHAY.get(n))
         thieu_tiem = sorted(n for n in CA_PHU_DINH
                             if n in ("cay-sach-3-ban-sao", "e3-ba-luot-cung-giay",
-                                     "ng21-03-ca-ghim-ro") and not DA_TIEM.get(n))
+                                     "ng21-03-ca-ghim-ro", "c4-go-route")
+                            and not DA_TIEM.get(n))
         print("\n  [Z1] CHỐT CHẶN (2) — ĐỐI CHỨNG DƯƠNG CHO MỌI CA PHỦ ĐỊNH")
         for n in sorted(CA_PHU_DINH):
             print("       %-22s đã chạy đối chứng=%-5s đã tiêm lỗi=%s"

@@ -31,6 +31,7 @@ import polling
 import quan_sat
 import quyen
 import tai_chinh
+import truy_van
 import usage
 import webhook
 
@@ -927,16 +928,25 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, {"don": [dict(x) for x in ds]})
 
         if duong == "/api/v2/don" and method == "GET":
+            # G22/AG-02 (cổng C4) — ĐI QUA LỚP TRUY VẤN. Bản cũ chỉ biết `q` · `trang_thai` ·
+            # `gioi_han` và BỎ QUA IM LẶNG mọi tham số khác: người gõ `trang_thai_gia0` nhận về
+            # danh sách KHÔNG LỌC mà không có gì báo. `truy_van` có danh sách trắng trường lọc +
+            # sắp xếp + phân trang, và TỪ CHỐI (400) tên lạ. Ép kiểu ở đây là lần thứ hai — lớp
+            # truy vấn tự ép và tự từ chối (§12.2 "lọc một chỗ, không lọc hai chỗ").
             self._can(nc, "tenant.don.xem")
-            dk, tsq = ["tenant_id=?"], [tenant_id]
-            if ts.get("trang_thai"):
-                dk.append("trang_thai=?"); tsq.append(ts["trang_thai"])
-            if ts.get("q"):
-                dk.append("(ma_don LIKE ? OR ma_van_don LIKE ? OR nguoi_nhan_ten LIKE ? OR nguoi_nhan_sdt LIKE ?)")
-                tsq += [f"%{ts['q']}%"] * 4
-            tsq.append(self._so_nguyen(ts, "gioi_han", 100))
-            ds = csdl.nhieu(f"SELECT * FROM don_hang WHERE {' AND '.join(dk)} ORDER BY id DESC LIMIT ?", tsq)
-            return self._tra(200, {"don": [dict(x) for x in ds]})
+            try:
+                kq = truy_van.tim_don(tenant_id, dict(ts), co_cot=don_hang.co_cot)
+            except truy_van.LoiTruyVan as e:
+                return self._tra(e.ma, {"loi": str(e)})
+            # TƯƠNG THÍCH: giao diện đang đọc `.don`. Trả CẢ HAI khoá trong lượt chuyển tiếp —
+            # cùng một danh sách; gỡ `don` sau khi `admin/*` chuyển hẳn sang `.dong`.
+            kq["don"] = kq["dong"]
+            return self._tra(200, kq)
+        if duong == "/api/v2/don/loc-mo-ta" and method == "GET":
+            # Tự mô tả bộ lọc để giao diện dựng form mà không chép tay danh sách trường — chép
+            # tay là hai bản sẽ lệch nhau (§14.6 "một nguồn duy nhất").
+            self._can(nc, "tenant.don.xem")
+            return self._tra(200, truy_van.mo_ta_bo_loc())
         if duong == "/api/v2/don/xuat-csv" and method == "GET":
             self._can(nc, "tenant.don.xem")
             ds = csdl.nhieu("SELECT * FROM don_hang WHERE tenant_id=? ORDER BY id DESC LIMIT 2000",

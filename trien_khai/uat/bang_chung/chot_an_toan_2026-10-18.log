@@ -1,0 +1,48 @@
+=== GUARD EVIDENCE 2026-10-18 13:56:00+0700 ===
+--- start ---
+start_exit=0
+[uat]                  da-tenant (đổi tenant) · shopb-owner
+[uat] Mật khẩu nằm trong: /private/tmp/veh-uat-run/TAI-KHOAN-UAT.md
+PID=88466 PORT=58883
+--- khoi dong trung ---
+duplicate_start_exit=1
+[uat] LỖI: UAT đang chạy sẵn (PID 88466). Dừng trước bằng:
+          /Users/viporder/orca/workspaces/vip-express-hub/u5-uat-local/trien_khai/uat/dung.sh
+--- xoa khi dang chay ---
+xoa_when_running_exit=1
+[uat] LỖI: TỪ CHỐI xoá: UAT vẫn đang chạy (PID 88466).
+          Chạy /Users/viporder/orca/workspaces/vip-express-hub/u5-uat-local/trien_khai/uat/dung.sh trước, rồi xoá dữ liệu.
+data_con_sau_khi_tu_choi=CO
+--- dung.sh voi state gia (PID khong phai server, cong 1) ---
+fake_pid_stop_exit=1
+[uat] CẢNH BÁO: health không trả lời — sẽ dựa vào ps/lsof để xác thực.
+[uat] CẢNH BÁO: ps không dùng được — bỏ kiểm user/lstart/command; dùng health + lsof.
+[uat] CẢNH BÁO: lsof không chạy được — bỏ phép kiểm bind.
+shell_van_song=YES (khong bi kill)
+--- dung that ---
+[uat] Xác thực health: pid=88466 khớp PID đã ghi.
+[uat] CẢNH BÁO: ps không dùng được — bỏ kiểm user/lstart/command; dùng health + lsof.
+[uat] Gửi SIGTERM tới ĐÚNG PID 88466 (cổng 58883)...
+[uat] Cổng 127.0.0.1:58883 đã đóng — không còn ai nghe.
+[uat] Không còn tiến trình nào chạy /Users/viporder/orca/workspaces/vip-express-hub/u5-uat-local/app/server.py.
+[uat] ======================================================================
+[uat] ĐÃ DỪNG UAT LOCAL
+[uat]   PID 88466 : không còn tồn tại (kiểm bằng kill -0)
+[uat]   Cổng 58883 : không còn LISTEN (kiểm bằng kết nối TCP loopback)
+[uat]   Dữ liệu vẫn ở: /private/tmp/veh-uat-run (không bị xoá)
+[uat]   Nhật ký máy chủ: /private/tmp/veh-uat-run/nhat-ky/may-chu.log
+[uat]   Xoá sạch dữ liệu UAT: /Users/viporder/orca/workspaces/vip-express-hub/u5-uat-local/trien_khai/uat/xoa_du_lieu.sh
+[uat] ======================================================================
+stop_exit=0
+PID da chet
+cong da dong: [Errno 61] Connection refused
+--- don sach ---
+[uat] Thư mục sắp xoá : /private/tmp/veh-uat-run
+[uat] Dấu UAT         : /private/tmp/veh-uat-run/.veh-uat-fixture.json (hợp lệ)
+[uat] Số tệp / dung lượng: 15 tệp · 880K
+[uat] CSDL UAT        : /private/tmp/veh-uat-run/hub.db (KHÔNG phải app/du-lieu)
+[uat] ĐÃ XOÁ SẠCH dữ liệu UAT: /private/tmp/veh-uat-run
+[uat] Lần khởi động sau sẽ tạo thư mục mới + bộ tài khoản FIXTURE mới.
+xoa_exit=0
+data_con=KHONG
+=== HET ===

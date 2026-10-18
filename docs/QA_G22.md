@@ -1001,3 +1001,91 @@ Không `push` · không deploy · không tunnel · không credentials thật · 
 sandbox** · **không ghi `.git`** (sandbox chặn, tôi báo AG-00 commit hộ) · mọi phép đo chỉ chạm
 `127.0.0.1`. Cây gương nằm **ngoài** cây thật (`$TMP/veh_g22_tiem_loi`); ba bản sao sạch dùng cho
 §10.5 nằm ở `/tmp/ag01_cp*`.
+
+---
+
+# NGHIỆM THU G22 — KẾT QUẢ THỰC TẾ (AG-00 DeepSeek Controller)
+
+**Commit nghiệm thu:** `b1c520555afcd2e8ca30300c0e20a28b59a85945` · **tree:** `e2b2ae8a236c0ed4e6e950b7021c02dcf53dc808` · **nhánh:** `integration/g22` (worktree `integration/g20`)
+**main:** `de740dc` — **CHƯA ĐỤNG SUỐT wave.**
+
+## 1. KẾT QUẢ CUỐI — đo trên CẢ HAI NƠI, KHÔNG LỆCH
+
+| Chỉ tiêu | worktree | bản sao sạch | Khớp |
+|---|---|---|---|
+| `Ran N` | **24** | **24** | **CÓ** |
+| PASS | **23** | **23** | **CÓ** |
+| FAIL | **0** | **0** | **CÓ** |
+| SKIP | **1** | **1** | **CÓ** |
+| dòng tổng kết | `OK (skipped=1)` | `OK (skipped=1)` | — |
+| **Mã thoát BỘ KIỂM G22** | **0** | **0** | **CÓ** |
+
+Bộ đo nghiệm thu: `trien_khai/g22-acceptance/nghiem_thu_ban_sao.py` · **EXIT_BO_DO = 0** ·
+§2 **không lệch ca nào** · §3 **không lệch dòng đo nào** · §4 `ĐỦ ĐIỀU KIỆN SO SÁNH: CÓ`
+
+**SKIP 1 là `Z9` — ca MỒI CÓ CHỦ ĐÍCH của `Z5`.** Bỏ nó đi thì `Z6` (mọi ca phủ định phải có đối
+chứng dương) mất răng. **Đây là skip CÓ LÝ DO đã được hợp đồng nghiệm thu cho phép (§VII).**
+
+## 2. TIẾN TRÌNH 6 LƯỢT ĐO THẬT
+
+| Lượt | Kết quả | Việc đã đóng |
+|---|---|---|
+| Ban đầu | `24 · 7 FAIL · 1 ERROR · 2 SKIP` | 8 vấn đề |
+| + Agent 02 v1 | `24 · 19P · 3F · 2S` | F (F1/F2/F3), G1, Z6 |
+| + Agent 02 v2 | `24 · 22P · 1F · 1S` | A1 đo được, B3 đếm động, E1 |
+| + Agent 02 v3 | `24 · 22P · 1F(B2) · 1S` | **A1 bền vững** — bỏ hằng số, đọc `HEAD^{tree}` TẠI CHỖ |
+| + Agent 06 | `24 · 22P · 1F(H_C4) · 1S` | **B2** — lỗi BACKEND thật |
+| + Agent 02 v4 | **`24 · 23P · 0F · 1S · EXIT 0`** | **H_C4** — C4/G19-C6 đã đóng |
+
+## 3. CÁC LỖI TÌM ĐƯỢC VÀ NGUYÊN NHÂN GỐC
+
+| # | Lỗi | Nguyên nhân gốc | Cách khắc phục | Agent |
+|---|---|---|---|---|
+| 1 | **B2/B3** `migrate.py` từ chối vì `KHO_DANG_CHAY=None` | Chưa có giao diện khai kho cho môi trường kiểm thử | `khai_kho_kiem_thu()` + 2 chốt cô lập; `migrate.chay()` **từ chối TRƯỚC khi tạo `hub.db`**; mặc định bảo mật GIỮ NGUYÊN | 01 |
+| 2 | **F1/F2/F3 stale** | Ca thử ghim mốc thời gian **tường** thay vì tham số | Chuyển sang hợp đồng **`luc=`** + đối chứng bản đóng băng `md5 611182a6` | 02 |
+| 3 | **G1** `N-G21-03` | `test_c2a` **ghim chính hành vi rò** | Đòi **G5 thật 0/5** + tiêm **tắt luật ECHO THEO TÊN** ⇒ `2/5`, `test_c2a` rc=1 | 02 |
+| 4 | **A1** không đo được | `git write-tree` bị chặn tại `gitdir/index.lock` (**rc=128**) — gitdir ngoài vùng ghi | Đo **tương đương**: index tạm + ODB tạm + alternates chỉ-đọc | 03 |
+| 5 | **A1 đỏ lại sau MỖI lần gộp** | `TREE_NEN` là **HẰNG SỐ** = cây của một commit cụ thể | **Bỏ hằng số** — `HEAD^{tree}` **đọc TẠI CHỖ**, so với `write-tree` đo động | 02 (v3) |
+| 6 | **B2** `01_luong_chinh` ca 03/09 | **KHÔNG phải lỗi ca thử.** `GET /api/v2/don` vẫn là bản cũ: chỉ biết `q/trang_thai/gioi_han`, **BỎ QUA IM LẶNG `cod_tu` và `tenant_id`**, trả `{don}` **thiếu `dong`/`tong`**; `app/truy_van.py` đúng hợp đồng nhưng **KHÔNG tệp SẢN XUẤT NÀO import** | Nối route vào `truy_van`, trả `dong`+`tong`, **từ chối 400** tham số lạ, thêm `loc-mo-ta` | 06 |
+| 7 | **H_C4** | Ca thử **ghim TRẠNG THÁI NỢ CŨ** `(True, False)`; nay là `(True, True)` | Viết lại theo bất biến **C4 ĐÃ ĐÓNG** + **đối chứng âm GỠ TUYẾN làm thật** (3 khối/21 dòng ⇒ `(True, False)` ⇒ ĐỎ) | 02 (v4) |
+| 8 | **Bộ đo trả 1 dù khớp** | `os.path.abspath()` **không giải symlink**; macOS `/var` → `/private/var` ⇒ dòng "lệch" **chỉ vì đường dẫn** | Dùng `os.path.realpath()` | 00 |
+
+**Ghi chú quan trọng:** lỗi #5, #7 và #8 **cùng một họ** — *ghim SỰ THẬT MÔI TRƯỜNG thay vì ghim BẤT BIẾN* (họ `H5`/`N-G19-04`). Đã diệt ở **C5/G7 · `SO_DO` · nhóm F · A1 · H_C4 · bộ đo**. Nguyên tắc áp dụng thống nhất: **viết lại khẳng định theo bất biến đúng, GIỮ đối chứng âm, KHÔNG xoá ca, KHÔNG nới assert.**
+
+## 4. BẢO MẬT — Agent 04, 7/7 mặt ĐẠT
+
+`thu_g22_regression.py` **35 ca · 0 skip · EXIT 0**
+
+| Mặt | Đo được |
+|---|---|
+| tenant isolation | **A→A 200** vs **A→B 404** |
+| RBAC | 403 vs 201 |
+| fail-closed | rc=1 vs rc=0 (5 kịch bản, vân tay `hub.db` không đổi) |
+| idempotency | (201,200) cùng id, +1 vs +2 |
+| webhook | 401 (0 sự kiện) vs 202 (+1) |
+| **rò rỉ chéo tenant** | **0/11 phản hồi + 0/2 log trên đĩa + 0/15 tệp bằng chứng** |
+| **gửi ra ngoài** | **74 kết nối TOÀN loopback · 0 tới `:5432`** · mọi adapter `live_mo=False` |
+
+**7 phép tiêm lỗi ngoài** trên bản sao cây trong TMP ⇒ **ĐỎ ĐÚNG CA (7/7, rc=1)**.
+
+## 5. QUYẾT ĐỊNH CẦN OWNER
+
+1. **`OWNER_ACTIONS C4` = "Chuyển CSDL nghiệp vụ sang PostgreSQL" = D-8 = BLOCKED OWNER** — **KHÔNG thực hiện**, không ép cổng xanh. **Đây KHÁC `G19-C6`.**
+2. **`G19-C6` phần CÒN TREO:** `nang_len_v10` **CHƯA áp** (`PHIEN_BAN_SCHEMA` vẫn **9**) — tức `truy_van.DDL_G12Q` **chưa** được áp cho CSDL **đã ở v9**. Route đã nối, migration thì chưa. **Chủ sở hữu: AG-02 backend.**
+3. **Xin OWNER phê duyệt ĐÓNG BĂNG G22.** AG-00 **không tự phê duyệt**, **không mở G23**.
+
+## 6. GIỚI HẠN PHÉP ĐO — KHÔNG ĐO ĐƯỢC
+
+- Webhook `jt_digest` **ngoài mock** — BLOCKED (chưa cấp credentials: `V-13906-05`)
+- Idempotency **đa tiến trình** — chưa đo
+- Danh tính tiến trình **giết máy chủ** ở 3/9 lượt cũ — `dtrace` bị SIP chặn, `ps` bị sandbox chặn
+- **KHÔNG có lệnh gọi hãng nào được thực hiện** — kể cả sandbox (`V-G09-01`)
+- `V-G11-01` (URL webhook công khai) · `V-13913` (Docker) — **BLOCKED OWNER**
+
+## 7. BẰNG CHỨNG
+
+- Bộ kiểm: `app/thu/thu_qa_g22.py` · log: `trien_khai/g22-acceptance/ket_qua/*-full-08/`
+- Bộ đo: `trien_khai/g22-acceptance/nghiem_thu_ban_sao.py` · `BANG_SO_SANH.txt`
+- Bảo mật: `app/thu/thu_g22_regression.py` · `docs/G22_REGRESSION.md`
+- Cấu hình: `app/thu/thu_g22_cauhinh.py` · `docs/G22_CAUHINH.md`
+- Hợp đồng: `docs/G22_CONTRACT.md` · `docs/G22_TRUYVAN.md` · `docs/G22_SAOLUU.md`

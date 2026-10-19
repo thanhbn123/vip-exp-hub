@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""G19 / AG-04 — PHỦ 31 ROUTE CÒN THIẾU BẰNG PHÉP ĐO CÁCH LY TENANT.
+"""G19 / AG-04 — PHỦ HẾT KHOẢNG TRỐNG ROUTE BẰNG PHÉP ĐO CÁCH LY TENANT.
 
 BỐI CẢNH (đo được, không suy đoán)
 ----------------------------------
 Lượt nghiệm thu G18 (`docs/QA_G18_INTEGRATED.md`, dòng 223-259) đo được: hai dụng cụ đo V5
 (cách ly tenant) **ĐỒNG Ý ở 73 route** và **lệch PHẠM VI ở 31 route** — AG-06 phủ **104** route,
 AG-01 phủ **73**. Nghĩa là **31 route chưa từng được đo cách ly tenant bằng bộ của AG-01**.
+
+R1 không ghim lại các con số ấy. Khoảng trống hiện tại được TÍNH LẠI mỗi lượt bằng chính hai bộ
+trích của AG-06/AG-01 (ca A6), và danh sách mục cần đo (`MUC_CON_THIEU`) phải khớp CHÍNH XÁC
+phép so ấy — sản phẩm thêm route thì phép so tự lộ ra, không có con số viết cứng nào che mất.
 
 Tệp này làm BA việc, và KHÔNG thêm tính năng nào vào sản phẩm:
 
@@ -16,10 +20,11 @@ Tệp này làm BA việc, và KHÔNG thêm tính năng nào vào sản phẩm:
      (đi cây cú pháp `ast`) và khác AG-01 (`re` trên từng dòng nguồn).
   B. CHỨNG MINH bộ trích **CÓ RĂNG** bằng ĐỘT BIẾN trên BẢN SAO: tiêm route giả (phải THẤY),
      tiêm hai loại bịa (phải KHÔNG thấy), xoá route thật (phải MẤT).
-  C. ĐO CÁCH LY TENANT cho **31 mục còn thiếu**: mỗi mục phải có **ĐỐI CHỨNG DƯƠNG** (chính
-     route đó với chủ sở hữu hợp lệ trả 200 kèm dữ liệu CỦA CHÍNH MÌNH) và **ĐỐI CHỨNG ĐƯỜNG**
-     cho vế phủ định (tenant B trả dữ liệu CỦA B) — nếu không thì "B không thấy dữ liệu A" có
-     thể chỉ vì B chẳng nhận được gì. Mục nào không đo được thì ghi thẳng **CHƯA ĐO**.
+  C. ĐO CÁCH LY TENANT cho **mọi mục trong khoảng trống còn thiếu**: mỗi mục phải có **ĐỐI
+     CHỨNG DƯƠNG** (chính route đó với chủ sở hữu hợp lệ trả 200 kèm dữ liệu CỦA CHÍNH MÌNH) và
+     **ĐỐI CHỨNG ĐƯỜNG** cho vế phủ định (tenant B trả dữ liệu CỦA B) — nếu không thì "B không
+     thấy dữ liệu A" có thể chỉ vì B chẳng nhận được gì. Mục nào không đo được thì ghi thẳng
+     **CHƯA ĐO**.
 
 RÀNG BUỘC ĐÃ GIỮ
 ----------------
@@ -38,22 +43,44 @@ CHẠY
     python3 app/thu/thu_g19_route.py --do       # chỉ ĐO, in JSON thô để soi
 """
 
+import atexit
 import json
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 GOC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(GOC, "app")
 sys.path.insert(0, os.path.join(GOC, "trien_khai", "g19"))
+sys.path.insert(0, APP)          # `cau_hinh` nằm trong app/ — cần cho lời khai kho bên dưới
+import cau_hinh  # noqa: E402
 import bot_route_thi_hanh as BOT  # noqa: E402
 
-# 31 mục = 104 (AG-06) − 73 (AG-01). Danh sách này CHÉP LẠI từ phép so ở ca A6, không gõ tay.
-HAI_MUOI_MOT = [
+# ── R1 · BỘ THỬ TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ────────────────────────────
+# Bộ đo THẬT chạy trong TIẾN TRÌNH CON (`BOT.chay_may_chu` → `may_chu_do.py`), và con ấy tự
+# dựng thư mục dữ liệu TẠM RIÊNG rồi ghi đè `VIP_HUB_DATA`; tiến trình cha KHÔNG mở CSDL nào.
+# Thư mục tạm dưới đây chỉ để `khai_kho_kiem_thu()` có một nền TƯỜNG MINH để kiểm hai chốt cô
+# lập (không phải dữ liệu thật). Lời khai đi vào `os.environ`, mà `chay_may_chu` truyền
+# `env=dict(os.environ)` cho con — nên con thấy `VIP_KHO_DANG_CHAY=sqlite` trước khi gọi
+# `migrate.chay()`. Trước bản vá, 13 ca ERROR chỉ vì thiếu đúng lời khai này, không phải vì
+# bộ trích route hỏng. KHÔNG đưa mặc định SQLite vào `app/migrate.py`/cấu hình production.
+_NEN_CHA = tempfile.mkdtemp(prefix="g19-route-khai-")
+atexit.register(shutil.rmtree, _NEN_CHA, True)
+os.environ["VIP_HUB_DATA"] = _NEN_CHA
+cau_hinh.khai_kho_kiem_thu()
+
+# MỤC CẦN ĐO = khoảng trống (AG-06 − AG-01) của lượt này. Danh sách này CHÉP LẠI từ phép so ở
+# ca A6; ca A6 đối chiếu nó với phép so THẬT nên lệch là ĐỎ, không phải "ghi thêm một số mới".
+# KHÔNG ghim số mục: khi sản phẩm thêm route, khoảng trống tự đổi và danh sách phải được cập nhật
+# theo bằng chứng của A6, không theo một con số viết cứng trong tệp này.
+MUC_CON_THIEU = [
     "/api/v2/ai/su-kien", "/api/v2/ai/thong-ke", "/api/v2/audit", "/api/v2/auth/dang-nhap",
     "/api/v2/auth/dat-lai-mat-khau", "/api/v2/auth/quen-mat-khau", "/api/v2/auth/toi",
     "/api/v2/billing", "/api/v2/billing/du-thao", "/api/v2/dang-ky", "/api/v2/doi-soat/dot",
-    "/api/v2/don/can-doi-soat", "/api/v2/don/xuat-csv", "/api/v2/g09/can-soat",
+    "/api/v2/don/can-doi-soat", "/api/v2/don/loc-mo-ta", "/api/v2/don/xuat-csv",
+    "/api/v2/g09/can-soat",
     "/api/v2/g09/suc-khoe-hang", "/api/v2/goi", "/api/v2/hang", "/api/v2/platform/",
     "/api/v2/san-sang", "/api/v2/suc-khoe", "/api/v2/tai-chinh/cod", "/api/v2/tai-chinh/cong-no",
     "/api/v2/tai-chinh/kiem-nhat-ky", "/api/v2/tai-chinh/tong-so", "/api/v2/usage",
@@ -63,7 +90,7 @@ HAI_MUOI_MOT = [
 
 # `/api/v2/platform/` KHÔNG phải route — nó là HẰNG SỐ TIỀN TỐ của cổng chặn platform
 # (`duong.startswith("/api/v2/platform/")`, server.py:566) mà bộ AST của AG-06 đếm nhầm thành
-# route. Ca A7 và C31 đo lại điều đó bằng THI HÀNH, không bằng lập luận.
+# route. Ca A7 và C2 đo lại điều đó bằng THI HÀNH, không bằng lập luận.
 KHONG_PHAI_ROUTE = ["/api/v2/platform/"]
 
 
@@ -76,7 +103,7 @@ def T(duong, **k):
 
 
 # ═════════════════════════════════════════════════════════════════════════════════════════════
-# DANH SÁCH CA CÁCH LY — 31 mục, mỗi mục có ĐỐI CHỨNG DƯƠNG riêng
+# DANH SÁCH CA CÁCH LY — mỗi mục có ĐỐI CHỨNG DƯƠNG riêng
 # ═════════════════════════════════════════════════════════════════════════════════════════════
 CAC_CA = [
     T("/api/v2/ai/su-kien", ten="ai/su-kien — sổ sự kiện AI",
@@ -115,6 +142,13 @@ CAC_CA = [
     T("/api/v2/don/can-doi-soat", ten="don/can-doi-soat — đơn cần đối soát",
       khang_dinh_a=["{canary_a}"], khang_dinh_b=["{canary_b}"],
       ghi_chu="don_hang.ma_don mang dấu A/B"),
+    # G12 thêm route này SAU lượt đo G18, nên nó nằm trong khoảng trống AG-06 − AG-01 mà
+    # chưa từng có ca cách ly. Ca A6 (bất biến tập hợp) bắt được việc thiếu mục này; ca dưới
+    # là phép đo cách ly tương ứng — không phải "thêm ca cho đủ số".
+    T("/api/v2/don/loc-mo-ta", ten="don/loc-mo-ta — tự mô tả bộ lọc (toàn cục)",
+      kieu="toan_cuc", khang_dinh_a=['"bang": "don_hang"', '"truong": ['],
+      khang_dinh_b=['"bang": "don_hang"', '"truong": ['],
+      ghi_chu="KHÔNG đọc CSDL nghiệp vụ: hai tenant phải nhận GIỐNG NHAU, không dấu tenant"),
     T("/api/v2/don/xuat-csv", ten="don/xuat-csv — xuất CSV đơn hàng",
       khang_dinh_a=["{canary_a}"], khang_dinh_b=["{canary_b}"],
       ghi_chu="KHÔNG phải JSON: thân là CSV, phép so chạy trên văn bản thô"),
@@ -292,26 +326,37 @@ class A_BoTrichThuBa(unittest.TestCase):
         self.assertEqual([], la, "bộ ba đo route mà AG-06 KHÔNG thấy: %s" % la)
         print("  [A5] 0 route lạ: cả %d route của bộ ba đều nằm trong tập AG-06" % len(kq["route"]))
 
-    def test_a6_bo_trich_ba_phu_31_muc_con_thieu_cua_AG01(self):
-        """PHÉP SO QUYẾT ĐỊNH: 104 (AG-06) − 73 (AG-01) = 31 mục.
+    def test_a6_bo_trich_ba_phu_het_khoang_trong_cua_AG01(self):
+        """BẤT BIẾN (thay ghim số): danh sách mục cần đo == ĐÚNG khoảng trống AG-06 − AG-01.
 
-        Bộ ba phải THẤY **30 route thật** trong khoảng trống đó; mục thứ 31
-        (`/api/v2/platform/`) KHÔNG phải route và ca A7 đo riêng điều đó. Nói cách khác: bộ ba
-        không "bỏ quên" mục nào — nó chỉ nói mục thứ 31 không phải route, và nói có bằng chứng.
+        Khoảng trống được TÍNH LẠI mỗi lượt từ chính hai bộ trích, nên nó tự đổi khi sản phẩm
+        thêm/bớt route. Không có con số "31" nào ở đây: nếu danh sách mục trong tệp lệch khỏi
+        phép so thật thì ca này ĐỎ, và người sửa phải cập nhật DANH SÁCH theo bằng chứng — chứ
+        không phải đổi một con số kỳ vọng cho khớp đầu ra.
+
+        Trong khoảng trống, mục đã được A7 chứng minh là artefact tiền tố (`KHONG_PHAI_ROUTE`)
+        KHÔNG phải route; MỌI mục còn lại phải được bộ ba THẤY. Như vậy "bộ ba không bỏ quên
+        mục nào" là một phép so TẬP HỢP, không phải một con số đếm được ghim lại.
         """
         import re
         kq = liet_ke_goc()
         ag06 = _ag06_route()
         ag01 = _ag01_route()
         thieu = sorted(ag06 - ag01)
-        self.assertEqual(31, len(thieu), "khoảng trống AG-06 − AG-01 KHÔNG còn là 31 mục")
-        self.assertEqual(sorted(HAI_MUOI_MOT), thieu,
-                         "danh sách 31 mục ghim trong tệp KHÁC phép so thật")
+        # BẤT BIẾN 1: danh sách mục cần đo phải khớp CHÍNH XÁC phép so thật (không ghim số).
+        self.assertEqual(sorted(MUC_CON_THIEU), thieu,
+                         "danh sách mục trong tệp KHÁC phép so AG-06 − AG-01 thật")
         that = [m for m in thieu if m not in KHONG_PHAI_ROUTE]
         chuan = lambda p: re.sub(r"/\d+", "/{id}", p.replace("g19-khong-co", "{ma}"))
         cua_toi = {chuan(r) for r in kq["route"]} | set(kq["route"])
         mat = [m for m in that if m not in cua_toi and chuan(m) not in cua_toi]
+        # BẤT BIẾN 2: mọi mục trong khoảng trống (trừ artefact đã khai) phải được bộ ba thấy.
         self.assertEqual([], mat, "bộ ba KHÔNG thấy các mục còn thiếu: %s" % mat)
+        # BẤT BIẾN 3: artefact trong khoảng trống đúng bằng danh sách đã chứng minh ở A7 —
+        # không có artefact nào mới lọt vào mà chưa được đo.
+        artefact = sorted(m for m in thieu if m in KHONG_PHAI_ROUTE)
+        self.assertEqual(sorted(KHONG_PHAI_ROUTE), artefact,
+                         "artefact tiền tố trong khoảng trống đã đổi ⇒ đọc lại ca A7")
         print("  [A6] AG-06=%d · AG-01=%d · khoảng trống=%d = %d route thật + %d artefact tiền tố"
               % (len(ag06), len(ag01), len(thieu), len(that), len(thieu) - len(that)))
         print("       bộ ba thấy đủ %d/%d route thật (mục còn lại do ca A7 đo riêng)"
@@ -545,10 +590,10 @@ class B_DotBien(unittest.TestCase):
 
 
 # ═════════════════════════════════════════════════════════════════════════════════════════════
-# C. ĐO CÁCH LY TENANT CHO 31 MỤC CÒN THIẾU
+# C. ĐO CÁCH LY TENANT CHO TOÀN BỘ KHOẢNG TRỐNG CÒN THIẾU
 # ═════════════════════════════════════════════════════════════════════════════════════════════
 class C_DoCachLy(unittest.TestCase):
-    """MỘT tiến trình đo cho cả 31 ca; mỗi ca là một test riêng để nhìn được ca nào hỏng."""
+    """MỘT tiến trình đo cho cả bộ ca; mỗi ca là một test riêng để nhìn được ca nào hỏng."""
 
     @classmethod
     def setUpClass(cls):
@@ -565,7 +610,7 @@ class C_DoCachLy(unittest.TestCase):
               % self.kq["giam_sat"]["so_luot_connect"])
 
     def test_c1_moi_ca_deu_co_doi_chung_duong_va_khong_ro_ri(self):
-        """TỔNG HỢP: đếm ĐẠT / CHƯA ĐO / RÒ RỈ trên toàn bộ 31 mục.
+        """TỔNG HỢP: đếm ĐẠT / CHƯA ĐO / RÒ RỈ trên toàn bộ khoảng trống cần đo.
 
         Đồng thời TỰ KIỂM TÍNH KHÔNG-RỖNG: một ca có danh sách khẳng định RỖNG thì `all([])` là
         True, tức là nó "đạt" mà không hề khẳng định gì. Ca này làm chuyện đó thành ĐỎ.
@@ -585,23 +630,28 @@ class C_DoCachLy(unittest.TestCase):
                      c["B"]["ma"], "đạt" if c["B"]["dat"] else "KHÔNG"))
 
     def test_c2_khong_route_that_nao_bi_bo_quen(self):
-        """31 MỤC phải được đo HẾT: 30 route thật + 1 mục chứng minh không phải route.
+        """BẤT BIẾN: tập MỤC đã đo == tập MỤC cần đo, không ghim tổng số.
 
         Số CA nhiều hơn số MỤC là chuyện bình thường: một mục có thể cần nhiều lượt đo (ví dụ
         cửa webhook cần cả 202 lượt-đầu, 200 lượt-gửi-lại, và 401 khi ký sai). Điều phải khớp là
-        **tập MỤC**, không phải số ca.
+        **tập MỤC**, không phải số ca — nên phép so dưới đây là phép so TẬP HỢP.
 
         Mục `/api/v2/platform/` không nằm trong danh sách ca C vì nó KHÔNG phải route — nó được
-        đo bằng ca A7 (phiên nền tảng gọi vào ⇒ 404 nhánh rơi).
+        đo bằng ca A7 (phiên nền tảng gọi vào ⇒ 404 nhánh rơi). Vì vậy nó bị TRỪ khỏi cả hai vế;
+        phép so vẫn bắt được mục thật nào bị bỏ quên.
         """
-        self.assertEqual(31, len(HAI_MUOI_MOT), "danh sách mục ghim phải là 31")
+        self.assertEqual(len(MUC_CON_THIEU), len(set(MUC_CON_THIEU)),
+                         "danh sách mục cần đo có mục TRÙNG")
         do = {_ve_ag06(c["mau"]) for c in self.kq["ca"]}
-        thieu = [m for m in HAI_MUOI_MOT if m not in do and m not in KHONG_PHAI_ROUTE]
-        self.assertEqual([], thieu, "mục chưa được đo: %s" % thieu)
-        self.assertEqual(30, len(do - set(KHONG_PHAI_ROUTE)),
-                         "phải đo đủ 30 route THẬT (các ca webhook là nhiều CHIỀU của MỘT route)")
-        print("  [C2] đã đo đủ 31/31 MỤC = 30 route thật (ca C) + 1 artefact (ca A7); "
-              "dùng %d ca" % len(self.kq["ca"]))
+        khai = set(MUC_CON_THIEU) - set(KHONG_PHAI_ROUTE)
+        da_do = do - set(KHONG_PHAI_ROUTE)
+        self.assertEqual(khai, da_do,
+                         "tập mục ĐÃ ĐO khác tập mục CẦN ĐO: thiếu=%s · thừa=%s"
+                         % (sorted(khai - da_do), sorted(da_do - khai)))
+        self.assertNotIn(KHONG_PHAI_ROUTE[0], do,
+                         "artefact tiền tố phải đo bằng ca A7, không được lọt vào ca C")
+        print("  [C2] đã đo đủ %d MỤC = %d route thật (ca C) + %d artefact (ca A7); dùng %d ca"
+              % (len(MUC_CON_THIEU), len(khai), len(KHONG_PHAI_ROUTE), len(self.kq["ca"])))
 
 
 def _sinh_ca_theo_route():
@@ -642,10 +692,13 @@ _sinh_ca_theo_route()
 class D_ConSoCuoi(unittest.TestCase):
 
     def test_d1_con_so_phu(self):
-        """X/104 — con số cuối, và nó phải KHỚP GIỮA HAI ĐƯỜNG ĐO ĐỘC LẬP.
+        """BẤT BIẾN: hai đường đo độ phủ phải ra CÙNG MỘT TẬP route, không chỉ cùng số đếm.
 
-        Đường 1: phép so tập hợp (bộ ba ↔ AG-06 ↔ AG-01). Đường 2: đếm số ca cách ly ĐẠT.
-        Hai đường phải ra CÙNG một con số; lệch nghĩa là một trong hai đang nói dối.
+        Đường 1: phép so tập hợp (bộ ba ↔ AG-06 ↔ AG-01). Đường 2: các ca cách ly ĐẠT.
+        Ghim cũ đòi đúng 103 route; con số ấy vô nghĩa khi sản phẩm thêm route — bản thân nó
+        đã lệch vì G12 thêm `/api/v2/don/loc-mo-ta`. Ở đây so TẬP: mọi route THẬT của AG-06
+        phải được bộ ba thấy, và mọi route thật ấy phải thuộc AG-01 hoặc lượt đo này. Khi sản
+        phẩm thêm route, phép so tự đỏ nếu đường đo không phủ tới — không cần sửa một con số.
         """
         import re
         kq = liet_ke_goc()
@@ -659,18 +712,23 @@ class D_ConSoCuoi(unittest.TestCase):
                     if c["dat"] and c["mau"] not in KHONG_PHAI_ROUTE}
         khong_dat = [c for c in cl["ca"] if not c["dat"]]
 
-        self.assertEqual(103, len(that), "số route THẬT của AG-06 phải là 103")
-        self.assertEqual(103, len(cua_toi & that), "bộ ba phải phủ đủ 103/103 route thật")
-        self.assertEqual(len(that), len(phu_ag01) + len(dat_that),
-                         "hai đường đếm độ phủ KHÔNG khớp nhau")
+        # BẤT BIẾN 1: bộ ba thấy ĐỦ tập route thật của AG-06 (không ghim tổng số).
+        self.assertEqual(that, cua_toi & that,
+                         "bộ ba THIẾU route thật của AG-06: %s" % sorted(that - (cua_toi & that)))
+        # BẤT BIẾN 2: hai đường đếm độc lập phủ ĐÚNG cùng một tập (mạnh hơn so số lượng).
+        self.assertEqual(that, phu_ag01 | dat_that,
+                         "hai đường đếm độ phủ KHÔNG khớp nhau: thiếu=%s · thừa=%s"
+                         % (sorted(that - (phu_ag01 | dat_that)),
+                            sorted((phu_ag01 | dat_that) - that)))
         print("\n  [D1] ================= CON SỐ CUỐI =================")
         print("       AG-06 đếm                 : %d mục" % len(ag06))
         print("         trong đó route THẬT     : %d" % len(that))
         print("         artefact tiền tố        : %d  (%s — ca A7 chứng minh không phải route)"
               % (len(ag06) - len(that), KHONG_PHAI_ROUTE[0]))
         print("       AG-01 phủ                 : %d route" % len(ag01))
-        print("       Khoảng trống G18          : %d mục = %d route thật + 1 artefact"
-              % (len(ag06 - ag01), len(ag06 - ag01) - len(KHONG_PHAI_ROUTE)))
+        print("       Khoảng trống AG-06 − AG-01: %d mục = %d route thật + %d artefact"
+              % (len(ag06 - ag01), len(ag06 - ag01) - len(KHONG_PHAI_ROUTE),
+                 len(KHONG_PHAI_ROUTE)))
         print("       Lượt này ĐO ĐƯỢC         : %d/%d mục khoảng trống (%d route thật + A7)"
               % (len(cl["ca"]) - len(khong_dat), len(cl["ca"]),
                  len(dat_that)))

@@ -30,7 +30,12 @@ while [ $i -lt 40 ]; do
 done
 [ -z "$CONG" ] && { echo "KHÔNG tìm được cổng rỗi sau 40 lượt thử"; exit 2; }
 
-export VIP_HUB_DATA="$NEN" VIP_E2E_CONG="$CONG"
+# R1 — BOOTSTRAP TỰ KHAI KHO ĐANG CHẠY. `$NEN` là thư mục TẠM do CHÍNH script này tạo bằng
+# `mktemp -d` (nền cô lập, không phải dữ liệu thật), nên bộ thử tự khai `sqlite` thay vì bắt
+# người chạy nhớ `export`. Lời khai đi vào môi trường của `python3 app/migrate.py` bên dưới —
+# nếu thiếu, cổng fail-closed của G22 TỪ CHỐI ngay ở bước migrate và E2E chết không có phép đo
+# nào (đo được trước bản vá: exit 1 · 0 ca). KHÔNG đặt biến này cho dữ liệu thật/production.
+export VIP_HUB_DATA="$NEN" VIP_E2E_CONG="$CONG" VIP_KHO_DANG_CHAY=sqlite
 cd "$GOC"
 python3 app/migrate.py  > "$NEN/migrate.log" 2>&1
 python3 app/khoi_tao.py > "$NEN/seed.log"    2>&1

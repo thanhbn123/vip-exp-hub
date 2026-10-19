@@ -27,11 +27,21 @@ os.environ["VIP_HUB_BACKOFF"] = "0.05"
 os.environ["VIP_HUB_RESET_TOKEN"] = "1"
 
 import bao_mat   # noqa: E402
+import cau_hinh  # noqa: E402
 import csdl      # noqa: E402
 import quyen     # noqa: E402
 import server    # noqa: E402
 import webhook   # noqa: E402
 import khoi_tao  # noqa: E402
+
+# ── R1 · BỘ THỬ TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ────────────────────────────
+# `test_014` chạy `python3 app/migrate.py` trong TIẾN TRÌNH CON; `migrate.sao_luu()` TỪ CHỐI khi
+# kho đang chạy chưa được khai, nên trước bản vá này phép đo đỏ vì thiếu khai chứ không phải vì
+# sản phẩm. `_tam` là thư mục TẠM do chính bộ thử vừa tạo (mkdtemp), KHÔNG phải dữ liệu thật;
+# `khai_kho_kiem_thu()` kiểm đúng hai chốt cô lập trước khi đặt `VIP_KHO_DANG_CHAY=sqlite` vào
+# `os.environ`. Từ đó mọi `dict(os.environ, ...)` của tiến trình con (test_014) đều mang lời khai.
+# KHÔNG đưa mặc định SQLite vào `app/migrate.py` hay cấu hình production: chốt fail-closed giữ nguyên.
+cau_hinh.khai_kho_kiem_thu()
 
 # Cổng 0 = để hệ tự cấp một cổng RỖI. Cổng cố định làm bộ thử báo HỎNG GIẢ khi hai
 # worktree chạy cùng lúc (AG-04 đo được 15/10: `Address already in use` ở lượt đầu,
@@ -261,17 +271,42 @@ class ThuG01G02(unittest.TestCase):
 
     # ---------- TEST-010 ----------
     def test_010_doi_tenant_id_trong_request_khong_vuot_quyen(self):
-        # nhét tenant_id của B vào body/query theo mọi kiểu — backend phải bỏ qua
+        """`tenant_id` client tự khai KHÔNG BAO GIỜ đổi được ngữ cảnh tenant.
+
+        HỢP ĐỒNG HIỆN HÀNH (G12/G22) có HAI vế, và phép đo phải đo cả hai thay vì đoán một vế:
+          · body: server BỎ QUA `tenant_id` — đơn vẫn thuộc tenant của phiên (đối chứng dương);
+          · query: lớp truy vấn CÓ DANH SÁCH TRẮNG trường lọc, tên lạ bị TỪ CHỐI 400 chứ KHÔNG
+            bị bỏ qua im lặng (`truy_van._kiem_ten_la`). Bản cũ đòi 200 rồi đọc `kq["don"]`,
+            nên nó ghim một hợp đồng đã bị thay — lỗi của phép đo, không phải rò tenant.
+        """
+        # (1) ĐỐI CHỨNG DƯƠNG — body mang tenant_id của B mà đơn vẫn thuộc A.
         st, kq = self.a.goi("/api/v2/don", "POST", dict(DON, tenant_id=self.tid_b))
-        self.assertEqual(st, 201)
+        self.assertEqual(st, 201, kq)
         d = csdl.mot("SELECT tenant_id FROM don_hang WHERE id=?", (kq["don"]["id"],))
         self.assertEqual(d["tenant_id"], self.tid_a, "tenant_id trong body ghi đè được ngữ cảnh!")
+
+        # (2) HỢP ĐỒNG TRUY VẤN: tenant_id không nằm trong danh sách trắng ⇒ 400, nêu đúng tên.
         st, kq = self.a.goi(f"/api/v2/don?tenant_id={self.tid_b}")
-        self.assertTrue(all(x["id"] != self.don_b for x in kq["don"]))
+        self.assertEqual(st, 400, f"query lạ phải bị TỪ CHỐI, không được bỏ qua: {kq}")
+        self.assertIn("tenant_id", kq.get("loi", ""),
+                      "400 phải NÓI RÕ tên điều kiện lạ, không phải lỗi chung")
+
+        # (3) ĐỐI CHỨNG ĐƯỜNG — truy vấn HỢP LỆ vẫn 200 và chỉ trả dữ liệu của A. Dùng tham
+        # số điều khiển HỢP LỆ (`gioi_han`) thay vì một bộ lọc trạng thái: đơn của A đã bị
+        # test_004 đổi trạng thái, nên bộ lọc trạng thái sẽ đo "không thấy" vì lý do sai.
+        st, kq = self.a.goi("/api/v2/don?gioi_han=200")
+        self.assertEqual(st, 200, kq)
+        ids = {x["id"] for x in kq["don"]}
+        self.assertIn(self.don_a, ids, "truy vấn hợp lệ của A phải thấy đơn của CHÍNH A")
+        self.assertNotIn(self.don_b, ids, "truy vấn hợp lệ của A thấy đơn của B!")
+
+        # (4) Body tenant_id ở endpoint khác cũng bị bỏ qua.
         st, kq = self.a.goi("/api/v2/khach-hang", "POST", {"ten": "KH", "tenant_id": self.tid_b})
+        self.assertEqual(st, 201, kq)
         self.assertEqual(csdl.mot("SELECT tenant_id FROM khach_hang WHERE id=?",
                                   (kq["id"],))["tenant_id"], self.tid_a)
-        # switch sang tenant mình KHÔNG thuộc → bị từ chối
+
+        # (5) switch sang tenant mình KHÔNG thuộc → bị từ chối.
         self.assertEqual(self.a.goi("/api/v2/auth/doi-tenant", "POST", {"tenant_id": self.tid_b})[0], 403)
 
     # ---------- TEST-011 ----------
@@ -322,8 +357,16 @@ class ThuG01G02(unittest.TestCase):
 
     # ---------- TEST-014 ----------
     def test_014_migration_bao_toan_du_lieu(self):
-        """Dựng CSDL dạng v1 (schema cũ) có dữ liệu, chạy migrate thật, kiểm bảo toàn + rollback."""
+        """Dựng CSDL v1 có dữ liệu, chạy migrate thật, kiểm bảo toàn + HỢP ĐỒNG KHÔI PHỤC.
+
+        Hợp đồng G21/G22: `--rollback` mặc định fail-closed — bản sao lưu tụt schema so với
+        CSDL đang chạy thì TỪ CHỐI và KHÔNG đụng CSDL; đường khôi phục được phép là cờ
+        `--toi-da-biet-chua-kiem-duoc` do người trực chủ động chọn. Bản cũ đòi rollback vô
+        điều kiện về v1, tức là đòi sản phẩm BỎ CHỐT để phép thử xanh — phép đo sai, không
+        phải sản phẩm sai.
+        """
         thu_muc = tempfile.mkdtemp(prefix="vip-hub-migr-")
+        self.addCleanup(shutil.rmtree, thu_muc, True)
         db = os.path.join(thu_muc, "hub.db")
         kn = sqlite3.connect(db)
         kn.executescript("""
@@ -418,19 +461,54 @@ class ThuG01G02(unittest.TestCase):
                          csdl.PHIEN_BAN_SCHEMA, "migrate không đưa lên phiên bản mới nhất")
         kn.close()
 
-        # ROLLBACK về backup → phải trở lại schema v1 (còn cột vai_tro)
+        # ==== HỢP ĐỒNG KHÔI PHỤC (G21/G22) — đo CẢ HAI vế, không nới chốt =================
+        # Bản sao lưu vừa tạo ở schema v0 (CSDL v1 không có bảng schema_version); CSDL đang
+        # chạy ở v10. Đây ĐÚNG là lượt "tụt schema" mà chốt fail-closed sinh ra để chặn.
         bk = sorted(os.listdir(os.path.join(thu_muc, "sao-luu")))
         self.assertTrue(bk, "migration không tạo backup!")
         duong_bk = os.path.join(thu_muc, "sao-luu", [b for b in bk if "truoc-migrate" in b][0])
+
+        # (1) ĐỐI CHỨNG ÂM: khôi phục tụt schema PHẢI bị TỪ CHỐI, kèm lý do đọc được.
         kq = subprocess.run([sys.executable, os.path.join(GOC_APP, "migrate.py"), "--rollback", duong_bk],
+                            capture_output=True, text=True, env=moi_truong, cwd=GOC_DA)
+        self.assertNotEqual(kq.returncode, 0,
+                            "rollback tụt schema v10→v0 KHÔNG bị chặn!\n" + kq.stdout + kq.stderr)
+        self.assertIn("TỤT SCHEMA", kq.stdout + kq.stderr,
+                      "lượt từ chối phải nói rõ nguyên nhân, không phải lỗi chung")
+
+        # (1b) BẤT BIẾN FAIL-CLOSED: lượt bị từ chối KHÔNG được đụng CSDL đang chạy.
+        kn = sqlite3.connect(db)
+        self.assertEqual(kn.execute("SELECT MAX(phien_ban) FROM schema_version").fetchone()[0],
+                         csdl.PHIEN_BAN_SCHEMA, "lượt từ chối đã hạ schema của CSDL đang chạy!")
+        self.assertEqual(kn.execute("SELECT COUNT(*) FROM don_hang").fetchone()[0], 1)
+        cot = [r[1] for r in kn.execute("PRAGMA table_info(users)")]
+        self.assertNotIn("vai_tro", cot, "CSDL đang chạy đã bị hạ TRƯỚC khi lệnh bị từ chối!")
+        kn.close()
+
+        # (2) ĐỐI CHỨNG DƯƠNG — ĐƯỜNG KHÔI PHỤC ĐƯỢC PHÉP: cùng tệp, cùng bộ đo, chỉ thêm
+        # đúng cờ mà thông điệp từ chối chỉ ra (`--toi-da-biet-chua-kiem-duoc`). Điều này
+        # chứng minh lượt đỏ ở (1) là do CHỐT, không phải do bản sao lưu hỏng.
+        kq = subprocess.run([sys.executable, os.path.join(GOC_APP, "migrate.py"), "--rollback", duong_bk,
+                             "--toi-da-biet-chua-kiem-duoc"],
                             capture_output=True, text=True, env=moi_truong, cwd=GOC_DA)
         self.assertEqual(kq.returncode, 0, kq.stdout + kq.stderr)
         kn = sqlite3.connect(db)
         cot = [r[1] for r in kn.execute("PRAGMA table_info(users)")]
-        self.assertIn("vai_tro", cot, "rollback không đưa được về schema cũ!")
+        self.assertIn("vai_tro", cot, "đường khôi phục được phép không đưa được về schema cũ!")
         self.assertEqual(kn.execute("SELECT COUNT(*) FROM don_hang").fetchone()[0], 1)
         kn.close()
-        shutil.rmtree(thu_muc, ignore_errors=True)
+
+        # (3) KHÔI PHỤC XONG VẪN NÂNG CẤP LẠI ĐƯỢC — giữ vòng tròn trên BẢN SAO tạm, không
+        # phải dữ liệu thật: đường khôi phục không được để lại một CSDL kẹt ở schema cũ.
+        kq = subprocess.run([sys.executable, os.path.join(GOC_APP, "migrate.py")],
+                            capture_output=True, text=True, env=moi_truong, cwd=GOC_DA)
+        self.assertEqual(kq.returncode, 0, kq.stdout + kq.stderr)
+        kn = sqlite3.connect(db)
+        self.assertEqual(kn.execute("SELECT MAX(phien_ban) FROM schema_version").fetchone()[0],
+                         csdl.PHIEN_BAN_SCHEMA, "khôi phục xong không nâng cấp lại được")
+        self.assertEqual(kn.execute("SELECT COUNT(*) FROM don_hang").fetchone()[0], 1,
+                         "dữ liệu mất trong vòng khôi phục → nâng cấp lại")
+        kn.close()
 
     # ---------- TEST-015 ----------
     def test_015_gateway_cu_van_dat(self):

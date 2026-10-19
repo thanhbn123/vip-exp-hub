@@ -9,6 +9,116 @@ set -e
 GOC=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$GOC"
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# BỘ ĐẾM + LUẬT PHÁN — MỘT chỗ duy nhất, dùng cho CẢ vòng lặp lẫn chế độ `--tinh-ca`
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# VÁ 19/10/2026 (X1 đo được, Z2 vá): `app/thu/thu_g22_gioihan.py` **CHẠY THẬT 32 ca** nhưng bảng
+# tổng kết của bộ chạy này in `0 ca` — bộ thử KHÔNG chết, chỉ có bộ ĐẾM sai.
+#
+# Vì sao: khi có ca HỎNG/KHUYẾT, bộ thử viết tay in dòng cuối
+#     `TỔNG: 32 ca — HỎNG (ĐẠT=27 · HỎNG=3 · KHUYẾT=2)`
+# còn bộ đếm cũ chỉ nhận `Ran N` và `N ca — ĐẠT` ⇒ không khớp khuôn nào ⇒ đọc thành 0.
+# Như thế "0 ca" gộp CHẾT THẬT với "CHẠY 32 CA RỒI HỎNG" vào cùng một nhãn — đúng thứ §12.1 luật 3
+# cấm: kết luận chỉ được nói trong đúng phạm vi ĐÃ ĐO.
+#
+# NAY nhận thêm BA khuôn, giữ nguyên THỨ TỰ ƯU TIÊN cũ (một bộ in nhiều khuôn thì `Ran N` vẫn
+# thắng — B5 của `thu_g22_gioihan.py` canh đúng thứ tự này):
+#     1. `Ran N`          (unittest)                    — lần CUỐI
+#     2. `N ca — ĐẠT`     (bộ viết tay, lượt đạt)      — lần CUỐI
+#     3. `N ca — HỎNG`    (bộ viết tay, lượt hỏng)     — lần CUỐI   ← MỚI
+#     4. `TỔNG: N ca`     (tổng kết tự công bố)        — lần CUỐI   ← MỚI
+#     5. `số ca ĐẠT/HỎNG/BỎ QUA/KHÔNG CHẠY/CHẬP CHỜN : a/b/c/d/e`
+#                         (cổng E2E `thu_g22_e2e.py`) — tổng a+b+c+d+e ← MỚI
+#        Vì sao có khuôn 5: cùng một lớp lỗi. Sau khi vá Chromium (việc 2), cổng E2E **chạy thật**
+#        nhưng output của nó không có `Ran`/`N ca — ĐẠT`/`TỔNG:` ⇒ bộ đếm vẫn đọc 0 và còn phán
+#        HỎNG oan một lượt đã thoát 0. Đọc đúng khuôn của nó là đếm đúng, KHÔNG phải nới luật.
+#
+# KHÔNG nới điều kiện ĐẠT. Ngược lại, siết thêm MỘT vế đã đo được: một bộ thoát 0 nhưng TỰ IN
+# `ca — HỎNG` phải là ĐỎ — nếu không, nó vừa tự báo hỏng vừa được bảng ghi ✓.
+#
+# Vì sao gom vào HÀM: bộ tự kiểm `app/thu/thu_g22_demca2.py` phải đo CHÍNH bộ đếm này, không đo
+# bản chép lại (hai bản sẽ trôi khỏi nhau — §41). Chế độ `--tinh-ca` chỉ gọi đúng hàm dưới đây.
+tinh_ca() {
+    TC_MA=$1
+    TC_OUT=$2
+    TC_N=$(printf '%s' "$TC_OUT" | grep -oE 'Ran [0-9]+' | tail -1 | grep -oE '[0-9]+' || true)
+    TC_KHUON="Ran [0-9]+"
+    if [ -z "$TC_N" ]; then
+        TC_N=$(printf '%s' "$TC_OUT" | grep -oE '[0-9]+ ca — ĐẠT' | tail -1 | grep -oE '^[0-9]+' || true)
+        TC_KHUON="N ca — ĐẠT"
+    fi
+    if [ -z "$TC_N" ]; then
+        TC_N=$(printf '%s' "$TC_OUT" | grep -oE '[0-9]+ ca — HỎNG' | tail -1 | grep -oE '^[0-9]+' || true)
+        TC_KHUON="N ca — HỎNG"
+    fi
+    if [ -z "$TC_N" ]; then
+        TC_N=$(printf '%s' "$TC_OUT" | grep -oE 'TỔNG: [0-9]+ ca' | tail -1 | grep -oE '[0-9]+' || true)
+        TC_KHUON="TỔNG: N ca"
+    fi
+    # Khuôn 5 — cổng E2E: `số ca  ĐẠT/HỎNG/BỎ QUA/KHÔNG CHẠY/CHẬP CHỜN : a/b/c/d/e`.
+    # Số ca ĐÃ CHẠY là TỔNG a+b+c+d+e (bỏ sót `did not run` là đếm thiếu đúng chỗ nó cần nói).
+    if [ -z "$TC_N" ]; then
+        TC_DAY=$(printf '%s' "$TC_OUT" | grep -oE 'số ca +ĐẠT/HỎNG/BỎ QUA/KHÔNG CHẠY/CHẬP CHỜN : [0-9]+/[0-9]+/[0-9]+/[0-9]+/[0-9]+' | tail -1 || true)
+        if [ -n "$TC_DAY" ]; then
+            TC_N=0
+            _tc_ifs=$IFS
+            IFS=/
+            for _tc_p in $(printf '%s' "$TC_DAY" | sed 's/.*: //'); do
+                TC_N=$((TC_N + _tc_p))
+            done
+            IFS=$_tc_ifs
+            TC_KHUON="số ca ĐẠT/HỎNG/BỎ QUA/KHÔNG CHẠY/CHẬP CHỜN"
+        fi
+    fi
+    if [ -z "$TC_N" ]; then
+        TC_N=0
+        TC_KHUON="không khớp khuôn nào"
+    fi
+    if printf '%s' "$TC_OUT" | grep -qE '^OK( |$)|ca — ĐẠT|số ca +ĐẠT/HỎNG'; then TC_DAU_VET=1; else TC_DAU_VET=0; fi
+    # Dòng PHÁN QUYẾT là dòng CUỐI CÙNG (sau khi bỏ dòng trống) — KHÔNG phải "có chữ HỎNG ở đâu
+    # đó". Vì sao phải chặt như thế, đo được trên cây thật: `thu_g22_zeroca.py` thoát 0, 17/17 ca
+    # đạt, nhưng docstring của ca 04 trích nguyên văn `TỔNG: 32 ca — HỎNG`; unittest -v in
+    # docstring ra, nên bản vá đầu tiên gắn HỎNG oan cho nó. Dòng cuối của một bộ thử mới là
+    # phán quyết của chính nó; chữ HỎNG nằm giữa bài là TRÍCH DẪN.
+    TC_CUOI=$(printf '%s' "$TC_OUT" | grep -v '^[[:space:]]*$' | tail -1 || true)
+    if printf '%s' "$TC_CUOI" | grep -qE '[0-9]+ ca — HỎNG'; then TC_HONG=1; else TC_HONG=0; fi
+    TC_PHAN=HONG
+    TC_LY_DO=""
+    if [ "$TC_MA" -eq 0 ] && [ "$TC_DAU_VET" = 1 ] && [ "$TC_N" -gt 0 ] && [ "$TC_HONG" -eq 0 ]; then
+        TC_PHAN=DAT
+    elif [ "$TC_MA" -eq 0 ] && [ "$TC_N" -eq 0 ] && [ "$TC_HONG" -eq 0 ] \
+         && printf '%s' "$TC_OUT" | grep -q 'skipped'; then
+        TC_PHAN=BO_QUA
+    elif [ "$TC_MA" -ne 0 ]; then
+        TC_LY_DO="mã thoát $TC_MA"
+    elif [ "$TC_HONG" -eq 1 ]; then
+        TC_LY_DO='thoát 0 nhưng báo cáo tự in `ca — HỎNG`'
+    elif [ "$TC_DAU_VET" = 0 ]; then
+        TC_LY_DO="thoát 0 nhưng KHÔNG có dấu vết đã chạy ca nào"
+    else
+        TC_LY_DO="thoát 0 nhưng đếm được 0 ca"
+    fi
+}
+
+# CHẾ ĐỘ ĐO BỘ ĐẾM (dùng bởi `app/thu/thu_g22_demca2.py`):
+#     sh app/thu/chay_tat_ca.sh --tinh-ca <mã-thoát> <tệp-output>
+# In bốn dòng `KHOÁ=giá-trị`. Mã thoát 0 = ĐỌC ĐƯỢC; phán quyết nằm ở `PHAN`, KHÔNG phải mã thoát
+# của chế độ này. Cố ý không in gì khác để bộ tự kiểm phân tích được.
+if [ "${1:-}" = "--tinh-ca" ]; then
+    case "${2:-}" in
+        ''|*[!0-9]*) echo "mã thoát phải là số: '${2:-}'" >&2; exit 2 ;;
+    esac
+    if [ "$#" -ne 3 ] || [ ! -f "$3" ]; then
+        echo "dùng: sh app/thu/chay_tat_ca.sh --tinh-ca <mã-thoát> <tệp-output>" >&2
+        exit 2
+    fi
+    _out=$(cat "$3")
+    tinh_ca "$2" "$_out"
+    printf 'N=%s\nKHUON=%s\nPHAN=%s\nLY_DO=%s\n' "$TC_N" "$TC_KHUON" "$TC_PHAN" "$TC_LY_DO"
+    exit 0
+fi
+
 # VÁ 15/10/2026 (N-G18-00, AG-01 phát hiện — AG-00 chốt): MÔI TRƯỜNG GIT HỎNG LÀM HAI NHIỆT KẾ
 # ĐO HAI THỨ KHÁC NHAU.
 #
@@ -96,12 +206,11 @@ for t in $(find app/thu gateway/thu -name 'thu_*.py' -type f ! -name 'thu_e2e.py
     # của chính lệnh vừa hỏng. Đã đo: mọi bộ đều được chạy, bộ hỏng được báo kèm lý do ĐÚNG.
     MA=0
     OUT=$(python3 "$t" 2>&1) || MA=$?
-    # Đếm ca: `Ran N` của unittest, hoặc `N ca — ĐẠT` của bộ thử viết tay.
-    N=$(printf '%s' "$OUT" | grep -oE 'Ran [0-9]+' | tail -1 | grep -oE '[0-9]+' || true)
-    if [ -z "$N" ]; then
-        N=$(printf '%s' "$OUT" | grep -oE '[0-9]+ ca — ĐẠT' | tail -1 | grep -oE '^[0-9]+' || true)
-    fi
-    N=${N:-0}
+    # Đếm ca + phán quyết: MỘT hàm, dùng CHUNG với chế độ `--tinh-ca` ở đầu tệp (bộ tự kiểm
+    # `thu_g22_demca2.py` gọi đúng hàm đó, không chép lại). Hàm nhận thêm `N ca — HỎNG` và
+    # `TỔNG: N ca`; xem khối "BỘ ĐẾM + LUẬT PHÁN" ở đầu tệp để biết vì sao (X1: 32 ca ⇒ đọc 0).
+    tinh_ca "$MA" "$OUT"
+    N=$TC_N
     TONG=$((TONG + N))
     # PHÁN BẰNG MÃ THOÁT, không bằng chữ trong output.
     #
@@ -117,10 +226,9 @@ for t in $(find app/thu gateway/thu -name 'thu_*.py' -type f ! -name 'thu_e2e.py
     #
     # Mã thoát một mình vẫn lừa được: một bộ thử bắt hết lỗi rồi thoát 0 mà KHÔNG chạy ca nào
     # cũng đạt. Nên đòi thêm DẤU VẾT ĐÃ CHẠY: đếm được số ca, hoặc có dòng OK/ĐẠT.
-    if printf '%s' "$OUT" | grep -qE '^OK( |$)|ca — ĐẠT'; then CO_DAU_VET=1; else CO_DAU_VET=0; fi
-    if [ "$MA" -eq 0 ] && [ "$CO_DAU_VET" = 1 ] && [ "$N" -gt 0 ]; then
+    if [ "$TC_PHAN" = DAT ]; then
         printf '  ✓ %-24s %4s ca\n' "$(basename "$t")" "$N"
-    elif [ "$MA" -eq 0 ] && [ "$N" -eq 0 ] && printf '%s' "$OUT" | grep -q 'skipped'; then
+    elif [ "$TC_PHAN" = BO_QUA ]; then
         # BỎ QUA là phán quyết THỨ BA, không gộp vào ĐẠT.
         # Trước 15/10/2026 chỉ có hai phán quyết, nên thu_postgres.py — bộ tự bỏ qua trừ khi
         # bật VIP_THU_POSTGRES=1 — hiện dấu ✓ trong MỌI báo cáo dù chạy KHÔNG MỘT CA NÀO.
@@ -130,13 +238,8 @@ for t in $(find app/thu gateway/thu -name 'thu_*.py' -type f ! -name 'thu_e2e.py
         printf '  ⊘ %-24s    BỎ QUA  %s\n' "$(basename "$t")" "${LY:-không nêu cách bật}"
         SO_BO_QUA=$((SO_BO_QUA + 1)); BO_QUA="$BO_QUA $(basename "$t")"
     else
-        LY_DO="mã thoát $MA"
-        if [ "$MA" -eq 0 ] && [ "$CO_DAU_VET" = 0 ]; then
-            LY_DO="thoát 0 nhưng KHÔNG có dấu vết đã chạy ca nào"
-        elif [ "$MA" -eq 0 ] && [ "$N" -eq 0 ]; then
-            LY_DO="thoát 0 nhưng đếm được 0 ca"
-        fi
-        printf '  ✗ %-24s %4s ca  HỎNG (%s)\n' "$(basename "$t")" "$N" "$LY_DO"
+        # Lý do đã được `tinh_ca` tính: mã thoát · tự in HỎNG · không dấu vết · 0 ca.
+        printf '  ✗ %-24s %4s ca  HỎNG (%s)\n' "$(basename "$t")" "$N" "$TC_LY_DO"
         HONG="$HONG $(basename "$t")"
         printf '%s' "$OUT" | grep -E '^(FAIL|ERROR):' | head -8 | sed 's/^/        /'
     fi

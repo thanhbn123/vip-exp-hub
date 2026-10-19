@@ -174,6 +174,110 @@ if [ ! -d "$GOC/node_modules/@playwright/test" ]; then
     exit 2
 fi
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# BẢN VÁ Z2 — ĐƯỜNG DẪN CHROMIUM (X1 đo được: `thu_g22_e2e.py` thoát 2 "KHÔNG có binary
+# Chromium … chromium_headless_shell-1194" dù binary CÓ trên máy).
+#
+# VÌ SAO: `PLAYWRIGHT_BROWSERS_PATH=0` bắt Playwright tìm trong
+# `<cây>/node_modules/playwright-core/.local-browsers`. `node_modules` KHÔNG được git mang theo,
+# nên một worktree MỚI luôn thiếu thư mục đó dù máy đã có binary. Đây là thiếu NHỊ PHÂN, không
+# phải lỗi sản phẩm — và KHÔNG được che bằng skip (`docs/QA_G21.md` §4.1, `N-G21-04`).
+#
+# CÁCH VÁ: self-heal bằng SYMLINK tới một kho `.local-browsers` đã có trên máy — đúng bước hạ
+# tầng của `docs/G21_BANPHIM_E2E.md` §10 và `docs/G22_CAUHINH.md` §6.4. Thứ tự ưu tiên:
+#   (1) `VIP_PLAYWRIGHT_KHO` (biến môi trường, đường dẫn TỚI thư mục `.local-browsers`)
+#   (2) kho của cây chuẩn `Projects-vip-express-hub` (đường `G22_CONTRACT` §544 chỉ định)
+#   (3) các worktree anh em cùng dải Orca
+#   (4) `~/code/veh4-g12-playwright`
+# KHÔNG dùng cache hệ thống `~/Library/Caches/ms-playwright` (chromium 1148/1243 của dự án
+# KHÁC — §10 G21). Không tìm được kho nào thì IN đường đã tìm + cách cài rồi thoát 2; không
+# lặng lẽ bỏ qua, không `skipTest`.
+PB_PATH=0
+KHO_BROWSER="$GOC/node_modules/playwright-core/.local-browsers"
+BIN_BROWSER="$KHO_BROWSER/chromium_headless_shell-1194/chrome-mac/headless_shell"
+SHA_BROWSER="a9752d8852a3972a07e4cddf63fa37019606336de0201631147519c732fa3040"
+
+chuan_bi_browser() {
+    if [ -f "$BIN_BROWSER" ]; then
+        echo "[giao-dien] Chromium: có sẵn tại $BIN_BROWSER"
+        return 0
+    fi
+    ANH_EM=$(dirname "$GOC")
+    DS_KHO="${VIP_PLAYWRIGHT_KHO:-}
+$ANH_EM/Projects-vip-express-hub/node_modules/playwright-core/.local-browsers
+$ANH_EM/*/node_modules/playwright-core/.local-browsers
+${HOME:-/nonexistent}/code/veh4-g12-playwright/node_modules/playwright-core/.local-browsers"
+    CHON=""
+    for c in $DS_KHO; do
+        [ -n "$c" ] || continue
+        if [ -f "$c/chromium_headless_shell-1194/chrome-mac/headless_shell" ]; then
+            CHON=$c
+            break
+        fi
+    done
+    if [ -z "$CHON" ]; then
+        echo "[giao-dien] KHÔNG có binary Chromium của Playwright."
+        echo "[giao-dien]   đã tìm: $BIN_BROWSER"
+        echo "[giao-dien]   và các kho .local-browsers:"
+        for c in $DS_KHO; do
+            [ -n "$c" ] && echo "[giao-dien]     · $c"
+        done
+        echo "[giao-dien]   cài:  PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium"
+        echo "[giao-dien]   hoặc nối một kho đã có:"
+        echo "[giao-dien]     ln -s <kho-.local-browsers> $KHO_BROWSER"
+        return 2
+    fi
+    if [ -e "$KHO_BROWSER" ] || [ -L "$KHO_BROWSER" ]; then
+        if [ -L "$KHO_BROWSER" ]; then
+            echo "[giao-dien] symlink .local-browsers HỎNG (đích không còn) — nối lại tới $CHON"
+            rm -f "$KHO_BROWSER"
+        else
+            # Thư mục THẬT nhưng thiếu binary: không xoá (có thể là bản cài dở của người dùng) —
+            # dùng đường thứ hai: biến môi trường.
+            echo "[giao-dien] $KHO_BROWSER TỒN TẠI nhưng thiếu binary — KHÔNG ghi đè thư mục thật."
+            echo "[giao-dien] dùng PLAYWRIGHT_BROWSERS_PATH=$CHON thay cho symlink"
+            PB_PATH=$CHON
+        fi
+    fi
+    if [ "$PB_PATH" = "0" ]; then
+        if mkdir -p "$GOC/node_modules/playwright-core" 2>/dev/null && ln -s "$CHON" "$KHO_BROWSER" 2>/dev/null; then
+            echo "[giao-dien] ĐÃ NỐI symlink .local-browsers -> $CHON"
+        else
+            # `node_modules` có thể chỉ-đọc: dùng biến môi trường, đường thứ hai hợp lệ.
+            echo "[giao-dien] KHÔNG tạo được symlink — dùng PLAYWRIGHT_BROWSERS_PATH=$CHON"
+            PB_PATH=$CHON
+        fi
+    fi
+    PB_SHA=""
+    if command -v shasum >/dev/null 2>&1; then
+        PB_SHA=$(shasum -a 256 "$CHON/chromium_headless_shell-1194/chrome-mac/headless_shell" 2>/dev/null | awk '{print $1}')
+    elif command -v sha256sum >/dev/null 2>&1; then
+        PB_SHA=$(sha256sum "$CHON/chromium_headless_shell-1194/chrome-mac/headless_shell" 2>/dev/null | awk '{print $1}')
+    fi
+    PB_VER=$("$CHON/chromium_headless_shell-1194/chrome-mac/headless_shell" --version 2>&1 || true)
+    echo "[giao-dien] Chromium tìm thấy: $CHON/chromium_headless_shell-1194/chrome-mac/headless_shell"
+    echo "[giao-dien] Chromium phiên bản: ${PB_VER:-KHÔNG hỏi được}"
+    if [ "$PB_SHA" = "$SHA_BROWSER" ]; then
+        echo "[giao-dien] Chromium sha256: $PB_SHA (KHỚP ghim)"
+    else
+        echo "[giao-dien] CẢNH BÁO: Chromium sha256 ${PB_SHA:-KHÔNG đọc được} KHÁC ghim $SHA_BROWSER"
+        echo "[giao-dien]          (vẫn dùng — nhưng số đo gắn với binary này, không gắn với ghim)"
+    fi
+    if [ ! -f "$BIN_BROWSER" ] && [ "$PB_PATH" != "0" ]; then
+        echo "[giao-dien] Chromium sẽ được tìm qua PLAYWRIGHT_BROWSERS_PATH (không có symlink trong cây)"
+    fi
+    return 0
+}
+chuan_bi_browser || exit 2
+
+# Chế độ CHỈ KIỂM ĐƯỜNG DẪN BROWSER (không dựng máy chủ, không chạy ca nào) — để đo bản vá
+# symlink trên một cây mới mà không phải chạy cả tầng 3:
+#     sh thu_giao_dien/chay.sh --kiem-browser
+if [ "${1:-}" = "--kiem-browser" ]; then
+    echo "[giao-dien] chế độ --kiem-browser: chỉ kiểm đường dẫn Chromium, KHÔNG chạy ca nào"
+    exit 0
+fi
+
 i=0
 while [ $i -lt 40 ]; do
     thu=$(awk 'BEGIN{srand();print 18000+int(rand()*2000)}')
@@ -212,6 +316,6 @@ echo "[giao-dien] nền=$NEN cổng=$CONG pid=$PID"
 # `|| MA=$?` là bản vá LỖI 1: KHÔNG để `set -e` thoát tại đây, nếu không thì mã thoát thật không
 # bao giờ được đọc và phần "mã thoát" của dòng PHẠM VI mất luôn.
 MA=0
-VIP_GD_GOC="$GOC_URL" VIP_GD_NEN="$NEN" PLAYWRIGHT_BROWSERS_PATH=0 \
+VIP_GD_GOC="$GOC_URL" VIP_GD_NEN="$NEN" PLAYWRIGHT_BROWSERS_PATH="$PB_PATH" \
     npx playwright test "$@" || MA=$?
 exit "$MA"

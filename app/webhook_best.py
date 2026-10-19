@@ -14,9 +14,10 @@
 #   · NGHĨA của từng mã trạng thái và CƠ CHẾ XÁC THỰC của BEST là CHƯA KIỂM CHỨNG. Bảng mã dưới
 #     đây là GIẢ THUYẾT PHÂN NHÓM để dựng máy trạng thái, mỗi dòng ghi rõ `muc = CHUA_KIEM_CHUNG`.
 #     Không dùng bảng này để đối soát tài chính hay để tuyên bố đã hiểu tài liệu hãng.
-#   · Với môi trường sandbox/production, hub KHÔNG có sơ đồ xác thực BEST ⇒ `chon_so_do()` trả
-#     None ⇒ mô-đun TỪ CHỐI (BLOCKED), không đoán header/chữ ký. Đường MOCK dùng HMAC của hub
-#     (`X-Webhook-Signature`), đúng như callback mô phỏng của chính dự án.
+#   · Sandbox/production: DOCX xác nhận JWT Bearer. Mô-đun gọi
+#     `xac_thuc_best.kiem_bearer_webhook` (so sánh hằng thời gian, kho Bearer mã hoá). Thiếu/sai
+#     Bearer ⇒ 401, KHÔNG lưu, KHÔNG ACK. Đường MOCK vẫn dùng HMAC của hub
+#     (`X-Webhook-Signature`) để các bộ thử cũ chạy được.
 #
 # KHÔNG gọi API BEST, KHÔNG tạo đơn thật, KHÔNG dùng credentials thật, KHÔNG ghi secret/token
 # vào payload_tho/headers_json/audit/response/sổ.
@@ -466,8 +467,8 @@ def quyet_dinh_chuyen(hien_tai, moi, mo_lai=False):
 def xac_thuc_webhook(tk, headers, body):
     """Xác thực callback theo sơ đồ do HUB chọn cho CHÍNH tài khoản này.
 
-    Trả `(ok, ly_do, ten_so_do, muc)`. Với BEST ở sandbox/production, hub chưa có sơ đồ
-    (BLOCKED) nên hàm từ chối — KHÔNG đoán header/chữ ký của hãng.
+    Trả `(ok, ly_do, ten_so_do, muc)`. Với BEST ở sandbox/production, DOCX xác nhận
+    JWT Bearer; hàm kiểm bằng Bearer đã lưu cho ĐÚNG tài khoản/tenant. Không có HMAC cho BEST thật.
     """
     mt = str(tk["moi_truong"] if "moi_truong" in tk.keys() else "mock") or "mock"
     if mt != cau_hinh.JT_MOCK:

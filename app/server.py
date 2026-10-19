@@ -1015,6 +1015,10 @@ class BoXuLy(BaseHTTPRequestHandler):
             id_moi = billing.chen_tai_khoan_hang_co_tran(
                 tenant_id, d["hang"], d.get("ten", d["hang"]), mt, cred_mh, duoi,
                 wh_ma, bao_mat.ma_hoa_wh(wh_secret, wh_ma))
+            # `chen_tai_khoan_hang_co_tran` không nhận mốc đổi credential; ghi ngay sau insert
+            # để trạng thái "đã có credential" đọc được từ một nguồn nhất quán.
+            csdl.ghi("UPDATE carrier_accounts SET credentials_doi_luc=? WHERE id=? AND tenant_id=?",
+                     (csdl.bay_gio(), id_moi, tenant_id))
             csdl.audit("tao_tai_khoan_hang", f"carrier_account:{id_moi}", d["hang"],
                        tenant_id=tenant_id, user_id=nc.user_id)
             tk_moi = {"webhook_ma": wh_ma}
@@ -1062,11 +1066,14 @@ class BoXuLy(BaseHTTPRequestHandler):
             tk_rows = []
             for x in csdl.nhieu(
                     "SELECT id, hang, ten, moi_truong, kich_hoat, webhook_ma,"
-                    " credentials_doi_luc FROM carrier_accounts"
+                    " credentials_doi_luc, credentials_duoi FROM carrier_accounts"
                     " WHERE tenant_id=? AND hang='best' ORDER BY id", (tenant_id,)):
                 d = dict(x)
-                d["co_credentials"] = bool(x["credentials_doi_luc"])
+                # `credentials_doi_luc` chỉ có sau khi rotate; tài khoản tạo mới có `duoi`
+                # nhưng chưa có mốc đổi. Đọc CẢ HAI để không báo "chưa có credential" sai.
+                d["co_credentials"] = bool(x["credentials_duoi"] or x["credentials_doi_luc"])
                 d["credentials_doi_luc"] = x["credentials_doi_luc"] if d["co_credentials"] else None
+                d.pop("credentials_duoi", None)  # KHÔNG trả đuôi credential ra UI
                 url_wh, cong_khai = _best_webhook_url(d)
                 d["webhook_url"], d["webhook_url_cong_khai"] = url_wh, cong_khai
                 try:

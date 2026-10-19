@@ -1145,8 +1145,8 @@ def kiem_bearer_webhook(tenant_id: str, tai_khoan: str, header_value: Any, *,
     401 rõ ràng thay vì 500. Riêng tenant không xác định được thì NÉM `THIEU_TENANT`:
     không có tenant thì không có kho để so, và mọi câu trả lời "hợp lệ" đều là bịa.
 
-    Header name `Authorization` là quy ước Bearer chuẩn; việc BEST có dùng đúng header này
-    hay không CHƯA KIỂM CHỨNG (xem báo cáo). Hàm nhận GIÁ TRỊ header, không nhận tên.
+    Header name `Authorization` đã được DOCX chính thức xác nhận (JWT Bearer, cấu hình trong
+    V9). Hàm nhận GIÁ TRỊ header, không nhận tên; so sánh bằng `hmac.compare_digest`.
     """
     tenant_id = _bat_buoc_tenant(tenant_id)
     tai_khoan = _bat_buoc_tai_khoan(tai_khoan)

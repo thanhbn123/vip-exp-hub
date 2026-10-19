@@ -27,7 +27,10 @@
     });
     let kq = {};
     try { kq = await res.json(); } catch (e) { /* không JSON */ }
-    if (res.status === 401) {
+    // 401 có HAI nghĩa: phiên hub hết hạn (`{loi:...}`) và BEST từ chối credential
+    // (`{ok:false, meta:{http_status:401}, ...}`). Gộp hai thứ này từng làm bàn nghiệm thu
+    // báo "hết phiên" ngay khi hãng trả sai mật khẩu. Phân biệt bằng cờ `ok` của phản hồi BEST.
+    if (res.status === 401 && kq.ok === undefined) {
       const e = new Error("phiên đăng nhập đã hết hạn — mở /admin/ để đăng nhập");
       e.ma = 401;
       throw e;
@@ -106,6 +109,14 @@
       }
     }
     dong.push("Ghi chú: production chỉ cho đăng nhập/đọc; tạo đơn production bị khóa.");
+    if (Array.isArray(kq.tai_khoan)) {
+      // Dùng danh sách từ /trang-thai vì nó kèm webhook_url + trạng thái Bearer (không secret).
+      renderTaiKhoan(kq.tai_khoan);
+      for (const t of kq.tai_khoan) {
+        dong.push(`Tài khoản #${t.id} · ${t.moi_truong} · webhook ${t.webhook_url || "?"}`
+          + ` · Bearer ${(t.webhook_bearer && t.webhook_bearer.co_bearer) ? "đã lưu" : "CHƯA lưu"}`);
+      }
+    }
     dat("trang-thai", dong.join("\n"), kq.co_phe_duyet_owner ? "ok" : "canhbao");
   }
 
@@ -356,6 +367,18 @@
   }
 
   function duLieuCapNhat() {
+    const tinh = $("ud-tinh").value.trim();
+    const quan = $("ud-quan").value.trim();
+    const xa = $("ud-xa").value.trim();
+    const dc = $("ud-dc").value.trim();
+    const ten = $("ud-ten").value.trim();
+    const sdt = $("ud-sdt").value.trim();
+    // Cùng một bộ địa chỉ được gửi dưới cả ba tên Source/Dest/Return. Backend chọn đúng bộ
+    // theo AddressTypeId; nếu chỉ gửi nguoi_nhan_* thì sửa địa chỉ lấy hàng/trả hàng sẽ dùng
+    // dữ liệu cũ của đơn thay vì dữ liệu người dùng vừa nhập.
+    const diaChi = {
+      tinh, quan, xa, dia_chi: dc, ten, sdt,
+    };
     return {
       ma_van_don: $("ud-ma").value.trim(),
       hang_hoa: $("ud-hang").value.trim(),
@@ -366,12 +389,15 @@
       chieu_rong_mm: Number($("ud-rong").value || 0),
       chieu_cao_mm: Number($("ud-cao").value || 0),
       address_type_id: Number($("ud-loai-dc").value || 2),
-      nguoi_nhan_tinh: $("ud-tinh").value.trim(),
-      nguoi_nhan_quan: $("ud-quan").value.trim(),
-      nguoi_nhan_xa: $("ud-xa").value.trim(),
-      nguoi_nhan_dia_chi: $("ud-dc").value.trim(),
-      nguoi_nhan_ten: $("ud-ten").value.trim(),
-      nguoi_nhan_sdt: $("ud-sdt").value.trim(),
+      nguoi_nhan_tinh: diaChi.tinh, nguoi_nhan_quan: diaChi.quan,
+      nguoi_nhan_xa: diaChi.xa, nguoi_nhan_dia_chi: diaChi.dia_chi,
+      nguoi_nhan_ten: diaChi.ten, nguoi_nhan_sdt: diaChi.sdt,
+      nguoi_gui_tinh: diaChi.tinh, nguoi_gui_quan: diaChi.quan,
+      nguoi_gui_xa: diaChi.xa, nguoi_gui_dia_chi: diaChi.dia_chi,
+      nguoi_gui_ten: diaChi.ten, nguoi_gui_sdt: diaChi.sdt,
+      nguoi_tra_tinh: diaChi.tinh, nguoi_tra_quan: diaChi.quan,
+      nguoi_tra_xa: diaChi.xa, nguoi_tra_dia_chi: diaChi.dia_chi,
+      nguoi_tra_ten: diaChi.ten, nguoi_tra_sdt: diaChi.sdt,
     };
   }
 

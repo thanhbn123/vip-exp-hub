@@ -132,7 +132,8 @@ test("01 — 12 màn BEST có trên MENU THẬT; mở đủ 12, tiêu đề kh�
   expect(bangHang, "bảng hãng thiếu BEST Express").toContain("BEST Express");
   expect(bangHang, "bảng hãng thiếu J&T Express (API thật)").toContain("J&T Express");
   expect(bangHang, "bảng hãng thiếu Viettel Post (API thật)").toContain("Viettel Post");
-  expect(bangHang, "BEST chưa có provider mà lại không ghi CHỜ BACKEND").toContain("CHỜ BACKEND");
+  expect(bangHang, "BEST đã có provider nhưng bảng không nói rõ").toContain("đã có provider");
+  expect(bangHang, "BEST chưa cấu hình mà không ghi CHƯA CẤU HÌNH").toContain("CHƯA CẤU HÌNH");
   // ĐỐI CHỨNG ÂM: một tên hãng KHÔNG có trong API không được xuất hiện — nếu có, bảng có thể
   // đang vẽ từ dữ liệu cứng thay vì đọc API.
   expect(bangHang).not.toContain("HANG-KHONG-CO-9Q7Z");
@@ -215,126 +216,102 @@ test("02 — 5 trạng thái đúng; credential-only KHÔNG được hiện ĐÃ
 // ============================================================================================
 // 03 — CẤU HÌNH CREDENTIAL AN TOÀN (MOCK POST) — chặn HTTP, không lộ secret
 // ============================================================================================
-test("03 — lưu credential: chặn HTTP khi chưa xác nhận; secret không lộ ra DOM", async ({ page }) => {
+test("03 — bàn nghiệm thu: ô credential là password/rỗng; không lộ secret ra DOM", async ({ page }) => {
   const CANARY = "BEST-CANARY-SECRET-9Q7Z-DO-NOT-LEAK";
-  const CANARY_WEBHOOK = "BEST-WEBHOOK-SECRET-4X8K-DO-NOT-LEAK";
-  let daLuu = false;
+  const CANARY_EMS = "BEST-EMS-SECRET-4X8K-DO-NOT-LEAK";
   let soLanPost = 0;
   let thanPost = "";
-  let thanTraVe = "";
 
-  await datNenBest(page, { tai_khoan: [] });
   await page.route("**/api/v2/tai-khoan-hang", (r) => {
-    if (r.request().method() === "GET") {
-      return r.fulfill(json({ tai_khoan: daLuu ? [tkChoXacMinh({ id: 91, ten: "BEST vừa lưu" })] : [] }));
-    }
+    if (r.request().method() === "GET") return r.fulfill(json({ tai_khoan: [] }));
     soLanPost += 1;
     thanPost = r.request().postData() || "";
-    daLuu = true;
-    thanTraVe = JSON.stringify({
-      id: 91, webhook_ma: "WH-MOI", webhook_secret_mot_lan: CANARY_WEBHOOK,
-      ghi_chu: "backend thật trả secret webhook MỘT LẦN; giao diện không được in nó ra",
-    });
-    return r.fulfill(json({
-      id: 91, webhook_ma: "WH-MOI", webhook_secret_mot_lan: CANARY_WEBHOOK,
-    }, 201));
+    return r.fulfill(json({ id: 91, webhook_ma: "WH-MOI", webhook_url: "/api/v2/webhook/nhan/WH-MOI",
+                            webhook_url_cong_khai: false }, 201));
   });
+  await page.route("**/api/v2/best/trang-thai", (r) => r.fulfill(json({
+    hop_dong: { so_ma: 23, service_id: 12491, token_ttl_days: 30,
+                gioi_han: { query: 10, print: 50 }, nguon: "DOCX", endpoints: {} },
+    co_phe_duyet_owner: true, co_ma_phe_duyet: true,
+    tai_khoan: [], tls: null, public_base_url: "",
+  })));
 
   await U.dangNhap(page, "shopa-owner");
-  await moBest(page, "best-cau-hinh-tai-khoan");
+  await page.goto("/pages/best-uat.html");
+  await expect(page.locator("#auth")).toContainText("Đã đăng nhập");
 
-  // (a) Ô bí mật phải là password, rỗng, không có value dựng sẵn.
-  for (const id of ["best-tk-ma-doi-tac", "best-tk-khoa", "best-tk-token"]) {
+  for (const id of ["tk-pass", "tk-ems"]) {
     const o = page.locator("#" + id);
     await expect(o).toHaveAttribute("type", "password");
     expect(await o.inputValue(), `${id} có value dựng sẵn`).toBe("");
   }
 
-  // (b) ĐỐI CHỨNG ÂM: chưa tick xác nhận MOCK ⇒ KHÔNG được gửi request.
-  await page.locator("#best-tk-khoa").fill(CANARY);
-  await page.locator("#best-tk-ten").fill("BEST kiểm thử");
-  await page.locator("#best-luu-tk").click();
-  await page.waitForTimeout(250);
-  expect(soLanPost, "đã gửi credential qua HTTP loopback dù chưa xác nhận MOCK").toBe(0);
-  await expect(page.locator("#best-ket-qua-luu")).toContainText("CHẶN GỬI");
-  expect(await page.locator("#best-tk-khoa").inputValue(), "secret bị xoá oan khi CHẶN GỬI").toBe(CANARY);
-
-  // (c) Tick xác nhận ⇒ gửi; request THẬT SỰ mang canary (đối chứng dương cho bộ dò rò rỉ).
-  await page.locator("#best-xac-nhan-mock").check();
-  await page.locator("#best-luu-tk").click();
+  await page.locator("#tk-ten").fill("BEST kiểm thử");
+  await page.locator("#tk-user").fill("uat-user");
+  await page.locator("#tk-pass").fill(CANARY);
+  await page.locator("#tk-ems").fill(CANARY_EMS);
+  await page.locator("#form-tk").evaluate((f) => f.requestSubmit());
   await expect.poll(() => soLanPost, { timeout: 5000 }).toBe(1);
-  expect(thanPost, "request không mang credential ⇒ phép dò rò rỉ không có gì để dò").toContain(CANARY);
-  expect(thanTraVe, "phản hồi mock không chứa canary ⇒ phép dò DOM vô nghĩa").toContain(CANARY_WEBHOOK);
+  expect(thanPost, "request không mang credential").toContain(CANARY);
+  expect(thanPost, "request không mang ems-key").toContain(CANARY_EMS);
 
-  // (d) DOM/HTML KHÔNG được chứa secret nào. Ô bí mật phải rỗng sau khi gửi.
-  await expect(page.locator("#best-trang-thai")).toHaveAttribute("data-best-state", "cho_xac_minh");
-  await expect(page.locator("#best-ket-qua-luu")).toContainText("CHỜ XÁC MINH");
-  const html = await page.locator("#man").innerHTML();
-  const chu = await page.locator("#man").innerText();
-  for (const biMat of [CANARY, CANARY_WEBHOOK]) {
+  const html = await page.locator("body").innerHTML();
+  const chu = await page.locator("body").innerText();
+  for (const biMat of [CANARY, CANARY_EMS]) {
     expect(html, `secret lọt vào innerHTML: ${biMat}`).not.toContain(biMat);
     expect(chu, `secret lọt vào chữ trên màn: ${biMat}`).not.toContain(biMat);
   }
-  for (const id of ["best-tk-ma-doi-tac", "best-tk-khoa", "best-tk-token"]) {
-    expect(await page.locator("#" + id).inputValue(), `${id} còn giữ secret sau khi gửi`).toBe("");
-  }
-
-  // ĐỐI CHỨNG DƯƠNG cho bộ dò: chuỗi bình thường vẫn phải thấy được — nếu không, (d) có thể
-  // đang quét một trang rỗng và "không thấy secret" là kết luận vô nghĩa.
+  expect(await page.locator("#tk-pass").inputValue(), "secret còn trong ô sau khi gửi").toBe("");
+  expect(await page.locator("#tk-ems").inputValue(), "ems-key còn trong ô sau khi gửi").toBe("");
   expect(chu).toContain("BEST");
 });
 
 // ============================================================================================
 // 04 — KIỂM TRA KẾT NỐI: thất bại KHÔNG xanh; 404 KHÔNG tự nâng trạng thái
 // ============================================================================================
-test("04 — kiểm tra kết nối: 401 → CẦN XỬ LÝ; ok=true mới → ĐÃ KẾT NỐI; 404 giữ nguyên", async ({ page }) => {
+test("04 — bàn nghiệm thu: 401 → THẤT BẠI; ok=true → ĐĂNG NHẬP THÀNH CÔNG", async ({ page }) => {
   let lan = 0;
-  await datNenBest(page, { tai_khoan: [tkChoXacMinh({ id: 88 })] });
-  await page.route("**/api/v2/tai-khoan-hang/*/kiem-ket-noi", (r) => {
+  const tk = {
+    id: 88, hang: "best", ten: "BEST sandbox", moi_truong: "sandbox", kich_hoat: 1,
+    co_credentials: true, credentials_doi_luc: "2026-10-19 10:00:00+0700",
+    webhook_ma: "WH-88", webhook_url: "/api/v2/webhook/nhan/WH-88",
+    webhook_bearer: { co_bearer: true, doc_duoc: true },
+  };
+  await page.route("**/api/v2/tai-khoan-hang", (r) => r.fulfill(json({ tai_khoan: [tk] })));
+  await page.route("**/api/v2/best/trang-thai", (r) => r.fulfill(json({
+    hop_dong: { so_ma: 23, service_id: 12491, token_ttl_days: 30,
+                gioi_han: { query: 10, print: 50 }, nguon: "DOCX", endpoints: {},
+                bang_ma: {} },
+    co_phe_duyet_owner: true, co_ma_phe_duyet: true,
+    tai_khoan: [tk], tls: null, public_base_url: "",
+  })));
+  await page.route("**/api/v2/best/kiem-ket-noi", (r) => {
     lan += 1;
     if (lan === 1) {
-      return r.fulfill(json({ ok: false, ma_http: 401, loi: "sai khoá", luc: "2026-10-19 10:10:00+0700" }));
+      return r.fulfill(json({ ok: false, co_token: false, blocked: false,
+                              moi_truong: "sandbox", endpoint: "/User/Login",
+                              meta: { endpoint: "/User/Login", http_status: 401 },
+                              loi: "[401] Invalid username or password" }, 401));
     }
-    if (lan === 2) {
-      return r.fulfill(json({ ok: true, ma_http: 200, tre_ms: 37, luc: "2026-10-19 10:11:00+0700" }));
-    }
-    return r.fulfill(json({ loi: "không có đường" }, 404));
+    return r.fulfill(json({ ok: true, co_token: true, blocked: false,
+                            moi_truong: "sandbox", endpoint: "/User/Login",
+                            meta: { endpoint: "/User/Login", http_status: 200 },
+                            tls: { ok: true, tls: "TLSv1.2", cn: "*.800best.com" }, loi: "" }));
   });
 
   await U.dangNhap(page, "shopa-owner");
-  await moBest(page, "best-kiem-tra-ket-noi");
-  expect((await docTrangThai(page)).ma).toBe("cho_xac_minh");
+  await page.goto("/pages/best-uat.html");
+  await expect(page.locator("#kn-tk option")).toHaveCount(1);
+  await page.locator("#phe-duyet-that").check();
+  await page.locator("#kn-xac-nhan").selectOption("1");
+  await page.locator("#btn-kiem-ket-noi").click();
+  await expect(page.locator("#kq-ket-noi")).toContainText("THẤT BẠI");
+  await expect(page.locator("#kq-ket-noi")).toContainText("Invalid username");
 
-  // Năm trạng thái phải HIỆN THÀNH BẢNG trên màn, không chỉ nằm trong mã. ĐỐI CHỨNG ÂM:
-  // bảng có đúng 5 dòng và dòng "đang ở" chỉ có MỘT — nếu 0 hoặc >1 thì luật hiển thị sai.
-  const soDongTt = await page.locator("#best-bang-trang-thai tbody tr").count();
-  expect(soDongTt, "bảng 5 trạng thái không đủ 5 dòng").toBe(5);
-  expect(await page.locator("#best-bang-trang-thai tbody .huy-hieu.hh-xanh-duong").count(),
-    "dòng 'ĐANG Ở ĐÂY' không duy nhất").toBe(1);
-
-  // (a) ĐỐI CHỨNG ÂM: kiểm tra THẤT BẠI ⇒ CẦN XỬ LÝ, tuyệt đối không xanh.
-  await page.locator("#best-kiem-ket-noi").click();
-  await expect(page.locator("#best-kq-ket-noi")).toContainText("THẤT BẠI");
-  await expect(page.locator("#best-trang-thai")).toHaveAttribute("data-best-state", "can_xu_ly");
-  expect((await docTrangThai(page)).ma).not.toBe("da_ket_noi");
-  // Bằng chứng phải đổi theo, không được để badge đỏ mà dòng bằng chứng vẫn nói "chưa có".
-  await expect(page.locator(".best-bang-chung").first()).toContainText("THẤT BẠI");
-
-  // (b) ĐỐI CHỨNG DƯƠNG: cùng nút, backend trả ok=true ⇒ ĐÃ KẾT NỐI.
-  await page.locator("#best-kiem-ket-noi").click();
-  await expect(page.locator("#best-kq-ket-noi")).toContainText("THÀNH CÔNG");
-  await expect(page.locator("#best-trang-thai")).toHaveAttribute("data-best-state", "da_ket_noi");
-  await expect(page.locator("#best-kq-ket-noi")).toContainText("37 ms");
-  // ĐỐI CHỨNG ÂM: badge xanh mà dòng bằng chứng vẫn "CHƯA CÓ lượt đăng nhập" là tự mâu thuẫn.
-  await expect(page.locator(".best-bang-chung").first()).toContainText("10:11");
-  await expect(page.locator(".best-bang-chung").first()).not.toContainText("CHƯA CÓ lượt đăng nhập");
-
-  // (c) ĐỐI CHỨNG ÂM: đường kiểm tra CHƯA CÓ (404) ⇒ giữ nguyên, không tự nâng.
-  await page.locator("#best-kiem-ket-noi").click();
-  await expect(page.locator("#best-kq-ket-noi")).toContainText("CHỜ BACKEND");
-  await expect(page.locator("#best-trang-thai")).toHaveAttribute("data-best-state", "da_ket_noi");
-  // Badge vẫn là kết quả THẬT của lần (b); 404 không được biến nó thành xanh MỚI.
-  expect(lan, "không chạm đủ ba lượt gọi mock").toBe(3);
+  await page.locator("#btn-kiem-ket-noi").click();
+  await expect(page.locator("#kq-ket-noi")).toContainText("ĐĂNG NHẬP THÀNH CÔNG");
+  await expect(page.locator("#kq-ket-noi")).toContainText("TLSv1.2");
+  expect(lan, "không chạm đủ hai lượt gọi mock").toBe(2);
 });
 
 // ============================================================================================
@@ -355,7 +332,7 @@ test("05 — tính cước: khối lượng quy đổi đúng; KHÔNG có số t
   // ĐỐI CHỨNG ÂM: khu vực báo giá KHÔNG được có số tiền. Nếu có "… ₫" thì giao diện đang bịa
   // giá cước khi chưa có biểu cước/đường API đã xác nhận.
   const gia = gon(await page.locator("#best-gia-best").innerText());
-  expect(gia).toContain("CHƯA CÓ");
+  expect(gia).toContain("bàn nghiệm thu");
   expect(/\d[\d.,]*\s*₫/.test(gia), `khu báo giá có số tiền bịa: ${gia}`).toBe(false);
 
   // ĐỐI CHỨNG ÂM phụ: không có request nào tới đường "tinh-cuoc" đoán trước.
@@ -409,7 +386,7 @@ test("05b — tạo đơn: kiểm dữ liệu thật (hợp lệ/không hợp l�
 
   // Nút gửi BEST phải KHOÁ và nói rõ CHỜ BACKEND — không được tạo đơn thật.
   expect(await page.locator("#best-gui-don").isDisabled(), "nút gửi BEST không bị khoá").toBe(true);
-  await expect(page.locator("#best-ly-do-gui")).toContainText("CHỜ BACKEND");
+  await expect(page.locator("#best-ly-do-gui")).toContainText("ĐÃ KẾT NỐI");
 });
 
 

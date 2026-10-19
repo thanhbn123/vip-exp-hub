@@ -57,6 +57,9 @@ const TRANG = {
   settings: { nguon: "khong", ly_do: "bảng nội dung do MẢNG VIẾT CỨNG trong pages/settings.js vẽ" },
   "create-order": { nguon: "khong", ly_do: "localStorage — rỗng lúc mới mở, không đọc ở đâu" },
   pricing: { nguon: "khong", ly_do: "bảng cước TÍNH từ công thức, không đọc ở đâu" },
+  // Bàn nghiệm thu BEST cần phiên đăng nhập + quyền tenant.hang.*; bộ tĩnh không có phiên nên
+  // API trả 401. Trang vẫn được canh ở 07 (CSP/khung); dữ liệu thật đo ở app/thu/thu_best_uat.py.
+  "best-uat": { nguon: "khong", ly_do: "trang cần phiên đăng nhập; API 401 nếu chưa đăng nhập" },
 };
 
 /* ============================================================================================

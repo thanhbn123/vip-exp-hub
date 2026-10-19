@@ -4,6 +4,14 @@
 > còn đúng. Schema Order/Add, auth Bearer, Query test host và bảng 23 mã đã được sửa theo tài liệu.
 > REAL PASS vẫn **BLOCKED** vì chưa có credential/phê duyệt.
 
+> **CẬP NHẬT 2026-10-19 — BÀN NGHIỆM THU THẬT.** `pages/best-uat.html` +
+> `admin/best_uat.js` đã được hoàn thiện cho tài khoản BEST thật: phê duyệt phiên, nhập
+> Username/Password/`ems-key` qua HTTPS, kiểm tra đăng nhập, báo cước, tạo đơn sandbox,
+> tracking + `traceLogs`, tải PDF qua backend, Order/Update, UpdateAddress (1/2/3), Cancel,
+> webhook URL + Bearer. Hai màn cấu hình/kiểm tra trong SPA cũ dẫn sang bàn này thay vì dùng
+> form credential sai. URL và quy trình: `docs/BEST_EXPRESS_ACCEPTANCE_HANDOFF.md`.
+> Bộ Playwright BEST: **15/15 pass**.
+
 # BEST EXPRESS — GIAO DIỆN 12 MÀN (AGENT B4)
 
 > Trạng thái: **LOCAL ONLY · MOCK PASS (phần cần backend BEST) + REAL PASS (các đường đọc đã có)**

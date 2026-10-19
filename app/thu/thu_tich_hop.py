@@ -193,7 +193,10 @@ class G16_CauHinhVaPhanTang(unittest.TestCase):
         #   import urllib.request            → Import,        name="urllib.request"
         #   from urllib import request       → ImportFrom,    module="urllib", alias="request"
         #   import socket                    → Import,        name="socket"
-        duoc_phep = {"http_jt.py"}
+        # J&T có lớp HTTP riêng. BEST có BA lớp riêng đã được review cho đúng mục đích:
+        # `http_best.py` (gửi/allowlist/SSRF), `xac_thuc_best.py` (transport login + kho token),
+        # `best_hop_dong.py` (kiểm TLS + gọi qua http_best). Không lớp nào khác được thêm.
+        duoc_phep = {"http_jt.py", "http_best.py", "xac_thuc_best.py", "best_hop_dong.py"}
         vi_pham = []
         for ten in sorted(os.listdir(GOC_APP)):
             if not ten.endswith(".py") or ten in duoc_phep:
@@ -217,8 +220,8 @@ class G16_CauHinhVaPhanTang(unittest.TestCase):
                         for a in nut.names:
                             if f"{nut.module}.{a.name}" in MANG_DAY_DU:
                                 vi_pham.append(f"{ten}: from {nut.module} import {a.name}")
-        self.assertEqual(vi_pham, [], "chỉ `http_jt.py` được nói chuyện với mạng; "
-                                      "chỗ khác phải đi qua nó: " + ", ".join(vi_pham))
+        self.assertEqual(vi_pham, [], "chỉ các lớp HTTP đã review (J&T, BEST) được nói chuyện "
+                                      "với mạng; chỗ khác phải đi qua chúng: " + ", ".join(vi_pham))
 
     def test_10_env_mau_khai_du_bon_TEN_va_khong_chua_gi_bi_mat(self):
         """`.env.example` là tài liệu đi theo repo — nó phải KHAI TÊN và để GIÁ TRỊ RỖNG."""

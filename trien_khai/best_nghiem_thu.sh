@@ -52,6 +52,10 @@ if [ ! -s "$VIP_HUB_DATA/hub.db" ]; then
   echo "[best-uat] Khởi tạo CSDL demo tại $VIP_HUB_DATA …"
   (cd "$GOC" && python3 app/khoi_tao.py >/dev/null)
 fi
+# CSDL mới tạo ở schema v0; server TỪ CHỐI nếu chưa migrate. Chạy migration ngay trong script
+# để người nghiệm thu không phải tự đoán bước tiếp theo. Khai kho SQLite là bắt buộc.
+echo "[best-uat] Kiểm tra/migrate schema CSDL…"
+(cd "$GOC" && VIP_KHO_DANG_CHAY=sqlite python3 app/migrate.py >/dev/null)
 
 echo "[best-uat] Mã phê duyệt phiên: $MA_PHE_DUYET"
 echo "[best-uat] Chỉ môi trường SANDBOX được dùng; tạo/sửa/hủy đơn production bị khoá trong mã."

@@ -9,6 +9,15 @@
 **Trạng thái:** `DOC_VERIFIED` — đã đọc toàn văn và đối chiếu. **Chưa phải REAL PASS**:
 chưa có credentials, chưa gọi API có xác thực, chưa tạo đơn thật.
 
+> **CẬP NHẬT 2026-10-19 — ĐỐI CHIẾU TỆP DOCX VÀ SỬA ADAPTER.** Owner cung cấp tệp
+> `Tài liệu API của Best Express Việt Nam.docx`; đã đọc `word/document.xml` (824 dòng trích
+> xuất). Các mục “schema SAI” bên dưới nay đã được sửa trong `app/best_hop_dong.py` và
+> `app/adapter_best.py`. Đo thật: login endpoint trả `Result=2` + HTTP 200 khi sai; EstimateFee
+> trả `data.TotalFee`/`Cod`; test account công khai trong tài liệu đã bị khoá. Bằng chứng đầy
+> đủ ở `docs/BEST_EXPRESS_DOCX_AUDIT.md`; quy trình nghiệm thu ở
+> `docs/BEST_EXPRESS_ACCEPTANCE_HANDOFF.md`. Các dòng “adapter hiện tại…” trong tài liệu này
+> là **trạng thái lịch sử**, không còn đúng.
+
 ---
 
 ## 0. KẾT LUẬN NGẮN

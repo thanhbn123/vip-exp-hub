@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BEST Express — 12 màn tích hợp · VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  /* Chỉ lớp của trang này. Không sửa `assets/css/style.css` dùng chung 10 trang demo. */
+  body { background: var(--nen); }
+  .best-vo { max-width: 1280px; margin: 0 auto; padding: 22px 18px 40px; }
+  .best-bang-local {
+    background: var(--vang-nhat); color: var(--vang); border: 1px solid #FBD38D;
+    border-radius: 9px; padding: 10px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 14px;
+  }
+  @media (max-width: 560px) { .best-vo { padding: 14px 12px 32px; } }
+</style>
+</head>
+<body>
+<div class="best-vo">
+  <div class="best-bang-local">
+    ⚠️ LOCAL ONLY · MOCK / CHỜ BACKEND — trang này KHÔNG gọi API hãng BEST, KHÔNG tạo đơn thật,
+    KHÔNG hiển thị credential. Đăng nhập quản trị trước khi dùng dữ liệu thật của doanh nghiệp.
+  </div>
+  <!-- Mã nằm ở tệp ngoài vì CSP của máy chủ là script-src 'self' (không có 'unsafe-inline'):
+       một <script> nội tuyến ở đây sẽ bị trình duyệt TỪ CHỐI CHẠY và trang đứng im. -->
+  <div id="best-goc">
+    <div class="dang-tai"><span class="xoay"></span>Đang nạp 12 màn BEST…</div>
+  </div>
+</div>
+<script src="../assets/js/app.js"></script>
+<script src="../admin/best.js"></script>
+</body>
+</html>

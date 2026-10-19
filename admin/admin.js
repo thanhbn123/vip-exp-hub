@@ -258,6 +258,24 @@ const MAN_TENANT = [
   /* G17 · AG-06 — màn kết nối J&T. Cùng quyền với màn Hãng vận chuyển vì nó đọc đúng những
      route mà màn ấy đọc (`tenant.hang.xem` ở backend, không phải ẩn/hiện của giao diện). */
   ["ket-noi-jt", "🔌 Kết nối J&T", "tenant.hang.xem"],
+  /* ===== B4 — BEST EXPRESS: 12 MÀN =====
+     Làn B4 (tích hợp BEST Express) cắm đúng 12 màn theo đề bài. Mã màn nằm trong
+     `admin/best.js` — tệp RIÊNG, được nạp MỘT LẦN khi màn BEST đầu tiên được bấm (xem khối
+     đăng ký ở cuối tệp). Không thêm <script> vào `admin/index.html`: tệp ấy ngoài phạm vi
+     ghi của làn này, và một màn không có đường vào menu thì không phải màn đã cắm.
+     Quyền dùng chung `tenant.hang.xem` — backend vẫn kiểm lại từng route. */
+  ["best-danh-sach-hang", "🚚 BEST · Danh sách hãng", "tenant.hang.xem", "BEST Express"],
+  ["best-cau-hinh-tai-khoan", "🔐 BEST · Cấu hình tài khoản", "tenant.hang.xem", "BEST Express"],
+  ["best-kiem-tra-ket-noi", "📡 BEST · Kiểm tra kết nối", "tenant.hang.xem", "BEST Express"],
+  ["best-tao-don", "➕ BEST · Tạo đơn", "tenant.hang.xem", "BEST Express"],
+  ["best-van-don", "📦 BEST · Danh sách vận đơn", "tenant.hang.xem", "BEST Express"],
+  ["best-chi-tiet-don", "🔎 BEST · Chi tiết đơn", "tenant.hang.xem", "BEST Express"],
+  ["best-lich-su-van-chuyen", "🕒 BEST · Lịch sử vận chuyển", "tenant.hang.xem", "BEST Express"],
+  ["best-tra-cuu-hanh-trinh", "🧭 BEST · Tra cứu hành trình", "tenant.hang.xem", "BEST Express"],
+  ["best-tinh-cuoc", "⚖️ BEST · Tính cước", "tenant.hang.xem", "BEST Express"],
+  ["best-in-van-don", "🖨️ BEST · In vận đơn", "tenant.hang.xem", "BEST Express"],
+  ["best-theo-doi-webhook", "🔔 BEST · Theo dõi webhook", "tenant.hang.xem", "BEST Express"],
+  ["best-nhat-ky-loi", "📝 BEST · Nhật ký lỗi đồng bộ", "tenant.hang.xem", "BEST Express"],
   ["webhook", "🔔 Webhook", "tenant.webhook.xem"],
   ["thanh-vien", "👥 Thành viên", "tenant.membership.xem"],
   /* G19 · AG-05 — ĐƯỜNG VÀO cho các màn mà bốn module `finance/billing/ai/health.js` đã khai
@@ -2908,6 +2926,49 @@ const MAN_HE_THONG = {
    để khối G19 không phải sửa một dòng nào bên trong đối tượng 1.000 dòng kia — ít chỗ chạm
    thì ít chỗ xung đột với làn khác đang sửa cùng tệp. */
 Object.assign(CAC_MAN, MAN_TAICHINH, MAN_GOI, MAN_GOI_NEN_TANG, MAN_AI, MAN_HE_THONG);
+
+/* ===== B4 — ĐĂNG KÝ 12 MÀN BEST EXPRESS (nạp module theo yêu cầu) =====
+   Vì sao nạp ĐỘNG thay vì thêm `<script src="best.js">` vào `admin/index.html`:
+   tệp HTML ấy nằm NGOÀI phạm vi ghi của làn B4. Khối này chỉ làm hai việc thuộc phần "đăng
+   ký menu": (1) nạp mã màn một lần, (2) gắn 12 mã màn vào bảng điều phối `CAC_MAN`.
+   Mọi quyết định hiển thị nằm trong `admin/best.js`; tệp này không biết màn nào vẽ gì.
+
+   Lỗi nạp tệp KHÔNG bị nuốt: `moMan()` bắt lỗi và hiện hộp lỗi thay vì màn trắng. Promise
+   lỗi được xoá khỏi cache để lần bấm sau thử lại (một lần mạng chập chờn không làm màn
+   chết vĩnh viễn). */
+const MAN_BEST_B4 = [
+  "best-danh-sach-hang", "best-cau-hinh-tai-khoan", "best-kiem-tra-ket-noi", "best-tao-don",
+  "best-van-don", "best-chi-tiet-don", "best-lich-su-van-chuyen", "best-tra-cuu-hanh-trinh",
+  "best-tinh-cuoc", "best-in-van-don", "best-theo-doi-webhook", "best-nhat-ky-loi",
+];
+let bestDangNap = null;
+function napBest() {
+  if (window.VIPBEST) return Promise.resolve(window.VIPBEST);
+  if (!bestDangNap) {
+    bestDangNap = new Promise((ok, loi) => {
+      const s = document.createElement("script");
+      // Đường TUYỆT ĐỐI trong site: SPA có thể được mở bằng `/admin/`, `/admin/index.html`
+      // hoặc `/` (máy chủ phục vụ admin/index.html ở gốc). Đường tương đối `best.js` sẽ thành
+      // `/best.js` ở trường hợp cuối và 404 — đường tuyệt đối tránh hẳn lớp lỗi ấy.
+      s.src = "/admin/best.js";
+      s.async = true;
+      s.onload = () => window.VIPBEST ? ok(window.VIPBEST)
+        : loi(new Error("admin/best.js đã tải nhưng không xuất window.VIPBEST"));
+      s.onerror = () => loi(new Error("không nạp được admin/best.js"));
+      document.head.appendChild(s);
+    }).catch((e) => { bestDangNap = null; throw e; });
+  }
+  return bestDangNap;
+}
+for (const maBest of MAN_BEST_B4) {
+  CAC_MAN[maBest] = async () => {
+    const B = await napBest();
+    if (!B || !B.MAN || typeof B.MAN[maBest] !== "function") {
+      throw new Error(`admin/best.js thiếu màn ${maBest}`);
+    }
+    return B.MAN[maBest]();
+  };
+}
 
 /* ===== khởi động ===== */
 async function khoiDong() {

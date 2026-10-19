@@ -1,10 +1,14 @@
 # Khoá chống chạy migration đồng thời + ngữ nghĩa lùi của DDL (chỉ thị G12 mục 5C, 11).
 #
-# Ba thứ bộ này khoá lại, cả ba đo được thật ngày 15/10/2026:
+# Bốn thứ bộ này khoá lại, cả bốn đo được thật:
 #   1. 8 tiến trình cùng migrate → phải ĐÚNG MỘT nâng cấp, 7 nhường, 0 lỗi.
 #   2. `executescript` tự COMMIT giao dịch đang mở → migration CHƯA BAO GIỜ nguyên tử.
 #   3. Một thread tự khoá chính mình qua hai kết nối → chờ hết giờ theo đợt 30 giây.
+#   4. (G22/Y2) 8 tiến trình gọi THẲNG `sao_luu()` cùng lúc → 8 bản sao KHÁC TÊN, 0 lỗi.
+import glob
+import hashlib
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,9 +21,14 @@ DU_AN = os.path.dirname(GOC)
 sys.path.insert(0, GOC)
 
 _TM = tempfile.mkdtemp(prefix="vh-migdt-")
+# G22/Y2 — KHAI KHO CHO NỀN KIỂM THỬ CÔ LẬP. Thiếu dòng này, `migrate.chay()` TỪ CHỐI ngay
+# (chốt fail-closed `VIP_KHO_DANG_CHAY`, Agent 01), và bộ thử đo NHẦM lỗi khai kho thay vì đo
+# race `sao_luu`. `khai_kho_kiem_thu()` tự từ chối nếu thư mục dữ liệu không cô lập.
+os.environ["VIP_HUB_DATA"] = _TM
 import cau_hinh                                                          # noqa: E402
 cau_hinh.THU_MUC_DU_LIEU = _TM
 cau_hinh.DUONG_DAN_CSDL = os.path.join(_TM, "hub.db")
+cau_hinh.khai_kho_kiem_thu()
 import csdl                                                             # noqa: E402
 import migrate                                                          # noqa: E402
 
@@ -50,19 +59,38 @@ except Exception as e:
 ''' % (GOC,)
 
 
-def _chay_song_song(thu_muc, n):
-    """Chạy n tiến trình migrate CÙNG một vạch xuất phát. Trả danh sách (nhãn, nâng, nhường)."""
-    tep = os.path.join(thu_muc, "_con.py")
+CON_SAO_LUU = r'''
+import os, sys, time
+sys.path.insert(0, %r)
+import cau_hinh
+cau_hinh.THU_MUC_DU_LIEU = os.environ["D"]
+cau_hinh.DUONG_DAN_CSDL = os.path.join(os.environ["D"], "hub.db")
+import migrate
+# CÙNG VẠCH XUẤT PHÁT BẰNG TỆP như CON_CHAY: đo ĐÚNG va chạm tên, không đo độ trễ nạp mô-đun.
+open(os.path.join(os.environ["SAN_SANG"], sys.argv[1]), "w").close()
+while not os.path.exists(os.environ["DI"]):
+    time.sleep(0.001)
+try:
+    print("%%s|OK|%%s" %% (sys.argv[1], migrate.sao_luu(luc=os.environ["LUC"])), flush=True)
+except Exception as e:
+    print("%%s|LOI|%%s" %% (sys.argv[1], str(e)[:120]), flush=True)
+''' % (GOC,)
+
+
+def _chay_song_song_voi(thu_muc, n, ten_tep, noi_dung, env_them=None):
+    """Chạy n tiến trình CÙNG một vạch xuất phát bằng TỆP. Trả `[(stdout, stderr), ...]`."""
+    tep = os.path.join(thu_muc, ten_tep)
     with open(tep, "w", encoding="utf-8") as f:
-        f.write(CON_CHAY)
+        f.write(noi_dung)
     # VẠCH XUẤT PHÁT BẰNG TỆP, không bằng đồng hồ (AG-04 phát hiện, AG-00 vá).
     # Cũ: `BAT_DAU = time.time() + 2.0` — con nào nạp mô-đun lâu hơn 2 giây thì khởi động SAU vạch,
     # về sớm, và ca thử đỏ với "không tiến trình nào chờ khoá rồi nhường". Hẹn giờ là đoán;
     # cha đợi đủ n tệp báo sẵn sàng rồi mới thả thì vạch xuất phát là THẬt.
-    san_sang = os.path.join(thu_muc, "_san_sang")
+    san_sang = os.path.join(thu_muc, "_san_sang_" + ten_tep)
     os.makedirs(san_sang, exist_ok=True)
-    di = os.path.join(thu_muc, "_di")
+    di = os.path.join(thu_muc, "_di_" + ten_tep)
     mt = dict(os.environ, D=thu_muc, SAN_SANG=san_sang, DI=di)
+    mt.update(env_them or {})
     ps = [subprocess.Popen([sys.executable, tep, "tt%d" % i], env=mt,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
           for i in range(n)]
@@ -81,6 +109,16 @@ def _chay_song_song(thu_muc, n):
         o, e = p.communicate(timeout=180)
         ra.append((o.strip(), e.strip()))
     return ra
+
+
+def _chay_song_song(thu_muc, n):
+    """Chạy n tiến trình migrate CÙNG một vạch xuất phát. Trả danh sách (nhãn, nâng, nhường)."""
+    return _chay_song_song_voi(thu_muc, n, "_con.py", CON_CHAY)
+
+
+def _chay_sao_luu_song_song(thu_muc, n, luc):
+    """Chạy n tiến trình gọi THẲNG `migrate.sao_luu()` cùng một vạch — đo tên bản sao."""
+    return _chay_song_song_voi(thu_muc, n, "_con_sao_luu.py", CON_SAO_LUU, {"LUC": luc})
 
 
 class A_MigrationDongThoi(unittest.TestCase):
@@ -162,6 +200,66 @@ class A_MigrationDongThoi(unittest.TestCase):
                              kn.execute("SELECT COUNT(DISTINCT ma) FROM permissions").fetchone()[0])
         finally:
             kn.close()
+
+    def test_a3_sao_luu_dong_thoi_ten_khong_de_nhau(self):
+        """G22/Y2 — đo THẲNG tên bản sao: 8 tiến trình gọi `sao_luu()` CÙNG LÚC.
+
+        Ca a1 đo `chay()` — có khoá bảo vệ nên chỉ một tiến trình sao lưu. Ca này đo phần còn
+        lại của bản vá: gọi TRỰC TIẾP `sao_luu()` (không qua khoá) vẫn phải ra 8 bản sao KHÁC
+        TÊN, mỗi bản có dấu kiểm `.sha256` ĐÚNG, và KHÔNG có `-wal`/`-shm` lạc trong `sao-luu/`.
+
+        ĐỐI CHỨNG ÂM (đã chạy, xem docs/Y2_MIGRATE_FIX.md): đưa tệp tạm về tên cũ dùng chung
+        `".dang-ghi"` thì ca này ĐỎ với `FileNotFoundError … .dang-ghi` / `disk I/O error` —
+        đúng lỗi X2 đo được trên 14/18 lượt.
+        """
+        tm = tempfile.mkdtemp(prefix="vh-dt3-")
+        # Dựng nền bằng CHÍNH `migrate.chay()` trong một tiến trình riêng, để ca này vẫn đo
+        # đúng đường chạy thật (không tự tay tạo bảng).
+        ma = (
+            "import os, sys\n"
+            "sys.path.insert(0, %r)\n"
+            "import cau_hinh\n"
+            "cau_hinh.THU_MUC_DU_LIEU = os.environ['D']\n"
+            "cau_hinh.DUONG_DAN_CSDL = os.path.join(os.environ['D'], 'hub.db')\n"
+            "import migrate\n"
+            "migrate.chay(im_lang=True)\n" % (GOC,))
+        mt = dict(os.environ, D=tm)
+        p = subprocess.run([sys.executable, "-c", ma], env=mt, capture_output=True,
+                           text=True, timeout=180)
+        self.assertEqual(p.returncode, 0,
+                         "dựng nền hỏng: rc=%s\n%s\n%s"
+                         % (p.returncode, p.stdout[-800:], p.stderr[-1200:]))
+        # Bản sao lưu của lượt dựng nền không thuộc phép đo — dọn để đếm CHÍNH XÁC 8 bản.
+        shutil.rmtree(os.path.join(tm, "sao-luu"), ignore_errors=True)
+
+        luc = "20261016-120000"
+        ra = _chay_sao_luu_song_song(tm, SO_TIEN_TRINH, luc)
+        duong, loi = [], []
+        for o, e in ra:
+            p = o.split("|")
+            if len(p) != 3 or p[1] != "OK":
+                loi.append((o, e[-400:]))
+                continue
+            duong.append(p[2])
+        self.assertEqual(loi, [], f"tiến trình sao_luu hỏng: {loi}")
+        self.assertEqual(len(duong), SO_TIEN_TRINH)
+        self.assertEqual(len(set(duong)), SO_TIEN_TRINH,
+                         f"tên bản sao bị ĐÈ: {sorted(duong)}")
+
+        tep = sorted(glob.glob(os.path.join(tm, "sao-luu", "*.db")))
+        self.assertEqual(len(tep), SO_TIEN_TRINH, f"số tệp .db phải là {SO_TIEN_TRINH}: {tep}")
+        for p in tep:
+            self.assertGreater(os.path.getsize(p), 0, f"bản sao RỖNG: {p}")
+            self.assertTrue(os.path.exists(p + ".sha256"), f"thiếu dấu kiểm: {p}")
+            with open(p + ".sha256", encoding="utf-8") as f:
+                mong = f.read().split()[0]
+            with open(p, "rb") as f:
+                that = hashlib.sha256(f.read()).hexdigest()
+            self.assertEqual(that, mong, f"dấu kiểm KHÔNG khớp nội dung: {p}")
+            self.assertFalse(os.path.exists(p + "-wal"), f"-wal lạc trong sao-luu/: {p}-wal")
+            self.assertFalse(os.path.exists(p + "-shm"), f"-shm lạc trong sao-luu/: {p}-shm")
+        print(f"  [đo] sao_luu() × {SO_TIEN_TRINH} cùng lúc: {len(tep)} tệp .db khác tên, "
+              f"dấu kiểm khớp, 0 tệp phụ")
 
 
 class B_DDLLuiDuoc(unittest.TestCase):
@@ -289,7 +387,7 @@ class C_KhongTuKhoaChinhMinh(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    print("[migrate-đồng-thời] PHẠM VI: %d tiến trình HỆ ĐIỀU HÀNH thật + 10 thread, trên"
+    print("[migrate-đồng-thời] PHẠM VI: 3 lượt × %d tiến trình HỆ ĐIỀU HÀNH thật + 10 thread, trên"
           % SO_TIEN_TRINH)
     print("                     SQLite 3.51.0 · py 3.9.6 · macOS arm64, CSDL trên ổ nội bộ.")
     print("                     NGOÀI: PostgreSQL · NFS/ổ mạng (khoá SQLite không đáng tin ở đó)")

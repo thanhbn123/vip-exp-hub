@@ -20,11 +20,13 @@
 #       PostgreSQL nó phải TỪ CHỐI, chứ không được đưa ra một ĐƯỜNG LÙI GIẢ (P-G15-02).
 # Bộ đo: trien_khai/g20-saoluu/fail_closed.py · bộ thử: app/thu/thu_g21_saoluu.py
 import hashlib
+import itertools
 import json
 import os
+import pathlib
 import shutil
-import sqlite3
 import sys
+import tempfile
 from datetime import datetime
 
 GOC = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +37,11 @@ import csdl       # noqa: E402
 import quyen      # noqa: E402
 
 THU_MUC_SAO_LUU = os.path.join(cau_hinh.THU_MUC_DU_LIEU, "sao-luu")
+
+# BỘ ĐẾM NGUYÊN TỬ cho tên tệp tạm của `sao_luu()` — xem `sao_luu`.
+# `next(itertools.count())` là một phép C nguyên tử dưới GIL; cộng với PID ở dưới nên hai
+# TIẾN TRÌNH (PID khác) và hai THREAD (bộ đếm khác) không bao giờ chọn cùng một tệp tạm.
+_DEM_TAM = itertools.count(1)
 
 # Các bảng phải bảo toàn số dòng qua migration (dữ liệu nghiệp vụ đã có).
 BANG_PHAI_GIU = ("tenants", "users", "khach_hang", "carrier_accounts", "don_hang",
@@ -69,6 +76,15 @@ def _bam_tep(duong):
     return h.hexdigest()
 
 
+def _hau_thoi_gian(luc):
+    """Hậu tố thời gian của tên bản sao — dùng NGUYÊN VĂN `luc` khi bộ đo truyền vào."""
+    if luc is None:
+        return datetime.now().strftime("%Y%m%d-%H%M%S")
+    if hasattr(luc, "strftime"):
+        return luc.strftime("%Y%m%d-%H%M%S")
+    return str(luc)
+
+
 def _duong_chua_dung(goc_ten, duoi, luc=None):
     """Đường dẫn CHƯA TỒN TẠI: trùng tên thì thêm hậu tố, KHÔNG BAO GIỜ ghi đè.
 
@@ -87,14 +103,12 @@ def _duong_chua_dung(goc_ten, duoi, luc=None):
     Nghĩa là kết quả của ca phụ thuộc ĐỒNG HỒ HỆ THỐNG (chạy riêng một kiểu, chạy chung một
     kiểu), và nó có thể XANH trên một sản phẩm còn lỗi. Truyền mốc vào là cách duy nhất khiến ca
     TẤT ĐỊNH và khiến nó THẬT SỰ chạm vào đường ĐÈ. Xem docs/G22_SAOLUU.md §5.
+
+    GHI CHÚ (G22/Y2): hàm này chỉ KIỂM tên rồi trả — giữa lúc kiểm và lúc người gọi tạo tệp vẫn
+    có khe TOCTOU. `khoi_phuc()` dùng nó (giữ nguyên hành vi cũ); `sao_luu()` dùng
+    `_dat_ten_ban_sao()` — TẠO tên bằng `os.link` (nguyên tử, không đè) nên khe đó bị đóng.
     """
-    if luc is None:
-        hau = datetime.now().strftime("%Y%m%d-%H%M%S")
-    elif hasattr(luc, "strftime"):
-        hau = luc.strftime("%Y%m%d-%H%M%S")
-    else:
-        hau = str(luc)
-    goc = os.path.join(THU_MUC_SAO_LUU, goc_ten + "-" + hau)
+    goc = os.path.join(THU_MUC_SAO_LUU, goc_ten + "-" + _hau_thoi_gian(luc))
     dich, n = goc + duoi, 1
     while os.path.exists(dich):
         dich = "%s-%d%s" % (goc, n, duoi)
@@ -102,6 +116,37 @@ def _duong_chua_dung(goc_ten, duoi, luc=None):
         if n > 1000:
             raise SystemExit("[migrate] TỪ CHỐI: quá 1000 bản cùng giây tại %s — có gì đó sai" % goc)
     return dich
+
+
+def _dat_ten_ban_sao(nguon, goc_ten, duoi, luc=None):
+    """ĐẶT `nguon` vào một tên CHƯA TỒN TẠI bằng `os.link` — NGUYÊN TỬ, KHÔNG ĐÈ.
+
+    Vì sao `os.link` chứ không `os.replace`: `replace` ĐÈ lên tên đã có, nên hai tiến trình cùng
+    chọn một tên sẽ ghi đè nhau (và tệp `.sha256` của người này có thể dính vào `.db` của người
+    kia). `os.link` là phép TẠO NGUYÊN TỬ: tên đã có ⇒ `FileExistsError` ⇒ thử hậu tố tiếp theo.
+    Nhờ vậy tên bản sao lưu duy nhất **mà không cần tạo tệp giữ chỗ**: một tệp rỗng mang đúng
+    tên `hub-truoc-migrate-*.db` sẽ là "đường lùi giả" nếu tiến trình bị kill giữa lúc ghi.
+
+    `nguon` và tên đích nằm CÙNG thư mục `sao-luu/` nên cùng một hệ tệp. Hệ tệp không hỗ trợ
+    hard link ⇒ rơi về `_duong_chua_dung` + `os.replace` (đường cũ; SQLite cũng đã bị khai là
+    KHÔNG đáng tin trên ổ mạng, nơi hard link/khóa hay thiếu).
+    """
+    goc = os.path.join(THU_MUC_SAO_LUU, goc_ten + "-" + _hau_thoi_gian(luc))
+    dich, n = goc + duoi, 1
+    while True:
+        try:
+            os.link(nguon, dich)
+            return dich
+        except FileExistsError:
+            pass
+        except OSError:
+            cuoi = _duong_chua_dung(goc_ten, duoi, luc)
+            os.replace(nguon, cuoi)
+            return cuoi
+        dich = "%s-%d%s" % (goc, n, duoi)
+        n += 1
+        if n > 1000:
+            raise SystemExit("[migrate] TỪ CHỐI: quá 1000 bản cùng giây tại %s — có gì đó sai" % goc)
 
 
 def _chep_nguyen_tu(nguon, dich):
@@ -123,6 +168,76 @@ def _chep_nguyen_tu(nguon, dich):
     return dich
 
 
+def _mo_ban_sao_tam(duong):
+    """ĐƯỜNG LÙI: chép `duong` ra thư mục tạm rồi mở bản chép — không đụng tệp gốc.
+
+    Chỉ dùng khi bản SQLite đang chạy KHÔNG hiểu URI ở `ATTACH` (xem `_mo_chi_doc`). Dùng
+    `shutil.copyfile` chứ KHÔNG `copy2`: `copy2` bê nguyên quyền 0444 của tệp gốc sang bản chép,
+    và mở một tệp 0444 ở chế độ đọc-ghi sẽ hỏng — đúng cái bẫy "TỪ CHỐI NHẦM bản sao lưu TỐT".
+
+    Trả `(ket_noi, thu_muc_tam)`; người gọi PHẢI đóng kết nối rồi xoá `thu_muc_tam`.
+    """
+    thu_muc = tempfile.mkdtemp(prefix="migrate-kiem-")
+    try:
+        tep = os.path.join(thu_muc, "kiem.db")
+        shutil.copyfile(duong, tep)
+        os.chmod(tep, 0o600)
+        return csdl.ket_noi(tep), thu_muc
+    except BaseException:
+        shutil.rmtree(thu_muc, ignore_errors=True)
+        raise
+
+
+def _mo_chi_doc(duong):
+    """Mở `duong` ở chế độ CHỈ ĐỌC mà KHÔNG nạp driver ở tệp này.
+
+    Trả `(ket_noi, thu_muc_tam)`; `thu_muc_tam is None` nghĩa là mở TRỰC TIẾP bằng URI
+    `mode=ro&immutable=1` — không chép, không tạo `-wal`/`-shm` cạnh tệp. Đường lùi (chỉ khi
+    bản SQLite không hiểu URI) chép ra thư mục tạm; người gọi phải xoá thư mục đó.
+
+    ====== VÌ SAO KHÔNG MỞ THẲNG BẰNG `csdl.ket_noi(duong)` ======
+    Mở đọc-ghi một CSDL WAL sẽ TẠO `-wal`/`-shm` cạnh tệp. Với `sao_luu()` đó là tệp giả trong
+    `sao-luu/` (đã đo: `thu_g20_saoluu` ca i7 đòi thư mục đo KHÔNG đổi); với bản sao lưu thì đó
+    là SỬA thứ đang được kiểm. URI `immutable=1` giữ đúng ngữ nghĩa của bản vá G21
+    (`sqlite3.connect("file:...?mode=ro&immutable=1")`) nhưng đi qua `csdl.ket_noi()` — biên
+    driver "chỉ `csdl.py` được nạp driver" không bị nới.
+
+    ====== VÌ SAO PHẢI KIỂM `database_list` ======
+    SQLite chỉ hiểu URI ở `ATTACH` khi URI được bật lúc MỞ KẾT NỐI (compile-time `USE_URI` hoặc
+    `sqlite3_config(SQLITE_CONFIG_URI)`). Bản Python nạp `:memory:` bằng `csdl.ket_noi()` không
+    truyền cờ đó. Nếu bản SQLite không hiểu URI, `ATTACH` sẽ coi chuỗi là TÊN TỆP THƯỜNG và có
+    thể mở/tạo một CSDL RỖNG — `integrity_check` trả "ok" trên một tệp chẳng liên quan. Nên
+    đường mở URI chỉ được TIN khi `PRAGMA database_list` trỏ đúng tệp đang kiểm; lệch là rơi
+    xuống đường chép-ra-tạm, KHÔNG đo trên tệp khác.
+    """
+    duong = os.path.abspath(duong)
+    uri = pathlib.Path(duong).as_uri() + "?mode=ro&immutable=1"
+    kn = csdl.ket_noi(":memory:")
+    try:
+        try:
+            kn.execute("ATTACH DATABASE ? AS kiem", (uri,))
+            ds = [r for r in kn.execute("PRAGMA database_list") if r[1] == "kiem"]
+            that = os.path.realpath(ds[0][2]) if ds else ""
+            if that != os.path.realpath(duong):
+                raise csdl.LoiVanHanh(
+                    "SQLite không hiểu URI ở ATTACH: mở %r thay vì %r" % (that, duong))
+            return kn, None
+        except csdl.LoiCSDL:
+            # Không hiểu URI, hoặc tệp hỏng: thử bản chép tạm. Tệp hỏng thì bản chép cũng hỏng
+            # và `PRAGMA integrity_check` dưới kia sẽ nói ra — không im lặng nhận.
+            try:
+                kn.close()
+            except csdl.LoiCSDL:
+                pass
+            return _mo_ban_sao_tam(duong)
+    except BaseException:
+        try:
+            kn.close()
+        except csdl.LoiCSDL:
+            pass
+        raise
+
+
 def _kiem_cau_truc(duong, toi_thieu_bang=1):
     """Xác minh CẤU TRÚC một tệp CSDL. NÉM `SystemExit` nếu không dùng được. CHỈ ĐỌC.
 
@@ -137,6 +252,9 @@ def _kiem_cau_truc(duong, toi_thieu_bang=1):
     nên nó chỉ đọc đúng phần đã nằm trong tệp chính. Với bản sao lưu của `sao_luu()` thì đúng
     (API backup của SQLite ghi thẳng nội dung vào tệp chính), và đó là lý do phép kiểm này đặt
     trên BẢN SAO LƯU, không đặt trên CSDL đang chạy.
+
+    Đường mở nằm ở `_mo_chi_doc`: `csdl.ket_noi(":memory:")` + `ATTACH` URI chỉ-đọc. Nhờ vậy tệp
+    này KHÔNG nạp `sqlite3` (biên driver G22), và phép kiểm KHÔNG tạo `-wal`/`-shm` cạnh tệp.
     """
     if not os.path.exists(duong):
         raise SystemExit("[migrate] TỪ CHỐI: không thấy tệp %s" % duong)
@@ -149,25 +267,31 @@ def _kiem_cau_truc(duong, toi_thieu_bang=1):
         raise SystemExit("[migrate] TỪ CHỐI: %s KHÔNG PHẢI CSDL SQLite (16 byte đầu: %r)"
                          % (duong, dau))
     try:
-        kn = sqlite3.connect("file:%s?mode=ro&immutable=1" % duong.replace("?", "%3f"), uri=True)
+        kn, thu_muc_tam = _mo_chi_doc(duong)
         try:
-            kq = kn.execute("PRAGMA integrity_check").fetchone()[0]
+            kq = kn.execute("PRAGMA kiem.integrity_check").fetchone()[0]
             if kq != "ok":
                 raise SystemExit("[migrate] TỪ CHỐI: %s hỏng cấu trúc — integrity_check = %r"
                                  % (duong, kq))
-            so_bang = kn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
+            so_bang = kn.execute("SELECT COUNT(*) FROM kiem.sqlite_master WHERE type='table'"
                                  " AND name NOT LIKE 'sqlite_%'").fetchone()[0]
             try:
-                pb = kn.execute("SELECT COALESCE(MAX(phien_ban),0) FROM schema_version").fetchone()[0]
-            except sqlite3.OperationalError:
+                pb = kn.execute("SELECT COALESCE(MAX(phien_ban),0) FROM kiem.schema_version"
+                                ).fetchone()[0]
+            except csdl.LoiVanHanh:
                 # CSDL SQLite HỢP LỆ nhưng KHÔNG có bảng `schema_version` (bản sao lưu của một hệ
                 # trước G01.5). Đó KHÔNG phải lý do để từ chối — thiếu bảng thì phiên bản là 0,
                 # và chốt TỤT SCHEMA ở dưới tự so tiếp. Từ chối ở đây là TỪ CHỐI NHẦM một bản sao
                 # lưu TỐT, đúng cùng loại lỗi với cái bẫy `mode=ro` ở docstring trên.
                 pb = 0
         finally:
-            kn.close()
-    except sqlite3.DatabaseError as e:
+            try:
+                kn.close()
+            except csdl.LoiCSDL:
+                pass
+            if thu_muc_tam:
+                shutil.rmtree(thu_muc_tam, ignore_errors=True)
+    except (csdl.LoiCSDL, OSError) as e:
         raise SystemExit("[migrate] TỪ CHỐI: %s KHÔNG ĐỌC ĐƯỢC như CSDL SQLite: %s" % (duong, e))
     # CHỐT CHỐNG BẪY 0 BYTE: tệp SQLite dài 0 byte LÀ một CSDL rỗng HỢP LỆ —
     # `integrity_check` trả "ok" cho nó. Chỉ SỐ BẢNG mới bắt được. Đo được, không suy đoán.
@@ -367,6 +491,17 @@ def sao_luu(luc=None):
     Giữ nguyên hai tính chất TỐT của bản trước (AG-05/AG-00 đã đo): tên KHÔNG BAO GIỜ ĐÈ
     (trùng giây thì thêm hậu tố), và dùng API backup của SQLite để lấy bản nhất quán kể cả khi
     có WAL.
+
+    ====== G22/Y2 — TÊN BẢN SAO LƯU PHẢI DUY NHẤT KỂ CẢ KHI CHẠY SONG SONG ======
+    Đo được (X2): 8 tiến trình cùng `migrate.chay()` gọi hàm này TRƯỚC khoá, tên bản sao chỉ có
+    độ phân giải GIÂY, và tệp tạm dùng chung `".dang-ghi"` ⇒ 6–7 tiến trình chết với
+    `FileNotFoundError … .dang-ghi` / `disk I/O error`. Hai vá nằm ngay trong hàm này:
+      · ĐẶT TÊN THẬT bằng `_dat_ten_ban_sao()` (`os.link`) — tạo tên NGUYÊN TỬ, không đè; tên
+        bản sao lưu vì thế duy nhất mà KHÔNG cần tệp giữ chỗ (một tệp rỗng mang tên bản sao lưu
+        sẽ thành "đường lùi giả" nếu tiến trình bị kill giữa lúc ghi);
+      · tệp tạm mang `PID + bộ đếm nguyên tử` — hai tiến trình/thread không bao giờ chung tệp.
+    `chay()` còn gọi hàm này BÊN TRONG `BEGIN IMMEDIATE` (xem chỗ gọi), nên chỉ tiến trình thắng
+    khoá sao lưu. Hai vá bù nhau: khoá lo phần `chay()`, tên duy nhất lo phần gọi TRỰC TIẾP.
     """
     _kiem_kho_truoc_khi_sao_luu()
     if not os.path.exists(cau_hinh.DUONG_DAN_CSDL):
@@ -377,8 +512,14 @@ def sao_luu(luc=None):
             "`sao_luu()` này không dùng được;\n           xem docs/G22_SAOLUU.md.)"
             % cau_hinh.DUONG_DAN_CSDL)
     os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
-    dich = _duong_chua_dung("hub-truoc-migrate", ".db", luc)
-    tam = dich + ".dang-ghi"
+    # TÊN ĐÍCH TẠM — KHÔNG phải tên bản sao lưu, nên chưa ai thấy một `hub-truoc-migrate-*.db`
+    # rỗng/nửa vời trong lúc ghi. Tên cuối chỉ xuất hiện ở `_dat_ten_ban_sao()` sau khi đã kiểm.
+    dich = os.path.join(THU_MUC_SAO_LUU,
+                        ".dang-dat-%d-%d.db" % (os.getpid(), next(_DEM_TAM)))
+    # TÊN TỆM TẠM: PID + bộ đếm nguyên tử. Chỉ thêm PID là CHƯA ĐỦ — hai THREAD trong cùng tiến
+    # trình vẫn trùng; chỉ thêm bộ đếm cũng CHƯA ĐỦ — hai tiến trình có bộ đếm riêng vẫn trùng.
+    tam = "%s.dang-ghi-%d-%d" % (dich, os.getpid(), next(_DEM_TAM))
+    dich_tam = dich
     try:
         nguon = csdl.ket_noi()
         ban = csdl.ket_noi(tam)
@@ -393,12 +534,24 @@ def sao_luu(luc=None):
             os.fsync(f.fileno())
         _kiem_cau_truc(tam, toi_thieu_bang=1)
         os.replace(tam, dich)
+        # ĐẶT TÊN THẬT, NGUYÊN TỬ: chỉ sau khi bản sao đã trọn + đã kiểm. Hỏng ở đây thì dọn
+        # cả tên đích tạm; KHÔNG để lại tệp nào mang tên bản sao lưu.
+        ban_sao = _dat_ten_ban_sao(dich, "hub-truoc-migrate", ".db", luc)
+        try:
+            os.remove(dich)
+        except OSError:
+            pass
+        dich = ban_sao
     except BaseException:
-        if os.path.exists(tam):
-            try:
-                os.remove(tam)
-            except OSError:
-                pass
+        # Dọn CẢ `-wal`/`-shm`: `csdl.ket_noi(tam)` có thể để lại chúng, và một `-wal` mồ côi
+        # trong `sao-luu/` là "tệp giả" trong phép đếm của bộ đo G20/G21.
+        for _p in (tam, tam + "-wal", tam + "-shm",
+                   dich_tam, dich_tam + "-wal", dich_tam + "-shm"):
+            if os.path.exists(_p):
+                try:
+                    os.remove(_p)
+                except OSError:
+                    pass
         raise
     bam = _bam_tep(dich)
     with open(dich + ".sha256", "w", encoding="utf-8") as f:
@@ -855,6 +1008,10 @@ KHOA_CHO_GIAY = 60
 #      dạng §12.2. `BEGIN` tường minh thì lùi sạch cả DDL (đo ca K).
 #   3. CHỐT ĐỌC-RỒI-LÀM. Phiên bản đọc ở đầu hàm nằm ngoài mọi khoá; đọc lại bên trong
 #      khoá thì tiến trình đến sau thấy việc đã xong và nhường, thay vì nâng cấp lần hai.
+#   4. CHỖ ĐẶT SAO LƯU. `sao_luu()` chạy BÊN TRONG khoá này. Trước bản vá Y2 nó chạy TRƯỚC
+#      khoá, nên tám tiến trình cùng `chay()` cùng sao lưu một lúc và đua tên tệp — đo được
+#      6–7 tiến trình chết (`FileNotFoundError … .dang-ghi` / `disk I/O error`). Trong khoá thì
+#      chỉ tiến trình THẮNG sao lưu; bảy tiến trình còn lại đọc lại phiên bản rồi nhường.
 def chay(im_lang=False):
     def noi(*a):
         if not im_lang:
@@ -883,9 +1040,6 @@ def chay(im_lang=False):
         return {"phien_ban": pb, "da_nang": False}
 
     noi(f"[migrate] Phiên bản hiện tại: {pb} → đích: {csdl.PHIEN_BAN_SCHEMA}")
-    ban_sao = sao_luu()
-    noi(f"[migrate] Đã backup: {ban_sao}")
-    noi(f"[migrate] Số dòng trước: {truoc}")
 
     kn = csdl.ket_noi(timeout=KHOA_CHO_GIAY, tuong_minh=True)
     # THỨ TỰ BẮT BUỘC: `PRAGMA foreign_keys` phải đặt TRƯỚC `BEGIN`. Đo được (ca M):
@@ -910,6 +1064,26 @@ def chay(im_lang=False):
         noi(f"[migrate] Tiến trình khác đã nâng lên {pb_trong} trong lúc chờ khoá — không làm lại.")
         return {"phien_ban": pb_trong, "da_nang": False, "nhuong": True}
     pb = pb_trong
+
+    # ===== SAO LƯU **BÊN TRONG** KHOÁ (G22/Y2 — vá race `sao_luu`) =====
+    # ĐÂY là chỗ đặt đúng: chỉ tiến trình ĐÃ THẮNG `BEGIN IMMEDIATE` mới sao lưu. Tám tiến
+    # trình cùng vào `chay()` thì bảy tiến trình kia đã về ở nhánh `nhuong` phía trên, nên
+    # KHÔNG còn ai gọi `sao_luu()` đồng thời. Trước bản vá, `sao_luu()` nằm TRƯỚC khoá và cả
+    # tám cùng ghi `…dang-ghi`/`hub-truoc-migrate-<giây>.db` — đo được 6–7/8 tiến trình chết.
+    # Hỏng ở bước sao lưu thì PHẢI nhả khoá + đóng kết nối trước khi ném: không để một tiến
+    # trình chết giữ `BEGIN IMMEDIATE` tới khi tiến trình thoát.
+    try:
+        ban_sao = sao_luu()
+    except BaseException:
+        try:
+            kn.execute("ROLLBACK")
+        except csdl.LoiCSDL:
+            pass
+        kn.close()
+        raise
+    noi(f"[migrate] Đã backup: {ban_sao}")
+    noi(f"[migrate] Số dòng trước: {truoc}")
+
     try:
         buoc = []
         if pb < 2:

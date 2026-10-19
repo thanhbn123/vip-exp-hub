@@ -18,15 +18,28 @@
   .uat button { padding: 8px 12px; border: 0; border-radius: 6px; background: #1f6feb; color: #fff; font-weight: 600; cursor: pointer; margin: 8px 6px 0 0; }
   .uat button.phu { background: #6b7280; }
   .uat button:disabled { background: #aab2bd; cursor: not-allowed; }
-  .uat .ketqua { margin-top: 12px; padding: 10px 12px; border-radius: 7px; background: #f3f4f6; white-space: pre-wrap; font-size: 13px; }
+  .uat .ketqua { margin-top: 12px; padding: 10px 12px; border-radius: 7px; background: #f3f4f6; white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; word-break: break-word; }
   .uat .ok { background: #e8f7ee; color: #14532d; }
   .uat .loi { background: #fdecec; color: #7f1d1d; }
   .uat .canhbao { background: #fff7e6; color: #7c4a03; }
   .uat table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-  .uat th, .uat td { border: 1px solid #e3e6ea; padding: 6px 7px; text-align: left; vertical-align: top; }
+  .uat th, .uat td { border: 1px solid #e3e6ea; padding: 6px 7px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
   .uat th { background: #f6f8fa; }
   .uat .hang { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
-  .uat .ma { font-family: ui-monospace, monospace; font-size: 12px; }
+  .uat .ma { font-family: ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+  /* Bố cục theo ba bề rộng của bộ thử: 1280 (mặc định), 768 và 375. Không dùng position
+     tuyệt đối hay bề rộng cố định nên chỉ cần siết padding + cho lưới về một cột. */
+  @media (max-width: 768px) {
+    .uat { padding: 20px 14px 40px; }
+    .uat h1 { font-size: 21px; }
+  }
+  @media (max-width: 480px) {
+    .uat { padding: 14px 10px 32px; }
+    .uat .the { padding: 13px 12px; }
+    .uat .luoi { grid-template-columns: 1fr; }
+    .uat button { width: 100%; margin: 8px 0 0; }
+    .uat h1 { font-size: 19px; }
+  }
 </style>
 </head>
 <body>
@@ -35,7 +48,7 @@
   <p class="phu">LOCAL · Không tự gọi hãng. Mọi thao tác thật đi qua backend và chỉ mở khi Owner đã
     đặt phê duyệt + chứng từ. Trang này không hiển thị token/secret.</p>
 
-  <div id="auth" class="the canhbao">Đang kiểm tra phiên đăng nhập…</div>
+  <div id="auth" class="the" role="status" aria-live="polite">Đang kiểm tra phiên đăng nhập…</div>
 
   <section class="the" id="khoi-phe-duyet">
     <h2>0. Phê duyệt phiên nghiệm thu</h2>
@@ -71,7 +84,7 @@
       </div>
       <label style="margin-top:10px;font-weight:400"><input id="tk-xac-nhan" type="checkbox" style="width:auto"> Tôi xác nhận đã có phê duyệt của Owner và đang nhập credential TEST (không phải production).</label>
       <button id="btn-luu-tk" type="submit">Lưu tài khoản</button>
-      <span class="ma" id="tk-ghi-chu"></span>
+      <span class="ma" id="tk-kq" role="status" aria-live="polite"></span>
     </form>
   </section>
 

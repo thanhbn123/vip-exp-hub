@@ -41,6 +41,8 @@ test.describe.configure({ mode: "serial" });
    `nguon: "khong"` — trang KHÔNG đọc ở đâu; ca 04 ghi nó vào CHƯA ĐO. Đây KHÔNG phải "trang
                       hỏng": cả ba đều hiện đúng thiết kế. Chỉ là chúng KHÔNG được tính là
                       bằng chứng cho câu "mỗi trang có dữ liệu thật".
+   `dau_hieu` (tuỳ chọn) — bộ chọn CHỈ tồn tại khi mã của chính trang đã chạy. Mặc định là
+                      `.khung`; hai trang BEST là trang riêng nên khai bộ chọn riêng.
    Thêm trang mới mà quên khai ⇒ ca 01 HỎNG (đó là mục đích của ca 01). */
 const TRANG = {
   dashboard: { nguon: "http", doc: "mock/shipments.json" },
@@ -57,9 +59,15 @@ const TRANG = {
   settings: { nguon: "khong", ly_do: "bảng nội dung do MẢNG VIẾT CỨNG trong pages/settings.js vẽ" },
   "create-order": { nguon: "khong", ly_do: "localStorage — rỗng lúc mới mở, không đọc ở đâu" },
   pricing: { nguon: "khong", ly_do: "bảng cước TÍNH từ công thức, không đọc ở đâu" },
-  // Bàn nghiệm thu BEST cần phiên đăng nhập + quyền tenant.hang.*; bộ tĩnh không có phiên nên
-  // API trả 401. Trang vẫn được canh ở 07 (CSP/khung); dữ liệu thật đo ở app/thu/thu_best_uat.py.
-  "best-uat": { nguon: "khong", ly_do: "trang cần phiên đăng nhập; API 401 nếu chưa đăng nhập" },
+  // HAI TRANG BEST LÀ TRANG RIÊNG — không dùng `.khung` của `assets/js/app.js`, nhưng vẫn đọc
+  // API thật của máy chủ nội bộ. Vì vậy chúng khai `http` và khai thêm `dau_hieu`: một bộ chọn
+  // CHỈ tồn tại khi MÃ CỦA CHÍNH TRANG đã chạy (best.js dựng 12 tab; best_uat.js đặt thuộc tính
+  // `data-best-uat` ngay đầu `khoiTao`). Ca 03 đăng nhập trước khi đo nên dữ liệu đọc được.
+  best: { nguon: "http", doc: "/api/v2/hang + /api/v2/tai-khoan-hang (cần phiên)",
+          dau_hieu: "#best-goc [data-best-tab]" },
+  "best-uat": { nguon: "http",
+                doc: "/api/v2/best/trang-thai + /api/v2/tai-khoan-hang (cần phiên)",
+                dau_hieu: "html[data-best-uat='1']" },
 };
 
 /* ============================================================================================
@@ -161,7 +169,7 @@ test("01 — mọi tệp `pages/*.html` trên đĩa đều có mặt trong bản
 // ============================================================================================
 test("02 — không trang nào còn `<script>` nội tuyến hay thuộc tính sự kiện nội tuyến", async ({ page }) => {
   const con = [];
-  for (const ten of Object.keys(TRANG)) {
+  for (const [ten, t] of Object.entries(TRANG)) {
     await page.goto(`/pages/${ten}.html`, { waitUntil: "domcontentloaded" });
     const d = await page.evaluate(() => ({
       script: document.querySelectorAll("script:not([src])").length,
@@ -169,17 +177,23 @@ test("02 — không trang nào còn `<script>` nội tuyến hay thuộc tính s
         "[onclick],[onchange],[oninput],[onsubmit],[onload],[onerror],[onkeydown]").length,
     }));
     if (d.script || d.su_kien) con.push(`${ten}: ${d.script} script · ${d.su_kien} thuộc tính sự kiện`);
-    const khung = await page.locator(".khung").count();
-    if (!khung) con.push(`${ten}: không có .khung ⇒ mã trang không chạy`);
+    // Mỗi trang phải để lại một DẤU HIỆU CHỈ MÃ TRANG tạo ra được. Mười trang dùng chung
+    // `.khung`; hai trang BEST là trang riêng nên khai `dau_hieu` riêng trong bảng TRANG.
+    // Chờ tới 5 giây vì dấu hiệu có thể do `DOMContentLoaded` dựng sau sự kiện `domcontentloaded`
+    // của lượt `goto` — nhưng KHÔNG chấp nhận dấu hiệu có sẵn trong HTML.
+    const dauHieu = t.dau_hieu || ".khung";
+    const thay = await page.locator(dauHieu).first()
+      .waitFor({ state: "attached", timeout: 5000 }).then(() => true).catch(() => false);
+    if (!thay) con.push(`${ten}: không thấy "${dauHieu}" ⇒ mã trang không chạy`);
   }
-  expect(con, "còn mã nội tuyến (CSP `script-src 'self'` sẽ chặn) hoặc trang không dựng được khung")
-    .toEqual([]);
+  expect(con, "còn mã nội tuyến (CSP `script-src 'self'` sẽ chặn) hoặc trang không dựng được "
+    + "khung/dấu hiệu chứng minh mã trang đã chạy").toEqual([]);
 });
 
 // ============================================================================================
 // 3. TRANG KHAI CÓ NGUỒN — DOM PHẢI GẮN VỚI MỘT PHẢN HỒI THẬT
 // ============================================================================================
-test("03 — bảy trang khai `http`: bảng dữ liệu dựng từ phản hồi THẬT, có neo đối chiếu", async ({ page }) => {
+test("03 — chín trang khai `http`: bảng dữ liệu dựng từ phản hồi THẬT, có neo đối chiếu", async ({ page }) => {
   await U.dangNhap(page, "shopa-owner");     // `carriers` cần phiên để đọc ba route thật
   const hong = [];
   const xong = [];

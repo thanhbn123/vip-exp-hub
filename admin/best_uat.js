@@ -7,6 +7,26 @@
   const esc = (s) => String(s == null ? "" : s);
   let dsTaiKhoan = [];
 
+  /* CHỐT THỨ HAI CHỐNG LỘ SECRET. Backend đã không trả token/credential, nhưng lý do lỗi của
+     hãng có thể chứa URL kèm token hoặc một chuỗi dài trông như Bearer. Mọi chữ đi vào DOM đều
+     qua `anBiMat`; giá trị thật KHÔNG bao giờ được chép vào thông báo. */
+  const MAU_JWT = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g;
+  function anBiMat(chu) {
+    return String(chu == null ? "" : chu)
+      .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, "$1•••")
+      .replace(MAU_JWT, "•••")
+      .replace(/((?:token|password|mat_khau|mật\s*khẩu|secret|bearer)\s*[=:]\s*)([A-Za-z0-9._~+/=-]{20,})/gi,
+               "$1•••");
+  }
+
+  /** Lỗi mạng của trình duyệt là tiếng Anh ("Failed to fetch", "Load failed") — đổi sang câu
+   *  tiếng Việt để người nghiệm thu biết việc cần làm, không đoán. */
+  function loiMang(m) {
+    return /failed to fetch|networkerror|load failed|fetch failed|network request failed/i.test(m)
+      ? "không kết nối được máy chủ nội bộ — kiểm tra máy chủ đang chạy và phiên đăng nhập"
+      : m;
+  }
+
   function xacNhanThat() {
     const o = $("phe-duyet-that");
     return !!(o && o.checked);
@@ -19,12 +39,20 @@
   }
 
   async function goi(duong, method, duLieu) {
-    const res = await fetch(duong, {
-      method: method || "GET",
-      credentials: "same-origin",
-      headers: { "X-Requested-With": "VIPHub", "Content-Type": "application/json" },
-      body: duLieu == null ? undefined : JSON.stringify(duLieu),
-    });
+    let res;
+    try {
+      res = await fetch(duong, {
+        method: method || "GET",
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "VIPHub", "Content-Type": "application/json" },
+        body: duLieu == null ? undefined : JSON.stringify(duLieu),
+      });
+    } catch (e) {
+      // Mất mạng / máy chủ tắt là ca thường gặp khi nghiệm thu local. Không để "Failed to fetch".
+      const loi = new Error(loiMang((e && e.message) || String(e)));
+      loi.ma = 0;
+      throw loi;
+    }
     let kq = {};
     try { kq = await res.json(); } catch (e) { /* không JSON */ }
     // 401 có HAI nghĩa: phiên hub hết hạn (`{loi:...}`) và BEST từ chối credential
@@ -42,11 +70,11 @@
     const o = $(id);
     if (!o) return;
     o.className = "ketqua" + (loai ? " " + loai : "");
-    o.textContent = chu;
+    o.textContent = anBiMat(chu);
   }
 
   function loi(id, e) {
-    dat(id, (e && e.message) ? e.message : String(e), "loi");
+    dat(id, loiMang((e && e.message) ? e.message : String(e)), "loi");
   }
 
   function renderTaiKhoan(ds) {
@@ -58,14 +86,14 @@
       o.textContent = "Chưa có tài khoản BEST. Tạo một tài khoản ở form bên dưới (mock trước, sandbox sau khi có phê duyệt).";
     } else {
       o.className = "ketqua";
-      o.textContent = dsTaiKhoan.map((t) => {
+      o.textContent = anBiMat(dsTaiKhoan.map((t) => {
         const wh = t.webhook_url || `/api/v2/webhook/nhan/${t.webhook_ma || ""}`;
         const b = t.webhook_bearer || {};
         return `#${t.id} · ${t.ten} · ${t.moi_truong} · ${t.kich_hoat ? "đang bật" : "đã khóa"}`
           + `\n   webhook: ${wh}${t.webhook_url_cong_khai ? "" : " (CHƯA khai VIP_HUB_PUBLIC_BASE_URL — BEST không gọi được)"}`
           + `\n   Bearer webhook: ${b.co_bearer === true ? "đã lưu" : "CHƯA lưu"}`
           + ` · credential: ${t.co_credentials ? "đã lưu" : "chưa lưu"}`;
-      }).join("\n");
+      }).join("\n"));
     }
     for (const id of ["kn-tk", "wh-tk", "cuoc-tk", "don-tk", "tc-tk", "ud-tk"]) {
       const s = $(id);
@@ -92,9 +120,11 @@
     renderTaiKhoan((r.kq && r.kq.tai_khoan) || []);
   }
 
-  async function taiTrangThai() {
-    dat("trang-thai", "Đang tải trạng thái + TLS…");
-    const r = await goi("/api/v2/best/trang-thai?tls=1");
+  async function taiTrangThai(coTls) {
+    // CHỈ kiểm TLS khi người dùng bấm nút: lượt mở trang không tự bắt tay ra host hãng.
+    // (Test E2E và chế độ local không được phát sinh kết nối ngoài loopback.)
+    dat("trang-thai", coTls ? "Đang tải trạng thái + TLS…" : "Đang tải trạng thái…");
+    const r = await goi("/api/v2/best/trang-thai" + (coTls ? "?tls=1" : ""));
     if (!r.ok) throw new Error((r.kq && r.kq.loi) || `HTTP ${r.ma}`);
     const kq = r.kq || {};
     const hd = kq.hop_dong || {};
@@ -126,15 +156,15 @@
     const user = $("tk-user").value.trim();
     const pass = $("tk-pass").value;
     const xacNhan = $("tk-xac-nhan").checked;
-    if (!user || !pass) return loi("tk-ghi-chu", new Error("cần username + password"));
+    if (!user || !pass) return loi("tk-kq", new Error("cần username + password"));
     if (mt !== "mock") {
       if (location.protocol !== "https:") {
-        return loi("tk-ghi-chu", new Error("credential thật chỉ nhận qua HTTPS. Chạy server với VIP_HUB_TLS_CERT/KEY hoặc sau reverse proxy TLS."));
+        return loi("tk-kq", new Error("credential thật chỉ nhận qua HTTPS. Chạy server với VIP_HUB_TLS_CERT/KEY hoặc sau reverse proxy TLS."));
       }
-      if (!xacNhan) return loi("tk-ghi-chu", new Error("cần tick xác nhận phê duyệt của Owner"));
-      if (!xacNhanThat()) return loi("tk-ghi-chu", new Error("cần tick ô phê duyệt phiên nghiệm thu ở mục 0"));
+      if (!xacNhan) return loi("tk-kq", new Error("cần tick xác nhận phê duyệt của Owner"));
+      if (!xacNhanThat()) return loi("tk-kq", new Error("cần tick ô phê duyệt phiên nghiệm thu ở mục 0"));
       if (mt === "production") {
-        return loi("tk-ghi-chu", new Error("production chỉ cho phép sau nghiệm thu riêng; dùng sandbox trước."));
+        return loi("tk-kq", new Error("production chỉ cho phép sau nghiệm thu riêng; dùng sandbox trước."));
       }
     }
     const cred = { username: user, password: pass };
@@ -150,14 +180,14 @@
     };
     $("tk-pass").value = "";
     if ($("tk-ems")) $("tk-ems").value = "";
-    dat("tk-ghi-chu", "Đang lưu (credential được mã hoá ở backend)…");
+    dat("tk-kq", "Đang lưu (credential được mã hoá ở backend)…");
     try {
       const r = await goi("/api/v2/tai-khoan-hang", "POST", than);
       if (!r.ok) throw new Error((r.kq && r.kq.loi) || `HTTP ${r.ma}`);
-      dat("tk-ghi-chu", `Đã lưu tài khoản #${r.kq.id} · môi trường ${mt} · webhook: ${r.kq.webhook_url || ""}`, "ok");
+      dat("tk-kq", `Đã lưu tài khoản #${r.kq.id} · môi trường ${mt} · webhook: ${r.kq.webhook_url || ""}`, "ok");
       await taiTaiKhoan();
-      await taiTrangThai();
-    } catch (e) { loi("tk-ghi-chu", e); }
+      await taiTrangThai(false);
+    } catch (e) { loi("tk-kq", e); }
   }
 
   async function kiemKetNoi() {
@@ -474,10 +504,13 @@
   }
 
   async function khoiTao() {
+    // Dấu hiệu ĐỒNG BỘ cho biết mã trang đã chạy (bộ thử đọc thuộc tính này thay vì tin vào
+    // chữ có sẵn trong HTML). Đặt trước mọi lời gọi mạng để không phụ thuộc tốc độ máy chủ.
+    document.documentElement.setAttribute("data-best-uat", "1");
     $("form-tk").addEventListener("submit", luuTaiKhoan);
     $("form-cuoc").addEventListener("submit", baoGia);
     $("form-don").addEventListener("submit", taoDon);
-    $("btn-trang-thai").addEventListener("click", () => taiTrangThai().catch((e) => dat("trang-thai", e.message, "loi")));
+    $("btn-trang-thai").addEventListener("click", () => taiTrangThai(true).catch((e) => loi("trang-thai", e)));
     $("btn-kiem-ket-noi").addEventListener("click", kiemKetNoi);
     $("btn-luu-webhook").addEventListener("click", luuWebhook);
     $("btn-tra-cuu").addEventListener("click", traCuu);
@@ -489,12 +522,14 @@
     $("btn-lich-su").addEventListener("click", taiLichSu);
     try {
       await taiTaiKhoan();
-      await taiTrangThai();
+      await taiTrangThai(false);
       $("auth").className = "the ok";
       $("auth").textContent = "Đã đăng nhập. Các nút bên dưới gọi backend nội bộ; không có token/secret nào hiển thị.";
     } catch (e) {
       $("auth").className = "the canhbao";
-      $("auth").textContent = "Chưa đăng nhập hoặc thiếu quyền: " + e.message + " — mở /admin/ để đăng nhập.";
+      $("auth").textContent = "Chưa đăng nhập hoặc thiếu quyền: "
+        + anBiMat(loiMang((e && e.message) ? e.message : String(e)))
+        + " — mở /admin/ để đăng nhập.";
     }
   }
 

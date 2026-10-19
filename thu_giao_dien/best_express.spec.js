@@ -650,3 +650,271 @@ test("13 — 12 màn BEST không tràn ngang ở 375px", async ({ page }) => {
   expect(coTran.tai_lieu > 0 || (coTran.phan_tu || []).length, "phép đo không phát hiện tràn do chính ca thử tạo")
     .toBeTruthy();
 });
+
+/* --------------------------------------------------------------------------------------------
+   NỀN CHUNG CHO HAI CA BÀN NGHIỆM THU (14, 15)
+   --------------------------------------------------------------------------------------------
+   Bàn UAT đọc hai đường THẬT của backend (`/api/v2/tai-khoan-hang`, `/api/v2/best/trang-thai`).
+   Ở đây mock đúng hai đường ấy để đo BỐ CỐC/CSP và hành vi URL, không phụ thuộc dữ liệu seed —
+   nhưng KHÔNG mock đường thao tác nào khác. Payload cố ý chứa tên và URL rất dài để phép đo
+   tràn ngang có việc thật mà làm. */
+const UAT_TK = {
+  id: 77, hang: "best", ten: "BEST sandbox — tên rất dài để đo sức chứa bố cục nghiệm thu",
+  moi_truong: "sandbox", kich_hoat: 1, co_credentials: true,
+  credentials_doi_luc: "2026-10-19 10:00:00+0700",
+  webhook_ma: "WH-BEST-UAT-77",
+  webhook_url: "https://best-uat.viporder.vn/api/v2/webhook/nhan/WH-BEST-UAT-77",
+  webhook_url_cong_khai: true, webhook_bearer: { co_bearer: true, doc_duoc: true },
+};
+
+const UAT_TRANG_THAI = {
+  hop_dong: { so_ma: 23, service_id: 12491, token_ttl_days: 30,
+              gioi_han: { query: 10, print: 50 }, nguon: "DOCX", endpoints: {}, bang_ma: {} },
+  co_phe_duyet_owner: false, co_ma_phe_duyet: false,
+  tai_khoan: [UAT_TK], tls: null, public_base_url: "",
+};
+
+async function datNenUat(page) {
+  await page.unroute("**/api/v2/tai-khoan-hang").catch(() => {});
+  await page.unroute("**/api/v2/best/trang-thai*").catch(() => {});
+  await page.route("**/api/v2/tai-khoan-hang", (r) => {
+    if (r.request().method() === "GET") return r.fulfill(json({ tai_khoan: [UAT_TK] }));
+    return r.fulfill(json({ id: 91, webhook_ma: "WH-MOI",
+                            webhook_url: "/api/v2/webhook/nhan/WH-MOI",
+                            webhook_url_cong_khai: false }, 201));
+  });
+  await page.route("**/api/v2/best/trang-thai*", (r) => r.fulfill(json(UAT_TRANG_THAI)));
+}
+
+// ============================================================================================
+// 14 — BÀN NGHIỆM THU: 375 / 768 / 1280 không tràn ngang; CSP không script nội tuyến
+// ============================================================================================
+test("14 — bàn nghiệm thu: 375/768/1280 không tràn ngang; không mã nội tuyến", async ({ page }) => {
+  const loi = U.thuLoi(page);
+  await datNenUat(page);
+  await U.dangNhap(page, "shopa-owner");
+
+  for (const beRong of [375, 768, 1280]) {
+    await page.setViewportSize({ width: beRong, height: 900 });
+    await page.goto("/pages/best-uat.html", { waitUntil: "networkidle" });
+    await expect(page.locator("#auth"), `mất phiên ở ${beRong}px`).toContainText("Đã đăng nhập");
+    // ĐỐI CHỨNG DƯƠNG: nội dung DÀI đã thật sự lên màn, nên phép đo tràn có việc để làm.
+    await expect(page.locator("#ds-tai-khoan")).toContainText("BEST sandbox");
+
+    const kq = await U.doTranNgang(page);
+    expect(kq.tai_lieu, `tài liệu tràn ngang ở ${beRong}px`).toBe(0);
+    expect(kq.phan_tu, `phần tử tràn ở ${beRong}px: ${JSON.stringify(kq.phan_tu)}`).toEqual([]);
+
+    // CSP của máy chủ là `script-src 'self'`: một script/thuộc tính nội tuyến là khối chết.
+    expect(await page.locator("script:not([src])").count(),
+      `có script nội tuyến ở ${beRong}px`).toBe(0);
+    expect(await page.locator(
+      "[onclick],[onchange],[oninput],[onsubmit],[onload],[onerror],[onkeydown]").count(),
+      `có thuộc tính sự kiện nội tuyến ở ${beRong}px`).toBe(0);
+  }
+  expect(loi, "lỗi console ở bàn nghiệm thu").toEqual([]);
+});
+
+// ============================================================================================
+// 15 — URL PDF LÀ HTTP: CHỈ CẢNH BÁO, KHÔNG TỰ MỞ (và không rời loopback)
+// ============================================================================================
+test("15 — bàn nghiệm thu: URL PDF http chỉ hiện cảnh báo, KHÔNG tự mở trang", async ({ page }) => {
+  await datNenUat(page);
+  const POPUP = [];
+  const RA_NGOAI = [];
+  page.on("popup", (p) => POPUP.push(p.url()));
+  page.on("request", (r) => {
+    try {
+      const u = new URL(r.url());
+      if (!/^https?:$/.test(u.protocol)) return;
+      if (u.hostname !== "127.0.0.1") RA_NGOAI.push(u.href);
+    } catch { /* about:blank, blob:… */ }
+  });
+  await page.route("**/api/v2/best/in", (r) => r.fulfill(json({
+    ok: true, url: "http://sea-edi-hxtest.800best.com/Print/Waybill?code=UAT123",
+    ma: "UAT123",
+  })));
+  await page.route("**/api/v2/best/in-pdf", (r) => r.fulfill(json({
+    ok: false, blocked: true, loi: "hãng từ chối in PDF trong lượt nghiệm thu này",
+  }, 403)));
+
+  await U.dangNhap(page, "shopa-owner");
+  await page.goto("/pages/best-uat.html", { waitUntil: "networkidle" });
+  await expect(page.locator("#auth")).toContainText("Đã đăng nhập");
+  await page.locator("#phe-duyet-that").check();
+  await page.locator("#tc-codes").fill("UAT123");
+  const soTrangTruoc = page.context().pages().length;
+
+  await page.locator("#btn-in").click();
+  await expect(page.locator("#kq-tra-cuu")).toContainText("CẢNH BÁO");
+  await expect(page.locator("#kq-tra-cuu")).toContainText("http://sea-edi-hxtest.800best.com");
+
+  // ĐỐI CHỨNG ÂM: không popup, không tab mới, không request ra ngoài loopback.
+  expect(POPUP, "đã tự mở URL HTTP của hãng").toEqual([]);
+  expect(page.context().pages().length, "đã mở tab mới khi chỉ được hiện URL")
+    .toBe(soTrangTruoc);
+  expect(await page.locator('a[href^="http://"]').count(),
+    "DOM có liên kết http:// để người dùng bấm nhầm").toBe(0);
+  expect(RA_NGOAI, `có request ra ngoài 127.0.0.1: ${RA_NGOAI.join(" · ")}`).toEqual([]);
+
+  // Nút tải PDF đi qua BACKEND, và lỗi backend hiện bằng tiếng Việt — không mở URL http.
+  await page.locator("#btn-tai-pdf").click();
+  await expect(page.locator("#kq-tra-cuu")).toContainText("hãng từ chối in PDF");
+  expect(POPUP).toEqual([]);
+});
+
+// ============================================================================================
+// 16 — MỌI NÚT CỦA BÀN NGHIỆM THU GỌI ĐÚNG API THẬT; LỖI HIỆN TIẾNG VIỆT; KHÔNG LỘ SECRET
+// ============================================================================================
+// Ca này không gọi hãng: route chặn MỌI đường `/api/v2/best/**` và trả lỗi có kiểm soát, rồi
+// đòi đúng một lời gọi cho mỗi nút. Mục đích là bắt NÚT CHẾT / NÚT GỌI SAI ĐƯỜNG — thứ mà
+// "trang mở được" không phát hiện được. Ca KHÔNG chứng minh hãng chấp nhận dữ liệu.
+test("16 — bàn nghiệm thu: mọi nút gọi đúng API, lỗi tiếng Việt, không lộ secret", async ({ page }) => {
+  const daGoi = [];
+  const raNgoai = [];
+  page.on("request", (r) => {
+    try {
+      const u = new URL(r.url());
+      if (/^https?:$/.test(u.protocol) && u.hostname !== "127.0.0.1") raNgoai.push(u.href);
+    } catch { /* blob:, about:blank */ }
+  });
+
+  const ghi = (r) => {
+    const u = new URL(r.request().url());
+    daGoi.push({ duong: u.pathname, truy_van: u.search, method: r.request().method() });
+  };
+
+  await page.route("**/api/v2/tai-khoan-hang", (r) => {
+    ghi(r);
+    if (r.request().method() === "GET") return r.fulfill(json({ tai_khoan: [UAT_TK] }));
+    return r.fulfill(json({ id: 91, webhook_ma: "WH-MOI",
+                            webhook_url: "/api/v2/webhook/nhan/WH-MOI",
+                            webhook_url_cong_khai: false }, 201));
+  });
+  await page.route("**/api/v2/best/**", (r) => {
+    ghi(r);
+    const d = new URL(r.request().url()).pathname;
+    if (d === "/api/v2/best/trang-thai") return r.fulfill(json(UAT_TRANG_THAI));
+    if (d === "/api/v2/best/kiem-ket-noi") {
+      return r.fulfill(json({
+        ok: false, co_token: false, blocked: false, moi_truong: "sandbox",
+        endpoint: "/User/Login", meta: { endpoint: "/User/Login", http_status: 401 },
+        loi: "hãng từ chối: sai tài khoản hoặc mật khẩu",
+      }, 401));
+    }
+    if (d === "/api/v2/best/webhook-bearer") {
+      return r.fulfill(json({ ok: true, da_luu: true, webhook_url: "/api/v2/webhook/nhan/WH-77" }));
+    }
+    if (d === "/api/v2/best/in") {
+      return r.fulfill(json({ ok: true, url: "http://sea-edi-hxtest.800best.com/Print/UAT123" }));
+    }
+    if (d === "/api/v2/best/in-pdf") {
+      return r.fulfill(json({ ok: false, blocked: true,
+                              loi: "hãng từ chối in PDF trong lượt nghiệm thu này" }, 403));
+    }
+    if (d === "/api/v2/best/lich-su") {
+      return r.fulfill(json({ su_kien: [], audit: [] }));
+    }
+    return r.fulfill(json({ ok: false, blocked: true, loi: "hãng từ chối yêu cầu" }, 403));
+  });
+
+  await U.dangNhap(page, "shopa-owner");
+  await page.goto("/pages/best-uat.html", { waitUntil: "networkidle" });
+  await expect(page.locator("#auth")).toContainText("Đã đăng nhập");
+  await page.locator("#phe-duyet-that").check();
+
+  // 1. Lưu tài khoản (POST thật) — secret phải rời khỏi ô ngay và không vào DOM.
+  const CANARY_PASS = "BEST-CANARY-PASS-9Q7Z";
+  const CANARY_WH = "BEST-CANARY-WEBHOOK-4X8K";
+  await page.locator("#tk-ten").fill("BEST UAT ca 16");
+  await page.locator("#tk-user").fill("uat-user");
+  await page.locator("#tk-pass").fill(CANARY_PASS);
+  await page.locator("#btn-luu-tk").click();
+  await expect(page.locator("#tk-kq")).toContainText("Đã lưu tài khoản #91");
+  expect(await page.locator("#tk-pass").inputValue(), "mật khẩu còn trong ô").toBe("");
+
+  // 2. Tải lại trạng thái + TLS.
+  await page.locator("#btn-trang-thai").click();
+  await expect.poll(() => daGoi.filter((x) => x.duong === "/api/v2/best/trang-thai"
+    && x.truy_van === "?tls=1").length).toBe(1);
+
+  // 3. Kiểm tra kết nối thật (mock 401 của hãng) — KHÔNG được báo thành công.
+  await page.locator("#kn-tk").selectOption("77");
+  await page.locator("#kn-xac-nhan").selectOption("1");
+  await page.locator("#btn-kiem-ket-noi").click();
+  await expect(page.locator("#kq-ket-noi")).toContainText("THẤT BẠI/BỊ CHẶN");
+  await expect(page.locator("#kq-ket-noi")).toContainText("sai tài khoản hoặc mật khẩu");
+
+  // 4. Lưu Bearer webhook — token rời ô ngay, không hiện lại.
+  await page.locator("#wh-tk").selectOption("77");
+  await page.locator("#wh-token").fill(CANARY_WH);
+  await page.locator("#btn-luu-webhook").click();
+  await expect(page.locator("#kq-webhook")).toContainText("Đã lưu Bearer");
+  expect(await page.locator("#wh-token").inputValue(), "Bearer còn trong ô").toBe("");
+
+  // 5. Báo cước.
+  await page.locator("#cuoc-tk").selectOption("77");
+  await page.locator("#btn-bao-gia").click();
+  await expect(page.locator("#kq-cuoc")).toContainText("KHÔNG BÁO ĐƯỢC CƯỚC");
+
+  // 6. Tạo đơn sandbox.
+  await page.locator("#don-tk").selectOption("77");
+  await page.locator("#don-xac-nhan").fill("TOI_DONG_Y_GOI_BEST_TEST");
+  await page.locator("#btn-tao-don").click();
+  await expect(page.locator("#kq-don")).toContainText("KHÔNG TẠO ĐƯỢC");
+
+  // 7. Tra cứu / lấy URL PDF / tải PDF qua backend.
+  await page.locator("#tc-tk").selectOption("77");
+  await page.locator("#tc-codes").fill("UAT123");
+  await page.locator("#btn-tra-cuu").click();
+  await expect(page.locator("#kq-tra-cuu")).toContainText("KHÔNG TRA CỨU ĐƯỢC");
+
+  await page.locator("#btn-in").click();
+  await expect(page.locator("#kq-tra-cuu")).toContainText("URL PDF: http://sea-edi-hxtest.800best.com");
+  await page.locator("#btn-tai-pdf").click();
+  await expect(page.locator("#kq-tra-cuu")).toContainText("hãng từ chối in PDF");
+
+  // 8. Order/Update, UpdateAddress, Cancel.
+  await page.locator("#ud-tk").selectOption("77");
+  await page.locator("#ud-ma").fill("UAT123");
+  await page.locator("#ud-xac-nhan").fill("TOI_DONG_Y_GOI_BEST_TEST");
+  await page.locator("#btn-cap-nhat").click();
+  await expect(page.locator("#kq-cap-nhat")).toContainText("KHÔNG CẬP NHẬT");
+
+  await page.locator("#btn-sua-dia-chi").click();
+  await expect(page.locator("#kq-cap-nhat")).toContainText("KHÔNG SỬA ĐƯỢC");
+
+  await page.locator("#btn-huy").click();
+  await expect(page.locator("#kq-cap-nhat")).toContainText("KHÔNG HỦY ĐƯỢC");
+
+  // 9. Lịch sử / nhật ký.
+  await page.locator("#btn-lich-su").click();
+  await expect(page.locator("#kq-lich-su")).toContainText("Sự kiện gần nhất: 0");
+
+  // MỌI nút phải để lại ĐÚNG một lời gọi tới đường của nó (không nút chết, không gọi sai).
+  const duong = new Set(daGoi.map((x) => x.duong));
+  for (const p of ["/api/v2/tai-khoan-hang", "/api/v2/best/trang-thai",
+    "/api/v2/best/kiem-ket-noi", "/api/v2/best/webhook-bearer", "/api/v2/best/bao-gia",
+    "/api/v2/best/tao-don", "/api/v2/best/tra-cuu", "/api/v2/best/in",
+    "/api/v2/best/in-pdf", "/api/v2/best/cap-nhat", "/api/v2/best/sua-dia-chi",
+    "/api/v2/best/huy", "/api/v2/best/lich-su"]) {
+    expect(duong.has(p), `không có lời gọi nào tới ${p} ⇒ nút chết hoặc gọi sai đường`)
+      .toBe(true);
+  }
+  const post = daGoi.filter((x) => x.method === "POST").map((x) => x.duong);
+  for (const p of ["/api/v2/tai-khoan-hang", "/api/v2/best/kiem-ket-noi",
+    "/api/v2/best/webhook-bearer", "/api/v2/best/bao-gia", "/api/v2/best/tao-don",
+    "/api/v2/best/tra-cuu", "/api/v2/best/in", "/api/v2/best/in-pdf",
+    "/api/v2/best/cap-nhat", "/api/v2/best/sua-dia-chi", "/api/v2/best/huy"]) {
+    expect(post, `thiếu POST ${p}`).toContain(p);
+  }
+
+  // ĐỐI CHỨNG ÂM: secret không lọt DOM; không lỗi tiếng Anh của trình duyệt; không ra ngoài.
+  const chu = await page.locator("body").innerText();
+  for (const biMat of [CANARY_PASS, CANARY_WH]) {
+    expect(chu, `secret lọt vào chữ trên màn: ${biMat}`).not.toContain(biMat);
+  }
+  expect(chu).not.toContain("Failed to fetch");
+  expect(chu).not.toContain("undefined");
+  expect(raNgoai, `có request ra ngoài loopback: ${raNgoai.join(" · ")}`).toEqual([]);
+});

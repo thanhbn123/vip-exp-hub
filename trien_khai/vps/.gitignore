@@ -1,0 +1,3 @@
+# Root .gitignore chặn `.env.*` để không lọt bí mật. Mẫu dưới đây là tài liệu công khai,
+# không chứa bí mật, và là tệp README yêu cầu copy — mở lại đúng một tệp này.
+!.env.production.example

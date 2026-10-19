@@ -60,22 +60,28 @@ def main():
         raise SystemExit("mật khẩu không được trùng username")
 
     csdl.mo()
-    quyen.seed()
-    if csdl.mot("SELECT COUNT(*) AS n FROM users")["n"]:
-        raise SystemExit("CSDL đã có user — bootstrap TỪ CHỐI (không tạo thêm quyền)")
-    if not csdl.mot("SELECT id FROM goi_dich_vu WHERE id=?", (plan,)):
-        raise SystemExit(f"gói dịch vụ {plan!r} không tồn tại")
-    if csdl.mot("SELECT id FROM tenants WHERE code=?", (tenant_code,)):
-        raise SystemExit("tenant code đã tồn tại")
-
+    # Kiểm và ghi trong CÙNG một giao dịch. Bản cũ gọi `quyen.seed()` TRƯỚC khi kiểm user:
+    # chạy trên CSDL đã có user vẫn ghi roles/permissions rồi mới từ chối — trái với lời hứa
+    # "không tạo thêm quyền trên hệ đang chạy". BEGIN IMMEDIATE cũng đóng khe hai bootstrap
+    # chạy song song cùng thấy 0 user rồi cùng tạo chủ.
+    password_hash = bao_mat.bam_mat_khau(password)
     with csdl.giao_dich():
+        if csdl.mot("SELECT COUNT(*) AS n FROM users")["n"]:
+            raise SystemExit("CSDL đã có user — bootstrap TỪ CHỐI (không tạo thêm quyền)")
+        if not csdl.mot("SELECT id FROM goi_dich_vu WHERE id=?", (plan,)):
+            raise SystemExit(f"gói dịch vụ {plan!r} không tồn tại")
+        if csdl.mot("SELECT id FROM tenants WHERE code=?", (tenant_code,)):
+            raise SystemExit("tenant code đã tồn tại")
+
+        # Chỉ seed SAU khi mọi điều kiện từ chối đã qua; mọi thứ nằm trong cùng transaction.
+        quyen.seed()
         tid = csdl.ghi(
             "INSERT INTO tenants (code,ten,goi_id,tao_luc) VALUES (?,?,?,?)",
             (tenant_code, tenant_name, plan, csdl.bay_gio())).lastrowid
         uid = csdl.ghi(
             "INSERT INTO users (ten_dang_nhap,mat_khau_hash,ho_ten,platform_role,tao_luc)"
             " VALUES (?,?,?,?,?)",
-            (username, bao_mat.bam_mat_khau(password), fullname, "PLATFORM_OWNER",
+            (username, password_hash, fullname, "PLATFORM_OWNER",
              csdl.bay_gio())).lastrowid
         csdl.ghi("INSERT INTO tenant_memberships (user_id,tenant_id,role,tao_luc)"
                  " VALUES (?,?,?,?)", (uid, tid, "TENANT_OWNER", csdl.bay_gio()))

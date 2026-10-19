@@ -22,7 +22,11 @@ for d in viporder.vn viporder.com.vn cpn.viporder.vn qua.viporder.vn best-uat.vi
   printf '%-28s ' "$d"; getent hosts "$d" 2>&1 | awk '{print $1}' | paste -sd, -
 done
 echo "===== BEST TLS (không credential) ====="
-for h in sgp-seaedi-test.800best.com sgp-seaedi.800best.com sea-edi-hxtest.800best.com; do
-  printf '%-32s ' "$h"; curl -sS -o /dev/null -w 'HTTP %{http_code} TLS %{ssl_verify_result}\n' --max-time 10 "https://$h/" 2>&1
-done
+if [ "${KHAO_SAT_BEST:-0}" = "1" ]; then
+  for h in sgp-seaedi-test.800best.com sgp-seaedi.800best.com sea-edi-hxtest.800best.com; do
+    printf '%-32s ' "$h"; curl -sS -o /dev/null -w 'HTTP %{http_code} TLS %{ssl_verify_result}\n' --max-time 10 "https://$h/" 2>&1
+  done
+else
+  echo "BỎ QUA: KHAO_SAT_BEST!=1 — không gọi host BEST (kể cả TLS ẩn danh) theo ràng buộc lượt này."
+fi
 echo "===== KẾT THÚC ====="

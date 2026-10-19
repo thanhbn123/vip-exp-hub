@@ -121,6 +121,47 @@ class TestBuilder(unittest.TestCase):
             bhd.dung_print([str(i) for i in range(51)])
 
 
+class TestBuilderMoi(unittest.TestCase):
+    def test_37_31_truong_nen_va_34_truong_tai_lieu(self):
+        self.assertEqual(len(bhd.TRUONG_ORDER_ADD_NEN), 31)
+        self.assertEqual(len(bhd.TRUONG_ORDER_ADD), 34)
+        p = bhd.dung_order_add(don_mau(), {})
+        self.assertEqual(len(p), 31)
+        p2 = bhd.dung_order_add(don_mau(number_of_products=3,
+                                        bonus_product_name1="Quà 1",
+                                        bonus_product_name2="Quà 2"), {})
+        self.assertEqual(p2["NumberOfProducts"], 3)
+        self.assertEqual(p2["BonusProductName1"], "Quà 1")
+        self.assertEqual(p2["BonusProductName2"], "Quà 2")
+
+    def test_38_thieu_can_nang_bi_tu_choi(self):
+        d = don_mau()
+        d.pop("khoi_luong_gram")
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_order_add(d, {})
+
+    def test_39_update_address_chon_dung_nguoi_theo_loai(self):
+        d = don_mau(nguoi_tra_ten="Người Trả", nguoi_tra_sdt="0903",
+                    nguoi_tra_tinh="Đà Nẵng", nguoi_tra_quan="Hải Châu",
+                    nguoi_tra_xa="Phường 1", nguoi_tra_dia_chi="9 Đường Trả")
+        p1 = bhd.dung_update_address(d, "W1", 1)
+        self.assertEqual(p1["ContactName"], d["nguoi_gui_ten"])
+        p2 = bhd.dung_update_address(d, "W1", 2)
+        self.assertEqual(p2["ContactName"], d["nguoi_nhan_ten"])
+        p3 = bhd.dung_update_address(d, "W1", 3)
+        self.assertEqual(p3["ContactName"], "Người Trả")
+        self.assertEqual(p3["CityName"], "Đà Nẵng")
+        self.assertEqual(p3["PhoneNumber1"], "0903")
+
+    def test_40_estimate_khong_bat_buoc_ward(self):
+        d = don_mau()
+        d.pop("nguoi_gui_xa", None)
+        d.pop("nguoi_nhan_xa", None)
+        p = bhd.dung_estimate(d)
+        self.assertEqual(p["SourceWard"], " ")
+        self.assertEqual(p["DestWard"], " ")
+
+
 class TestParser(unittest.TestCase):
     def test_20_result_1_thanh_cong(self):
         ok, data, loi, result = bhd.boc_ket_qua({"Result": 1, "Message": None,
@@ -181,6 +222,44 @@ class TestParser(unittest.TestCase):
         self.assertEqual(bhd.trang_thai_chung(1000)[0], "giao_that_bai")
         self.assertEqual(bhd.trang_thai_chung(2)[0], "da_huy")
         self.assertIsNone(bhd.trang_thai_chung(99999)[0])
+
+
+class TestParserMoi(unittest.TestCase):
+    def test_41_query_customer_cancel(self):
+        goi = {"Result": 1, "Message": None, "data": [{
+            "code_best": "8485", "merchant_order_code": "MD1",
+            "traceLogs": [{"status": "customer Cancel", "modified_at": 2000,
+                           "status_content": "khách hủy"}]}]}
+        ok, ds, loi = bhd.boc_query(goi)
+        self.assertTrue(ok, loi)
+        self.assertEqual(ds[0]["status_so"], 2)
+        self.assertTrue(ds[0]["customer_cancel"])
+        self.assertEqual(ds[0]["trang_thai_chung"], "da_huy")
+        self.assertTrue(ds[0]["biet_ma"])
+
+    def test_42_estimate_alias_cod_va_phi_cuoi(self):
+        ok, d, loi = bhd.boc_estimate({"Result": 1, "Message": "", "data": {
+            "Cod": 100000, "TotalFee": 19800, "TotalFeeVAT": 21780}})
+        self.assertTrue(ok, loi)
+        self.assertEqual(d["COD"], 100000)
+        self.assertEqual(d["Cod"], 100000)
+        self.assertEqual(bhd.phi_cuoi(d), 21780)
+
+    def test_43_print_full_guid_va_url(self):
+        ok, d, loi = bhd.boc_print_full({"Result": 1, "Message": "",
+                                         "Guid": "3034", "Url": "http://x/y.pdf"})
+        self.assertTrue(ok, loi)
+        self.assertEqual(d["Guid"], "3034")
+        self.assertEqual(d["Url"], "http://x/y.pdf")
+
+    def test_44_http_best_nang_http_len_https_chi_host_hang(self):
+        import http_best
+        self.assertEqual(
+            http_best.nang_cap_https_cho_url_hang(
+                "http://sgp-seaedi-test.800best.com/VietNamV3/x.pdf?y=1"),
+            "https://sgp-seaedi-test.800best.com/VietNamV3/x.pdf?y=1")
+        self.assertEqual(http_best.nang_cap_https_cho_url_hang("http://evil.example/x.pdf"),
+                         "http://evil.example/x.pdf")
 
 
 class TestApproval(unittest.TestCase):

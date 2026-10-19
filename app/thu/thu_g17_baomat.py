@@ -630,6 +630,28 @@ def bang_cua():
         _c("/api/v2/tai-khoan-hang/{tk_a2}/revoke", "POST", "tenant.hang.quan_ly", "ghi_id",
            ok_A=(200,), chan_B=(403, 404)),
 
+        # ---------- BEST Express (thật, có cổng Owner) ----------
+        # Ba cửa ĐỌC chạy được bằng phiên tenant, nên vào lưới cách ly bình thường.
+        _c("/api/v2/best/hop-dong", "GET", "tenant.hang.xem", "toan_cuc", chan_B=(200,),
+           chu="metadata hợp đồng; không chứa credential/token"),
+        _c("/api/v2/best/trang-thai", "GET", "tenant.hang.xem", "doc_ds", chan_B=(200,),
+           chu="danh sách tài khoản BEST của CHÍNH tenant; không trả secret"),
+        _c("/api/v2/best/lich-su", "GET", "tenant.hang.xem", "doc_ds", chan_B=(200,),
+           chu="sự kiện/audit BEST của CHÍNH tenant"),
+        # Mười cửa GHI cần phê duyệt Owner + tài khoản sandbox nên KHÔNG chạy trong lưới
+        # cách ly (sẽ gọi hãng). V1 vẫn canh khai báo; hành vi fail-closed được đo ở
+        # `thu_best_uat.py` (không xác nhận ⇒ 403) và E2E.
+        _c("/api/v2/best/kiem-ket-noi", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/webhook-bearer", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/bao-gia", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/tao-don", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/cap-nhat", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/sua-dia-chi", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/huy", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/tra-cuu", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/in", "POST", None, "rieng", phien_A=None, phien_B=None),
+        _c("/api/v2/best/in-pdf", "POST", None, "rieng", phien_A=None, phien_B=None),
+
         # ---------- đơn hàng ----------
         _c("/api/v2/don/tim", "POST", "tenant.don.xem", "doc_ds", than={}, sentinel=True,
            than_B={}, rb=True),
@@ -1086,6 +1108,11 @@ class V_QuetCua(unittest.TestCase):
         khai["/api/v2/platform/"] = {None}      # tiền tố `duong.startswith(...)`
         thieu, thua = [], []
         for (duong, method), ln in sorted(cua_that.items(), key=lambda x: x[1]):
+            # `method is None` là so sánh TRONG HÀM PHỤ (`_best_thao_tac`) hoặc tiền tố
+            # `platform/`, không phải khai báo route có phương thức. Bỏ qua để V1 canh đúng
+            # nơi dispatch; các route BEST thật vẫn được khai ở bảng bên dưới.
+            if method is None:
+                continue
             ms = khai.get(duong)
             # `method is None` = server KHÔNG kiểm method ở cửa đó (mọi method vào handler)
             if ms is None or (method is not None and method not in ms):

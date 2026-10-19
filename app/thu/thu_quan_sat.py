@@ -531,6 +531,10 @@ class H_CauHinhTrienKhai(unittest.TestCase):
                             "Dockerfile COPY .env vào image — bí mật nằm trong layer vĩnh viễn")
         for dong in noi_dung.split("\n"):
             if re.match(r"(?i)^\s*(ENV|ARG)\s", dong):
+                # Digest image `@sha256:<64 hex>` là ĐỊNH DANH CÔNG KHAI, không phải secret.
+                # Bỏ qua đúng dạng này; mọi chuỗi dài khác vẫn bị canh.
+                if re.search(r"@sha256:[0-9a-f]{64}\b", dong):
+                    continue
                 self.assertNotRegex(dong, r"[A-Za-z0-9+/=_-]{24,}",
                                     f"ENV/ARG mang giá trị dài như secret: {dong.strip()}")
 

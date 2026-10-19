@@ -37,6 +37,18 @@
 
   <div id="auth" class="the canhbao">Đang kiểm tra phiên đăng nhập…</div>
 
+  <section class="the" id="khoi-phe-duyet">
+    <h2>0. Phê duyệt phiên nghiệm thu</h2>
+    <label style="font-weight:400">
+      <input id="phe-duyet-that" type="checkbox" style="width:auto">
+      Tôi xác nhận đã được Owner phê duyệt gọi BEST <b>sandbox</b> trong phiên này; không dùng
+      tài khoản production để tạo đơn. Mọi thao tác thật vẫn đi qua backend và bị từ chối nếu
+      thiếu phê duyệt phía máy chủ.
+    </label>
+    <p class="phu" style="margin:8px 0 0">Trang này không lưu mật khẩu/token vào trình duyệt.
+      Đóng tab là mất; tải lại phải nhập lại nếu muốn kiểm tra kết nối.</p>
+  </section>
+
   <section class="the" id="khoi-trang-thai">
     <h2>1. Trạng thái hợp đồng, TLS, quyền</h2>
     <div id="trang-thai" class="ketqua">Đang tải…</div>
@@ -54,6 +66,8 @@
         </div>
         <div><label for="tk-user">Username BEST</label><input id="tk-user" autocomplete="username" maxlength="255"></div>
         <div><label for="tk-pass">Password BEST</label><input id="tk-pass" type="password" autocomplete="new-password" maxlength="1024"></div>
+        <div><label for="tk-ems">ems-key (tuỳ chọn)</label><input id="tk-ems" type="password" autocomplete="new-password" maxlength="512"></div>
+        <div><label for="tk-ghi-chu">Ghi chú nội bộ</label><input id="tk-ghi-chu" maxlength="300"></div>
       </div>
       <label style="margin-top:10px;font-weight:400"><input id="tk-xac-nhan" type="checkbox" style="width:auto"> Tôi xác nhận đã có phê duyệt của Owner và đang nhập credential TEST (không phải production).</label>
       <button id="btn-luu-tk" type="submit">Lưu tài khoản</button>
@@ -146,11 +160,41 @@
     </div>
     <button id="btn-tra-cuu" type="button">Tra cứu hành trình</button>
     <button id="btn-in" type="button" class="phu">Lấy URL PDF</button>
+    <button id="btn-tai-pdf" type="button" class="phu">Tải PDF (qua HTTPS)</button>
     <div id="kq-tra-cuu" class="ketqua">Chưa chạy.</div>
   </section>
 
+  <section class="the" id="khoi-cap-nhat">
+    <h2>8. Cập nhật đơn / sửa địa chỉ / hủy (sandbox)</h2>
+    <form id="form-cap-nhat">
+      <div class="luoi">
+        <div><label for="ud-tk">Tài khoản</label><select id="ud-tk"></select></div>
+        <div><label for="ud-ma">Mã vận đơn (Best / mã đối tác)</label><input id="ud-ma" value=""></div>
+        <div><label for="ud-hang">Tên hàng (Order/Update)</label><input id="ud-hang" value="Hàng cập nhật UAT"></div>
+        <div><label for="ud-cod">COD (VND)</label><input id="ud-cod" type="number" min="0" value="0"></div>
+        <div><label for="ud-gia">Khai giá (VND)</label><input id="ud-gia" type="number" min="0" value="0"></div>
+        <div><label for="ud-can">Cân (gram)</label><input id="ud-can" type="number" min="1" value="500"></div>
+        <div><label for="ud-dai">Dài (mm)</label><input id="ud-dai" type="number" min="0" value="0"></div>
+        <div><label for="ud-rong">Rộng (mm)</label><input id="ud-rong" type="number" min="0" value="0"></div>
+        <div><label for="ud-cao">Cao (mm)</label><input id="ud-cao" type="number" min="0" value="0"></div>
+        <div><label for="ud-loai-dc">AddressTypeId</label><select id="ud-loai-dc"><option value="2">2 — Giao hàng</option><option value="1">1 — Lấy hàng</option><option value="3">3 — Trả hàng</option></select></div>
+        <div><label for="ud-tinh">Tỉnh/thành</label><input id="ud-tinh" value="Hồ Chí Minh"></div>
+        <div><label for="ud-quan">Quận/huyện (2 cấp: để trống)</label><input id="ud-quan" value=""></div>
+        <div><label for="ud-xa">Phường/xã</label><input id="ud-xa" value="Phường 10"></div>
+        <div><label for="ud-dc">Địa chỉ chi tiết</label><input id="ud-dc" value="34 Đường XYZ"></div>
+        <div><label for="ud-ten">Người liên hệ</label><input id="ud-ten" value="Trần Nhận"></div>
+        <div><label for="ud-sdt">SĐT liên hệ</label><input id="ud-sdt" value="0902000002"></div>
+        <div><label for="ud-xac-nhan">Câu xác nhận ghi</label><input id="ud-xac-nhan" value=""></div>
+      </div>
+      <button id="btn-cap-nhat" type="submit">Order/Update</button>
+      <button id="btn-sua-dia-chi" type="button" class="phu">Order/UpdateAddress</button>
+      <button id="btn-huy" type="button" class="phu">Order/Cancel</button>
+    </form>
+    <div id="kq-cap-nhat" class="ketqua">Chưa chạy.</div>
+  </section>
+
   <section class="the" id="khoi-lich-su">
-    <h2>8. Lịch sử đồng bộ / nhật ký lỗi</h2>
+    <h2>9. Lịch sử đồng bộ / nhật ký lỗi</h2>
     <button id="btn-lich-su" type="button" class="phu">Tải lịch sử</button>
     <div id="kq-lich-su" class="ketqua">Chưa tải.</div>
   </section>

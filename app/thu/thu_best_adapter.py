@@ -51,10 +51,10 @@ def make_don(**kw):
         "ma_don": "T1-000001", "idem_key": "IDEM-1",
         "nguoi_gui_ten": "Shop Thử", "nguoi_gui_sdt": "0901111111",
         "nguoi_gui_dia_chi": "1 Đường Gửi", "nguoi_gui_tinh": "Tỉnh Gửi",
-        "nguoi_gui_quan": "Quận Gửi",
+        "nguoi_gui_quan": "Quận Gửi", "nguoi_gui_xa": "Phường Gửi",
         "nguoi_nhan_ten": "Khách Thử", "nguoi_nhan_sdt": "0902222222",
         "nguoi_nhan_dia_chi": "2 Đường Nhận", "nguoi_nhan_tinh": "Tỉnh Nhận",
-        "nguoi_nhan_quan": None,
+        "nguoi_nhan_quan": None, "nguoi_nhan_xa": "Phường Nhận",
         "hang_hoa": "Áo thử", "khoi_luong_gram": 1500,
         "cod": 15000, "gia_tri_khai": 200000,
         "journey_type": 1,
@@ -176,37 +176,47 @@ class StubBEST:
 
     def _tra_loi(self, handler, path, data):
         if path.endswith("/User/Login"):
-            return self._gui(handler, 200, {"success": True,
-                                            "data": {"Token": "MOCK-TOKEN-KHONG-THAT"}})
+            return self._gui(handler, 200, {"token": "MOCK-TOKEN-KHONG-THAT",
+                                            "Result": 1, "Message": None})
         if path.endswith("/Order/Add"):
-            ma = str(data.get("MerchantOrderCode") or "")
+            ma = str(data.get("Code") or "")
             if ma.startswith("TIMEOUT"):
                 time.sleep(0.6)
             if ma.startswith("FAIL500"):
-                return self._gui(handler, 500, {"success": False})
+                return self._gui(handler, 500, {"Result": 2, "Message": "server error"})
             if ma.startswith("FAIL400"):
-                return self._gui(handler, 400, {"success": False})
+                return self._gui(handler, 400, {"Result": 2, "Message": "bad request"})
             if ma.startswith("ECHOSECRET"):
-                return self._gui(handler, 200, {"success": False,
-                                                "message": "p-test"})
-            return self._gui(handler, 200, {"success": True,
-                                            "data": {"WaybillCode": "BEST-" + ma}})
+                return self._gui(handler, 200, {"Result": 2, "Message": "p-test"})
+            return self._gui(handler, 200, {"Result": 1, "Message": None,
+                                            "Code": "BEST-" + ma,
+                                            "RouteCode": "SG905-00-00-02"})
         if path.endswith("/Order/Query"):
-            ma_list = data.get("WaybillCodes") or []
+            ma_list = data.get("Codes") or []
             if any(str(x).startswith("TIMEOUTQ") for x in ma_list):
                 time.sleep(0.6)
             if any(str(x).startswith("FAILQ") for x in ma_list):
-                return self._gui(handler, 500, {"success": False})
-            return self._gui(handler, 200, {"success": True, "data": {"Items": [
-                {"WaybillCode": str(x), "Status": "99"} for x in ma_list]}})
+                return self._gui(handler, 500, {"Result": 2, "Message": "query failed"})
+            return self._gui(handler, 200, {"Result": 1, "Message": None, "data": [
+                {"merchant_order_code": str(x), "code_best": str(x),
+                 "traceLogs": [{"status": "211", "modified_at": 1700000000000,
+                                "cod": 15000.0}]} for x in ma_list]})
         if path.endswith("/Order/Update") or path.endswith("/Order/UpdateAddress"):
-            return self._gui(handler, 200, {"success": True, "data": {}})
+            return self._gui(handler, 200, {"Result": 1, "Message": "",
+                                            "Code": str(data.get("Code") or ""),
+                                            "RouteCode": "SG905",
+                                            "AddressTypeId": data.get("AddressTypeId")})
         if path.endswith("/Order/Cancel"):
-            return self._gui(handler, 200, {"success": True, "data": {}})
+            return self._gui(handler, 200, {"Result": 1, "Message": ""})
         if path.endswith("/Service/EstimateFee"):
-            return self._gui(handler, 200, {"success": True, "data": {"Fee": 27500}})
+            return self._gui(handler, 200, {"Result": 1, "Message": "", "data": {
+                "ServiceId": 12491, "ServiceType": "Giao hàng tiết kiệm",
+                "FreightFee": 22000.0, "CODFee": 0.0, "InsuranceFee": 5500.0,
+                "TotalFee": 27500.0, "TotalFeeVAT": 30250.0,
+                "TotalFeeWithDiscount": 27500.0, "TotalFeeVATWithDiscount": 30250.0,
+                "Cod": 15000.0, "COD": 15000.0}})
         if path.endswith("/Print/PrintWayBill"):
-            ma = str((data.get("WaybillCodes") or [""])[0])
+            ma = str((data.get("codes") or [""])[0])
             url = f"http://127.0.0.1:{self.port}/waybill/1.pdf"
             if ma == "SSRFMETA":
                 url = "http://169.254.169.254/latest/meta-data/"
@@ -218,15 +228,16 @@ class StubBEST:
                 url = "http://evil.example/x.pdf"
             elif ma == "REDIRECT":
                 url = f"http://127.0.0.1:{self.port}/redirect"
-            return self._gui(handler, 200, {"success": True, "data": {"Url": url}})
+            return self._gui(handler, 200, {"Result": 1, "Message": "",
+                                            "Guid": "30341879-ae3d-49f1",
+                                            "Url": url})
         if path.endswith("/429"):
-            return self._gui(handler, 429, {"success": False},
-                             headers={"Retry-After": "86400"})
+            return self._gui(handler, 429, {"Result": 2}, headers={"Retry-After": "86400"})
         if path.endswith("/500"):
-            return self._gui(handler, 500, {"success": False})
+            return self._gui(handler, 500, {"Result": 2})
         if path.endswith("/400"):
-            return self._gui(handler, 400, {"success": False})
-        return self._gui(handler, 404, {"success": False})
+            return self._gui(handler, 400, {"Result": 2})
+        return self._gui(handler, 404, {"Result": 2})
 
     def _tra_loi_get(self, handler, path):
         if path.endswith("/waybill/1.pdf"):
@@ -306,10 +317,11 @@ class A_HopDong(Base):
         self.assertEqual(cap["gioi_han"], {"queryTracking": 10, "printWaybill": 50})
         self.assertEqual(cap["service_id"], 12491)
         self.assertEqual(cap["journey_type_hop_le"], [1, 2, 3])
-        self.assertFalse(cap["tai_lieu_da_xac_minh"])
-        self.assertFalse(cap["schema_da_xac_minh"])
-        self.assertFalse(cap["webhook_da_xac_thuc"])
-        self.assertFalse(cap["bang_trang_thai_da_xac_minh"])
+        self.assertTrue(cap["tai_lieu_da_xac_minh"])
+        self.assertTrue(cap["schema_da_xac_minh"])
+        self.assertTrue(cap["webhook_da_xac_thuc"])
+        self.assertTrue(cap["bang_trang_thai_da_xac_minh"])
+        self.assertEqual(cap["so_ma_trang_thai"], 23)
 
     def test_a2_du_muoi_chuc_nang(self):
         for ten in ("authenticate", "createOrder", "updateOrder", "updateAddress",
@@ -335,13 +347,13 @@ class A_HopDong(Base):
         })
         self.assertEqual(len(ab.DUONG_API), 8)
 
-    def test_a4_base_url_dung_de_bai_va_la_http(self):
+    def test_a4_base_url_dung_va_dung_https(self):
         self.assertEqual(ab.BASE_URL_PRODUCTION,
-                         "http://sgp-seaedi.800best.com/VietNamV3/v3/api/process/sears")
+                         "https://sgp-seaedi.800best.com/VietNamV3/v3/api/process/sears")
         self.assertEqual(ab.BASE_URL_SANDBOX,
-                         "http://sgp-seaedi-test.800best.com/VietNamV3/v3/api/process/sears")
-        self.assertTrue(ab.CO_HTTP_CHUA_MA_HOA)
-        self.assertTrue(hb.CO_HTTP_CHUA_MA_HOA)
+                         "https://sgp-seaedi-test.800best.com/VietNamV3/v3/api/process/sears")
+        self.assertFalse(ab.CO_HTTP_CHUA_MA_HOA)
+        self.assertFalse(hb.CO_HTTP_CHUA_MA_HOA)
 
     def test_a5_host_test_query_da_xac_minh_chi_dung_cho_query(self):
         self.assertEqual(ab.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH,
@@ -357,11 +369,12 @@ class A_HopDong(Base):
         self.assertFalse(ab.AdapterBEST.CHO_PHEP_SANDBOX)
         self.assertFalse(ab.AdapterBEST.CHO_PHEP_PRODUCTION)
         self.assertFalse(ab.AdapterBEST.CHO_PHEP_HTTP_KHONG_MA_HOA)
-        self.assertFalse(ab.AdapterBEST.SCHEMA_DA_XAC_MINH)
+        self.assertTrue(ab.AdapterBEST.SCHEMA_DA_XAC_MINH)
+        self.assertTrue(ab.TRANG_THAI_DA_XAC_MINH)
 
-    def test_a7_21_truong_va_hang_so(self):
-        self.assertEqual(len(ab.TRUONG_BAT_BUOC_ORDER_ADD), 21)
-        self.assertEqual(len(set(ab.TRUONG_BAT_BUOC_ORDER_ADD)), 21)
+    def test_a7_31_truong_va_hang_so(self):
+        self.assertEqual(len(ab.TRUONG_BAT_BUOC_ORDER_ADD), 31)
+        self.assertEqual(len(set(ab.TRUONG_BAT_BUOC_ORDER_ADD)), 31)
         self.assertEqual(ab.DICH_VU_ID, 12491)
         self.assertNotEqual(ab.DICH_VU_ID, ab.DICH_VU_ID_CU_KHONG_DUNG)
         self.assertEqual(ab.DON_VI["Weight"], "GRAM")
@@ -395,18 +408,20 @@ class B_MoiTruong(Base):
         self.assertIn("production", str(cm.exception))
 
     def test_b4_http_chua_ma_hoa_bi_chan(self):
+        # Mặc định đã là HTTPS; chỉ một base_url HTTP tường minh mới chạm chốt.
         with CoBat(CHO_PHEP_LIVE=True, CHO_PHEP_SANDBOX=True):
             with self.assertRaises(PermissionError) as cm:
-                ab.AdapterBEST(dict(CRED), "sandbox")
+                ab.AdapterBEST(dict(CRED), "sandbox",
+                               base_url="http://sgp-seaedi-test.800best.com/VietNamV3/v3/api/process/sears")
             self.assertIn("HTTP CHƯA MÃ HOÁ", str(cm.exception))
 
-    def test_b5_http_cho_phep_tuong_minh_nhung_schema_van_chan(self):
+    def test_b5_http_cho_phep_tuong_minh_va_schema_da_xac_minh(self):
         with CoBat(CHO_PHEP_LIVE=True, CHO_PHEP_SANDBOX=True,
                    CHO_PHEP_HTTP_KHONG_MA_HOA=True):
-            ad = ab.AdapterBEST(dict(CRED), "sandbox", cho_phep_http_khong_ma_hoa=True)
+            ad = ab.AdapterBEST(dict(CRED), "sandbox", cho_phep_http_khong_ma_hoa=True,
+                               base_url="http://sgp-seaedi-test.800best.com/VietNamV3/v3/api/process/sears")
             self.assertTrue(ad.base_url.startswith("http://"))
-            with self.assertRaises(ab.ChuaXacNhanTaiLieu):
-                ad.createOrder(make_don())
+            self.assertTrue(ad.SCHEMA_DA_XAC_MINH)
 
     def test_b6_loopback_ngoai_mock_bi_chan(self):
         with CoBat(CHO_PHEP_LIVE=True, CHO_PHEP_SANDBOX=True,
@@ -527,7 +542,7 @@ class C_DuongDi(Base):
 # =================================================================================================
 # D. 21 TRƯỜNG ORDER/ADD
 # =================================================================================================
-class D_21Truong(Base):
+class D_31Truong(Base):
     def _tao_va_lay_than(self, **kw):
         ad = self.ad_stub_auth()
         don = make_don(ma_don=kw.pop("ma_don", "T1-D"), idem_key=kw.pop("idem_key", "IDEM-D"), **kw)
@@ -535,15 +550,16 @@ class D_21Truong(Base):
         self.assertTrue(kq.ok, kq.loi)
         return STUB.bodies("Order/Add")[-1]
 
-    def test_d1_du_21_truong(self):
+    def test_d1_du_31_truong(self):
         body = self._tao_va_lay_than()
-        self.assertEqual(len(ab.TRUONG_BAT_BUOC_ORDER_ADD), 21)
+        self.assertEqual(len(ab.TRUONG_BAT_BUOC_ORDER_ADD), 31)
         for ten in ab.TRUONG_BAT_BUOC_ORDER_ADD:
             self.assertIn(ten, body)
         self.assertTrue(set(ab.TRUONG_BAT_BUOC_ORDER_ADD).issubset(body))
-        self.assertEqual(len(set(body) & set(ab.TRUONG_BAT_BUOC_ORDER_ADD)), 21)
+        self.assertEqual(len(set(body) & set(ab.TRUONG_BAT_BUOC_ORDER_ADD)), 31)
+        # Metadata chống trùng là NỘI BỘ — tài liệu hãng không có các trường này.
         for ten in ab.TRUONG_META_CHONG_TRUNG:
-            self.assertIn(ten, body)
+            self.assertNotIn(ten, body)
 
     def test_d2_service_id_12491(self):
         body = self._tao_va_lay_than()
@@ -588,34 +604,49 @@ class D_21Truong(Base):
         body = self._tao_va_lay_than(ma_don="T1-D6", idem_key="IDEM-D6")
         self.assertEqual((body["Length"], body["Width"], body["Height"]), (200, 100, 50))
         ad = self.ad_stub_auth()
+        # Tài liệu KHÔNG đánh dấu kích thước là bắt buộc: 0/None hợp lệ.
+        for i, truong in enumerate(("chieu_dai_mm", "chieu_rong_mm", "chieu_cao_mm")):
+            kq = ad.createOrder(make_don(**{truong: 0},
+                                         ma_don=f"T1-D6-Z{i}", idem_key=f"IDEM-D6-Z{i}"))
+            self.assertTrue(kq.ok, (truong, kq.loi))
+            self.assertEqual(STUB.bodies("Order/Add")[-1][
+                {"chieu_dai_mm": "Length", "chieu_rong_mm": "Width",
+                 "chieu_cao_mm": "Height"}[truong]], 0)
         for truong in ("chieu_dai_mm", "chieu_rong_mm", "chieu_cao_mm"):
-            for gia_tri in (0, 10.5, None):
+            for gia_tri in (10.5, -1):
                 kq = ad.createOrder(make_don(**{truong: gia_tri},
-                                             ma_don=f"T1-D6-{truong}-{gia_tri}",
-                                             idem_key=f"IDEM-D6-{truong}-{gia_tri}"))
+                                             ma_don=f"T1-D6-X-{truong}-{gia_tri}",
+                                             idem_key=f"IDEM-D6-X-{truong}-{gia_tri}"))
                 self.assertFalse(kq.ok, (truong, gia_tri))
-        self.assertEqual(STUB.count("Order/Add"), 1)
 
     def test_d7_cod_va_product_price_vnd(self):
         body = self._tao_va_lay_than(ma_don="T1-D7", idem_key="IDEM-D7")
-        self.assertEqual(body["Cod"], 15000)
+        self.assertEqual(body["CollectAmount"], 15000)
         self.assertEqual(body["ProductPrice"], 200000)
         ad = self.ad_stub_auth()
+        # Tài liệu khai `decimal`: 1.5 hợp lệ và phải giữ nguyên, không làm tròn.
+        for i, truong in enumerate(("cod", "gia_tri_khai")):
+            kq = ad.createOrder(make_don(**{truong: 1.5},
+                                         ma_don=f"T1-D7-DEC{i}", idem_key=f"IDEM-D7-DEC{i}"))
+            self.assertTrue(kq.ok, (truong, kq.loi))
+            khoa = "CollectAmount" if truong == "cod" else "ProductPrice"
+            self.assertEqual(STUB.bodies("Order/Add")[-1][khoa], 1.5)
         for truong in ("cod", "gia_tri_khai"):
-            for gia_tri in (1.5, -1, True):
+            for gia_tri in (-1, True):
                 kq = ad.createOrder(make_don(**{truong: gia_tri},
-                                             ma_don=f"T1-D7-{truong}-{gia_tri}",
-                                             idem_key=f"IDEM-D7-{truong}-{gia_tri}"))
+                                             ma_don=f"T1-D7-X-{truong}-{gia_tri}",
+                                             idem_key=f"IDEM-D7-X-{truong}-{gia_tri}"))
                 self.assertFalse(kq.ok, (truong, gia_tri))
-        self.assertEqual(STUB.count("Order/Add"), 1)
 
     def test_d8_thieu_truong_bat_buoc_bi_tu_choi(self):
         ad = self.ad_stub_auth()
+        # Tài liệu đánh dấu `*`: người gửi/nhận, địa chỉ, hàng hoá, cân nặng, JourneyType,
+        # Code. Kích thước KHÔNG bắt buộc nên không nằm trong danh sách này.
         truong_bat_buoc = ("nguoi_gui_ten", "nguoi_gui_sdt", "nguoi_gui_dia_chi",
-                           "nguoi_gui_tinh", "nguoi_nhan_ten", "nguoi_nhan_sdt",
-                           "nguoi_nhan_dia_chi", "nguoi_nhan_tinh", "hang_hoa",
-                           "khoi_luong_gram", "chieu_dai_mm", "chieu_rong_mm",
-                           "chieu_cao_mm", "journey_type", "ma_don")
+                           "nguoi_gui_tinh", "nguoi_gui_xa", "nguoi_nhan_ten",
+                           "nguoi_nhan_sdt", "nguoi_nhan_dia_chi", "nguoi_nhan_tinh",
+                           "nguoi_nhan_xa", "hang_hoa", "khoi_luong_gram",
+                           "journey_type", "ma_don")
         for i, truong in enumerate(truong_bat_buoc):
             kw = {truong: XOA, "idem_key": f"IDEM-D8-{i}"}
             if truong != "ma_don":
@@ -630,13 +661,11 @@ class D_21Truong(Base):
         ad.createOrder(make_don(hang_hoa="", ma_don="T1-D9", idem_key="IDEM-D9"))
         self.assertEqual(STUB.count("Order/Add"), 0)
 
-    def test_d10_meta_chong_trung(self):
+    def test_d10_meta_chong_trung_khong_gui_trong_body(self):
         body = self._tao_va_lay_than(ma_don="T1-D10", idem_key="IDEM-D10")
-        self.assertEqual(body["TenantId"], "1")
-        self.assertEqual(body["CarrierId"], "9")
-        self.assertEqual(body["MerchantOrderCode"], "T1-D10")
-        self.assertEqual(body["IdempotencyKey"], "IDEM-D10")
-        self.assertRegex(body["RequestId"], r"^[0-9a-f]{32}$")
+        self.assertEqual(body["Code"], "T1-D10")
+        for ten in ab.TRUONG_META_CHONG_TRUNG:
+            self.assertNotIn(ten, body)
 
 
 # =================================================================================================
@@ -649,23 +678,23 @@ class E_DiaChi(Base):
                                      ma_don="T1-E1", idem_key="IDEM-E1"))
         self.assertTrue(kq.ok, kq.loi)
         body = STUB.bodies("Order/Add")[-1]
-        self.assertEqual(body["SenderDistrict"], " ")
-        self.assertEqual(body["ReceiverDistrict"], " ")
-        self.assertIsInstance(body["ReceiverDistrict"], str)
-        self.assertNotEqual(body["ReceiverDistrict"], "")
+        self.assertEqual(body["SourceDistrict"], " ")
+        self.assertEqual(body["DestDistrict"], " ")
+        self.assertIsInstance(body["DestDistrict"], str)
+        self.assertNotEqual(body["DestDistrict"], "")
 
     def test_e2_district_toan_khoang_trang(self):
         ad = self.ad_stub_auth()
         ad.createOrder(make_don(nguoi_nhan_quan="   ", ma_don="T1-E2", idem_key="IDEM-E2"))
-        self.assertEqual(STUB.bodies("Order/Add")[-1]["ReceiverDistrict"], " ")
+        self.assertEqual(STUB.bodies("Order/Add")[-1]["DestDistrict"], " ")
 
     def test_e3_update_address_cung_ap_dung(self):
         ad = self.ad_stub_auth()
         don = make_don(nguoi_nhan_quan=None, ma_don="T1-E3", idem_key="IDEM-E3")
         self.assertTrue(ad.updateAddress(don, "BEST-T1-E3").ok)
         body = STUB.bodies("Order/UpdateAddress")[-1]
-        self.assertEqual(body["ReceiverDistrict"], " ")
-        self.assertIsInstance(body["ReceiverDistrict"], str)
+        self.assertEqual(body["DistrictName"], " ")
+        self.assertIsInstance(body["DistrictName"], str)
 
     def test_e4_khong_hardcode_danh_sach_dia_gioi(self):
         d = ab.BestAddressAdapter().chuan_hoa(
@@ -678,7 +707,7 @@ class E_DiaChi(Base):
         ad = self.ad_stub_auth()
         ad.createOrder(make_don(nguoi_nhan_xa="Phường 9", ma_don="T1-E5", idem_key="IDEM-E5"))
         body = STUB.bodies("Order/Add")[-1]
-        self.assertTrue(body["ReceiverAddress"].endswith(", Phường 9"), body["ReceiverAddress"])
+        self.assertTrue(body["DestAddress"].endswith(", Phường 9"), body["DestAddress"])
 
     def test_e6_thieu_tinh_bi_tu_choi(self):
         ad = self.ad_stub_auth()
@@ -702,8 +731,8 @@ class E_DiaChi(Base):
         ad.createOrder(make_don(nguoi_gui_quan="Quận Gửi", nguoi_nhan_quan="Quận Nhận",
                                 ma_don="T1-E9", idem_key="IDEM-E9"))
         body = STUB.bodies("Order/Add")[-1]
-        self.assertEqual(body["SenderDistrict"], "Quận Gửi")
-        self.assertEqual(body["ReceiverDistrict"], "Quận Nhận")
+        self.assertEqual(body["SourceDistrict"], "Quận Gửi")
+        self.assertEqual(body["DestDistrict"], "Quận Nhận")
 
 
 # =================================================================================================
@@ -1031,9 +1060,16 @@ class I_BiMat(Base):
 # J. WEBHOOK / TRẠNG THÁI
 # =================================================================================================
 class J_Webhook(Base):
+    @staticmethod
+    def _wh(**thua):
+        d = {"code_best": "W1", "merchant_order_code": "M1", "status": "211",
+             "modified_at": 1700000000000}
+        d.update(thua)
+        return d
+
     def test_j1_parse_hop_le_nhung_chua_xac_thuc(self):
         ad = self.ad_mock()
-        kq = ad.parseWebhook({"WaybillCode": "W1", "Status": "99"})
+        kq = ad.parseWebhook(self._wh(status="99"))
         self.assertTrue(kq["ok"])
         self.assertFalse(kq["da_xac_thuc"])
         self.assertIsNone(kq["trang_thai_chuan"])
@@ -1042,8 +1078,9 @@ class J_Webhook(Base):
 
     def test_j2_parse_bytes(self):
         ad = self.ad_mock()
-        kq = ad.parseWebhook(json.dumps({"WaybillCode": "W1", "Status": 1}).encode())
+        kq = ad.parseWebhook(json.dumps(self._wh(status=211)).encode())
         self.assertTrue(kq["ok"])
+        self.assertEqual(kq["trang_thai_chuan"], "cho_lay")
 
     def test_j3_parse_khong_phai_json(self):
         ad = self.ad_mock()
@@ -1051,11 +1088,12 @@ class J_Webhook(Base):
 
     def test_j4_parse_thieu_ma_van_don(self):
         ad = self.ad_mock()
-        self.assertFalse(ad.parseWebhook({"Status": "1"})["ok"])
+        self.assertFalse(ad.parseWebhook(self._wh(code_best=""))["ok"])
 
     def test_j5_parse_thieu_trang_thai(self):
         ad = self.ad_mock()
-        self.assertFalse(ad.parseWebhook({"WaybillCode": "W1"})["ok"])
+        self.assertFalse(ad.parseWebhook({"code_best": "W1",
+                                          "merchant_order_code": "M1"})["ok"])
 
     def test_j6_parse_qua_lon(self):
         ad = self.ad_mock()
@@ -1063,10 +1101,8 @@ class J_Webhook(Base):
 
     def test_j7_xac_thuc_callable(self):
         ad = self.ad_mock()
-        self.assertTrue(ad.parseWebhook({"WaybillCode": "W1", "Status": "1"},
-                                        xac_thuc=lambda g: True)["da_xac_thuc"])
-        self.assertFalse(ad.parseWebhook({"WaybillCode": "W1", "Status": "1"},
-                                         xac_thuc=lambda g: False)["da_xac_thuc"])
+        self.assertTrue(ad.parseWebhook(self._wh(), xac_thuc=lambda g: True)["da_xac_thuc"])
+        self.assertFalse(ad.parseWebhook(self._wh(), xac_thuc=lambda g: False)["da_xac_thuc"])
 
     def test_j8_normalize_khong_doan(self):
         for ma in (0, 1, 99, "DELIVERED", "giao_thanh_cong", None):
@@ -1076,21 +1112,26 @@ class J_Webhook(Base):
             self.assertTrue(r.can_soat, ma)
             self.assertEqual(r.do_tin_cay, tth.TIN_MA_LA)
 
-    def test_j9_khong_map_vao_trang_thai_hoan_tat(self):
-        for ma in (1, 2, 3, 99, "DELIVERED"):
-            r = ab.AdapterBEST.normalizeStatus(ma)
-            self.assertNotIn(r.trang_thai_ap, tth.TRANG_THAI_HOAN_TAT)
+    def test_j9_ma_tai_lieu_va_customer_cancel(self):
+        self.assertEqual(ab.AdapterBEST.normalizeStatus("666").trang_thai_ap,
+                         "giao_thanh_cong")
+        self.assertEqual(ab.AdapterBEST.normalizeStatus("606").trang_thai_ap, "dang_giao")
+        r = ab.AdapterBEST.normalizeStatus("customer Cancel")
+        self.assertTrue(r.biet_ma)
+        self.assertEqual(r.trang_thai_ap, "da_huy")
+        for ma in (99, "DELIVERED"):
+            self.assertNotIn(ab.AdapterBEST.normalizeStatus(ma).trang_thai_ap,
+                             tth.TRANG_THAI_HOAN_TAT)
 
     def test_j10_webhook_khong_echo_payload(self):
         ad = self.ad_mock()
-        kq = ad.parseWebhook({"WaybillCode": "W1", "Status": "1",
-                              "Password": "p-test", "Token": "TOKEN-BI-MAT"})
+        kq = ad.parseWebhook(self._wh(Password="p-test", Token="TOKEN-BI-MAT"))
         self.assertTrue(kq["ok"])
         self.assertEqual(quet_bi_mat(kq), [])
 
     def test_j11_webhook_tenant_khac_bi_deny(self):
         ad = self.ad_mock()
-        kq = ad.parseWebhook({"WaybillCode": "W1", "Status": "1"}, tenant_id="2")
+        kq = ad.parseWebhook(self._wh(), tenant_id="2")
         self.assertFalse(kq["ok"])
 
 
@@ -1191,10 +1232,10 @@ class L_ChotChan(Base):
         self.assertFalse(hb.host_duoc_phep("800best.com"))
         self.assertFalse(hb.host_duoc_phep("169.254.169.254"))
 
-    def test_l2_base_url_la_http_theo_de_bai(self):
+    def test_l2_base_url_dung_https(self):
         for mt in (hb.SANDBOX, hb.PRODUCTION):
-            self.assertTrue(hb.BASE_URL[mt].startswith("http://"))
-            self.assertFalse(hb.BASE_URL[mt].startswith("https://"))
+            self.assertTrue(hb.BASE_URL[mt].startswith("https://"))
+            self.assertFalse(hb.BASE_URL[mt].startswith("http://"))
 
     def test_l3_default_mock_khong_goi_http(self):
         ad = self.ad_mock()

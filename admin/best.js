@@ -11,9 +11,9 @@
  *     một lượt đăng nhập/kiểm tra API THÀNH CÔNG (`kiem_ket_noi.ok === true` kèm thời điểm).
  *     Chỉ lưu credential thì trạng thái là "CHỜ XÁC MINH". Backend khai "da_ket_noi" mà
  *     thiếu bằng chứng thì giao diện KHÔNG tin — hiện CHỜ XÁC MINH kèm cảnh báo.
- *   - Tài liệu API BEST là Google Docs và CHƯA đọc được trong lượt này. Vì vậy tên trường
- *     credentials/endpoint của hãng đều bị đánh dấu CHƯA KIỂM CHỨNG. Không đoán endpoint
- *     hãng, không đoán request schema.
+ *   - Tài liệu API BEST (DOCX) ĐÃ đọc toàn văn 2026-10-19. Tên trường wire, envelope
+ *     Result/Message, Bearer và 23 mã trạng thái đã đối chiếu. Bàn nghiệm thu thật nằm ở
+ *     `pages/best-uat.html`; các màn tại đây KHÔNG gọi thẳng hãng, KHÔNG hiển thị secret.
  *   - Phần LOGIC THUẦN (trạng thái, khối lượng quy đổi, điều kiện in) không chạm DOM, để bộ
  *     thử Node/E2E kiểm được quyết định mà không cần tin chữ trên màn.
  *
@@ -449,6 +449,8 @@
           <div class="best-tt-nut">
             <button class="nut nut-nho" data-best-di="best-cau-hinh-tai-khoan">🔐 Cấu hình tài khoản</button>
             <button class="nut nut-nho" data-best-di="best-kiem-tra-ket-noi">📡 Kiểm tra kết nối</button>
+            <a class="nut nut-nho" href="/pages/best-uat.html" target="_blank"
+               rel="noopener">🧪 Bàn nghiệm thu thật (sandbox)</a>
           </div>
         </div>
         <div class="best-bang-chung">
@@ -647,154 +649,32 @@
     </div>`;
   }
 
-  function manCauHinhTaiKhoan() {
-    return (async () => {
-      state.man = "best-cau-hinh-tai-khoan";
-      const n = await taiNen(true);
-      const hs = n.hs;
-      const st = trangThaiKetNoi(hs);
-      const tk = hs.tai_khoan;
-      const https = (typeof location !== "undefined" && location.protocol === "https:");
-      const thongBao = state.thong_bao;
-      state.thong_bao = null;
-      datMan("BEST · Cấu hình tài khoản", `
-        ${khoiTrangThai(hs)}
-        ${thongBao ? `<div class="${thongBao.loi ? "hop-loi" : "hop-nguon"}" id="best-ket-qua-luu" style="margin-bottom:14px">${T(thongBao.chu)}</div>`
-          : '<div id="best-ket-qua-luu"></div>'}
-        <div class="the">
-          <div class="the-dau"><h2>${tk ? "Cập nhật credential BEST" : "Thêm tài khoản BEST"}</h2>
-            <div class="phai"><span class="huy-hieu hh-xam">form KHÔNG hiện lại secret</span></div></div>
-          <div class="the-than">
-            ${!hs.provider ? `<div class="hop-loi" style="margin-bottom:14px">
-              Backend CHƯA có provider BEST (<code>carrier_providers</code>). Lưu tài khoản sẽ bị
-              máy chủ từ chối với thông điệp <i>"hãng chưa có adapter"</i>. Đây là CHỜ BACKEND,
-              không phải lỗi nhập liệu.
-            </div>` : ""}
-            <form id="best-form-tk" autocomplete="off" novalidate>
-              <div class="best-form-luoi">
-                <div class="form-nhom">
-                  <label for="best-tk-ten">Tên gợi nhớ</label>
-                  <input id="best-tk-ten" type="text" maxlength="120" autocomplete="off"
-                    value="${tk ? T(tk.ten || "") : ""}">
-                </div>
-                <div class="form-nhom">
-                  <label>Môi trường</label>
-                  <input type="text" value="mock (local)" disabled>
-                  <div class="ghi-chu-nguon" style="margin-top:3px">sandbox/production đang bị backend khoá — cần Owner duyệt.</div>
-                </div>
-                ${oNhap("best-tk-ma-doi-tac", "Mã đối tác / Client ID (tên trường CHƯA KIỂM CHỨNG)", "password")}
-                ${oNhap("best-tk-khoa", "Khóa bí mật / Secret (tên trường CHƯA KIỂM CHỨNG)", "password")}
-                ${oNhap("best-tk-token", "Token (nếu có — tên trường CHƯA KIỂM CHỨNG)", "password")}
-                <div class="form-nhom">
-                  <label for="best-tk-ghi-chu">Ghi chú nội bộ</label>
-                  <input id="best-tk-ghi-chu" type="text" maxlength="300" autocomplete="off">
-                </div>
-              </div>
-              <div class="hop-cho-backend">
-                <b>Tài liệu API BEST (Google Docs) CHƯA đọc được trong lượt này.</b>
-                Tên trường credential chính thức của BEST <b>CHƯA KIỂM CHỨNG</b>. Ba ô bí mật ở trên là
-                khóa nội bộ đề xuất, KHÔNG phải schema đã xác nhận của hãng. Không dùng cho production.
-              </div>
-              <label class="best-xac-nhan" for="best-xac-nhan-mock">
-                <input id="best-xac-nhan-mock" type="checkbox">
-                <span>Tôi xác nhận đây là credential <b>MOCK</b>, không phải credential thật.
-                  ${https ? "" : "Trang đang chạy HTTP loopback (local) — KHÔNG nhập credential thật vào đây."}</span>
-              </label>
-              <div class="hang-cong-cu" style="margin-top:12px">
-                <button class="nut nut-chinh" type="submit" id="best-luu-tk">💾 Lưu credential</button>
-                <span class="ghi-chu-nguon">Giá trị bí mật được xoá khỏi ô ngay sau khi gửi; không lưu vào localStorage.</span>
-              </div>
-            </form>
-            <p class="ghi-chu-nguon" style="margin-top:10px">
-              Lưu credential <b>KHÔNG</b> làm trạng thái thành ĐÃ KẾT NỐI. Sau khi lưu, trạng thái là
-              <b>CHỜ XÁC MINH</b> cho tới khi có lượt đăng nhập API thành công.
-            </p>
+  async function manCauHinhTaiKhoan() {
+    state.man = "best-cau-hinh-tai-khoan";
+    const n = await taiNen(true);
+    const hs = n.hs;
+    datMan("BEST · Cấu hình tài khoản", `
+      ${khoiTrangThai(hs)}
+      <div class="the">
+        <div class="the-dau"><h2>Nhập tài khoản BEST thật ở bàn nghiệm thu</h2>
+          <div class="phai"><span class="huy-hieu hh-xanh">DÙNG ĐƯỢC</span></div></div>
+        <div class="the-than">
+          <p style="margin-top:0">Tài khoản BEST xác thực bằng <b>Username + Password</b> (không phải
+            mã đối tác/secret như J&amp;T). Form nhập credential thật nằm ở bàn nghiệm thu, nơi có
+            ô phê duyệt phiên, chốt HTTPS và hiển thị mã lỗi thật của hãng.</p>
+          <div class="hop-nguon">
+            <b>Đường dùng:</b> <code>POST /api/v2/tai-khoan-hang</code> với
+            <code>{hang:"best", moi_truong:"sandbox", credentials:{username,password}}</code>.
+            Backend mã hoá credential; API đọc lại KHÔNG trả secret.
           </div>
+          <p><a class="nut nut-chinh" href="/pages/best-uat.html" target="_blank"
+                rel="noopener">🧪 Mở bàn nghiệm thu BEST (đăng nhập thật)</a></p>
+          <p class="ghi-chu-nguon">Không nhập credential thật vào trang HTTP. Bàn nghiệm thu tự chặn
+            nếu trang không phải HTTPS.</p>
         </div>
-        ${khoiTaiKhoan(hs)}
-        ${hopNguon([
-          "Đường ghi dự kiến: <code>POST /api/v2/tai-khoan-hang</code> (tạo) · <code>POST /api/v2/tai-khoan-hang/&lt;id&gt;/rotate</code> (cập nhật) — cùng origin, có phiên đăng nhập.",
-          "Máy chủ lưu credential đã mã hoá; API đọc lại chỉ trả 4 ký tự cuối, và giao diện này KHÔNG hiển thị cả 4 ký tự ấy.",
-          "Không có token/secret nào trong console, audit hay response của giao diện.",
-        ])}
-      `);
-    })();
-  }
-
-  async function luuTaiKhoan(form) {
-    const kq = form.querySelector("#best-ket-qua-luu");
-    const v = (id) => (form.querySelector("#" + id) || {}).value || "";
-    const cred = {};
-    const maDoiTac = v("best-tk-ma-doi-tac").trim();
-    const khoa = v("best-tk-khoa").trim();
-    const token = v("best-tk-token").trim();
-    if (maDoiTac) cred.ma_doi_tac = maDoiTac;
-    if (khoa) cred.khoa_bi_mat = khoa;
-    if (token) cred.token = token;
-    const ghiChu = v("best-tk-ghi-chu").trim();
-    if (ghiChu) cred.ghi_chu = ghiChu;
-    const ten = v("best-tk-ten").trim() || "BEST Express";
-
-    const https = (typeof location !== "undefined" && location.protocol === "https:");
-    const xacNhan = !!(form.querySelector("#best-xac-nhan-mock") || {}).checked;
-    if (!https && !xacNhan) {
-      // CHẶN GỬI: chỉ báo lỗi TẠI CHỖ, KHÔNG dựng lại form — người dùng không phải gõ lại
-      // secret chỉ vì chưa tick ô xác nhận. Secret vẫn ở trong ô, chưa đi đâu cả.
-      const o = document.getElementById("best-ket-qua-luu");
-      if (o) {
-        o.className = "hop-loi";
-        o.innerHTML = T("CHẶN GỬI: trang đang chạy HTTP loopback. Chỉ gửi credential MOCK sau khi tick xác nhận; credential thật phải đi qua HTTPS.");
-      }
-      return;
-    }
-    if (!Object.keys(cred).length) {
-      const o = document.getElementById("best-ket-qua-luu");
-      if (o) {
-        o.className = "hop-loi";
-        o.innerHTML = T("Chưa nhập credential nào — không gửi request rỗng.");
-      }
-      return;
-    }
-
-    // Đã qua hai chốt an toàn ⇒ xoá secret khỏi DOM NGAY, trước khi chờ mạng.
-    form.querySelectorAll('input[type="password"]').forEach((i) => { i.value = ""; });
-
-    const tk = cache.hs && cache.hs.tai_khoan;
-    try {
-      let r;
-      if (tk) {
-        r = await goi(`/api/v2/tai-khoan-hang/${encodeURIComponent(tk.id)}/rotate`, "POST", { credentials: cred });
-      } else {
-        r = await goi("/api/v2/tai-khoan-hang", "POST", {
-          hang: MA_HANG, ten, moi_truong: "mock", credentials: cred,
-        });
-      }
-      if (r.ma === 200 || r.ma === 201) {
-        cache.luc = 0;
-        // Credential vừa đổi thì kết quả kiểm tra CŨ không còn nghĩa — xoá, đừng để badge
-        // ĐÃ KẾT NỐI cũ nói về một bộ credential khác.
-        state.xac_minh_tam = null;
-        state.ket_qua_kiem = null;
-        state.thong_bao = {
-          loi: false,
-          chu: "Đã lưu credential. Trạng thái CHỈ chuyển sang CHỜ XÁC MINH — chưa phải ĐÃ KẾT NỐI. " +
-               "Bấm Kiểm tra kết nối để có bằng chứng đăng nhập API. Secret không được hiển thị lại.",
-        };
-        return manCauHinhTaiKhoan();
-      }
-      const loi = (r.kq && r.kq.loi) || `HTTP ${r.ma}`;
-      state.thong_bao = {
-        loi: true,
-        chu: `Không lưu được credential: ${loi}` +
-             (r.ma === 400 ? " — đây là CHỜ BACKEND (chưa có adapter BEST), không phải lỗi nhập liệu." : ""),
-      };
-      return manCauHinhTaiKhoan();
-    } catch (e) {
-      state.thong_bao = { loi: true, chu: "Lỗi gửi credential: " + e.message };
-      return manCauHinhTaiKhoan();
-    } finally {
-      form.querySelectorAll('input[type="password"]').forEach((i) => { i.value = ""; });
-    }
+      </div>
+      ${khoiTaiKhoan(hs)}
+    `);
   }
 
   /* ========================================================================================
@@ -805,112 +685,23 @@
     const n = await taiNen(true);
     const hs = n.hs;
     const st = trangThaiKetNoi(hs);
-    const tk = hs.tai_khoan;
-    const duocBam = !!(tk && coCredential(tk));
-    const kqk = state.ket_qua_kiem;
-    let htmlKq = "";
-    if (kqk && kqk.loai === "cho_backend") {
-      htmlKq = hopCho("POST /api/v2/tai-khoan-hang/<id>/kiem-ket-noi",
-        `Máy chủ trả HTTP ${kqk.ma}. Chưa có đường kiểm tra — trạng thái GIỮ NGUYÊN, không nâng lên ĐÃ KẾT NỐI.`);
-    } else if (kqk && kqk.loai === "loi") {
-      htmlKq = `<div class="hop-loi">${T(kqk.chu)}</div>`;
-    } else if (kqk) {
-      htmlKq = `<div class="${kqk.ok ? "hop-nguon" : "hop-loi"}" id="best-kq-ket-noi-noi-dung">
-        <b>Kết quả: ${kqk.ok ? "ĐĂNG NHẬP THÀNH CÔNG" : "THẤT BẠI"}</b>
-        · HTTP ${T(String(kqk.ma_http || "?"))}
-        ${kqk.tre_ms != null ? ` · ${T(String(kqk.tre_ms))} ms` : ""}
-        ${kqk.loi ? ` · ${T(kqk.loi)}` : ""}
-        <div style="margin-top:6px">Trạng thái giao diện: ${huyHieu(trangThaiKetNoi(hs), null)}</div>
-      </div>`;
-    }
     datMan("BEST · Kiểm tra kết nối", `
       ${khoiTrangThai(hs)}
       <div class="the">
-        <div class="the-dau"><h2>Đăng nhập thử vào API BEST</h2>
-          <div class="phai"><span class="huy-hieu hh-vang">CHỜ BACKEND</span></div></div>
+        <div class="the-dau"><h2>Đăng nhập thử API BEST</h2>
+          <div class="phai"><span class="huy-hieu hh-xanh">DÙNG ĐƯỢC</span></div></div>
         <div class="the-than">
-          <p style="margin-top:0">Nút dưới đây gọi <b>máy chủ nội bộ</b>
-            <code>POST /api/v2/tai-khoan-hang/&lt;id&gt;/kiem-ket-noi</code>, nhờ backend thực hiện
-            một lượt đăng nhập/kiểm tra với BEST. Giao diện <b>không gọi thẳng hãng</b>.</p>
-          <div class="hop-cho-backend">
-            <b>Đường kiểm tra CHƯA có trong máy chủ hiện tại</b> (đã khai trong
-            <code>admin/logic.js → API_CHO_BACKEND</code>). Khi bấm, nếu máy chủ trả 404/405,
-            giao diện hiện <b>CHƯA CÓ ĐƯỜNG KIỂM TRA</b> và <b>KHÔNG</b> tự chuyển sang ĐÃ KẾT NỐI.
-          </div>
-          <div class="hang-cong-cu" style="margin-top:12px">
-            <button class="nut nut-chinh" id="best-kiem-ket-noi"${duocBam ? "" : " disabled"}>📡 Kiểm tra kết nối ngay</button>
-            <span class="ghi-chu-nguon">${duocBam ? "Tài khoản đã có credential — bấm được." : "Chưa có tài khoản/credential — nút bị khoá."}</span>
-          </div>
-          <div id="best-kq-ket-noi" style="margin-top:12px">${htmlKq}</div>
-          <div class="best-bang-chung" style="margin-top:12px">
-            <span><b>Trạng thái hiện tại:</b> ${huyHieu(st, null)}</span>
-            <span><b>Bằng chứng backend:</b> ${st.bang_chung && st.bang_chung.xac_minh && st.bang_chung.xac_minh.ok === true
-              ? "có (ok=true)" : "chưa có"}</span>
-          </div>
+          <p style="margin-top:0">Đường thật: <code>POST /api/v2/best/kiem-ket-noi</code> với
+            <code>{tai_khoan_id, xac_nhan_that:true}</code>. Backend gọi
+            <code>POST /User/Login</code> qua HTTPS, trả <code>ok</code> + HTTP + lý do; KHÔNG trả token.</p>
+          <p><a class="nut nut-chinh" href="/pages/best-uat.html" target="_blank"
+                rel="noopener">🧪 Kiểm tra kết nối tại bàn nghiệm thu</a></p>
+          <p class="ghi-chu-nguon">Trạng thái ĐÃ KẾT NỐI chỉ hiện khi backend trả
+            <code>ok=true</code> kèm thời điểm. Lưu credential một mình là CHỜ XÁC MINH.</p>
         </div>
       </div>
       ${khoiBangTrangThai(st)}
-      ${hopNguon([
-        "Đường gọi: <code>POST /api/v2/tai-khoan-hang/&lt;id&gt;/kiem-ket-noi</code> — CHƯA KIỂM CHỨNG vì máy chủ hiện chưa có route này.",
-        "Phản hồi mong đợi (đề xuất, CHƯA xác nhận): <code>{ ok: bool, tre_ms: int, loi: string|null, luc: string }</code>.",
-        "Không gọi API BEST trực tiếp từ trình duyệt; không dùng HTTP cho credential thật.",
-      ])}
     `);
-  }
-
-  async function kiemKetNoiNgay() {
-    const tk = cache.hs && cache.hs.tai_khoan;
-    if (!tk) return;
-    const o = document.getElementById("best-kq-ket-noi");
-    if (o) o.innerHTML = '<div class="dang-tai"><span class="xoay"></span>Đang nhờ máy chủ kiểm tra…</div>';
-    try {
-      const r = await goi(`/api/v2/tai-khoan-hang/${encodeURIComponent(tk.id)}/kiem-ket-noi`, "POST", {});
-      if (r.ma === 404 || r.ma === 405) {
-        state.ket_qua_kiem = { loai: "cho_backend", ma: r.ma };
-        return manKiemTraKetNoi();
-      }
-      if (!r.ok) {
-        state.ket_qua_kiem = { loai: "loi", chu: "Máy chủ từ chối kiểm tra: " + ((r.kq && r.kq.loi) || `HTTP ${r.ma}`) };
-        return manKiemTraKetNoi();
-      }
-      const kq = r.kq || {};
-      if (kq.ok !== true && kq.ok !== false) {
-        state.ket_qua_kiem = {
-          loai: "loi",
-          chu: "Phản hồi kiểm tra thiếu cờ `ok` đọc được — giao diện KHÔNG kết luận. Nguyên văn: " +
-               JSON.stringify(kq).slice(0, 500),
-        };
-        return manKiemTraKetNoi();
-      }
-      const luc = kq.luc || new Date().toISOString();
-      const xacMinh = {
-        ok: kq.ok === true, luc,
-        tre_ms: kq.tre_ms,
-        ma_http: kq.ma_http || (kq.ok ? 200 : null),
-        loi: kq.loi || null,
-        loai: kq.loai || null,
-      };
-      // Kết quả chỉ sống trong PHIÊN này: backend chưa có route lưu nó. Làm mới trang là
-      // quay về CHỜ XÁC MINH — đúng sự thật, không tự nhận đã kết nối vĩnh viễn.
-      state.xac_minh_tam = {
-        id: tk.id,
-        kiem_ket_noi: xacMinh,
-        da_tung_ket_noi: xacMinh.ok ? true : daTungKetNoi(tk),
-      };
-      state.ket_qua_kiem = {
-        ok: xacMinh.ok, ma_http: xacMinh.ma_http, tre_ms: xacMinh.tre_ms,
-        loi: xacMinh.loi, luc,
-      };
-      cache.hs.tai_khoan = Object.assign({}, tk, {
-        kiem_ket_noi: xacMinh,
-        da_tung_ket_noi: state.xac_minh_tam.da_tung_ket_noi,
-      });
-      cache.luc = Date.now();
-      return manKiemTraKetNoi();
-    } catch (e) {
-      state.ket_qua_kiem = { loai: "loi", chu: "Không kiểm tra được: " + e.message };
-      return manKiemTraKetNoi();
-    }
   }
 
   /* ========================================================================================
@@ -1303,11 +1094,13 @@
         <div class="the-dau"><h2>Bước 2 — báo giá cước BEST</h2>
           <div class="phai"><span class="huy-hieu hh-vang">CHƯA KIỂM CHỨNG</span></div></div>
         <div class="the-than">
-          <div class="hop-cho-backend" id="best-gia-best">
-            <b>CHƯA CÓ biểu cước / đường báo giá BEST đã xác nhận.</b>
-            Tài liệu API BEST (Google Docs) chưa đọc được trong lượt này, nên giao diện
-            <b>không hiển thị số tiền</b> và không gọi endpoint đoán. Đây là việc CHỜ BACKEND
-            (adapter + biểu cước), không phải lỗi tính toán.
+          <div class="hop-nguon" id="best-gia-best">
+            <b>Báo giá cước BEST thật nằm ở bàn nghiệm thu.</b>
+            Đường đã có: <code>POST /api/v2/best/bao-gia</code> → backend gọi
+            <code>POST /Service/EstimateFee</code> và trả <code>data.TotalFee</code> (kèm
+            <code>Cod</code>/<code>COD</code>, VAT, bảo hiểm). Màn này chỉ tính khối lượng quy đổi,
+            <b>không hiển thị số tiền tự bịa</b>. <a href="/pages/best-uat.html" target="_blank"
+            rel="noopener">Mở bàn nghiệm thu →</a>
           </div>
           <p class="ghi-chu-nguon" style="margin-top:10px">Không có số tiền nào trên màn này là giá
             cước BEST. Khối lượng quy đổi chỉ là đầu vào; giá do hãng trả về sau khi có hợp đồng/biểu cước.</p>
@@ -1518,7 +1311,7 @@
       </div>
       ${hopNguon([
         "Đường đọc: <code>GET /api/v2/audit</code> — quyền <code>tenant.audit.xem</code>.",
-        "Đề xuất hợp đồng backend (CHƯA KIỂM CHỨNG): <code>GET /api/v2/hang/best/nhat-ky-dong-bo</code> trả <code>{ dong: [{ luc, ma_loi, thong_diep, so_lan_thu, da_gui_lai }] }</code>. Giao diện KHÔNG gọi đường đoán này.",
+        "Nhật ký đồng bộ BEST: <code>GET /api/v2/best/lich-su</code> trả <code>{su_kien, audit}</code> — đúng dữ liệu backend đang có; không có endpoint riêng cho từng mã lỗi.",
       ])}
     `);
   }

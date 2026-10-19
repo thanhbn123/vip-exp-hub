@@ -7,6 +7,17 @@
   const esc = (s) => String(s == null ? "" : s);
   let dsTaiKhoan = [];
 
+  function xacNhanThat() {
+    const o = $("phe-duyet-that");
+    return !!(o && o.checked);
+  }
+
+  function canPheDuyet(id) {
+    if (xacNhanThat()) return true;
+    dat(id || "kq-ket-noi", "CHẶN: hãy tick ô phê duyệt phiên nghiệm thu ở mục 0 trước.", "canhbao");
+    return false;
+  }
+
   async function goi(duong, method, duLieu) {
     const res = await fetch(duong, {
       method: method || "GET",
@@ -44,11 +55,16 @@
       o.textContent = "Chưa có tài khoản BEST. Tạo một tài khoản ở form bên dưới (mock trước, sandbox sau khi có phê duyệt).";
     } else {
       o.className = "ketqua";
-      o.textContent = dsTaiKhoan.map((t) =>
-        `#${t.id} · ${t.ten} · ${t.moi_truong} · ${t.kich_hoat ? "đang bật" : "đã khóa"}`
-      ).join("\n");
+      o.textContent = dsTaiKhoan.map((t) => {
+        const wh = t.webhook_url || `/api/v2/webhook/nhan/${t.webhook_ma || ""}`;
+        const b = t.webhook_bearer || {};
+        return `#${t.id} · ${t.ten} · ${t.moi_truong} · ${t.kich_hoat ? "đang bật" : "đã khóa"}`
+          + `\n   webhook: ${wh}${t.webhook_url_cong_khai ? "" : " (CHƯA khai VIP_HUB_PUBLIC_BASE_URL — BEST không gọi được)"}`
+          + `\n   Bearer webhook: ${b.co_bearer === true ? "đã lưu" : "CHƯA lưu"}`
+          + ` · credential: ${t.co_credentials ? "đã lưu" : "chưa lưu"}`;
+      }).join("\n");
     }
-    for (const id of ["kn-tk", "wh-tk", "cuoc-tk", "don-tk", "tc-tk"]) {
+    for (const id of ["kn-tk", "wh-tk", "cuoc-tk", "don-tk", "tc-tk", "ud-tk"]) {
       const s = $(id);
       if (!s) continue;
       s.textContent = "";
@@ -105,17 +121,24 @@
         return loi("tk-ghi-chu", new Error("credential thật chỉ nhận qua HTTPS. Chạy server với VIP_HUB_TLS_CERT/KEY hoặc sau reverse proxy TLS."));
       }
       if (!xacNhan) return loi("tk-ghi-chu", new Error("cần tick xác nhận phê duyệt của Owner"));
+      if (!xacNhanThat()) return loi("tk-ghi-chu", new Error("cần tick ô phê duyệt phiên nghiệm thu ở mục 0"));
       if (mt === "production") {
         return loi("tk-ghi-chu", new Error("production chỉ cho phép sau nghiệm thu riêng; dùng sandbox trước."));
       }
     }
+    const cred = { username: user, password: pass };
+    const ems = ($("tk-ems") ? $("tk-ems").value : "").trim();
+    if (ems) cred.ems_key = ems;
+    const ghiChu = ($("tk-ghi-chu") ? $("tk-ghi-chu").value : "").trim();
+    if (ghiChu) cred.ghi_chu = ghiChu;
     const than = {
       hang: "best",
       ten: $("tk-ten").value.trim() || "BEST Express",
       moi_truong: mt,
-      credentials: { username: user, password: pass },
+      credentials: cred,
     };
     $("tk-pass").value = "";
+    if ($("tk-ems")) $("tk-ems").value = "";
     dat("tk-ghi-chu", "Đang lưu (credential được mã hoá ở backend)…");
     try {
       const r = await goi("/api/v2/tai-khoan-hang", "POST", than);
@@ -128,8 +151,10 @@
 
   async function kiemKetNoi() {
     const id = $("kn-tk").value;
-    const xacNhan = $("kn-xac-nhan").value === "1";
+    const xacNhan = $("kn-xac-nhan").value === "1" && xacNhanThat();
     if (!id) return loi("kq-ket-noi", new Error("chưa chọn tài khoản BEST"));
+    if (!canPheDuyet("kq-ket-noi")) return;
+    if (!xacNhan) return loi("kq-ket-noi", new Error("chọn 'Tôi đã phê duyệt kiểm tra thật'"));
     dat("kq-ket-noi", "Đang gọi backend kiểm tra đăng nhập…");
     try {
       const r = await goi("/api/v2/best/kiem-ket-noi", "POST",
@@ -150,6 +175,7 @@
     const id = $("wh-tk").value;
     const token = $("wh-token").value;
     if (!id || !token) return loi("kq-webhook", new Error("chọn tài khoản + nhập Bearer"));
+    if (!canPheDuyet("kq-webhook")) return;
     $("wh-token").value = "";
     dat("kq-webhook", "Đang lưu Bearer (mã hoá)…");
     try {
@@ -204,10 +230,11 @@
       cod: Number($("cuoc-cod").value || 0),
       gia_tri_khai: Number($("cuoc-gia").value || 0),
     };
+    if (!canPheDuyet("kq-cuoc")) return;
     dat("kq-cuoc", "Đang báo cước…");
     try {
       const r = await goi("/api/v2/best/bao-gia", "POST",
-        { tai_khoan_id: Number(id), don, xac_nhan_that: true });
+        { tai_khoan_id: Number(id), don, xac_nhan_that: xacNhanThat() });
       const kq = r.kq || {};
       if (!r.ok || !kq.ok) {
         const ly = (kq && kq.loi) || (r.kq && r.kq.loi) || `HTTP ${r.ma}`;
@@ -215,12 +242,14 @@
         return;
       }
       const d = kq.data || {};
+      const codVal = d.COD != null ? d.COD : d.Cod;
       const dong = [
         `Tổng phí: ${d.TotalFee != null ? d.TotalFee : "?"} VND`,
         `Phí vận chuyển: ${d.FreightFee != null ? d.FreightFee : "?"} · COD fee: ${d.CODFee != null ? d.CODFee : "?"}`,
         `Bảo hiểm: ${d.InsuranceFee != null ? d.InsuranceFee : "?"} · VAT: ${d.FreightFeeVAT != null ? d.FreightFeeVAT : "?"}`,
         `Tổng có VAT: ${d.TotalFeeVAT != null ? d.TotalFeeVAT : "?"} · sau discount: ${d.TotalFeeVATWithDiscount != null ? d.TotalFeeVATWithDiscount : "?"}`,
-        `Service: ${d.ServiceType || "?"} · COD: ${d.COD != null ? d.COD : "?"} · khai giá: ${d.ProductPrice != null ? d.ProductPrice : "?"}`,
+        `Service: ${d.ServiceType || "?"} · COD: ${codVal != null ? codVal : "?"} · khai giá: ${d.ProductPrice != null ? d.ProductPrice : "?"}`,
+        "Lưu ý: hãng trả `Cod` (chữ d thường) ở một số phản hồi; trang đọc cả `COD` và `Cod`.",
       ];
       dat("kq-cuoc", dong.join("\n"), "ok");
     } catch (e) { loi("kq-cuoc", e); }
@@ -230,11 +259,13 @@
     ev.preventDefault();
     const id = $("don-tk").value;
     if (!id) return loi("kq-don", new Error("chưa chọn tài khoản"));
+    if (!canPheDuyet("kq-don")) return;
     const xacNhan = $("don-xac-nhan").value.trim();
+    if (!xacNhan) return loi("kq-don", new Error("gõ đúng câu xác nhận ghi đơn sandbox"));
     dat("kq-don", "Đang gửi tạo đơn sandbox…");
     try {
       const r = await goi("/api/v2/best/tao-don", "POST", {
-        tai_khoan_id: Number(id), don: donTuForm("don-"), xac_nhan_that: true,
+        tai_khoan_id: Number(id), don: donTuForm("don-"), xac_nhan_that: xacNhanThat(),
         xac_nhan: xacNhan,
       });
       const kq = r.kq || {};
@@ -254,15 +285,23 @@
     const id = $("tc-tk").value;
     const ds = codes();
     if (!id || !ds.length) return loi("kq-tra-cuu", new Error("chọn tài khoản + nhập mã"));
+    if (!canPheDuyet("kq-tra-cuu")) return;
     dat("kq-tra-cuu", "Đang tra cứu…");
     try {
       const r = await goi("/api/v2/best/tra-cuu", "POST",
-        { tai_khoan_id: Number(id), codes: ds, xac_nhan_that: true });
+        { tai_khoan_id: Number(id), codes: ds, xac_nhan_that: xacNhanThat() });
       const kq = r.kq || {};
       if (!r.ok || !kq.ok) return dat("kq-tra-cuu", `KHÔNG TRA CỨU ĐƯỢC: ${kq.loi || "HTTP " + r.ma}`, "canhbao");
-      const rows = (kq.data || []).map((x) =>
-        `• ${x.code_best || "?"} · status=${x.status || "?"} · ${x.trang_thai_chung || "chưa map"} · ${x.status_content || ""}`
-      );
+      const rows = (kq.data || []).map((x) => {
+        let s = `• ${x.code_best || "?"} · status=${x.status || "?"}`
+          + ` · ${x.trang_thai_chung || "chưa map"} · ${x.status_content || ""}`;
+        const logs = Array.isArray(x.traceLogs) ? x.traceLogs.slice(-5) : [];
+        for (const l of logs) {
+          const luc = l.modified_at ? new Date(Number(l.modified_at)).toISOString() : "?";
+          s += `\n   - ${String(l.status || "?")} · ${luc} · ${l.status_content || ""}`;
+        }
+        return s;
+      });
       dat("kq-tra-cuu", rows.length ? rows.join("\n") : "Không có kết quả.", "ok");
     } catch (e) { loi("kq-tra-cuu", e); }
   }
@@ -271,16 +310,127 @@
     const id = $("tc-tk").value;
     const ds = codes();
     if (!id || !ds.length) return loi("kq-tra-cuu", new Error("chọn tài khoản + nhập mã"));
+    if (!canPheDuyet("kq-tra-cuu")) return;
     dat("kq-tra-cuu", "Đang lấy URL PDF…");
     try {
       const r = await goi("/api/v2/best/in", "POST",
-        { tai_khoan_id: Number(id), codes: ds, xac_nhan_that: true });
+        { tai_khoan_id: Number(id), codes: ds, xac_nhan_that: xacNhanThat() });
       const kq = r.kq || {};
       if (!r.ok || !kq.ok) return dat("kq-tra-cuu", `KHÔNG IN ĐƯỢC: ${kq.loi || "HTTP " + r.ma}`, "canhbao");
       const url = String(kq.url || "");
       const canhBao = /^http:\/\//i.test(url) ? "\nCẢNH BÁO: URL PDF là HTTP — không tải bằng trình duyệt; cần backend tải qua HTTPS/allowlist." : "";
       dat("kq-tra-cuu", `URL PDF: ${url}${canhBao}`, "ok");
     } catch (e) { loi("kq-tra-cuu", e); }
+  }
+
+  async function taiPdf() {
+    const id = $("tc-tk").value;
+    const ds = codes();
+    if (!id || !ds.length) return loi("kq-tra-cuu", new Error("chọn tài khoản + nhập mã"));
+    if (!canPheDuyet("kq-tra-cuu")) return;
+    dat("kq-tra-cuu", "Đang in và tải PDF qua backend (HTTPS)…");
+    try {
+      const res = await fetch("/api/v2/best/in-pdf", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "VIPHub", "Content-Type": "application/json" },
+        body: JSON.stringify({ tai_khoan_id: Number(id), codes: ds,
+                               xac_nhan_that: xacNhanThat() }),
+      });
+      if (!res.ok) {
+        let kq = {};
+        try { kq = await res.json(); } catch (e) { /* không JSON */ }
+        throw new Error((kq && kq.loi) || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "BEST-waybill-" + (ds[0] || "pdf").replace(/[^A-Za-z0-9._-]/g, "_") + ".pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      dat("kq-tra-cuu", `Đã tải PDF (${blob.size} byte) qua backend. Không mở URL http trực tiếp.`, "ok");
+    } catch (e) { loi("kq-tra-cuu", e); }
+  }
+
+  function duLieuCapNhat() {
+    return {
+      ma_van_don: $("ud-ma").value.trim(),
+      hang_hoa: $("ud-hang").value.trim(),
+      cod: Number($("ud-cod").value || 0),
+      gia_tri_khai: Number($("ud-gia").value || 0),
+      khoi_luong_gram: Number($("ud-can").value || 1),
+      chieu_dai_mm: Number($("ud-dai").value || 0),
+      chieu_rong_mm: Number($("ud-rong").value || 0),
+      chieu_cao_mm: Number($("ud-cao").value || 0),
+      address_type_id: Number($("ud-loai-dc").value || 2),
+      nguoi_nhan_tinh: $("ud-tinh").value.trim(),
+      nguoi_nhan_quan: $("ud-quan").value.trim(),
+      nguoi_nhan_xa: $("ud-xa").value.trim(),
+      nguoi_nhan_dia_chi: $("ud-dc").value.trim(),
+      nguoi_nhan_ten: $("ud-ten").value.trim(),
+      nguoi_nhan_sdt: $("ud-sdt").value.trim(),
+    };
+  }
+
+  async function capNhatDon(ev) {
+    ev.preventDefault();
+    const id = $("ud-tk").value;
+    if (!id) return loi("kq-cap-nhat", new Error("chưa chọn tài khoản"));
+    if (!canPheDuyet("kq-cap-nhat")) return;
+    const xacNhan = $("ud-xac-nhan").value.trim();
+    if (!xacNhan) return loi("kq-cap-nhat", new Error("gõ đúng câu xác nhận ghi"));
+    dat("kq-cap-nhat", "Đang gửi Order/Update…");
+    try {
+      const r = await goi("/api/v2/best/cap-nhat", "POST", {
+        tai_khoan_id: Number(id), don: duLieuCapNhat(),
+        xac_nhan_that: xacNhanThat(), xac_nhan: xacNhan,
+      });
+      const kq = r.kq || {};
+      dat("kq-cap-nhat", kq.ok ? "ĐÃ CẬP NHẬT ĐƠN" : `KHÔNG CẬP NHẬT: ${kq.loi || "HTTP " + r.ma}`,
+          kq.ok ? "ok" : "canhbao");
+    } catch (e) { loi("kq-cap-nhat", e); }
+  }
+
+  async function suaDiaChi() {
+    const id = $("ud-tk").value;
+    if (!id) return loi("kq-cap-nhat", new Error("chưa chọn tài khoản"));
+    if (!canPheDuyet("kq-cap-nhat")) return;
+    const xacNhan = $("ud-xac-nhan").value.trim();
+    if (!xacNhan) return loi("kq-cap-nhat", new Error("gõ đúng câu xác nhận ghi"));
+    dat("kq-cap-nhat", "Đang gửi Order/UpdateAddress…");
+    try {
+      const r = await goi("/api/v2/best/sua-dia-chi", "POST", {
+        tai_khoan_id: Number(id), don: duLieuCapNhat(),
+        address_type_id: Number($("ud-loai-dc").value || 2),
+        xac_nhan_that: xacNhanThat(), xac_nhan: xacNhan,
+      });
+      const kq = r.kq || {};
+      dat("kq-cap-nhat", kq.ok
+        ? `ĐÃ SỬA ĐỊA CHỈ (AddressTypeId=${kq.address_type_id || "?"})`
+        : `KHÔNG SỬA ĐƯỢC: ${kq.loi || "HTTP " + r.ma}`, kq.ok ? "ok" : "canhbao");
+    } catch (e) { loi("kq-cap-nhat", e); }
+  }
+
+  async function huyDon() {
+    const id = $("ud-tk").value;
+    const ma = $("ud-ma").value.trim();
+    if (!id || !ma) return loi("kq-cap-nhat", new Error("chọn tài khoản + nhập mã vận đơn"));
+    if (!canPheDuyet("kq-cap-nhat")) return;
+    const xacNhan = $("ud-xac-nhan").value.trim();
+    if (!xacNhan) return loi("kq-cap-nhat", new Error("gõ đúng câu xác nhận ghi"));
+    dat("kq-cap-nhat", "Đang gửi Order/Cancel…");
+    try {
+      const r = await goi("/api/v2/best/huy", "POST", {
+        tai_khoan_id: Number(id), ma_van_don: ma,
+        xac_nhan_that: xacNhanThat(), xac_nhan: xacNhan,
+      });
+      const kq = r.kq || {};
+      dat("kq-cap-nhat", kq.ok ? "ĐÃ GỬI HỦY (chỉ trước khi lấy hàng thành công)"
+        : `KHÔNG HỦY ĐƯỢC: ${kq.loi || "HTTP " + r.ma}`, kq.ok ? "ok" : "canhbao");
+    } catch (e) { loi("kq-cap-nhat", e); }
   }
 
   async function taiLichSu() {
@@ -306,6 +456,10 @@
     $("btn-luu-webhook").addEventListener("click", luuWebhook);
     $("btn-tra-cuu").addEventListener("click", traCuu);
     $("btn-in").addEventListener("click", inVanDon);
+    $("btn-tai-pdf").addEventListener("click", taiPdf);
+    $("form-cap-nhat").addEventListener("submit", capNhatDon);
+    $("btn-sua-dia-chi").addEventListener("click", suaDiaChi);
+    $("btn-huy").addEventListener("click", huyDon);
     $("btn-lich-su").addEventListener("click", taiLichSu);
     try {
       await taiTaiKhoan();

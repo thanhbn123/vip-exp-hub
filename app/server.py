@@ -74,6 +74,26 @@ def _best_cred(tk, tenant_id):
     return bao_mat.giai_ma_cred(tk["credentials_ma_hoa"], tenant_id, "best")
 
 
+def _best_webhook_url(tk):
+    """URL webhook ĐẦY ĐỦ để gửi BEST sale. Base công khai khai bằng biến môi trường.
+
+    BEST phải gọi được URL này từ Internet; `127.0.0.1` chỉ dùng để thử cục bộ. Vì vậy không
+    được ghép một URL nội bộ rồi nói đó là URL đăng ký. Chưa khai base ⇒ trả đường dẫn tương
+    đối + cờ `webhook_url_cong_khai=False` để UI nói thẳng.
+    """
+    duong = f"/api/v2/webhook/nhan/{tk['webhook_ma']}"
+    base = os.environ.get("VIP_HUB_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return base + duong, True
+    return duong, False
+
+
+def _best_phe_duyet_env():
+    """Cổng phê duyệt cấp tiến trình cho thao tác gọi BEST thật (sandbox)."""
+    return (os.environ.get("VIP_BEST_OWNER_APPROVED") == "1"
+            and bool(os.environ.get("VIP_BEST_OWNER_APPROVAL_ID", "").strip()))
+
+
 def _json(obj):
     return json.dumps(obj, ensure_ascii=False, default=_ma_hoa_la).encode()
 
@@ -213,7 +233,11 @@ class BoXuLy(BaseHTTPRequestHandler):
         nhập hoặc mật khẩu" trong khi mật khẩu chưa bao giờ sai. Đó đúng là ca sinh ra §12.2
         của `CLAUDE.md` — mất gần ba tiếng cho một lỗi mà thông báo nói sai hoàn toàn.
         """
-        return os.environ.get("VIP_HUB_HTTPS", "0") == "1"
+        # Nhận cả hai cách khai: cờ tường minh, hoặc có chứng chỉ TLS (server bọc socket ngay
+        # trong `chay()`). Thiếu vế thứ hai thì cookie không có `Secure` dù kênh đã là HTTPS —
+        # một cấu hình trông đúng mà bảo vệ yếu hơn tên của nó.
+        return (os.environ.get("VIP_HUB_HTTPS", "0") == "1"
+                or bool(os.environ.get("VIP_HUB_TLS_CERT", "").strip()))
 
     def _header_bao_mat(self):
         for k, v in self.HEADER_BAO_MAT.items():
@@ -221,8 +245,11 @@ class BoXuLy(BaseHTTPRequestHandler):
         if self._dung_https():
             # Chỉ gửi HSTS khi THẬT SỰ sau HTTPS. Gửi qua HTTP là vô nghĩa, và nếu trình
             # duyệt từng thấy nó trên một tên miền thì nó sẽ từ chối HTTP của tên miền đó
-            # về sau — hỏng khó gỡ.
-            self.send_header("Strict-Transport-Security", "max-age=31536000")
+            # về sau — hỏng khó gỡ. Loopback + chứng chỉ tự ký là ca đặc biệt: HSTS ở đó chỉ
+            # làm trình duyệt khó quay lại, không thêm bảo vệ thật.
+            host = (self.headers.get("Host", "") or "").split(":", 1)[0].strip().lower()
+            if host not in ("127.0.0.1", "localhost", "::1"):
+                self.send_header("Strict-Transport-Security", "max-age=31536000")
 
     def _doc_json(self, gioi_han=None, long_khoa=()):
         """Đọc body JSON và CHẶN NGAY Ở BIÊN mọi trường mang list/dict không được khai trước.
@@ -467,23 +494,49 @@ class BoXuLy(BaseHTTPRequestHandler):
             cred = _best_cred(tk, tenant_id)
         except Exception:
             return self._tra(500, {"loi": "không giải mã được credential BEST"})
+        xac_nhan = d.get("xac_nhan")
+        cho_phep = bool(d.get("xac_nhan_that"))
         if duong == "/api/v2/best/bao-gia":
             kq = best_hop_dong.bao_gia_that(
-                d.get("don") or {}, cred, tk["moi_truong"],
-                cho_phep_that=bool(d.get("xac_nhan_that")))
+                d.get("don") or {}, cred, tk["moi_truong"], cho_phep_that=cho_phep)
         elif duong == "/api/v2/best/tao-don":
             kq = best_hop_dong.tao_don_that(
-                d.get("don") or {}, cred, tk["moi_truong"],
-                cho_phep_that=bool(d.get("xac_nhan_that")),
-                xac_nhan=d.get("xac_nhan"))
+                d.get("don") or {}, cred, tk["moi_truong"], cho_phep_that=cho_phep,
+                xac_nhan=xac_nhan)
+        elif duong == "/api/v2/best/cap-nhat":
+            kq = best_hop_dong.cap_nhat_that(
+                d.get("don") or {}, cred, tk["moi_truong"], cho_phep_that=cho_phep,
+                xac_nhan=xac_nhan)
+        elif duong == "/api/v2/best/sua-dia-chi":
+            kq = best_hop_dong.sua_dia_chi_that(
+                d.get("don") or {}, cred, tk["moi_truong"], cho_phep_that=cho_phep,
+                xac_nhan=xac_nhan, address_type=d.get("address_type_id"))
+        elif duong == "/api/v2/best/huy":
+            ma = d.get("ma_van_don") or (d.get("don") or {}).get("ma_van_don")
+            kq = best_hop_dong.huy_that(
+                ma, cred, tk["moi_truong"], cho_phep_that=cho_phep, xac_nhan=xac_nhan)
         elif duong == "/api/v2/best/tra-cuu":
             kq = best_hop_dong.tra_cuu_that(
-                d.get("codes") or [], cred, tk["moi_truong"],
-                cho_phep_that=bool(d.get("xac_nhan_that")))
+                d.get("codes") or [], cred, tk["moi_truong"], cho_phep_that=cho_phep)
+        elif duong == "/api/v2/best/in-pdf":
+            ok_pdf, pdf, url, loi_pdf, meta_pdf = best_hop_dong.in_pdf_that(
+                d.get("codes") or [], cred, tk["moi_truong"], cho_phep_that=cho_phep)
+            csdl.audit("best_thao_tac_that", f"carrier_account:{tk['id']}",
+                       json.dumps({"duong": "in-pdf", "ok": ok_pdf,
+                                   "ly_do": str(loi_pdf)[:300]}, ensure_ascii=False),
+                       tenant_id=tenant_id, user_id=nc.user_id,
+                       ket_qua="thanh_cong" if ok_pdf else "tu_choi")
+            if not ok_pdf:
+                blocked = bool((meta_pdf or {}).get("blocked"))
+                return self._tra(403 if blocked else 502,
+                                 {"ok": False, "loi": loi_pdf, "blocked": blocked,
+                                  "pdf_url": url})
+            ten_tep = "BEST-" + re.sub(r"[^A-Za-z0-9._-]", "_",
+                                      str((d.get("codes") or ["waybill"])[0]))[:60] + ".pdf"
+            return self._tra_tep(pdf, "application/pdf", dinh_kem=ten_tep)
         else:
             kq = best_hop_dong.in_that(
-                d.get("codes") or [], cred, tk["moi_truong"],
-                cho_phep_that=bool(d.get("xac_nhan_that")))
+                d.get("codes") or [], cred, tk["moi_truong"], cho_phep_that=cho_phep)
         csdl.audit("best_thao_tac_that", f"carrier_account:{tk['id']}",
                    json.dumps({"duong": duong.rsplit("/", 1)[-1], "ok": kq.get("ok"),
                                "ly_do": str(kq.get("loi", ""))[:300]},
@@ -947,9 +1000,9 @@ class BoXuLy(BaseHTTPRequestHandler):
                 # Chỉ BEST được lưu tài khoản thật; J&T/VTP giữ nguyên đường mock.
                 if d.get("hang") != "best":
                     return self._tra(403, {"loi": "chỉ BEST hỗ trợ môi trường thật trong lượt này — BLOCKED"})
-                if os.environ.get("VIP_BEST_OWNER_APPROVED") != "1":
+                if not _best_phe_duyet_env():
                     return self._tra(403, {"loi": "sandbox/production cần VIP_BEST_OWNER_APPROVED=1 "
-                                                  "và mã phê duyệt của Owner (BLOCKED)"})
+                                                  "VÀ VIP_BEST_OWNER_APPROVAL_ID của Owner (BLOCKED)"})
                 cred = d.get("credentials") or {}
                 if not (isinstance(cred, dict) and cred.get("username") and cred.get("password")):
                     return self._tra(400, {"loi": "credential BEST thật cần username + password"})
@@ -964,8 +1017,10 @@ class BoXuLy(BaseHTTPRequestHandler):
                 wh_ma, bao_mat.ma_hoa_wh(wh_secret, wh_ma))
             csdl.audit("tao_tai_khoan_hang", f"carrier_account:{id_moi}", d["hang"],
                        tenant_id=tenant_id, user_id=nc.user_id)
+            tk_moi = {"webhook_ma": wh_ma}
+            url_wh, cong_khai = _best_webhook_url(tk_moi)
             ra = {"id": id_moi, "webhook_ma": wh_ma,
-                  "webhook_url": f"/api/v2/webhook/nhan/{wh_ma}"}
+                  "webhook_url": url_wh, "webhook_url_cong_khai": cong_khai}
             # BEST thật dùng Bearer webhook, không dùng HMAC secret. Không trả secret không dùng.
             if d["hang"] != "best":
                 ra["webhook_secret_mot_lan"] = wh_secret
@@ -1004,15 +1059,30 @@ class BoXuLy(BaseHTTPRequestHandler):
             return self._tra(200, best_hop_dong.thong_tin_hop_dong())
         if duong == "/api/v2/best/trang-thai" and method == "GET":
             self._can(nc, "tenant.hang.xem")
+            tk_rows = []
+            for x in csdl.nhieu(
+                    "SELECT id, hang, ten, moi_truong, kich_hoat, webhook_ma,"
+                    " credentials_doi_luc FROM carrier_accounts"
+                    " WHERE tenant_id=? AND hang='best' ORDER BY id", (tenant_id,)):
+                d = dict(x)
+                d["co_credentials"] = bool(x["credentials_doi_luc"])
+                d["credentials_doi_luc"] = x["credentials_doi_luc"] if d["co_credentials"] else None
+                url_wh, cong_khai = _best_webhook_url(d)
+                d["webhook_url"], d["webhook_url_cong_khai"] = url_wh, cong_khai
+                try:
+                    d["webhook_bearer"] = xac_thuc_best.trang_thai_bearer_webhook(
+                        str(tenant_id), str(x["id"]))
+                except Exception:
+                    d["webhook_bearer"] = {"co_bearer": None, "doc_duoc": None,
+                                           "ma_ly_do": "không đọc được trạng thái Bearer"}
+                tk_rows.append(d)
             ra = {
                 "hop_dong": best_hop_dong.thong_tin_hop_dong(),
-                "co_phe_duyet_owner": os.environ.get("VIP_BEST_OWNER_APPROVED") == "1",
+                "co_phe_duyet_owner": _best_phe_duyet_env(),
                 "co_ma_phe_duyet": bool(os.environ.get("VIP_BEST_OWNER_APPROVAL_ID", "").strip()),
+                "public_base_url": os.environ.get("VIP_HUB_PUBLIC_BASE_URL", "").strip(),
                 "production_ghi": False,
-                "tai_khoan": [dict(x) for x in csdl.nhieu(
-                    "SELECT id, hang, ten, moi_truong, kich_hoat, webhook_ma"
-                    " FROM carrier_accounts WHERE tenant_id=? AND hang='best' ORDER BY id",
-                    (tenant_id,))],
+                "tai_khoan": tk_rows,
                 "tls": None,
             }
             if "tls=1" in (self.path.split("?", 1)[1] if "?" in self.path else ""):
@@ -1040,8 +1110,18 @@ class BoXuLy(BaseHTTPRequestHandler):
                                    "ly_do": str(kq.get("loi", ""))[:300]}, ensure_ascii=False),
                        tenant_id=tenant_id, user_id=nc.user_id,
                        ket_qua="thanh_cong" if kq.get("ok") else "tu_choi")
-            ma = 200 if kq.get("ok") else (
-                403 if (kq.get("blocked") or "VIP_BEST" in str(kq.get("loi", ""))) else 502)
+            loi = str(kq.get("loi", ""))
+            if kq.get("ok"):
+                ma = 200
+            elif kq.get("blocked") or "VIP_BEST" in loi:
+                ma = 403
+            elif "[401]" in loi or "[404]" in loi or "xác thực" in loi.lower() \
+                    or "đăng nhập" in loi.lower():
+                # BEST trả HTTP 200 + Result=2 cho sai tài khoản; đây là lỗi xác thực phía
+                # người dùng, không phải cổng nội bộ hỏng (502).
+                ma = 401
+            else:
+                ma = 502
             return self._tra(ma, kq)
         if duong == "/api/v2/best/webhook-bearer" and method == "POST":
             self._can(nc, "tenant.hang.quan_ly")
@@ -1057,15 +1137,14 @@ class BoXuLy(BaseHTTPRequestHandler):
                 return self._tra(400, {"loi": f"không lưu được Bearer webhook: {type(e).__name__}"})
             csdl.audit("best_webhook_bearer_luu", f"carrier_account:{tk['id']}", "",
                        tenant_id=tenant_id, user_id=nc.user_id)
+            url_wh, cong_khai = _best_webhook_url(tk)
             return self._tra(200, {"ok": True, "da_luu": True,
-                                   "webhook_url": f"/api/v2/webhook/nhan/{tk['webhook_ma']}"})
-        if duong == "/api/v2/best/bao-gia" and method == "POST":
-            return self._best_thao_tac(duong, nc, tenant_id)
-        if duong == "/api/v2/best/tao-don" and method == "POST":
-            return self._best_thao_tac(duong, nc, tenant_id)
-        if duong == "/api/v2/best/tra-cuu" and method == "POST":
-            return self._best_thao_tac(duong, nc, tenant_id)
-        if duong == "/api/v2/best/in" and method == "POST":
+                                   "webhook_url": url_wh,
+                                   "webhook_url_cong_khai": cong_khai})
+        if duong in ("/api/v2/best/bao-gia", "/api/v2/best/tao-don",
+                     "/api/v2/best/cap-nhat", "/api/v2/best/sua-dia-chi",
+                     "/api/v2/best/huy", "/api/v2/best/tra-cuu",
+                     "/api/v2/best/in", "/api/v2/best/in-pdf") and method == "POST":
             return self._best_thao_tac(duong, nc, tenant_id)
         if duong == "/api/v2/best/lich-su" and method == "GET":
             self._can(nc, "tenant.hang.xem")
@@ -1723,11 +1802,16 @@ def chay(cong=cau_hinh.CONG_MAC_DINH):
     # In ĐỊA CHỈ THẬT đã bind, không in một hằng viết sẵn: bản cũ luôn in "127.0.0.1" nên nếu
     # địa chỉ có đổi thì dòng log vẫn nói y như cũ — dòng log nói sai về chính nó.
     that = sv.server_address
-    print(f"[hub] VIP Express Hub SaaS chạy tại http://{that[0]}:{that[1]} — Ctrl+C để dừng")
-    print(f"[hub] Giao diện quản trị: http://{that[0]}:{that[1]}/admin/")
+    giao_thuc = "https" if (cert and key) else "http"
+    if os.environ.get("VIP_HUB_HTTPS") == "1" and not (cert and key):
+        print("[hub] CẢNH BÁO: VIP_HUB_HTTPS=1 nhưng thiếu VIP_HUB_TLS_CERT/KEY — cookie Secure "
+              "sẽ không được gửi qua HTTP và đăng nhập sẽ hỏng.")
+    print(f"[hub] VIP Express Hub SaaS chạy tại {giao_thuc}://{that[0]}:{that[1]} — Ctrl+C để dừng")
+    print(f"[hub] Giao diện quản trị: {giao_thuc}://{that[0]}:{that[1]}/admin/")
+    print(f"[hub] Bàn nghiệm thu BEST: {giao_thuc}://{that[0]}:{that[1]}/pages/best-uat.html")
     if ra_ngoai:
         print(f"[hub] LƯU Ý: đang bind RA NGOÀI ({dia_chi}). HTTPS: "
-              f"{'bật' if os.environ.get('VIP_HUB_HTTPS') == '1' else 'TẮT — cookie không có cờ Secure'}")
+              f"{'bật' if (cert and key) else 'TẮT — cookie không có cờ Secure'}")
     try:
         sv.serve_forever()
     except KeyboardInterrupt:

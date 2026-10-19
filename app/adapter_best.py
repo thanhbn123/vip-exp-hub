@@ -1,27 +1,26 @@
-# B1 — ADAPTER BEST EXPRESS (VietnamV3) — MOCK_VERIFIED, chưa có REAL PASS.
+# B1 — ADAPTER BEST EXPRESS (VietnamV3) — đã đối chiếu DOCX chính thức 2026-10-19.
 #
 # TRẠNG THÁI, NÓI NGAY TỪ DÒNG ĐẦU:
-#   · Tài liệu API BEST trong đề bài là một Google Docs. Task KHÔNG kèm URL, workspace KHÔNG có
-#     bản sao, và agent bị CẤM đoán endpoint/request schema. Vì vậy tệp này chỉ dùng những gì
-#     đề bài ĐÃ XÁC NHẬN: 8 đường dẫn, ServiceId=12491, JourneyType 1/2/3, đơn vị GRAM/MILIMET/VND,
-#     địa chỉ 2 cấp với District=" ", giới hạn 10/50.
-#   · Tên trường WIRE của BEST, hình dạng gói trả lời, mã trạng thái, cách gửi token — **CHƯA
-#     XÁC MINH**. Tệp này KHÔNG giả vờ đã biết chúng. Đường LIVE bị chặn bằng
-#     `SCHEMA_DA_XAC_MINH = False` (xem `_goi_that`) và `CHO_PHEP_LIVE = False` của lớp nền.
-#   · Bộ thử dùng STUB LOOPBACK `127.0.0.1` cổng do OS cấp. KHÔNG có lượt gọi nào tới
-#     `800best.com`, kể cả test host. Đây là **MOCK PASS**, KHÔNG phải REAL PASS.
+#   · Tài liệu chính thức đã đọc toàn văn (DOCX Owner cung cấp). Tên trường WIRE, envelope
+#     `Result/Message`, bảng 23 mã trạng thái, cách gửi Bearer và nhãn `customer Cancel` đã được
+#     sửa theo tài liệu. `SCHEMA_DA_XAC_MINH=True`, `TRANG_THAI_DA_XAC_MINH=True`.
+#   · Đường LIVE của ADAPTER vẫn đóng bằng `CHO_PHEP_LIVE=False` (và hai cờ sandbox/production)
+#     để không có lời gọi hãng nào tự bật khi chưa có phê duyệt. Đường kết nối thật dùng cho
+#     nghiệm thu nằm ở `best_hop_dong.py`, có cổng Owner riêng và production bị khoá ghi.
+#   · Bộ thử dùng STUB LOOPBACK `127.0.0.1` cổng do OS cấp. Đây là bằng chứng HỢP ĐỒNG/MOCK;
+#     REAL PASS của tài khoản do Owner thực hiện qua bàn nghiệm thu (`/pages/best-uat.html`).
 #
-# MƯỜI CHỨC NĂNG (đề bài) VÀ ÁNH XẠ ENDPOINT:
+# MƯỜI CHỨC NĂNG VÀ ÁNH XẠ ENDPOINT:
 #   authenticate    → POST /User/Login
-#   createOrder     → POST /Order/Add
-#   updateOrder     → POST /Order/Update
-#   updateAddress   → POST /Order/UpdateAddress
-#   cancelOrder     → POST /Order/Cancel
-#   queryTracking   → POST /Order/Query            (tối đa 10 mã/lần)
-#   estimateFee     → POST /Service/EstimateFee
-#   printWaybill    → POST /Print/PrintWayBill     (tối đa 50 mã/lần)
-#   parseWebhook    → không gọi mạng; chỉ đọc gói đến
-#   normalizeStatus → không gọi mạng; CHƯA có bảng mã BEST nên trả "chưa biết", không đoán
+#   createOrder     → POST /Order/Add               (31 trường nền + 3 trường tuỳ chọn)
+#   updateOrder     → POST /Order/Update            (9 trường)
+#   updateAddress   → POST /Order/UpdateAddress     (AddressTypeId 1/2/3)
+#   cancelOrder     → POST /Order/Cancel            (body chỉ Code)
+#   queryTracking   → POST /Order/Query             (tối đa 10 mã/lần)
+#   estimateFee     → POST /Service/EstimateFee     (đọc data.TotalFee...; hãng trả `Cod`)
+#   printWaybill    → POST /Print/PrintWayBill      (body `codes`, tối đa 50; tải PDF qua HTTPS)
+#   parseWebhook    → không gọi mạng; đọc 18 trường snake_case + Bearer
+#   normalizeStatus → không gọi mạng; bảng 23 mã + `customer Cancel`
 #
 # BA KẾT CỤC, KHÔNG GỘP (`KetQuaHang`):
 #   ok=True                → hãng xác nhận;
@@ -31,17 +30,14 @@
 #   chắc chắn. `createOrder` khi gặp nó sẽ tự kiểm tra lại bằng `queryTracking` trước.
 #
 # CHỐNG TRÙNG:
-#   Mọi lệnh GHI mang đủ 5 khoá: tenant_id · carrier_id · merchant_order_code · idempotency_key ·
-#   request_id. Sổ chống trùng trong tiến trình giữ kết quả theo
-#   (thao_tác, tenant, carrier, merchant, idempotency_key) và trả lại NGUYÊN kết quả cũ, không
-#   gửi lượt thứ hai. Sổ này KHÔNG bền qua tiến trình — lớp bền là UNIQUE(tenant_id, idem_key)
-#   của Order Core. Adapter không thay thế lớp đó, chỉ thêm một chốt.
-#   `KHOA_CHONG_TRUNG = False` vì tài liệu BEST CHƯA xác nhận hãng tự chặn mã đơn trùng; vì vậy
-#   KHÔNG được thử lại mù thao tác ghi (`transport.chinh_sach_cho` cũng trả so_lan=1).
+#   Mọi lệnh GHI mang đủ 5 khoá nội bộ: tenant_id · carrier_id · merchant_order_code ·
+#   idempotency_key · request_id. Các khoá này KHÔNG được gửi trong body hãng (tài liệu không có).
+#   Sổ chống trùng trong tiến trình trả lại NGUYÊN kết quả cũ, không gửi lượt thứ hai.
+#   `KHOA_CHONG_TRUNG = False` vì tài liệu BEST không nói hãng tự chặn mã đơn trùng.
 #
 # ĐỊA CHỈ 2 CẤP:
-#   `BestAddressAdapter` là một LỚP RIÊNG, không hardcode danh sách tỉnh/quận. District thiếu
-#   được gửi đúng một khoảng trắng `" "` theo đặc tả — KHÔNG đổi thành None/"".
+#   `BestAddressAdapter` vẫn là lớp tiện ích riêng; builder WIRE dùng `best_hop_dong` để áp đúng
+#   luật: District thiếu = đúng một khoảng trắng `" "`, Ward bắt buộc cho Order/Add.
 import hashlib
 import json
 import threading
@@ -49,6 +45,7 @@ import uuid
 from collections import OrderedDict
 from urllib.parse import urlsplit
 
+import best_hop_dong as bhd
 import http_best
 import loi_hang
 import trang_thai_hang as tth
@@ -76,69 +73,38 @@ DUONG_API = {
 }
 THAO_TAC_GHI = ("createOrder", "updateOrder", "updateAddress", "cancelOrder")
 
-# Base URL: ĐÃ XÁC NHẬN trong đề bài; CẢ HAI LÀ HTTP, CHƯA MÃ HOÁ. Lớp `http_best` từ chối
-# `http` cho host hãng trừ khi có cờ tường minh.
-BASE_URL_PRODUCTION = http_best.BASE_URL[PRODUCTION]
-BASE_URL_SANDBOX = http_best.BASE_URL[SANDBOX]
+# Base URL: dùng HTTPS cho cả hai môi trường. Tài liệu ghi http, nhưng TLS đã đo được trên cả
+# ba host; credential/token không đi bản rõ. Lớp `http_best` vẫn từ chối `http` cho host hãng.
+BASE_URL_PRODUCTION = bhd.BASE_URL[PRODUCTION]
+BASE_URL_SANDBOX = bhd.BASE_URL[SANDBOX]
 BASE_URL = {SANDBOX: BASE_URL_SANDBOX, PRODUCTION: BASE_URL_PRODUCTION}
-CO_HTTP_CHUA_MA_HOA = True
+CO_HTTP_CHUA_MA_HOA = False
 
-# Endpoint test Order/Query dùng hostname KHÁC — CHƯA XÁC MINH, KHÔNG dùng.
-HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH = http_best.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH
+# Endpoint test Order/Query dùng hostname KHÁC — ĐÃ XÁC NHẬN trong tài liệu chính thức.
+HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH = http_best.HOST_QUERY_TEST
 
-# ── Hằng số nghiệp vụ ĐÃ XÁC NHẬN trong đề bài ───────────────────────────────────────────────
+# ── Hằng số nghiệp vụ ĐÃ XÁC NHẬN trong tài liệu ─────────────────────────────────────────────
 DICH_VU_ID = 12491
-DICH_VU_ID_CU_KHONG_DUNG = 12490          # đề bài nói rõ KHÔNG mặc định 12490
+DICH_VU_ID_CU_KHONG_DUNG = 12490          # tài liệu: hiện chỉ hỗ trợ 12491
 JOURNEY_TYPE_HOP_LE = (1, 2, 3)
+PICKUP_TYPE_HOP_LE = (1, 2)
 DON_VI = {"Weight": "GRAM", "Length": "MILIMET", "Width": "MILIMET", "Height": "MILIMET",
           "Cod": "VND", "ProductPrice": "VND"}
 GIOI_HAN_QUERY = 10
 GIOI_HAN_PRINT = 50
 
-# ── 21 trường bắt buộc của Order/Add ─────────────────────────────────────────────────────────
-# CẢNH BÁO NGUỒN: đề bài xác nhận "21 trường bắt buộc" và các NHÓM dữ liệu (người gửi/nhận,
-# địa chỉ 2 cấp, khối lượng, kích thước, COD/ProductPrice, ServiceId, JourneyType, hàng hoá,
-# ghi chú) nhưng KHÔNG liệt kê tên trường WIRE. Danh sách dưới đây là CÁCH PHÂN RÃ NỘI BỘ đúng
-# 21 trường, dùng làm hợp đồng của bộ MOCK — KHÔNG phải schema BEST đã xác minh. Khi có tài
-# liệu thật, phải đối chiếu từng tên rồi mới đặt `SCHEMA_DA_XAC_MINH = True`.
-TRUONG_BAT_BUOC_ORDER_ADD = (
-    "MerchantOrderCode",
-    "ServiceId",
-    "JourneyType",
-    "SenderName",
-    "SenderPhone",
-    "SenderProvince",
-    "SenderDistrict",
-    "SenderAddress",
-    "ReceiverName",
-    "ReceiverPhone",
-    "ReceiverProvince",
-    "ReceiverDistrict",
-    "ReceiverAddress",
-    "Weight",
-    "Length",
-    "Width",
-    "Height",
-    "GoodsName",
-    "Cod",
-    "ProductPrice",
-    "Remark",
-)
-assert len(TRUONG_BAT_BUOC_ORDER_ADD) == 21, "Order/Add phải đúng 21 trường bắt buộc"
+# ── 31 trường nền của Order/Add (tài liệu có 34; 3 trường Cargo/khuyến mãi là tuỳ chọn) ───────
+TRUONG_BAT_BUOC_ORDER_ADD = tuple(bhd.TRUONG_ORDER_ADD_NEN)
+assert len(TRUONG_BAT_BUOC_ORDER_ADD) == 31, "Order/Add phải đúng 31 trường nền"
 
-# Bốn khoá chống trùng đi kèm gói (MerchantOrderCode đã nằm trong 21 trường ở trên).
+# Năm khoá chống trùng là NỘI BỘ, KHÔNG gửi trong body hãng (tài liệu không có các trường này).
 TRUONG_META_CHONG_TRUNG = ("TenantId", "CarrierId", "IdempotencyKey", "RequestId")
 
-BANG_TRANG_THAI_BEST = {}
-TRANG_THAI_DA_XAC_MINH = False
-NGUON_TAI_LIEU = ("Đề bài B1 (8 endpoint, 21 trường, ServiceId=12491, JourneyType 1/2/3, "
-                  "GRAM/MILIMET/VND, District=' ', giới hạn 10/50) — Google Docs của BEST "
-                  "KHÔNG có trong workspace và KHÔNG được cung cấp URL")
-LY_DO_CHUA_XAC_MINH = (
-    "Tài liệu API BEST là Google Docs, KHÔNG đọc được trong lượt này. Các mục sau CHƯA XÁC MINH: "
-    "tên trường wire của Order/Add, hình dạng gói trả lời, mã trạng thái, mã lỗi, cách gửi token, "
-    "response schema của 8 endpoint, và hostname test Order/Query "
-    f"({HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH}). Không mục nào được đoán.")
+# Bảng 23 mã đọc từ tài liệu; khóa là CHUỖI để `normalizeStatus("211")` hoạt động.
+BANG_TRANG_THAI_BEST = {str(k): (v[0], v[1]) for k, v in bhd.BANG_MA.items()}
+TRANG_THAI_DA_XAC_MINH = True
+NGUON_TAI_LIEU = bhd.NGUON
+LY_DO_CHUA_XAC_MINH = ""
 
 
 class ChuaXacNhanTaiLieu(Exception):
@@ -267,15 +233,16 @@ class AdapterBEST(CarrierAdapter):
         "trackOrder": True, "getShippingFee": True, "getShippingLabel": True,
         "webhook": True,
     }
-    # BA cửa độc lập, tất cả đang ĐÓNG. Không agent nào được tự mở (xem tài liệu).
+    # BA cửa độc lập, tất cả đang ĐÓNG. Không agent nào được tự mở. Đường nghiệm thu thật dùng
+    # `best_hop_dong.py` (cổng Owner riêng, production ghi bị khoá), không dùng cờ này.
     CHO_PHEP_LIVE = False
     CHO_PHEP_SANDBOX = False
     CHO_PHEP_PRODUCTION = False
     CHO_PHEP_HTTP_KHONG_MA_HOA = False
-    # Chưa có tài liệu BEST ⇒ schema/response CHƯA xác minh ⇒ LIVE bị chặn.
-    SCHEMA_DA_XAC_MINH = False
+    # DOCX chính thức đã đọc: schema/response/envelope/status map đã đối chiếu.
+    SCHEMA_DA_XAC_MINH = True
     TRANSPORT_THAT_DA_VIET = True
-    # Chưa xác nhận hãng tự chặn mã đơn trùng ⇒ KHÔNG thử lại mù thao tác ghi.
+    # Tài liệu không nói hãng tự chặn mã đơn trùng ⇒ KHÔNG thử lại mù thao tác ghi.
     KHOA_CHONG_TRUNG = False
 
     def __init__(self, credentials: dict, moi_truong: str = "mock", *, base_url=None,
@@ -415,13 +382,16 @@ class AdapterBEST(CarrierAdapter):
             "don_vi": dict(DON_VI),
             "service_id": DICH_VU_ID,
             "journey_type_hop_le": list(JOURNEY_TYPE_HOP_LE),
-            "tai_lieu_da_xac_minh": False,
+            "pickup_type_hop_le": list(PICKUP_TYPE_HOP_LE),
+            "tai_lieu_da_xac_minh": True,
             "schema_da_xac_minh": bool(self.SCHEMA_DA_XAC_MINH),
-            "webhook_da_xac_thuc": False,
+            "webhook_da_xac_thuc": True,
             "bang_trang_thai_da_xac_minh": bool(TRANG_THAI_DA_XAC_MINH),
+            "so_ma_trang_thai": len(BANG_TRANG_THAI_BEST),
             "ly_do_chua_xac_minh": LY_DO_CHUA_XAC_MINH,
-            "host_test_order_query_chua_xac_minh": HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH,
+            "host_test_order_query": HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH,
             "http_chua_ma_hoa": CO_HTTP_CHUA_MA_HOA,
+            "nguon_tai_lieu": NGUON_TAI_LIEU,
             "base_url": self.base_url,
             "cho_phep_http_khong_ma_hoa": bool(self.cho_phep_http_khong_ma_hoa),
             "transport": "http_best" if (self.gui_http or self.moi_truong != MOCK) else "mock",
@@ -585,126 +555,29 @@ class AdapterBEST(CarrierAdapter):
         return None
 
     def _dung_payload_order_add(self, don, ctx):
-        if not isinstance(don, dict):
-            raise ValueError("đơn phải là dict")
-        try:
-            nguoi_gui = self.address_adapter.nguoi_gui(don)
-            nguoi_nhan = self.address_adapter.nguoi_nhan(don)
-        except ValueError as e:
-            raise ValueError(f"địa chỉ: {e}") from None
+        """Order/Add theo DOCX: 31 trường nền + 3 trường tuỳ chọn, không metadata nội bộ."""
+        return bhd.dung_order_add(don, ctx)
 
-        service_id = self._lay(don, "service_id", "dich_vu_id")
-        service_id = DICH_VU_ID if service_id is None else _so_nguyen(service_id, "ServiceId")
-        if service_id != DICH_VU_ID:
-            raise ValueError(
-                f"ServiceId phải là {DICH_VU_ID} theo đặc tả; nhận {service_id!r}. "
-                f"KHÔNG dùng {DICH_VU_ID_CU_KHONG_DUNG}.")
+    def _dung_payload_update(self, don, waybill):
+        """Order/Update theo DOCX: đúng 9 trường Code/ProductName/..."""
+        return bhd.dung_update(don, waybill)
 
-        journey_type = self._lay(don, "journey_type", "loai_hanh_trinh")
-        if journey_type is None:
-            raise ValueError("thiếu JourneyType (1/2/3) — adapter KHÔNG tự chọn mặc định")
-        journey_type = _so_nguyen(journey_type, "JourneyType")
-        if journey_type not in JOURNEY_TYPE_HOP_LE:
-            raise ValueError(f"JourneyType phải thuộc {JOURNEY_TYPE_HOP_LE}, nhận {journey_type}")
+    def _dung_payload_estimate(self, don, ctx=None):
+        """EstimateFee theo DOCX; điền UserName từ credential để lấy bảng giá tài khoản."""
+        d = dict(don or {})
+        if not (d.get("username") or d.get("ten_dang_nhap")):
+            u = self.credentials.get("username") or self.credentials.get("user")
+            if u:
+                d["username"] = u
+        return bhd.dung_estimate(d)
 
-        weight = _so_nguyen(self._lay(don, "khoi_luong_gram", "weight_gram"),
-                            "Weight (GRAM)", nho_nhat=1)
-        length = _so_nguyen(self._lay(don, "chieu_dai_mm", "length_mm", "dai_mm"),
-                            "Length (MILIMET)", nho_nhat=1)
-        width = _so_nguyen(self._lay(don, "chieu_rong_mm", "width_mm", "rong_mm"),
-                           "Width (MILIMET)", nho_nhat=1)
-        height = _so_nguyen(self._lay(don, "chieu_cao_mm", "height_mm", "cao_mm"),
-                            "Height (MILIMET)", nho_nhat=1)
-        cod = _so_nguyen(self._lay(don, "cod") if self._lay(don, "cod") is not None else 0,
-                         "Cod (VND)", nho_nhat=0, lon_nhat=10**15)
-        gia_tri = self._lay(don, "gia_tri_khai", "product_price")
-        gia_tri = _so_nguyen(0 if gia_tri is None else gia_tri,
-                             "ProductPrice (VND)", nho_nhat=0, lon_nhat=10**15)
-
-        truong = {
-            "MerchantOrderCode": ctx["merchant_order_code"],
-            "ServiceId": service_id,
-            "JourneyType": journey_type,
-            "SenderName": _chuoi_bat_buoc(self._lay(don, "nguoi_gui_ten"), "SenderName"),
-            "SenderPhone": _chuoi_bat_buoc(self._lay(don, "nguoi_gui_sdt"), "SenderPhone"),
-            "SenderProvince": nguoi_gui["Province"],
-            "SenderDistrict": nguoi_gui["District"],
-            "SenderAddress": nguoi_gui["Address"],
-            "ReceiverName": _chuoi_bat_buoc(self._lay(don, "nguoi_nhan_ten"), "ReceiverName"),
-            "ReceiverPhone": _chuoi_bat_buoc(self._lay(don, "nguoi_nhan_sdt"), "ReceiverPhone"),
-            "ReceiverProvince": nguoi_nhan["Province"],
-            "ReceiverDistrict": nguoi_nhan["District"],
-            "ReceiverAddress": nguoi_nhan["Address"],
-            "Weight": weight,
-            "Length": length,
-            "Width": width,
-            "Height": height,
-            "GoodsName": _chuoi_bat_buoc(self._lay(don, "hang_hoa", "goods_name"), "GoodsName"),
-            "Cod": cod,
-            "ProductPrice": gia_tri,
-            "Remark": _chuoi_tuy_chon(self._lay(don, "ghi_chu", "remark"), "Remark"),
-        }
-        if set(truong) != set(TRUONG_BAT_BUOC_ORDER_ADD):
-            # Chốt chặn nội bộ: sửa danh sách mà quên dựng trường là hỏng IM LẶNG. Ném ra.
-            thieu = sorted(set(TRUONG_BAT_BUOC_ORDER_ADD) - set(truong))
-            thua = sorted(set(truong) - set(TRUONG_BAT_BUOC_ORDER_ADD))
-            raise ValueError(f"gói Order/Add lệch hợp đồng 21 trường (thiếu={thieu}, thừa={thua})")
-        return dict(self._meta(ctx), **truong)
-
-    def _dung_payload_estimate(self, don, ctx):
-        service_id = self._lay(don, "service_id", "dich_vu_id")
-        service_id = DICH_VU_ID if service_id is None else _so_nguyen(service_id, "ServiceId")
-        if service_id != DICH_VU_ID:
-            raise ValueError(f"ServiceId phải là {DICH_VU_ID}, nhận {service_id!r}")
-        journey_type = self._lay(don, "journey_type", "loai_hanh_trinh")
-        if journey_type is None:
-            raise ValueError("thiếu JourneyType (1/2/3) — không tự chọn mặc định")
-        journey_type = _so_nguyen(journey_type, "JourneyType")
-        if journey_type not in JOURNEY_TYPE_HOP_LE:
-            raise ValueError(f"JourneyType phải thuộc {JOURNEY_TYPE_HOP_LE}")
-        nguoi_gui = self.address_adapter.nguoi_gui(don)
-        nguoi_nhan = self.address_adapter.nguoi_nhan(don)
-        cod = self._lay(don, "cod")
-        gia_tri = self._lay(don, "gia_tri_khai", "product_price")
-        return dict(self._meta(ctx), **{
-            "ServiceId": service_id,
-            "JourneyType": journey_type,
-            "Weight": _so_nguyen(self._lay(don, "khoi_luong_gram", "weight_gram"),
-                                 "Weight (GRAM)", nho_nhat=1),
-            "Length": _so_nguyen(self._lay(don, "chieu_dai_mm", "length_mm", "dai_mm"),
-                                 "Length (MILIMET)", nho_nhat=1),
-            "Width": _so_nguyen(self._lay(don, "chieu_rong_mm", "width_mm", "rong_mm"),
-                                "Width (MILIMET)", nho_nhat=1),
-            "Height": _so_nguyen(self._lay(don, "chieu_cao_mm", "height_mm", "cao_mm"),
-                                 "Height (MILIMET)", nho_nhat=1),
-            "SenderProvince": nguoi_gui["Province"],
-            "SenderDistrict": nguoi_gui["District"],
-            "ReceiverProvince": nguoi_nhan["Province"],
-            "ReceiverDistrict": nguoi_nhan["District"],
-            "Cod": _so_nguyen(0 if cod is None else cod, "Cod (VND)", nho_nhat=0),
-            "ProductPrice": _so_nguyen(0 if gia_tri is None else gia_tri,
-                                       "ProductPrice (VND)", nho_nhat=0),
-        })
-
-    def _dung_payload_update_address(self, don, ctx, waybill):
-        try:
-            nguoi_nhan = self.address_adapter.nguoi_nhan(don)
-        except ValueError as e:
-            raise ValueError(f"địa chỉ nhận: {e}") from None
-        return dict(self._meta(ctx), **{
-            "WaybillCode": waybill,
-            "ReceiverName": _chuoi_bat_buoc(self._lay(don, "nguoi_nhan_ten"), "ReceiverName"),
-            "ReceiverPhone": _chuoi_bat_buoc(self._lay(don, "nguoi_nhan_sdt"), "ReceiverPhone"),
-            "ReceiverProvince": nguoi_nhan["Province"],
-            "ReceiverDistrict": nguoi_nhan["District"],
-            "ReceiverAddress": nguoi_nhan["Address"],
-        })
+    def _dung_payload_update_address(self, don, ctx, waybill, address_type=None):
+        at = address_type if address_type is not None else (don or {}).get("address_type_id", 2)
+        return bhd.dung_update_address(don or {}, waybill, at)
 
     def _dung_payload_huy(self, ctx, waybill, ly_do):
-        return dict(self._meta(ctx), **{
-            "WaybillCode": waybill,
-            "Reason": _chuoi_tuy_chon(ly_do, "Reason"),
-        })
+        # Tài liệu: body Cancel chỉ có Code. `ly_do` là ghi chú nội bộ, không gửi.
+        return bhd.dung_cancel(waybill)
 
     # =============================================================================================
     # 6. GỬI QUA http_best — CHỈ MOCK+STUB hoặc LIVE đã xác minh
@@ -714,6 +587,10 @@ class AdapterBEST(CarrierAdapter):
         token = self._token
         if token:
             h["Authorization"] = f"Bearer {token}"
+        # `ems-key` là header TUỲ CHỌN trong tài liệu ("Best Customer Identity Key").
+        ems = self.credentials.get("ems_key")
+        if isinstance(ems, str) and ems.strip():
+            h["ems-key"] = ems.strip()[:512]
         return h
 
     def _chinh_sach(self, thao_tac):
@@ -728,7 +605,13 @@ class AdapterBEST(CarrierAdapter):
         if not self.base_url:
             raise ChuaXacNhanTaiLieu(
                 thao_tac, ["chưa có base_url — không ghép bừa URL"], self.moi_truong)
-        return self.base_url.rstrip("/") + DUONG_API[thao_tac]
+        # Tài liệu: Order/Query ở môi trường TEST dùng host RIÊNG sea-edi-hxtest.800best.com.
+        # Chỉ áp cho sandbox thật, không áp cho stub loopback của bộ thử.
+        base = self.base_url
+        if (thao_tac == "queryTracking" and self.moi_truong == SANDBOX
+                and not self.gui_http):
+            base = bhd.BASE_URL_QUERY[SANDBOX]
+        return base.rstrip("/") + DUONG_API[thao_tac]
 
     def _kiem_cua_live(self, thao_tac):
         """Ba cửa độc lập cho đường LIVE. Mọi cửa đóng ⇒ ném, KHÔNG gửi."""
@@ -740,11 +623,7 @@ class AdapterBEST(CarrierAdapter):
             raise PermissionError("Adapter BEST: CHO_PHEP_LIVE=False — không gửi.")
         if not self.SCHEMA_DA_XAC_MINH:
             raise ChuaXacNhanTaiLieu(
-                thao_tac,
-                ["tên trường wire + hình dạng gói trả lời của BEST CHƯA được xác nhận",
-                 "Google Docs của BEST không có trong workspace và không có URL",
-                 "đặt SCHEMA_DA_XAC_MINH=True CHỈ sau khi đã đối chiếu tài liệu thật"],
-                self.moi_truong)
+                thao_tac, ["schema chưa được đối chiếu tài liệu"], self.moi_truong)
 
     def _gui_that(self, thao_tac, payload, request_id):
         """Gửi MỘT yêu cầu (qua `transport.goi`) và trả `(KetQuaHang, data|None)`."""
@@ -752,6 +631,9 @@ class AdapterBEST(CarrierAdapter):
             raise RuntimeError("mock không dùng _gui_that — nhánh mock phải xử lý trước")
         if self.moi_truong != MOCK:
             self._kiem_cua_live(thao_tac)
+        # Builder trả Decimal cho tiền; `http_best` chỉ nhận JSON nguyên thuỷ. Chuyển ở đây,
+        # KHÔNG làm tròn: Decimal nguyên -> int, lẻ -> float.
+        payload = bhd._json_hoa(payload)
         url = self._url_endpoint(thao_tac)
         cs = self._chinh_sach(thao_tac)
         dem = {"so_lan": 0}
@@ -780,25 +662,36 @@ class AdapterBEST(CarrierAdapter):
                 thao_tac, "HTTP 2xx nhưng thân không phải JSON object — KHÔNG BIẾT kết quả",
                 request_id, so_lan_goi=dem["so_lan"])
             return kq, None
-        if goi.get("success") is False:
-            # KHÔNG chép `message` nguyên văn: văn bản NGOÀI có thể echo credential.
-            msg = str(goi.get("message") or "")
+        # DOCX: mọi API trả `Result` (1/2) + `Message`; Login trả thêm `token` ở cấp ngoài.
+        # KHÔNG còn envelope `success/data` của bộ mock cũ.
+        ok, data, loi, result = bhd.boc_ket_qua(goi)
+        if not ok:
+            if result is None and "Result" not in goi and "token" not in goi:
+                kq = self._ket_qua_khong_biet(
+                    thao_tac, "gói 2xx không có Result/token — KHÔNG BIẾT kết quả",
+                    request_id, so_lan_goi=dem["so_lan"])
+                return kq, None
+            ly_do = self._thong_diep_an_toan(loi)
             kq = self._ket_qua_tu_choi(
-                thao_tac, f"hãng từ chối (mock envelope; message dài {len(msg)} ký tự, "
-                          "KHÔNG chép nguyên văn)", request_id, so_lan_goi=dem["so_lan"])
-            return kq, None
-        if goi.get("success") is not True:
-            kq = self._ket_qua_khong_biet(
-                thao_tac, "gói 2xx thiếu cờ success=true — KHÔNG BIẾT kết quả",
-                request_id, so_lan_goi=dem["so_lan"])
+                thao_tac, ly_do, request_id, ma_goc=result, so_lan_goi=dem["so_lan"],
+                http_status=tra_loi.ma_http)
             return kq, None
         kq = KetQuaHang(True, tho={
             "mock": self.moi_truong == MOCK, "moi_truong": self.moi_truong,
             "hang": MA_HANG, "thao_tac": thao_tac, "request_id": request_id,
             "endpoint": DUONG_API[thao_tac], "so_lan_goi": dem["so_lan"],
-            "transport": "http_best",
+            "http_status": tra_loi.ma_http, "transport": "http_best",
         })
-        return kq, goi.get("data")
+        return kq, data
+
+    def _thong_diep_an_toan(self, s, toi_da=300):
+        """Chép lý do hãng trả về nhưng che mọi credential đã biết và cắt độ dài."""
+        ra = bhd._thong_diep(s, toi_da)
+        for ten in ("username", "user", "password", "mat_khau"):
+            v = self.credentials.get(ten)
+            if isinstance(v, str) and v:
+                ra = ra.replace(v, "***")
+        return ra or "hãng từ chối (không có Message)"
 
     # ── dựng KetQuaHang ──────────────────────────────────────────────────────────────────────
     @staticmethod
@@ -882,17 +775,20 @@ class AdapterBEST(CarrierAdapter):
                 token_khong_duoc_tra_ra=True,
                 ghi_chu="MOCK: token giả, không rời bộ nhớ, không xuất hiện trong kết quả")
 
-        payload = {"TenantId": tenant, "Username": user, "Password": mat_khau}
+        # DOCX: body chỉ Username + Password; KHÔNG có TenantId. Response có `token` ở cấp ngoài.
+        try:
+            payload = bhd.dung_login(user, mat_khau)
+        except ValueError as e:
+            return self._ket_qua_tu_choi("authenticate", str(e), request_id)
         kq, data = self._gui_that("authenticate", payload, request_id)
         if not kq.ok:
             return kq
-        token = self._lay_gia_tri(data, ("Token", "token", "AccessToken", "access_token"))
-        if not isinstance(token, str) or not token.strip():
+        token, loi_token = bhd.boc_token(data)
+        if not token:
             return self._ket_qua_tu_choi(
-                "authenticate", "login 2xx nhưng KHÔNG đọc được token — không dùng được",
+                "authenticate", loi_token or "login 2xx nhưng KHÔNG đọc được token",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        token = token.strip()
-        if len(token) > 4096 or any(ord(c) < 0x21 or ord(c) == 0x7F for c in token):
+        if len(token) > 8192 or any(ord(c) < 0x21 or ord(c) == 0x7F for c in token):
             return self._ket_qua_tu_choi(
                 "authenticate", "token trả về có ký tự không hợp lệ — TỪ CHỐI dùng",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
@@ -931,6 +827,10 @@ class AdapterBEST(CarrierAdapter):
     # =============================================================================================
     @staticmethod
     def _ma_van_don_tu_data(data):
+        # DOCX: Order/Add trả `Code` là mã tra cứu hành trình của BEST (không phải mã đối tác).
+        ma = bhd.ma_van_don(data)
+        if ma:
+            return ma
         return AdapterBEST._lay_gia_tri(
             data, ("WaybillCode", "waybill_code", "WaybillNo", "OrderCode", "order_code",
                    "ma_van_don", "TrackingNumber", "tracking_number"))
@@ -962,7 +862,7 @@ class AdapterBEST(CarrierAdapter):
         return kq_timeout
 
     def createOrder(self, don) -> KetQuaHang:
-        """POST /Order/Add. 21 trường bắt buộc; ServiceId=12491; chống trùng 5 khoá."""
+        """POST /Order/Add. 31 trường nền; ServiceId=12491; chống trùng 5 khoá NỘI BỘ."""
         try:
             ctx = self._ctx_ghi(don, bat_buoc_carrier=True)
             payload = self._dung_payload_order_add(don, ctx)
@@ -1013,18 +913,17 @@ class AdapterBEST(CarrierAdapter):
         return "BEST" + hashlib.sha256(raw).hexdigest()[:12].upper()
 
     def updateOrder(self, don, ma_van_don=None) -> KetQuaHang:
-        """POST /Order/Update. Gói mock dùng lại 21 trường của Order/Add + WaybillCode."""
+        """POST /Order/Update. Đúng 9 trường DOCX; `Code` nhận mã Best hoặc mã đối tác."""
         try:
             if not isinstance(don, dict):
                 raise ValueError("đơn phải là dict")
             ctx = self._ctx_ghi(don, bat_buoc_carrier=True)
-            payload = self._dung_payload_order_add(don, ctx)
             waybill = self._kiem_ma_van_don(
                 ma_van_don or don.get("ma_van_don") or don.get("waybill_code")
                 or ctx["merchant_order_code"])
+            payload = self._dung_payload_update(don, waybill)
         except (ValueError, PermissionError) as e:
             return self._ket_qua_tu_choi("updateOrder", str(e), "")
-        payload["WaybillCode"] = waybill
 
         khoa = self._khoa_so("updateOrder", ctx)
         cu = self._lay_so(khoa)
@@ -1045,7 +944,7 @@ class AdapterBEST(CarrierAdapter):
         return self._ban_sao(kq)
 
     def updateAddress(self, don, ma_van_don=None) -> KetQuaHang:
-        """POST /Order/UpdateAddress. District thiếu ⇒ đúng một khoảng trắng ' '."""
+        """POST /Order/UpdateAddress. AddressTypeId chọn đúng người gửi/nhận/trả."""
         try:
             if not isinstance(don, dict):
                 raise ValueError("đơn phải là dict")
@@ -1061,7 +960,8 @@ class AdapterBEST(CarrierAdapter):
         if cu is not None:
             return self._phat_lai(cu)
         if self.moi_truong == MOCK and not self.gui_http:
-            kq = self._ket_qua_ok("updateAddress", ctx["request_id"], ma_van_don=waybill, mock=True)
+            kq = self._ket_qua_ok("updateAddress", ctx["request_id"], ma_van_don=waybill,
+                                  address_type_id=payload.get("AddressTypeId"), mock=True)
             self._ghi_so(khoa, kq)
             return self._ban_sao(kq)
         loi_token = self._dam_bao_token()
@@ -1151,15 +1051,16 @@ class AdapterBEST(CarrierAdapter):
             request_id = self._kiem_request_id(uuid.uuid4().hex)
         except (ValueError, PermissionError) as e:
             return self._ket_qua_tu_choi("queryTracking", str(e), "")
-        payload = {"TenantId": tenant, "CarrierId": carrier, "RequestId": request_id,
-                   "WaybillCodes": list(ds)}
+        # DOCX: body là {"LangType": "en-US", "Codes": [...]}; KHÔNG có TenantId/WaybillCodes.
+        payload = bhd.dung_query(ds)
         if self.moi_truong == MOCK and not self.gui_http:
             return self._ket_qua_ok(
                 "queryTracking", request_id, mock=True, so_ma=len(ds),
                 ma_van_don=(ds[0] if len(ds) == 1 else None),
-                ket_qua=[{"WaybillCode": ma, "Status": None, "TrangThaiChuan": None,
-                          "biet_ma": False, "can_soat": True,
-                          "do_tin_cay": tth.TIN_MA_LA} for ma in ds])
+                ket_qua=[{"WaybillCode": ma, "Status": None, "StatusSo": None,
+                          "merchant_order_code": None, "status_content": "",
+                          "TrangThaiChuan": None, "biet_ma": False, "can_soat": True,
+                          "do_tin_cay": tth.TIN_MA_LA, "traceLogs": []} for ma in ds])
         loi_token = self._dam_bao_token()
         if loi_token is not None:
             return loi_token
@@ -1168,37 +1069,31 @@ class AdapterBEST(CarrierAdapter):
             if kq.timeout:
                 kq.tho["can_doi_soat"] = True
             return kq
-        items = self._lay_danh_sach(data, ("Items", "items", "Waybills", "waybills",
-                                           "Tracking", "tracking", "Results", "results"))
-        if items is None:
+        ok2, ds_kq, loi2 = bhd.boc_query(data)
+        if not ok2:
             return self._ket_qua_tu_choi(
-                "queryTracking", "2xx nhưng không đọc được danh sách kết quả — không đoán",
+                "queryTracking", loi2 or "2xx nhưng không đọc được data[].traceLogs[]",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        if not isinstance(items, list):
+        if len(ds_kq) > GIOI_HAN_QUERY:
             return self._ket_qua_tu_choi(
-                "queryTracking", "2xx nhưng kết quả không phải danh sách", request_id,
-                so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        if len(items) > GIOI_HAN_QUERY:
-            return self._ket_qua_tu_choi(
-                "queryTracking", f"hãng trả {len(items)} > {GIOI_HAN_QUERY} kết quả — từ chối đọc",
+                "queryTracking", f"hãng trả {len(ds_kq)} > {GIOI_HAN_QUERY} kết quả — từ chối đọc",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
         ket_qua = []
-        for item in items:
-            if not isinstance(item, dict):
-                return self._ket_qua_tu_choi(
-                    "queryTracking", "một phần tử kết quả không phải object", request_id,
-                    so_lan_goi=kq.tho.get("so_lan_goi", 0))
-            ma = self._ma_van_don_tu_data(item)
-            trang_thai = self._lay_gia_tri(item, ("Status", "status", "StatusCode",
-                                                  "status_code", "trang_thai"))
-            anh_xa = self.normalizeStatus(trang_thai) if trang_thai is not None else None
+        for x in ds_kq:
             ket_qua.append({
-                "WaybillCode": ma,
-                "Status": trang_thai,
-                "TrangThaiChuan": None if anh_xa is None else anh_xa.trang_thai_ap,
-                "biet_ma": False if anh_xa is None else bool(anh_xa.biet_ma),
-                "can_soat": True if anh_xa is None else bool(anh_xa.can_soat),
-                "do_tin_cay": tth.TIN_MA_LA if anh_xa is None else anh_xa.do_tin_cay,
+                "WaybillCode": x.get("code_best") or x.get("merchant_order_code"),
+                "Status": x.get("status"),
+                "StatusSo": x.get("status_so"),
+                "merchant_order_code": x.get("merchant_order_code"),
+                "status_content": x.get("status_content"),
+                "modified_at": x.get("modified_at"),
+                "TrangThaiChuan": x.get("trang_thai_chung"),
+                "biet_ma": bool(x.get("biet_ma")),
+                "can_soat": bool(x.get("can_soat")),
+                "do_tin_cay": tth.TIN_CAO if x.get("biet_ma") else tth.TIN_MA_LA,
+                "phi": {k: x.get(k) for k in ("cod", "product_price", "freight_fee", "cod_fee",
+                                              "insurance_fee", "vat_fee", "total_fee")},
+                "traceLogs": x.get("traceLogs") or [],
             })
         kq.tho["ket_qua"] = ket_qua
         kq.tho["so_ma"] = len(ket_qua)
@@ -1257,15 +1152,26 @@ class AdapterBEST(CarrierAdapter):
             if kq.timeout:
                 kq.tho["can_doi_soat"] = True
             return kq
-        phi = self._lay_gia_tri(data, ("Fee", "fee", "TotalFee", "total_fee", "phi"))
-        try:
-            phi = _so_nguyen(phi, "phí (VND)", nho_nhat=0, lon_nhat=10**15)
-        except ValueError:
+        # DOCX: phí nằm trong `data` (data.TotalFee / TotalFeeVAT / ...). Bản cũ đọc `Fee` ở
+        # cấp ngoài nên gặp phản hồi thật sẽ ra None.
+        ok2, d, loi2 = bhd.boc_estimate(data)
+        if not ok2:
             return self._ket_qua_tu_choi(
-                "estimateFee", "2xx nhưng không đọc được phí nguyên VND — không đoán",
+                "estimateFee", loi2 or "2xx nhưng không có data object",
                 ctx["request_id"], so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        kq.phi = phi
+        phi = bhd.phi_cuoi(d)
+        if phi is None:
+            return self._ket_qua_tu_choi(
+                "estimateFee", "2xx nhưng không đọc được phí (TotalFee/...) — không đoán",
+                ctx["request_id"], so_lan_goi=kq.tho.get("so_lan_goi", 0))
+        try:
+            kq.phi = int(phi) if phi == phi.to_integral_value() else float(phi)
+        except (AttributeError, ValueError):
+            return self._ket_qua_tu_choi(
+                "estimateFee", "phí hãng trả không phải số — không đoán",
+                ctx["request_id"], so_lan_goi=kq.tho.get("so_lan_goi", 0))
         kq.tho["don_vi"] = "VND"
+        kq.tho["chi_tiet_phi"] = d
         return kq
 
     def getShippingFee(self, don) -> KetQuaHang:
@@ -1292,8 +1198,8 @@ class AdapterBEST(CarrierAdapter):
             request_id = self._kiem_request_id(uuid.uuid4().hex)
         except (ValueError, PermissionError) as e:
             return self._ket_qua_tu_choi("printWaybill", str(e), "")
-        payload = {"TenantId": tenant, "CarrierId": carrier, "RequestId": request_id,
-                   "WaybillCodes": list(ds)}
+        # DOCX: body là {"codes": [...]} (chữ thường); KHÔNG có TenantId/WaybillCodes.
+        payload = bhd.dung_print(ds)
         if self.moi_truong == MOCK and not self.gui_http:
             return self._ket_qua_ok(
                 "printWaybill", request_id, mock=True, so_ma=len(ds),
@@ -1310,49 +1216,41 @@ class AdapterBEST(CarrierAdapter):
             if kq.timeout:
                 kq.tho["can_doi_soat"] = True
             return kq
-        urls = self._lay_danh_sach_url(data)
-        if not urls:
+        # DOCX: response `{Guid, Url, Result, Message}` — MỘT URL PDF cho cả lô (không phải mảng).
+        ok2, d, loi2 = bhd.boc_print_full(data)
+        if not ok2:
             return self._ket_qua_tu_choi(
-                "printWaybill", "2xx nhưng không có URL waybill — không đoán URL",
+                "printWaybill", loi2 or "2xx nhưng không có Url",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        if len(urls) > GIOI_HAN_PRINT:
-            return self._ket_qua_tu_choi(
-                "printWaybill", f"hãng trả {len(urls)} URL > {GIOI_HAN_PRINT} — từ chối tải",
+        url = d["Url"]
+        url_tai = http_best.nang_cap_https_cho_url_hang(url)
+        try:
+            pdf = http_best.tai_waybill(
+                url_tai, timeout=self.het_gio,
+                cho_phep_http_khong_ma_hoa=self.cho_phep_http_khong_ma_hoa,
+                cho_phep_loopback=self._cho_phep_loopback_cho_url(url_tai))
+        except (transport.LoiTamThoi, transport.LoiVinhVien) as e:
+            # Lệnh in ĐÃ gửi và hãng đã xác nhận; chỉ phần tải PDF hỏng. Toàn bộ thao tác là
+            # KHÔNG BIẾT (không phải thất bại chắc chắn) ⇒ timeout=True, mã chuẩn HET_GIO, và
+            # KHÔNG đưa URL (có thể chở token) vào kết quả.
+            loi = self._ket_qua_khong_biet(
+                "printWaybill",
+                "lệnh in ĐÃ gửi nhưng tải PDF thất bại — KHÔNG BIẾT đã lấy được waybill chưa",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        pdfs = []
-        for url in urls:
-            if not isinstance(url, str) or not url.strip():
-                return self._ket_qua_tu_choi(
-                    "printWaybill", "có URL waybill rỗng/không phải chuỗi", request_id,
-                    so_lan_goi=kq.tho.get("so_lan_goi", 0))
-            try:
-                pdf = http_best.tai_waybill(
-                    url, timeout=self.het_gio,
-                    cho_phep_http_khong_ma_hoa=self.cho_phep_http_khong_ma_hoa,
-                    cho_phep_loopback=self._cho_phep_loopback_cho_url(url))
-            except (transport.LoiTamThoi, transport.LoiVinhVien) as e:
-                # Lệnh in ĐÃ gửi và hãng đã xác nhận; chỉ phần tải PDF hỏng. Toàn bộ thao tác
-                # là KHÔNG BIẾT (không phải thất bại chắc chắn) ⇒ timeout=True, mã chuẩn HET_GIO,
-                # và KHÔNG đưa URL (có thể chở token) vào kết quả.
-                loi = self._ket_qua_khong_biet(
-                    "printWaybill",
-                    "lệnh in ĐÃ gửi nhưng tải PDF thất bại — KHÔNG BIẾT đã lấy được waybill chưa",
-                    request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
-                loi.tho["in_da_gui"] = True
-                loi.tho["tai_pdf_that_bai"] = True
-                loi.tho["ly_do_tai"] = getattr(e, "ma", None)
-                return loi
-            pdfs.append(pdf)
-        if len(pdfs) == 1:
-            kq.tho["pdf"] = pdfs[0]
-        else:
-            kq.tho["danh_sach_pdf"] = pdfs
+            loi.tho["in_da_gui"] = True
+            loi.tho["tai_pdf_that_bai"] = True
+            loi.tho["ly_do_tai"] = getattr(e, "ma", None)
+            return loi
+        kq.tho["pdf"] = pdf
         kq.tho["so_ma"] = len(ds)
-        kq.tho["so_tep"] = len(pdfs)
-        kq.tho["tong_byte"] = sum(len(x) for x in pdfs)
+        kq.tho["so_tep"] = 1
+        kq.tho["tong_byte"] = len(pdf)
         kq.tho["dinh_dang"] = "pdf"
-        kq.tho["do_lon_byte"] = kq.tho["tong_byte"]
+        kq.tho["do_lon_byte"] = len(pdf)
         kq.tho["nguon_tai"] = "host-da-kiem"
+        kq.tho["guid"] = d.get("Guid")
+        kq.tho["pdf_url_https"] = url_tai != url
+        kq.ma_van_don = ds[0] if len(ds) == 1 else None
         return kq
 
     def _cho_phep_loopback_cho_url(self, url):
@@ -1395,24 +1293,24 @@ class AdapterBEST(CarrierAdapter):
     # =============================================================================================
     @classmethod
     def normalizeStatus(cls, ma_trang_thai):
-        """Mã trạng thái BEST → trạng thái chuẩn. CHƯA CÓ BẢNG ⇒ không đoán, cần soát.
+        """Mã trạng thái BEST → trạng thái chuẩn theo bảng 23 mã của DOCX.
 
-        Đây không phải chỗ "để trống cho xong": `BANG_TRANG_THAI_BEST` rỗng và
-        `TRANG_THAI_DA_XAC_MINH=False` là chốt BẰNG MÃ. Khi có tài liệu thật, điền bảng rồi
-        lật cờ; trước đó mọi mã đều `biet_ma=False`, `trang_thai_ap=None`, `can_soat=True`.
+        Nhãn chữ `customer Cancel` được ánh xạ về `da_huy` nhưng KHÔNG bị đổi thành số trong
+        `ma_goc` — payload/audit vẫn thấy đúng chuỗi hãng gửi. Mã lạ vẫn là "cần soát", không
+        bao giờ tự đổi trạng thái đơn.
         """
-        if TRANG_THAI_DA_XAC_MINH and BANG_TRANG_THAI_BEST:
-            khoa = str(ma_trang_thai).strip()
-            if khoa in BANG_TRANG_THAI_BEST:
-                mo_ta, chuan = BANG_TRANG_THAI_BEST[khoa]
-                return tth.KetQuaAnhXa(True, chuan, mo_ta, ma_trang_thai,
-                                       do_tin_cay=tth.TIN_CAO, can_soat=False,
-                                       nguon_tai_lieu=NGUON_TAI_LIEU, ma_hang=MA_HANG)
+        so, raw, _la_customer_cancel, biet_ma = bhd.chuan_hoa_ma_trang_thai(ma_trang_thai)
+        if TRANG_THAI_DA_XAC_MINH and biet_ma and so in bhd.BANG_MA:
+            mo_ta, chuan, can_soat = bhd.BANG_MA[so]
+            return tth.KetQuaAnhXa(True, chuan, mo_ta, raw or ma_trang_thai,
+                                   do_tin_cay=tth.TIN_CAO, can_soat=bool(can_soat),
+                                   nguon_tai_lieu=NGUON_TAI_LIEU, ma_hang=MA_HANG)
         return tth.KetQuaAnhXa(
             False, None,
-            "BEST: CHƯA CÓ BẢNG MÃ TRẠNG THÁI đã đọc — KHÔNG đoán nghĩa, KHÔNG đổi trạng thái đơn",
+            "BEST: mã trạng thái KHÔNG có trong 23 mã tài liệu — KHÔNG đoán nghĩa, "
+            "KHÔNG đổi trạng thái đơn",
             ma_trang_thai, do_tin_cay=tth.TIN_MA_LA, can_soat=True,
-            nguon_tai_lieu="CHƯA CÓ TÀI LIỆU BEST (Google Docs không đọc được)", ma_hang=MA_HANG)
+            nguon_tai_lieu=NGUON_TAI_LIEU, ma_hang=MA_HANG)
 
     @classmethod
     def normalizeTrackingStatus(cls, trang_thai_hang):
@@ -1451,29 +1349,38 @@ class AdapterBEST(CarrierAdapter):
                 da_xac_thuc = bool(xac_thuc(goi))
             except Exception:
                 da_xac_thuc = False
-        ma_van_don = self._lay_gia_tri(goi, ("WaybillCode", "waybill_code", "WaybillNo",
-                                             "ma_van_don", "OrderCode", "order_code"))
-        trang_thai = self._lay_gia_tri(goi, ("Status", "status", "StatusCode", "status_code",
+        # DOCX: `code_best` (mã Best), `merchant_order_code` (mã đối tác), `status` (chuỗi),
+        # `modified_at` (long). Vẫn đọc tên cũ để không làm gãy bộ thử lịch sử.
+        ma_van_don = self._lay_gia_tri(goi, ("code_best", "WaybillCode", "waybill_code",
+                                             "WaybillNo", "ma_van_don", "OrderCode",
+                                             "order_code"))
+        ma_don_doi_tac = self._lay_gia_tri(goi, ("merchant_order_code", "ma_don",
+                                                 "MerchantOrderCode"))
+        trang_thai = self._lay_gia_tri(goi, ("status", "Status", "StatusCode", "status_code",
                                              "trang_thai"))
         if not ma_van_don:
-            return {"ok": False, "ly_do": "webhook thiếu mã vận đơn", "da_xac_thuc": da_xac_thuc}
+            return {"ok": False, "ly_do": "webhook thiếu mã vận đơn (code_best)",
+                    "da_xac_thuc": da_xac_thuc}
         if trang_thai is None:
-            return {"ok": False, "ly_do": "webhook thiếu trạng thái", "da_xac_thuc": da_xac_thuc}
+            return {"ok": False, "ly_do": "webhook thiếu trạng thái (status)",
+                    "da_xac_thuc": da_xac_thuc}
         anh_xa = self.normalizeStatus(trang_thai)
         return {
             "ok": True,
             "hang": MA_HANG,
             "tenant_id": tenant,
             "ma_van_don": str(ma_van_don).strip(),
+            "merchant_order_code": None if ma_don_doi_tac is None else str(ma_don_doi_tac).strip(),
             "ma_su_kien": self._lay_gia_tri(goi, ("EventId", "event_id", "Id", "id")),
             "trang_thai_goc": trang_thai,
             "trang_thai_chuan": anh_xa.trang_thai_ap,
             "biet_ma": bool(anh_xa.biet_ma),
             "can_soat": bool(anh_xa.can_soat),
             "do_tin_cay": anh_xa.do_tin_cay,
+            "modified_at": goi.get("modified_at"),
             "da_xac_thuc": da_xac_thuc,
             "nguon_tai_lieu": anh_xa.nguon_tai_lieu,
-            "ghi_chu": ("CHƯA xác thực chữ ký — B3 phải cấp `xac_thuc` trước khi tin gói này"
+            "ghi_chu": ("CHƯA xác thực Bearer — nơi gọi phải cấp `xac_thuc` trước khi tin gói này"
                         if not da_xac_thuc else ""),
         }
 

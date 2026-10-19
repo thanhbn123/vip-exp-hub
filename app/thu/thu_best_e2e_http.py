@@ -1125,14 +1125,16 @@ class K_ChotTichHop(Nen):
         self.assertNotIn("tenant_id=body", n)
         self.assertNotIn("tenant_id=p.get", n)
 
-    def test_k02_chot_live_va_schema_van_dong(self):
+    def test_k02_chot_live_van_dong_va_schema_da_xac_minh(self):
+        # Cửa LIVE của adapter vẫn ĐÓNG (đường thật đi qua best_hop_dong + cổng Owner).
         self.assertFalse(adapter_best.AdapterBEST.CHO_PHEP_LIVE)
         self.assertFalse(adapter_best.AdapterBEST.CHO_PHEP_SANDBOX)
         self.assertFalse(adapter_best.AdapterBEST.CHO_PHEP_PRODUCTION)
         self.assertFalse(adapter_best.AdapterBEST.CHO_PHEP_HTTP_KHONG_MA_HOA)
-        self.assertFalse(adapter_best.AdapterBEST.SCHEMA_DA_XAC_MINH)
         self.assertFalse(adapter_best.AdapterBEST.KHOA_CHONG_TRUNG)
-        self.assertFalse(adapter_best.TRANG_THAI_DA_XAC_MINH)
+        # DOCX chính thức đã đọc: schema + bảng mã đã đối chiếu.
+        self.assertTrue(adapter_best.AdapterBEST.SCHEMA_DA_XAC_MINH)
+        self.assertTrue(adapter_best.TRANG_THAI_DA_XAC_MINH)
 
     def test_k03_bo_thu_chi_dung_loopback_va_khong_mo_mang_ngoai(self):
         import ast

@@ -168,6 +168,10 @@ def _so(v, ten, *, nho_nhat=0, toi_da=10**15):
 
 
 def _nguyen(v, ten, *, nho_nhat=0, toi_da=10**15):
+    # `_so(None)` trả 0 cho trường TUỲ CHỌN. Nhưng một trường có sàn > 0 (Weight, ServiceId…)
+    # mà thiếu thì phải TỪ CHỐI, không được lặng lẽ gửi 0 — BEST sẽ nhận một bưu kiện 0 gram.
+    if (v is None or (isinstance(v, str) and not v.strip())) and nho_nhat > 0:
+        raise LoiHopDong(f"thiếu {ten}", "thieu-truong")
     d = _so(v, ten, nho_nhat=nho_nhat, toi_da=toi_da)
     if d != d.to_integral_value():
         raise LoiHopDong(f"{ten} phải là số nguyên", "sai-kieu")
@@ -968,14 +972,15 @@ def thong_tin_hop_dong():
         "bang_ma": {str(k): {"mo_ta": v[0], "chung": v[1], "can_soat": v[2]}
                     for k, v in BANG_MA.items()},
         "trang_thai_chu": TRANG_THAI_CUSTOMER_CANCEL,
-        "auth": {"header": "Authorization: Bearer <token>",
-                 "login_body": ["Username", "Password"], "login_response": ["token"],
-                 "ems_key": "tuỳ chọn — Best Customer Identity Key"},
+        # Không lặp lại TÊN trường bí mật ở đây: mô tả công khai chỉ cần header/quy ước.
+        "auth": {"header": "Authorization", "scheme": "JWT",
+                 "ems_key": "tuỳ chọn — Best Customer Identity Key",
+                 "login": "POST /User/Login; token sống 30 ngày"},
         "truong": {"order_add": list(TRUONG_ORDER_ADD), "update": list(TRUONG_UPDATE),
                     "update_address": list(TRUONG_UPDATE_ADDRESS),
                     "estimate": list(TRUONG_ESTIMATE), "query": list(TRUONG_QUERY),
                     "print": list(TRUONG_PRINT), "webhook": list(TRUONG_WEBHOOK)},
-        "webhook": {"auth": "JWT Bearer", "ack": {"Result": 1, "Message": ""}},
+        "webhook": {"auth": "JWT", "ack": {"Result": 1, "Message": ""}},
         "http": "https (tài liệu ghi http; TLS đã đo được trên cả ba host)",
         "tai_khoan_test_trong_tai_lieu":
             "Tài khoản test công khai trong tài liệu đã bị khóa/không tồn tại "

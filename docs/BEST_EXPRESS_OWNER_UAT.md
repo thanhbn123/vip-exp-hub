@@ -9,7 +9,9 @@
 **Trạng thái:** `READY FOR OWNER UAT (LOCAL)` — **KHÔNG phải REAL PASS**, **KHÔNG phải OWNER
 APPROVED**. Mọi thao tác thật còn phụ thuộc credential, phê duyệt Owner và URL webhook công khai.
 
-**HEAD mã:** `80e2c60` trên `best/integration` (commit tài liệu này nối tiếp; xem `git log`).
+**HEAD mã cuối wave 8:** `6231458` trên `best/integration` (báo cáo điều phối:
+`docs/WAVE8_CONTROLLER_REPORT.md`). Các số ca trong tệp này là mốc trước wave 8; số cuối:
+E2E 59 · B3 69 · adapter 125 · auth 50 · hợp đồng 47 · UAT 14 · Playwright 84.
 `main` = `de740dc`, không push/deploy.
 
 ---

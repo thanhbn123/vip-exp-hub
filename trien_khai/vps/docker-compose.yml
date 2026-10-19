@@ -4,11 +4,14 @@
 #   · cổng 80/443 thuộc Caddy dùng chung (host network); KHÔNG map 80/443 ở đây;
 #   · app chỉ lắng nghe 127.0.0.1:18897 trên HOST, Caddy proxy vào;
 #   · dữ liệu nằm ở bind mount persistent /home/deploy/vip-express-hub/data, KHÔNG /tmp;
-#   · container chạy UID 1000 (deploy) để ghi được bind mount, root filesystem read-only.
+#   · container chạy đúng UID/GID của `deploy` (đo: 1000:1000) để ghi được bind mount;
+#     image cũng tạo user 1000 nhờ build args dưới đây — trước AG-06 image là 999, lệch compose.
+#   · root filesystem read-only, cap_drop ALL, no-new-privileges.
 #
 # Dùng:
 #   cd /home/deploy/vip-express-hub/src/trien_khai/vps
-#   cp .env.production.example .env && chmod 600 .env
+#   cp -n .env.production.example .env && chmod 600 .env
+#   sh chuan_bi.sh                        # tạo data/ + backups/ mode 700, đúng chủ sở hữu
 #   docker compose config                 # kiểm cú pháp, KHÔNG khởi động
 #   docker compose build                  # sau khi Owner duyệt
 #   docker compose up -d                  # sau khi Owner duyệt
@@ -19,9 +22,14 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        HUB_UID: ${VIP_HUB_UID:-1000}
+        HUB_GID: ${VIP_HUB_GID:-1000}
     image: vip-express-hub:${VIP_HUB_IMAGE_TAG:-2026-10-19}
     container_name: vip-express-hub
-    user: "1000:1000"
+    # PHẢI khớp build args ở trên và chủ sở hữu bind mount /du-lieu. Đổi UID/GID thì phải
+    # build lại image; `docker compose config` in ra giá trị thực để đối chiếu.
+    user: "${VIP_HUB_UID:-1000}:${VIP_HUB_GID:-1000}"
     env_file:
       - .env
     environment:
@@ -38,7 +46,16 @@ services:
     ports:
       - "127.0.0.1:18897:8897"
     volumes:
-      - /home/deploy/vip-express-hub/data:/du-lieu
+      # Long syntax + create_host_path:false là chốt FAIL-CLOSED cho đường dữ liệu.
+      # Short syntax `host:/du-lieu` sẽ để Docker tự tạo thư mục thiếu với chủ sở hữu ROOT;
+      # container UID 1000 khi đó không ghi được và app chết ở bước "ghi thử" của entrypoint.
+      # Thiếu thư mục bây giờ là `docker compose up` báo lỗi rõ, không phải hỏng quyền âm thầm.
+      # `chuan_bi.sh` tạo đúng thư mục trước khi chạy.
+      - type: bind
+        source: /home/deploy/vip-express-hub/data
+        target: /du-lieu
+        bind:
+          create_host_path: false
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -46,6 +63,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Trần tài nguyên: ThreadingHTTPServer sinh một thread mỗi kết nối, nên một lượt gọi dồn
+    # có thể ăn hết RAM. Trần làm container chết thay vì cả máy chủ. CHƯA ĐO bằng tải thật;
+    # 512m/512 pids là mức của compose local, phải đo lại trước khi mở rộng.
+    mem_limit: 512m
+    pids_limit: 512
     restart: unless-stopped
     stop_grace_period: 30s
     healthcheck:

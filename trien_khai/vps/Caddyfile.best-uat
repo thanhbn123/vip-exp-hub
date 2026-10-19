@@ -1,19 +1,33 @@
 # Khối Caddy cho VIP Express Hub UAT — DÁN SAU KHI OWNER DUYỆT.
 #
 # Đích: /srv/vip-staging-proxy/Caddyfile (Caddy dùng chung, host network, đang giữ 80/443).
-# Sao lưu trước, validate, rồi reload (không restart):
-#   docker exec vip-staging-caddy cat /etc/caddy/Caddyfile > ~/Caddyfile.bak-$(date +%F-%H%M)
-#   docker exec -i vip-staging-caddy sh -c 'cat >> /etc/caddy/Caddyfile' < Caddyfile.best-uat
-#   docker exec vip-staging-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-#   docker exec vip-staging-caddy caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+#
+# ====== ĐỌC TRƯỚC: /etc/caddy/Caddyfile LÀ MOUNT READ-ONLY ======
+# Trong container, `/etc/caddy/Caddyfile` là bind mount `ro` từ file host ở trên. Vì vậy cách
+# cũ `docker exec ... cat >> /etc/caddy/Caddyfile` KHÔNG chạy được ("Read-only file system").
+# `deploy` cũng không có sudo và file host thuộc root: chỉ Owner/root ghi được.
+#
+# Quy trình ĐÚNG (chưa áp dụng ở lượt AG-06):
+#   1. Validate live + candidate, KHÔNG ghi gì:
+#        sh kiem_caddy.sh
+#   2. Owner/root backup file host:
+#        sudo cp -p /srv/vip-staging-proxy/Caddyfile \
+#                    /srv/vip-staging-proxy/Caddyfile.bak-$(date +%F-%H%M)
+#   3. Owner/root ghi IN-PLACE (KHÔNG `mv`/`install` đè inode: container đang giữ inode cũ và
+#      sẽ không thấy file mới; `cat >` giữ nguyên inode):
+#        { docker exec vip-staging-caddy cat /etc/caddy/Caddyfile; printf '\n\n';
+#          cat trien_khai/vps/Caddyfile.best-uat; } > ~/Caddyfile.best-uat.candidate
+#        sudo sh -c 'cat /home/deploy/Caddyfile.best-uat.candidate \
+#                    > /srv/vip-staging-proxy/Caddyfile'
+#   4. Validate file live RỒI MỚI reload (reload graceful, KHÔNG restart):
+#        docker exec vip-staging-caddy caddy validate \
+#          --config /etc/caddy/Caddyfile --adapter caddyfile
+#        docker exec vip-staging-caddy caddy reload \
+#          --config /etc/caddy/Caddyfile --adapter caddyfile
+#   5. Rollback: Owner/root ghi backup IN-PLACE, validate, reload. Không restart Caddy.
 #
 # DNS BẮT BUỘC trước khi dán: best-uat.viporder.vn A 160.22.170.20 (DNS-only, không proxy).
 # Caddy tự xin Let's Encrypt qua HTTP-01; cổng 80/443 đã mở sẵn, KHÔNG sửa firewall.
-#
-# Rollback:
-#   docker exec -i vip-staging-caddy sh -c 'cat > /etc/caddy/Caddyfile' < ~/Caddyfile.bak-...
-#   docker exec vip-staging-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-#   docker exec vip-staging-caddy caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
 
 best-uat.viporder.vn {
 	encode zstd gzip

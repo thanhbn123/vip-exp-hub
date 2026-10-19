@@ -535,18 +535,19 @@ def dao_but_toan(tenant_id, but_toan_id, ly_do, tao_boi=None):
         raise LoiTaiChinh(f"loại {goc['loai']!r} không khai cặp đảo — bàn giao người xử", 400)
     if not str(ly_do or "").strip():
         raise LoiTaiChinh("đảo bút toán phải có lý do")
-    try:
-        bt = ghi_but_toan(tenant_id, loai_dao, goc["so_tien_dong"], "nguoi",
-                          f"ĐẢO bút toán #{but_toan_id} ({goc['loai']}): {ly_do}",
-                          tao_boi=tao_boi, don_id=goc["don_id"],
-                          carrier_account_id=goc["carrier_account_id"],
-                          batch_id=goc["batch_id"], dao_cua=but_toan_id)
-    except Exception as e:
-        if "ux_tc_bt_dao" in str(e) or "UNIQUE" in str(e).upper():
-            raise LoiTaiChinh(f"bút toán #{but_toan_id} đã được đảo một lần rồi", 409)
-        raise
-    ghi_nhat_ky(tenant_id, "dao_but_toan", f"tc_but_toan:{but_toan_id}",
-                f"đảo bằng #{bt}: {ly_do}", tao_boi)
+    with csdl.giao_dich():
+        try:
+            bt = ghi_but_toan(tenant_id, loai_dao, goc["so_tien_dong"], "nguoi",
+                              f"ĐẢO bút toán #{but_toan_id} ({goc['loai']}): {ly_do}",
+                              tao_boi=tao_boi, don_id=goc["don_id"],
+                              carrier_account_id=goc["carrier_account_id"],
+                              batch_id=goc["batch_id"], dao_cua=but_toan_id)
+        except Exception as e:
+            if "ux_tc_bt_dao" in str(e) or "UNIQUE" in str(e).upper():
+                raise LoiTaiChinh(f"bút toán #{but_toan_id} đã được đảo một lần rồi", 409)
+            raise
+        ghi_nhat_ky(tenant_id, "dao_but_toan", f"tc_but_toan:{but_toan_id}",
+                    f"đảo bằng #{bt}: {ly_do}", tao_boi)
     return bt
 
 
@@ -606,6 +607,59 @@ BUT_TOAN_THEO_CHUYEN = {
     ("COD_DISPUTED", "COD_COLLECTED"): "cod_hang_bao_thu",
 }
 
+# Các loại bút toán có tác động lên khoản PHẢI THU COD của một đơn — danh sách TRẮNG trong
+# `_so_du_cod` dưới đây. Loại lạ KHÔNG được cộng vào số dư COD (nếu không, một bút toán phí sẽ
+# bị đọc thành COD).
+
+
+def _so_du_cod(tenant_id, don_id):
+    """Số PHẢI THU COD đang ghi trên SỔ CÁI cho MỘT đơn — nguồn của mọi phép cân sổ COD.
+
+    Vì sao không đọc `tc_cod.so_tien_doi_soat`? Đó là Ý ĐỊNH của người/hãng; còn số kế toán
+    thật sự nợ là tổng bút toán. Hai con số được phép lệch trong lúc chuyển trạng thái, nhưng
+    KHÔNG được lệch sau khi lượt chuyển xong — `chuyen_cod` cân lại bằng bút toán điều chỉnh.
+    """
+    r = csdl.mot(
+        "SELECT COALESCE(SUM(CASE loai"
+        " WHEN 'cod_hang_bao_thu' THEN so_tien_dong"
+        " WHEN 'cod_dieu_chinh_tang' THEN so_tien_dong"
+        " WHEN 'cod_hang_tra' THEN -so_tien_dong"
+        " WHEN 'cod_dieu_chinh_giam' THEN -so_tien_dong"
+        " WHEN 'cod_mat' THEN -so_tien_dong"
+        " ELSE 0 END),0) t FROM tc_but_toan WHERE tenant_id=? AND don_id=?",
+        (tenant_id, don_id))
+    return r["t"]
+
+
+def _da_tra_cod(tenant_id, don_id):
+    """Số hãng ĐÃ TRẢ cho đơn (tổng `cod_hang_tra`). Dùng để quy số mục tiêu về số CÒN LẠI."""
+    r = csdl.mot("SELECT COALESCE(SUM(so_tien_dong),0) t FROM tc_but_toan"
+                 " WHERE tenant_id=? AND don_id=? AND loai='cod_hang_tra'",
+                 (tenant_id, don_id))
+    return r["t"]
+
+
+def _so_cod_muc_tieu(cur, den, so_tien_hang_bao):
+    """Số phải thu COD MỤC TIÊU sau một lượt chuyển trạng thái (INTEGER đồng).
+
+    `COD_EXPECTED`/`COD_DISPUTED` → 0: chưa thu, hoặc đang tranh chấp thì tạm xoá khoản phải
+    thu (`cod_mat` khi vào tranh chấp, bút toán khôi phục khi quay lại). `COD_COLLECTED` lấy số
+    hãng báo đã thu. `COD_RECONCILED`/`COD_ADJUSTED` lấy số đã chốt (điều chỉnh thay nó).
+    """
+    if den in ("COD_EXPECTED", "COD_DISPUTED"):
+        return 0
+    if so_tien_hang_bao is not None:
+        return so_tien_hang_bao
+    if den == "COD_COLLECTED":
+        for k in ("so_tien_hang_bao", "so_tien_doi_soat"):
+            if cur[k] is not None:
+                return cur[k]
+    else:
+        for k in ("so_tien_doi_soat", "so_tien_hang_bao"):
+            if cur[k] is not None:
+                return cur[k]
+    return cur["so_tien_du_kien"]
+
 
 def mo_so_cod(tenant_id, don_id, so_tien_du_kien=None, tao_boi=None):
     """Mở sổ COD cho một đơn ở `COD_EXPECTED`. Idempotent: gọi lại trả dòng đang có.
@@ -649,6 +703,13 @@ def chuyen_cod(tenant_id, don_id, den, nguon, can_cu, nguoi=None, so_tien_hang_b
     CHÚ Ý: `COD_SETTLED` KHÔNG đi qua đây — nó chỉ đến từ `ghi_nhan_thanh_toan()`, tức phải
     có tiền thật của một đợt thanh toán. Đó là chốt chặn của luật "giao thành công ≠ đã trả
     tiền" (§18): không có đường nào từ trạng thái giao sang settled.
+
+    CÂN SỔ: mỗi lượt chuyển còn phải làm cho SỔ CÁI khớp số mục tiêu (`_so_du_cod` so với
+    `_so_cod_muc_tieu`). Bản trước chỉ ghi bút toán cho hai cặp chuyển, nên đổi số COD (ví dụ
+    `COD_RECONCILED` 200.000 → `COD_ADJUSTED` 150.000) chỉ sửa cột `tc_cod` mà không sửa phải
+    thu: trả đủ 150.000 xong sổ vẫn còn 50.000. Đo được 2026-10-19. Nay phần lệch được ghi
+    thành bút toán điều chỉnh (`cod_dieu_chinh_tang/giam`), tranh chấp ghi `cod_mat`, và lượt
+    thu đầu tiên vẫn giữ tên `cod_hang_bao_thu`.
     """
     _dam_bao_bang()
     if den not in TRANG_THAI_COD:
@@ -673,6 +734,11 @@ def chuyen_cod(tenant_id, don_id, den, nguon, can_cu, nguoi=None, so_tien_hang_b
     if stb is not None and stb < 0:
         raise LoiTaiChinh("COD hãng báo không được âm")
     ca_id = carrier_account_id or cur["carrier_account_id"]
+    # `so_chot` = số COD đã chốt (gross, để lưu vào cột `so_tien_doi_soat`).
+    # `muc_tieu` = số CÒN LẠI phải thu trên sổ cái = gross − đã trả. Hai thứ khác nhau khi
+    # hãng đã trả một phần: sổ cái giữ số còn nợ, cột `tc_cod` giữ số đã chốt.
+    so_chot = _so_cod_muc_tieu(cur, den, stb)
+    muc_tieu = max(0, so_chot - _da_tra_cod(tenant_id, don_id))
 
     # V-13912 (AG-00 vá): một lượt chuyển COD ghi NĂM chỗ — cập nhật `tc_cod` · dòng
     # `tc_cod_chuyen` · bút toán · cập nhật công nợ · nhật ký. Trước bản vá: hai câu đầu nằm
@@ -687,11 +753,10 @@ def chuyen_cod(tenant_id, don_id, den, nguon, can_cu, nguoi=None, so_tien_hang_b
         ts = [den, csdl.bay_gio()]
         if stb is not None:
             dat.append("so_tien_hang_bao=?"); ts.append(stb)
-        if den == "COD_RECONCILED":
-            dat.append("so_tien_doi_soat=?")
-            ts.append(stb if stb is not None else
-                      (cur["so_tien_hang_bao"] if cur["so_tien_hang_bao"] is not None
-                       else cur["so_tien_du_kien"]))
+        if den in ("COD_RECONCILED", "COD_ADJUSTED"):
+            # ADJUSTED cũng phải ghi số đã chốt: `ghi_nhan_thanh_toan` đọc cột này trước, nên
+            # để nó mang số CŨ là trả tiền theo số đã bị điều chỉnh.
+            dat.append("so_tien_doi_soat=?"); ts.append(so_chot)
         if ly_do_tranh_chap is not None:
             dat.append("ly_do_tranh_chap=?"); ts.append(ly_do_tranh_chap)
         if ca_id:
@@ -706,11 +771,34 @@ def chuyen_cod(tenant_id, don_id, den, nguon, can_cu, nguoi=None, so_tien_hang_b
                  " VALUES (?,?,?,?,?,?,?,?)",
                  (tenant_id, don_id, tu, den, nguon, can_cu, nguoi, csdl.bay_gio()))
 
-        loai_bt = BUT_TOAN_THEO_CHUYEN.get((tu, den))
-        if loai_bt:
-            tien_bt = stb if stb is not None else cur["so_tien_du_kien"]
-            ghi_but_toan(tenant_id, loai_bt, tien_bt, nguon, can_cu, tao_boi=nguoi,
-                         don_id=don_id, carrier_account_id=ca_id, batch_id=batch_id)
+        so_du = _so_du_cod(tenant_id, don_id)
+        if den == "COD_DISPUTED":
+            # Tranh chấp: tạm rút khoản phải thu khỏi sổ để không báo tiền đang chờ thu trong
+            # lúc chưa ai xác nhận. Quay lại COLLECTED/RECONCILED sẽ ghi bút toán khôi phục.
+            if so_du > 0:
+                ghi_but_toan(tenant_id, "cod_mat", so_du, "he_thong",
+                             f"{can_cu} — tranh chấp: tạm xoá {so_du} đồng phải thu COD",
+                             tao_boi=nguoi, don_id=don_id, carrier_account_id=ca_id,
+                             batch_id=batch_id)
+        else:
+            chenh = muc_tieu - so_du
+            if chenh > 0:
+                # Lượt THU ĐẦU TIÊN giữ đúng tên bút toán đã khai trong bảng chuyển (để lịch
+                # sử/đối soát cũ đọc được); các lần tăng sau là điều chỉnh số đã ghi.
+                loai_dau = BUT_TOAN_THEO_CHUYEN.get((tu, den)) if so_du == 0 else None
+                loai_bt = loai_dau or "cod_dieu_chinh_tang"
+                ghi_but_toan(
+                    tenant_id, loai_bt, chenh,
+                    nguon if loai_dau else "he_thong",
+                    can_cu if loai_dau else
+                    f"{can_cu} — điều chỉnh phải thu COD +{chenh} đồng cho khớp số {muc_tieu}",
+                    tao_boi=nguoi, don_id=don_id, carrier_account_id=ca_id, batch_id=batch_id)
+            elif chenh < 0:
+                giam = -chenh
+                ghi_but_toan(
+                    tenant_id, "cod_dieu_chinh_giam", giam, "he_thong",
+                    f"{can_cu} — điều chỉnh phải thu COD -{giam} đồng cho khớp số {muc_tieu}",
+                    tao_boi=nguoi, don_id=don_id, carrier_account_id=ca_id, batch_id=batch_id)
         ghi_nhat_ky(tenant_id, "chuyen_cod", f"don:{don_id}", f"{tu} → {den}: {can_cu}", nguoi)
     return cod_cua_don(tenant_id, don_id)
 
@@ -723,7 +811,8 @@ def tong_hop_cod(tenant_id) -> dict:
         "SELECT COUNT(*) so_don,"
         " COALESCE(SUM(so_tien_du_kien),0) du_kien,"
         " COALESCE(SUM(CASE WHEN so_tien_hang_bao IS NOT NULL THEN so_tien_hang_bao ELSE 0 END),0) hang_bao,"
-        " COALESCE(SUM(CASE WHEN trang_thai IN ('COD_RECONCILED','COD_SETTLED')"
+        " COALESCE(SUM(CASE WHEN trang_thai IN"
+        "   ('COD_RECONCILED','COD_SETTLED','COD_ADJUSTED')"
         "   THEN COALESCE(so_tien_doi_soat,0) ELSE 0 END),0) da_doi_soat,"
         " COALESCE(SUM(so_tien_da_tt),0) da_thanh_toan"
         " FROM tc_cod WHERE tenant_id=?", (tenant_id,))
@@ -760,6 +849,55 @@ def tong_hop_cod(tenant_id) -> dict:
 # ============================================================================
 # ĐỢT THANH TOÁN CỦA HÃNG — cửa DUY NHẤT dẫn tới COD_SETTLED
 # ============================================================================
+def _kiem_tai_khoan_hang(tenant_id, carrier_account_id):
+    """Tài khoản hãng phải TỒN TẠI và THUỘC tenant này. Trả dòng CSDL, hoặc None.
+
+    Bản trước nhận `carrier_account_id` từ người gọi rồi ghi thẳng vào `tc_dot_tt`/`tc_phi`.
+    Đo 2026-10-19: một đợt thanh toán của tenant A trỏ được vào tài khoản hãng của tenant B,
+    và một khoản phí ghi được vào tài khoản của tenant khác. Khoá ngoại của SQLite không có
+    điều kiện tenant, nên chốt này phải nằm ở tầng nghiệp vụ.
+    """
+    if not carrier_account_id:
+        return None
+    tk = csdl.mot("SELECT * FROM carrier_accounts WHERE id=? AND tenant_id=?",
+                  (carrier_account_id, tenant_id))
+    if not tk:
+        raise LoiTaiChinh("tài khoản hãng không thuộc doanh nghiệp này", 404)
+    return tk
+
+
+def _kiem_dot_khop_hang(tenant_id, dot, cod_row):
+    """Đợt trả tiền phải đúng HÃNG của sổ COD — không trả đơn VTP bằng sao kê J&T.
+
+    Đo 2026-10-19: `ghi_nhan_thanh_toan` nhận đợt 'jt' cho đơn có tài khoản 'vtp' mà không
+    báo gì; tiền vào sổ COD vẫn gắn tài khoản VTP, còn đợt thì ghi J&T — hai đầu nói hai
+    chuyện về cùng một khoản tiền. Chỉ so khi CÓ thông tin ở cả hai phía; đợt không khai tài
+    khoản vẫn hợp lệ (một sao kê có thể trả nhiều tài khoản cùng hãng).
+    """
+    ca_dot = dot["carrier_account_id"]
+    ca_cod = cod_row["carrier_account_id"]
+    if ca_dot and ca_cod and int(ca_dot) != int(ca_cod):
+        raise LoiTaiChinh(
+            f"đợt thanh toán #{dot['id']} gắn tài khoản hãng #{ca_dot}, còn sổ COD của đơn gắn"
+            f" tài khoản #{ca_cod} — không trả chéo tài khoản hãng", 409)
+    hang_dot = None
+    if ca_dot:
+        tk = _kiem_tai_khoan_hang(tenant_id, ca_dot)
+        hang_dot = tk["hang"]
+        if str(tk["hang"]) != str(dot["hang"]):
+            raise LoiTaiChinh(f"tài khoản hãng #{ca_dot} là '{tk['hang']}', không khớp hãng"
+                              f" '{dot['hang']}' của đợt", 400)
+    else:
+        hang_dot = dot["hang"]
+    if ca_cod:
+        tk_cod = csdl.mot("SELECT hang FROM carrier_accounts WHERE id=? AND tenant_id=?",
+                          (ca_cod, tenant_id))
+        if tk_cod and hang_dot and str(tk_cod["hang"]) != str(hang_dot):
+            raise LoiTaiChinh(
+                f"đợt thanh toán #{dot['id']} là của hãng '{hang_dot}', còn sổ COD của đơn"
+                f" thuộc hãng '{tk_cod['hang']}' — không trả chéo hãng", 409)
+
+
 def tao_dot_thanh_toan(tenant_id, user_id, hang, ma_dot, so_tien_hang_bao=0,
                        carrier_account_id=None, ky_tu=None, ky_den=None, kiem_quyen=True):
     """Tạo đợt thanh toán. `UNIQUE(tenant_id, hang, ma_dot)` chặn nạp trùng ở tầng CSDL."""
@@ -768,20 +906,28 @@ def tao_dot_thanh_toan(tenant_id, user_id, hang, ma_dot, so_tien_hang_bao=0,
         _can_quyen_tc(tenant_id, user_id, "ghi")
     if not str(ma_dot or "").strip():
         raise LoiTaiChinh("đợt thanh toán phải có mã đợt của hãng")
+    hang = str(hang or "").strip()
+    if not hang:
+        raise LoiTaiChinh("đợt thanh toán phải có mã hãng")
+    tk = _kiem_tai_khoan_hang(tenant_id, carrier_account_id)
+    if tk and str(tk["hang"]) != hang:
+        raise LoiTaiChinh(f"tài khoản hãng #{carrier_account_id} là '{tk['hang']}',"
+                          f" không khớp hãng '{hang}' của đợt", 400)
     st = so_tien(so_tien_hang_bao, "số tiền đợt")
-    try:
-        did = csdl.ghi("INSERT INTO tc_dot_tt (tenant_id, hang, carrier_account_id, ma_dot,"
-                       " ky_tu, ky_den, so_tien_hang_bao, tao_boi, tao_luc)"
-                       " VALUES (?,?,?,?,?,?,?,?,?)",
-                       (tenant_id, hang, carrier_account_id, ma_dot, ky_tu, ky_den, st,
-                        user_id, csdl.bay_gio())).lastrowid
-    except Exception as e:
-        if "UNIQUE" in str(e).upper():
-            raise LoiTaiChinh(f"đợt thanh toán {ma_dot!r} của hãng {hang} đã có "
-                              f"— không tạo lần hai", 409)
-        raise
-    ghi_nhat_ky(tenant_id, "tao_dot_thanh_toan", f"tc_dot_tt:{did}",
-                f"hãng {hang} mã {ma_dot} số tiền {st}", user_id)
+    with csdl.giao_dich():
+        try:
+            did = csdl.ghi("INSERT INTO tc_dot_tt (tenant_id, hang, carrier_account_id, ma_dot,"
+                           " ky_tu, ky_den, so_tien_hang_bao, tao_boi, tao_luc)"
+                           " VALUES (?,?,?,?,?,?,?,?,?)",
+                           (tenant_id, hang, carrier_account_id, ma_dot, ky_tu, ky_den, st,
+                            user_id, csdl.bay_gio())).lastrowid
+        except Exception as e:
+            if "UNIQUE" in str(e).upper():
+                raise LoiTaiChinh(f"đợt thanh toán {ma_dot!r} của hãng {hang} đã có "
+                                  f"— không tạo lần hai", 409)
+            raise
+        ghi_nhat_ky(tenant_id, "tao_dot_thanh_toan", f"tc_dot_tt:{did}",
+                    f"hãng {hang} mã {ma_dot} số tiền {st}", user_id)
     return did
 
 
@@ -802,31 +948,39 @@ def ghi_nhan_thanh_toan(tenant_id, user_id, dot_id, don_id, so_tien_dong, kiem_q
     _dam_bao_bang()
     if kiem_quyen:
         _can_quyen_tc(tenant_id, user_id, "duyet")
-    dot = csdl.mot("SELECT * FROM tc_dot_tt WHERE id=? AND tenant_id=?", (dot_id, tenant_id))
-    if not dot:
-        raise LoiTaiChinh("không có đợt thanh toán này trong doanh nghiệp", 404)
-    if dot["trang_thai"] != "MOI":
-        raise LoiTaiChinh(f"đợt thanh toán đang ở {dot['trang_thai']}, không ghi nhận thêm", 409)
     st = so_tien(so_tien_dong, "số tiền thanh toán")
     if st <= 0:
         raise LoiTaiChinh("số tiền thanh toán phải > 0")
-    c = cod_cua_don(tenant_id, don_id)
-    if not c:
-        raise LoiTaiChinh("đơn chưa có sổ COD", 404)
-    if c["trang_thai"] not in ("COD_RECONCILED", "COD_ADJUSTED"):
-        raise LoiTaiChinh(
-            f"COD của đơn đang ở {c['trang_thai']} — phải ĐỐI SOÁT xong mới nhận tiền. "
-            f"Giao hàng thành công KHÔNG làm COD thành đã thanh toán (hợp đồng §18).", 409)
-    phai_tra = c["so_tien_doi_soat"] if c["so_tien_doi_soat"] is not None else (
-        c["so_tien_hang_bao"] if c["so_tien_hang_bao"] is not None else c["so_tien_du_kien"])
 
-    # MỘT giao dịch cho CẢ SÁU bước: dòng đợt · cộng đã-trả · chuyển COD_SETTLED · dòng
-    # chuyển trạng thái · bút toán · nhật ký. Trước 15/10/2026 đây là `khoa_ghi` trần, nên
-    # mỗi `csdl.ghi()` tự commit. Đo được hậu quả: đơn COD 100.000 đã trả 50.000, đợt mới trả
-    # 90.000 → câu 2 từ chối đúng (50+90 > 100), nhưng câu 1 ĐÃ COMMIT: tc_dot_tt_dong mang
-    # một dòng 90.000 MỒ CÔI, tổng đợt 140.000 trong khi tc_cod ghi đã trả 50.000. Tệ hơn:
-    # UNIQUE(dot_id, don_id) chặn làm lại, nên đợt đó kẹt vĩnh viễn, phải sửa tay dưới CSDL.
+    # MỌI phép đọc quyết định tiền phải nằm TRONG giao dịch. Bản trước đọc `dot`, `c` và
+    # tính `phai_tra` NGOÀI `giao_dich()`, nên một lượt điều chỉnh/đổi trạng thái chen vào
+    # giữa phép đọc và câu UPDATE vẫn lọt: đo 2026-10-19, số phải trả bị hạ xuống 40.000
+    # nhưng hàm vẫn nhận 50.000 (đọc bản cũ 100.000), rồi báo `con_lai=50.000` trong khi
+    # thực tế đã trả DƯ 10.000. `BEGIN IMMEDIATE` của `giao_dich()` giữ khoá ghi xuyên suốt.
     with csdl.giao_dich():
+        dot = csdl.mot("SELECT * FROM tc_dot_tt WHERE id=? AND tenant_id=?", (dot_id, tenant_id))
+        if not dot:
+            raise LoiTaiChinh("không có đợt thanh toán này trong doanh nghiệp", 404)
+        if dot["trang_thai"] != "MOI":
+            raise LoiTaiChinh(f"đợt thanh toán đang ở {dot['trang_thai']}, không ghi nhận thêm",
+                              409)
+        c = cod_cua_don(tenant_id, don_id)
+        if not c:
+            raise LoiTaiChinh("đơn chưa có sổ COD", 404)
+        if c["trang_thai"] not in ("COD_RECONCILED", "COD_ADJUSTED"):
+            raise LoiTaiChinh(
+                f"COD của đơn đang ở {c['trang_thai']} — phải ĐỐI SOÁT xong mới nhận tiền. "
+                f"Giao hàng thành công KHÔNG làm COD thành đã thanh toán (hợp đồng §18).", 409)
+        _kiem_dot_khop_hang(tenant_id, dot, c)
+        phai_tra = c["so_tien_doi_soat"] if c["so_tien_doi_soat"] is not None else (
+            c["so_tien_hang_bao"] if c["so_tien_hang_bao"] is not None else c["so_tien_du_kien"])
+
+        # MỘT giao dịch cho CẢ SÁU bước: dòng đợt · cộng đã-trả · chuyển COD_SETTLED · dòng
+        # chuyển trạng thái · bút toán · nhật ký. Trước 15/10/2026 đây là `khoa_ghi` trần, nên
+        # mỗi `csdl.ghi()` tự commit. Đo được hậu quả: đơn COD 100.000 đã trả 50.000, đợt mới trả
+        # 90.000 → câu 2 từ chối đúng (50+90 > 100), nhưng câu 1 ĐÃ COMMIT: tc_dot_tt_dong mang
+        # một dòng 90.000 MỒ CÔI, tổng đợt 140.000 trong khi tc_cod ghi đã trả 50.000. Tệ hơn:
+        # UNIQUE(dot_id, don_id) chặn làm lại, nên đợt đó kẹt vĩnh viễn, phải sửa tay dưới CSDL.
         try:
             csdl.ghi("INSERT INTO tc_dot_tt_dong (dot_id, tenant_id, don_id, so_tien_dong)"
                      " VALUES (?,?,?,?)", (dot_id, tenant_id, don_id, st))
@@ -835,8 +989,11 @@ def ghi_nhan_thanh_toan(tenant_id, user_id, dot_id, don_id, so_tien_dong, kiem_q
                 raise LoiTaiChinh(f"đơn {don_id} đã được ghi nhận thanh toán trong đợt này "
                                   f"— không cộng tiền lần hai", 409)
             raise
+        # Điều kiện TRẠNG THÁI cũng nằm trong WHERE: nếu một lượt khác vừa đổi COD sang
+        # DISPUTED/SETTLED sau phép đọc, câu này không khớp và tiền không vào sổ.
         con = csdl.ghi("UPDATE tc_cod SET so_tien_da_tt = so_tien_da_tt + ?, cap_nhat_luc=?"
-                       " WHERE don_id=? AND tenant_id=? AND so_tien_da_tt + ? <= ?",
+                       " WHERE don_id=? AND tenant_id=? AND so_tien_da_tt + ? <= ?"
+                       " AND trang_thai IN ('COD_RECONCILED','COD_ADJUSTED')",
                        (st, csdl.bay_gio(), don_id, tenant_id, st, phai_tra))
         if con.rowcount != 1:
             raise LoiTaiChinh(
@@ -846,13 +1003,16 @@ def ghi_nhan_thanh_toan(tenant_id, user_id, dot_id, don_id, so_tien_dong, kiem_q
                        (don_id, tenant_id))
         du = moi["so_tien_da_tt"] >= phai_tra
         if du:
-            csdl.ghi("UPDATE tc_cod SET trang_thai='COD_SETTLED', cap_nhat_luc=?"
-                     " WHERE don_id=? AND tenant_id=? AND trang_thai IN ('COD_RECONCILED','COD_ADJUSTED')",
-                     (csdl.bay_gio(), don_id, tenant_id))
-            csdl.ghi("INSERT INTO tc_cod_chuyen (tenant_id, don_id, tu, den, nguon, can_cu, nguoi, luc)"
-                     " VALUES (?,?,?,?,?,?,?,?)",
-                     (tenant_id, don_id, moi["trang_thai"], "COD_SETTLED", "hang",
-                      f"đợt thanh toán #{dot_id} trả đủ {phai_tra}", user_id, csdl.bay_gio()))
+            con_settle = csdl.ghi("UPDATE tc_cod SET trang_thai='COD_SETTLED', cap_nhat_luc=?"
+                                 " WHERE don_id=? AND tenant_id=?"
+                                 " AND trang_thai IN ('COD_RECONCILED','COD_ADJUSTED')",
+                                 (csdl.bay_gio(), don_id, tenant_id))
+            if con_settle.rowcount == 1:
+                csdl.ghi("INSERT INTO tc_cod_chuyen (tenant_id, don_id, tu, den, nguon, can_cu,"
+                         " nguoi, luc) VALUES (?,?,?,?,?,?,?,?)",
+                         (tenant_id, don_id, moi["trang_thai"], "COD_SETTLED", "hang",
+                          f"đợt thanh toán #{dot_id} trả đủ {phai_tra}", user_id,
+                          csdl.bay_gio()))
 
         # Bút toán và nhật ký NẰM TRONG cùng giao dịch. Để ngoài thì có ca: tiền đã áp vào
         # tc_cod mà sổ cái không có bút toán nào — và bút toán thì không ghi bù được bằng
@@ -875,12 +1035,14 @@ def dong_dot_thanh_toan(tenant_id, user_id, dot_id, kiem_quyen=True):
     _dam_bao_bang()
     if kiem_quyen:
         _can_quyen_tc(tenant_id, user_id, "duyet")
-    con = csdl.ghi("UPDATE tc_dot_tt SET trang_thai='DA_AP', ap_luc=?"
-                   " WHERE id=? AND tenant_id=? AND trang_thai='MOI'",
-                   (csdl.bay_gio(), dot_id, tenant_id))
-    if con.rowcount != 1:
-        raise LoiTaiChinh("đợt thanh toán không còn ở trạng thái MOI — không chốt lần hai", 409)
-    ghi_nhat_ky(tenant_id, "dong_dot_thanh_toan", f"tc_dot_tt:{dot_id}", "", user_id)
+    with csdl.giao_dich():
+        con = csdl.ghi("UPDATE tc_dot_tt SET trang_thai='DA_AP', ap_luc=?"
+                       " WHERE id=? AND tenant_id=? AND trang_thai='MOI'",
+                       (csdl.bay_gio(), dot_id, tenant_id))
+        if con.rowcount != 1:
+            raise LoiTaiChinh("đợt thanh toán không còn ở trạng thái MOI — không chốt lần hai",
+                              409)
+        ghi_nhat_ky(tenant_id, "dong_dot_thanh_toan", f"tc_dot_tt:{dot_id}", "", user_id)
     return True
 
 
@@ -921,16 +1083,24 @@ def ghi_phi(tenant_id, don_id, loai, so_tien_dong, nguon, can_cu, tao_boi=None,
         if not don:
             raise LoiTaiChinh("không có đơn này trong doanh nghiệp", 404)
         carrier_account_id = carrier_account_id or don["carrier_account_id"]
+    # Chốt tham chiếu chéo tenant: `tc_phi`/`tc_but_toan` chỉ được trỏ tài khoản hãng CỦA
+    # tenant này. Khoá ngoại của SQLite không có điều kiện tenant nên phải kiểm ở đây.
+    _kiem_tai_khoan_hang(tenant_id, carrier_account_id)
     loai_bt = LOAI_PHI[loai]
-    bt = ghi_but_toan(tenant_id, loai_bt, st, nguon, can_cu, tao_boi=tao_boi, don_id=don_id,
-                      carrier_account_id=carrier_account_id, batch_id=batch_id)
-    # Dấu lưu trong `tc_phi` theo hướng kinh tế, để cộng tổng đọc thẳng được.
-    dau = -1 if loai in ("hoan", "dieu_chinh_giam") else 1
-    pid = csdl.ghi("INSERT INTO tc_phi (tenant_id, don_id, carrier_account_id, loai, so_tien_dong,"
-                   " nguon, can_cu, ghi_nhan_luc, tao_boi, but_toan_id, batch_id)"
-                   " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                   (tenant_id, don_id, carrier_account_id, loai, dau * st, nguon, can_cu,
-                    ghi_nhan_luc or csdl.bay_gio(), tao_boi, bt, batch_id)).lastrowid
+    # Bút toán · công nợ · dòng `tc_phi` là MỘT đơn vị. Bản trước ghi bút toán (tự commit) rồi
+    # mới chèn `tc_phi`; ép bước sau hỏng thì sổ cái có khoản phí mà bảng phí không có dòng
+    # nào — đo được 2026-10-19: phải trả tăng 50.000, `tc_phi` rỗng, không sửa được bằng UPDATE
+    # vì bút toán bất biến (§17).
+    with csdl.giao_dich():
+        bt = ghi_but_toan(tenant_id, loai_bt, st, nguon, can_cu, tao_boi=tao_boi, don_id=don_id,
+                          carrier_account_id=carrier_account_id, batch_id=batch_id)
+        # Dấu lưu trong `tc_phi` theo hướng kinh tế, để cộng tổng đọc thẳng được.
+        dau = -1 if loai in ("hoan", "dieu_chinh_giam") else 1
+        pid = csdl.ghi("INSERT INTO tc_phi (tenant_id, don_id, carrier_account_id, loai,"
+                       " so_tien_dong, nguon, can_cu, ghi_nhan_luc, tao_boi, but_toan_id,"
+                       " batch_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                       (tenant_id, don_id, carrier_account_id, loai, dau * st, nguon, can_cu,
+                        ghi_nhan_luc or csdl.bay_gio(), tao_boi, bt, batch_id)).lastrowid
     return {"phi_id": pid, "but_toan_id": bt}
 
 
@@ -998,20 +1168,25 @@ def dieu_chinh(tenant_id, user_id, loai, so_tien_dong, ly_do, don_id=None, kiem_
     loai_bt = {("cod", 1): "cod_dieu_chinh_tang", ("cod", -1): "cod_dieu_chinh_giam",
                ("phi", 1): "phi_dieu_chinh_tang", ("phi", -1): "phi_dieu_chinh_giam"}[
         (loai, 1 if st > 0 else -1)]
-    bt = ghi_but_toan(tenant_id, loai_bt, abs(st), "nguoi", f"điều chỉnh tay: {ly_do}",
-                      tao_boi=user_id, don_id=don_id, carrier_account_id=ca_id)
-    did = csdl.ghi("INSERT INTO tc_dieu_chinh (tenant_id, don_id, loai, so_tien_dong, ly_do,"
-                   " nguoi, but_toan_id, luc) VALUES (?,?,?,?,?,?,?,?)",
-                   (tenant_id, don_id, loai, st, ly_do, user_id, bt, csdl.bay_gio())).lastrowid
-    if loai == "phi":
-        csdl.ghi("INSERT INTO tc_phi (tenant_id, don_id, carrier_account_id, loai, so_tien_dong,"
-                 " nguon, can_cu, ghi_nhan_luc, tao_boi, but_toan_id)"
-                 " VALUES (?,?,?,?,?, 'nguoi', ?, ?, ?, ?)",
-                 (tenant_id, don_id, ca_id,
-                  "dieu_chinh_tang" if st > 0 else "dieu_chinh_giam", st,
-                  f"điều chỉnh tay #{did}: {ly_do}", csdl.bay_gio(), user_id, bt))
-    ghi_nhat_ky(tenant_id, "dieu_chinh", f"tc_dieu_chinh:{did}",
-                f"{loai} {st:+d}đ: {ly_do}", user_id)
+    # Bút toán · `tc_dieu_chinh` · `tc_phi` · nhật ký là MỘT đơn vị. Bản trước mỗi câu tự
+    # commit: ép `tc_dieu_chinh` hỏng thì bút toán đã vào sổ mà không có dòng điều chỉnh nào
+    # — mất đúng lý do/người của một thao tác tiền (đo 2026-10-19).
+    with csdl.giao_dich():
+        bt = ghi_but_toan(tenant_id, loai_bt, abs(st), "nguoi", f"điều chỉnh tay: {ly_do}",
+                          tao_boi=user_id, don_id=don_id, carrier_account_id=ca_id)
+        did = csdl.ghi("INSERT INTO tc_dieu_chinh (tenant_id, don_id, loai, so_tien_dong, ly_do,"
+                       " nguoi, but_toan_id, luc) VALUES (?,?,?,?,?,?,?,?)",
+                       (tenant_id, don_id, loai, st, ly_do, user_id, bt,
+                        csdl.bay_gio())).lastrowid
+        if loai == "phi":
+            csdl.ghi("INSERT INTO tc_phi (tenant_id, don_id, carrier_account_id, loai,"
+                     " so_tien_dong, nguon, can_cu, ghi_nhan_luc, tao_boi, but_toan_id)"
+                     " VALUES (?,?,?,?,?, 'nguoi', ?, ?, ?, ?)",
+                     (tenant_id, don_id, ca_id,
+                      "dieu_chinh_tang" if st > 0 else "dieu_chinh_giam", st,
+                      f"điều chỉnh tay #{did}: {ly_do}", csdl.bay_gio(), user_id, bt))
+        ghi_nhat_ky(tenant_id, "dieu_chinh", f"tc_dieu_chinh:{did}",
+                    f"{loai} {st:+d}đ: {ly_do}", user_id)
     return {"dieu_chinh_id": did, "but_toan_id": bt}
 
 

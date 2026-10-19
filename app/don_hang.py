@@ -260,6 +260,27 @@ def _so_nguyen_tien(gt, ten):
 TRUONG_TIEN = ("cod", "gia_tri_khai")
 
 
+def _phi_nguyen_dong(kq):
+    """Phí hãng trả về, chuẩn hoá về INTEGER ĐỒNG >= 0. Không dùng được ⇒ `None`.
+
+    Vì sao phải có cửa này: `KetQuaHang.phi` là dữ liệu NGOÀI. Đo 2026-10-19 với VTP mock:
+    `phi=22000.5` vào thẳng `don_hang.phi_van_chuyen` thành cột kiểu REAL (§16 cấm), còn
+    `phi=-1500` được nhận như một khoản phí âm. Cả hai đều là tiền sai lặng lẽ. Ở đây CHẶN
+    phần thập phân và số âm — không cắt cụt, không làm tròn — rồi trả `None` để người gọi
+    KHÔNG ghi gì (và ghi cảnh báo vào lịch sử, xem `gui_don`).
+    """
+    if kq is None or not getattr(kq, "ok", False):
+        return None
+    gt = getattr(kq, "phi", None)
+    if gt is None:
+        return None
+    try:
+        so = _so_nguyen_tien(gt, "phí vận chuyển hãng báo")
+    except LoiNghiepVu:
+        return None
+    return so if so >= 0 else None
+
+
 def _kiem_du_lieu(d):
     """Trả DANH SÁCH lỗi (rỗng = hợp lệ). Không ném — để người gọi quyết định."""
     loi = []
@@ -415,6 +436,14 @@ def tao_don(tenant_id, user_id, d, idem_key=None, kiem_quyen=True):
     sql = ("INSERT INTO don_hang (" + ",".join(cot) + ") VALUES ("
            + ",".join("?" * len(cot)) + ")")
 
+    # Kiểm mặt hàng TRƯỚC khi ghi đơn. Bản cũ ghi đơn trước rồi mới gọi `luu_mat_hang`, nên
+    # một danh sách mặt hàng hỏng để lại ĐƠN MỒ CÔI: lượt gọi ném lỗi nhưng đơn đã nằm trong
+    # CSDL, và lượt thử lại cùng `idem_key` nhận đúng cái đơn không có mặt hàng nào. Đo được
+    # 2026-10-19. Kiểm trước + gói cả ba câu ghi vào MỘT giao dịch là hai lớp của cùng một chốt.
+    if d.get("mat_hang"):
+        _doi_bang_mat_hang()
+        _kiem_mat_hang(d["mat_hang"])
+
     with csdl.khoa_ghi:
         if idem_key:
             cu = csdl.mot("SELECT * FROM don_hang WHERE tenant_id=? AND idem_key=?",
@@ -422,29 +451,30 @@ def tao_don(tenant_id, user_id, d, idem_key=None, kiem_quyen=True):
             if cu:
                 return dict(cu), True
         con = None
-        for lan in range(5):
-            gt[1] = _sinh_ma_don(tenant_id)
-            try:
-                con = csdl.ghi(sql, gt)
-                break
-            except csdl.LoiToanVen as e:
-                # Phân biệt HAI ràng buộc khác nhau, không gộp làm một:
-                #  - UNIQUE(tenant_id, idem_key) → lượt song song vừa tạo đúng đơn này ⇒ trả đơn đó
-                #  - UNIQUE(tenant_id, ma_don)   → COUNT(*) đụng nhau giữa hai TIẾN TRÌNH ⇒ sinh lại
-                if idem_key:
-                    cu = csdl.mot("SELECT * FROM don_hang WHERE tenant_id=? AND idem_key=?",
-                                  (tenant_id, idem_key))
-                    if cu:
-                        return dict(cu), True
-                if "ma_don" in str(e) and lan < 4:
-                    continue
-                raise
-        if con is None:
-            raise LoiNghiepVu("không sinh được mã đơn duy nhất sau 5 lần thử", 500)
-    don_id = con.lastrowid
-    _ghi_lich_su(don_id, f"user:{user_id}", "tạo đơn nháp")
-    if d.get("mat_hang"):
-        luu_mat_hang(tenant_id, user_id, don_id, d["mat_hang"], kiem_quyen=False)
+        with csdl.giao_dich():
+            for lan in range(5):
+                gt[1] = _sinh_ma_don(tenant_id)
+                try:
+                    con = csdl.ghi(sql, gt)
+                    break
+                except csdl.LoiToanVen as e:
+                    # Phân biệt HAI ràng buộc khác nhau, không gộp làm một:
+                    #  - UNIQUE(tenant_id, idem_key) → lượt song song vừa tạo đúng đơn này ⇒ trả đơn đó
+                    #  - UNIQUE(tenant_id, ma_don)   → COUNT(*) đụng nhau giữa hai TIẾN TRÌNH ⇒ sinh lại
+                    if idem_key:
+                        cu = csdl.mot("SELECT * FROM don_hang WHERE tenant_id=? AND idem_key=?",
+                                      (tenant_id, idem_key))
+                        if cu:
+                            return dict(cu), True
+                    if "ma_don" in str(e) and lan < 4:
+                        continue
+                    raise
+            if con is None:
+                raise LoiNghiepVu("không sinh được mã đơn duy nhất sau 5 lần thử", 500)
+            don_id = con.lastrowid
+            _ghi_lich_su(don_id, f"user:{user_id}", "tạo đơn nháp")
+            if d.get("mat_hang"):
+                luu_mat_hang(tenant_id, user_id, don_id, d["mat_hang"], kiem_quyen=False)
     return dict(lay_don(tenant_id, don_id)), False
 
 
@@ -632,13 +662,20 @@ def gui_don(tenant_id, user_id, don_id, carrier_account_id):
         raise
     if kq.ok:
         phi = ad.getShippingFee(dict(don)) if ad.capability("getShippingFee") else None
+        phi_dong = _phi_nguyen_dong(phi)
         csdl.ghi("UPDATE don_hang SET trang_thai='da_gui', ma_van_don=?, phi_van_chuyen=?,"
                  " can_doi_soat_ket_qua=0, trang_thai_giao='cho_lay', hang_trang_thai_giao=1,"
                  " cap_nhat_luc=? WHERE id=? AND tenant_id=?",
-                 (kq.ma_van_don, phi.phi if (phi and phi.ok) else None, csdl.bay_gio(),
-                  don_id, tenant_id))
+                 (kq.ma_van_don, phi_dong, csdl.bay_gio(), don_id, tenant_id))
         _ghi_lich_su(don_id, f"user:{user_id}",
                      f"hãng {ad.ten_hang} ({tk['moi_truong']}) xác nhận, mã vận đơn {kq.ma_van_don}")
+        if phi is not None and getattr(phi, "ok", False) and phi_dong is None:
+            # Không ghi số hỏng vào đơn, nhưng cũng KHÔNG im lặng: người đối soát cần biết vì
+            # sao đơn không có phí để so với bảng kê của hãng.
+            _ghi_lich_su(don_id, f"user:{user_id}",
+                         f"CẢNH BÁO: phí hãng {ad.ten_hang} trả về "
+                         f"({str(getattr(phi, 'phi', None))[:60]!r}) không phải số nguyên đồng"
+                         " >= 0 — KHÔNG ghi vào đơn, cần đối soát tay")
     elif kq.timeout:
         # KHÔNG biết kết quả — giữ dang_gui, bật cờ phải đối soát; KHÔNG nhận thành công/thất bại.
         csdl.ghi("UPDATE don_hang SET can_doi_soat_ket_qua=1, cap_nhat_luc=?"
@@ -721,15 +758,24 @@ def doi_soat_don(tenant_id, user_id, don_id):
 
     if kq.ok and kq.ma_van_don:
         phi = ad.getShippingFee(dict(don)) if ad.capability("getShippingFee") else None
+        # Cùng luật §16 như `gui_don`: phí hãng trả không phải INTEGER đồng >= 0 thì KHÔNG ghi;
+        # giữ số cũ (nếu có) thay vì ghi đè bằng rác. Số cũ là số đã được một lượt trước chấp nhận.
+        phi_dong = _phi_nguyen_dong(phi)
         csdl.ghi("UPDATE don_hang SET trang_thai='da_gui', ma_van_don=?, phi_van_chuyen=?,"
                  " can_doi_soat_ket_qua=0, trang_thai_giao=COALESCE(trang_thai_giao,'cho_lay'),"
                  " hang_trang_thai_giao=MAX(hang_trang_thai_giao,1), cap_nhat_luc=?"
                  " WHERE id=? AND tenant_id=?",
-                 (kq.ma_van_don, phi.phi if (phi and phi.ok) else don["phi_van_chuyen"],
+                 (kq.ma_van_don,
+                  phi_dong if phi_dong is not None else don["phi_van_chuyen"],
                   csdl.bay_gio(), don_id, tenant_id))
         _ghi_lich_su(don_id, f"user:{user_id}",
                      f"ĐỐI SOÁT {thao_tac} với {ad.ten_hang}: hãng ĐÃ nhận đơn,"
                      f" mã vận đơn {kq.ma_van_don} → da_gui")
+        if phi is not None and getattr(phi, "ok", False) and phi_dong is None:
+            _ghi_lich_su(don_id, f"user:{user_id}",
+                         f"CẢNH BÁO: phí hãng {ad.ten_hang} trả về "
+                         f"({str(getattr(phi, 'phi', None))[:60]!r}) không phải số nguyên đồng"
+                         " >= 0 — giữ số phí cũ (nếu có), cần đối soát tay")
         ket_luan = "da_vao"
     elif _la_khong_tim_thay(kq):
         csdl.ghi("UPDATE don_hang SET trang_thai='da_duyet', can_doi_soat_ket_qua=0,"
@@ -909,6 +955,13 @@ def ap_trang_thai_giao(tenant_id, don_id, loai, nguon):
         don = csdl.mot("SELECT * FROM don_hang WHERE id=? AND tenant_id=?", (don_id, tenant_id))
         if don is None:
             return 0, "không có đơn này trong doanh nghiệp đó"
+        if don["trang_thai"] == "huy":
+            # Hủy là quyết định NGHIỆP VỤ. `webhook_best` đã tự chặn, nhưng `webhook.py` và
+            # `polling.py` đi thẳng vào đây; không chặn ở tầng nghiệp vụ thì một sự kiện đến
+            # sau lúc hủy vẫn đẩy trục giao vận của đơn đã hủy đi tiếp — trái hợp đồng §10.
+            _ghi_lich_su(don_id, nguon,
+                         f"sự kiện {loai} đến sau khi đơn đã hủy — KHÔNG áp trạng thái giao")
+            return 0, "đơn đã hủy ở trục nghiệp vụ"
         if don["hang_trang_thai_giao"] >= hang_moi:
             _ghi_lich_su(don_id, nguon,
                          f"sự kiện {loai} đến muộn/out-of-order — KHÔNG áp"
@@ -1009,7 +1062,12 @@ def luu_mat_hang(tenant_id, user_id, don_id, cac_mon, kiem_quyen=True):
                 " don_gia, khoi_luong_gram, ghi_chu, tao_luc) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (tenant_id, don_id, m["stt"], m["ten"], m["ma_sku"], m["so_luong"],
                  m["don_gia"], m["khoi_luong_gram"], m["ghi_chu"], csdl.bay_gio()))
-        if mon and tong_kl > 0:
+        if mon:
+            # Đồng bộ CẢ KHI tổng bằng 0. Bản cũ có `and tong_kl > 0`, nên một danh sách
+            # toàn mặt hàng 0g để lại khối lượng/giá trị CŨ của đơn: hai con số nói hai
+            # chuyện khác nhau, đúng thứ docstring này cam kết chặn (đo được 2026-10-19).
+            # Tổng 0 làm đơn chưa hợp lệ và `duyet_don` sẽ chặn — đó là hành vi đúng, không
+            # phải lý do để giữ số cũ.
             csdl.ghi("UPDATE don_hang SET khoi_luong_gram=?, gia_tri_khai=?, cap_nhat_luc=?"
                      " WHERE id=? AND tenant_id=?",
                      (tong_kl, tong_gt, csdl.bay_gio(), don_id, tenant_id))

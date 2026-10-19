@@ -754,5 +754,225 @@ class J_GiaoDien(unittest.TestCase):
             self.fail(f"finance.js có gán bí mật: {nd[m.start():m.start() + 60]!r}")
 
 
+# ================================================================= K. Cân sổ COD + phí
+class K_CanSoCODVaPhi(unittest.TestCase):
+    """Các lỗi TIỀN đo được ngày 2026-10-19, mỗi ca là một phép đo trên sổ thật.
+
+    Bốn nhóm: (1) đổi số COD thì sổ cái phải đổi theo; (2) tranh chấp rồi quay lại không được
+    nhân đôi phải thu; (3) thanh toán phải đọc số/trạng thái TRONG giao dịch và đúng hãng;
+    (4) phí là ba loại tách rời, và bút toán + dòng phí phải cùng vào hoặc cùng không.
+    """
+
+    @staticmethod
+    def _ep_hong(mau):
+        """Ép câu SQL chứa `mau` hỏng. Trả hàm hoàn nguyên (gọi trong finally)."""
+        goc = csdl.ghi
+
+        def ghi_hong(sql, ts=()):
+            if mau in sql:
+                raise RuntimeError(f"ép hỏng: {mau}")
+            return goc(sql, ts)
+
+        csdl.ghi = ghi_hong
+        return lambda: setattr(csdl, "ghi", goc)
+
+    def test_k1_doi_soat_roi_dieu_chinh_so_COD_thi_so_cai_phai_theo(self):
+        """COD 200.000 → đã đối soát → điều chỉnh 150.000 → chốt lại 150.000 → trả đủ.
+
+        Bản trước chỉ sửa cột `tc_cod`, không sửa phải thu: trả đủ 150.000 mà sổ còn 50.000.
+        """
+        t, u, ca = NEN["t1"], NEN["u1"], NEN["ca1"]
+        truoc = tai_chinh.cong_no(t)["tong_phai_thu"]
+        don = _tao_don(t, u, cod=200_000, ca_id=ca)
+        tai_chinh.mo_so_cod(t, don)
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo thu", nguoi=u,
+                             so_tien_hang_bao=200_000)
+        tai_chinh.chuyen_cod(t, don, "COD_RECONCILED", "nguoi", "chốt 200k", nguoi=u)
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc + 200_000)
+        tai_chinh.chuyen_cod(t, don, "COD_ADJUSTED", "nguoi", "hãng chốt lại 150k", nguoi=u,
+                             so_tien_hang_bao=150_000)
+        c = tai_chinh.cod_cua_don(t, don)
+        self.assertEqual(c["so_tien_doi_soat"], 150_000,
+                         "COD_ADJUSTED không cập nhật số đã chốt — sẽ trả theo số cũ")
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc + 150_000,
+                         "phải thu không đi theo số COD đã điều chỉnh")
+        tai_chinh.chuyen_cod(t, don, "COD_RECONCILED", "nguoi", "đối soát lại 150k", nguoi=u,
+                             so_tien_hang_bao=150_000)
+        dot = tai_chinh.tao_dot_thanh_toan(t, u, "vtp", f"DOT-k1-{don}", 150_000,
+                                           carrier_account_id=ca)
+        kq = tai_chinh.ghi_nhan_thanh_toan(t, u, dot, don, 150_000)
+        self.assertTrue(kq["du"])
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc,
+                         "đã tất toán mà sổ cái còn dư phải thu — tiền không khớp")
+
+    def test_k2_tranh_chap_roi_quay_lai_COLLECTED_khong_nhan_doi_phai_thu(self):
+        """COLLECTED → DISPUTED → COLLECTED: phải thu ròng vẫn đúng MỘT lần số COD.
+
+        Bản trước ghi `cod_hang_bao_thu` ở cả hai lần vào COLLECTED mà không có bút toán
+        ngược khi vào tranh chấp, nên hãng nợ mình gấp đôi.
+        """
+        t, u, ca = NEN["t1"], NEN["u1"], NEN["ca1"]
+        truoc = tai_chinh.cong_no(t)["tong_phai_thu"]
+        don = _tao_don(t, u, cod=100_000, ca_id=ca)
+        tai_chinh.mo_so_cod(t, don)
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo thu", nguoi=u,
+                             so_tien_hang_bao=100_000)
+        tai_chinh.chuyen_cod(t, don, "COD_DISPUTED", "nguoi", "khách phủ nhận", nguoi=u,
+                             ly_do_tranh_chap="khách nói chưa trả")
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc,
+                         "đang tranh chấp mà vẫn giữ khoản phải thu chưa ai xác nhận")
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo lại đã thu", nguoi=u,
+                             so_tien_hang_bao=100_000)
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc + 100_000,
+                         "quay lại COLLECTED làm phải thu nhân đôi")
+
+    def test_k3_thanh_toan_qua_dot_cua_HANG_KHAC_bi_chan(self):
+        """Không trả đơn VTP bằng sao kê J&T: hai đầu sẽ ghi hai hãng cho cùng một khoản tiền."""
+        t, u, ca = NEN["t1"], NEN["u1"], NEN["ca1"]
+        don = _tao_don(t, u, cod=100_000, ca_id=ca)
+        tai_chinh.mo_so_cod(t, don)
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo thu", nguoi=u,
+                             so_tien_hang_bao=100_000)
+        tai_chinh.chuyen_cod(t, don, "COD_RECONCILED", "nguoi", "chốt", nguoi=u)
+        dot = tai_chinh.tao_dot_thanh_toan(t, u, "jt", f"DOT-k3-{os.urandom(3).hex()}", 100_000)
+        with self.assertRaises(tai_chinh.LoiTaiChinh) as e:
+            tai_chinh.ghi_nhan_thanh_toan(t, u, dot, don, 100_000)
+        self.assertIn("hãng", str(e.exception))
+        self.assertEqual(tai_chinh.cod_cua_don(t, don)["so_tien_da_tt"], 0)
+
+    def test_k4_so_phai_tra_duoc_doc_LAI_trong_giao_dich(self):
+        """Mô phỏng ĐÚNG khe đọc-rồi-ghi: một lượt khác hạ số phải trả xuống 40.000 ngay
+        trước khi ta mở giao dịch. Bản trước đọc 100.000 ngoài giao dịch nên nhận 50.000.
+
+        Hàm giả trả ảnh CŨ khi bị đọc NGOÀI giao dịch, còn đọc TRONG giao dịch thì thấy số
+        thật — đúng thứ tự một lượt ghi của tiến trình khác chen vào giữa.
+        """
+        t, u, ca = NEN["t1"], NEN["u1"], NEN["ca1"]
+        don = _tao_don(t, u, cod=100_000, ca_id=ca)
+        tai_chinh.mo_so_cod(t, don)
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo thu", nguoi=u,
+                             so_tien_hang_bao=100_000)
+        tai_chinh.chuyen_cod(t, don, "COD_RECONCILED", "nguoi", "chốt", nguoi=u)
+        csdl.ghi("UPDATE tc_cod SET so_tien_doi_soat=40000 WHERE don_id=?", (don,))
+        that = tai_chinh.cod_cua_don(t, don)
+        gia = dict(that)
+        gia["so_tien_doi_soat"] = 100_000
+        goc = tai_chinh.cod_cua_don
+
+        def doc_theo_giao_dich(tid, did):
+            if did != don:
+                return goc(tid, did)
+            dang_trong = getattr(csdl._local, "sau_giao_dich", 0) > 0
+            return goc(tid, did) if dang_trong else gia
+
+        tai_chinh.cod_cua_don = doc_theo_giao_dich
+        try:
+            dot = tai_chinh.tao_dot_thanh_toan(t, u, "vtp", f"DOT-k4-{don}", 50_000)
+            with self.assertRaises(tai_chinh.LoiTaiChinh) as e:
+                tai_chinh.ghi_nhan_thanh_toan(t, u, dot, don, 50_000)
+        finally:
+            tai_chinh.cod_cua_don = goc
+        self.assertIn("vượt", str(e.exception))
+        self.assertEqual(tai_chinh.cod_cua_don(t, don)["so_tien_da_tt"], 0,
+                         "đã trả 50.000 trong khi số phải trả thật chỉ 40.000")
+
+    def test_k5_tai_khoan_hang_cua_TENANT_KHAC_bi_chan(self):
+        """Khoá ngoại SQLite không có tenant: chốt tham chiếu phải nằm ở tầng nghiệp vụ."""
+        t, u = NEN["t1"], NEN["u1"]
+        with self.assertRaises(tai_chinh.LoiTaiChinh) as e:
+            tai_chinh.tao_dot_thanh_toan(t, u, "vtp", f"DOT-k5-{os.urandom(3).hex()}", 1000,
+                                         carrier_account_id=NEN["ca2"])
+        self.assertEqual(e.exception.ma, 404)
+        don = _tao_don(t, u, cod=0, ca_id=NEN["ca1"])
+        with self.assertRaises(tai_chinh.LoiTaiChinh) as e:
+            tai_chinh.ghi_phi(t, don, "thuc_te_hang", 1000, "hang", "phí chéo tenant",
+                              carrier_account_id=NEN["ca2"])
+        self.assertEqual(e.exception.ma, 404)
+        # Đối chứng dương: tài khoản ĐÚNG tenant nhưng SAI hãng của đợt cũng phải bị chặn
+        with self.assertRaises(tai_chinh.LoiTaiChinh) as e:
+            tai_chinh.tao_dot_thanh_toan(t, u, "jt", f"DOT-k5b-{os.urandom(3).hex()}", 1000,
+                                         carrier_account_id=NEN["ca1"])   # ca1 là vtp
+        self.assertEqual(e.exception.ma, 400)
+
+    def test_k6_ghi_phi_va_dieu_chinh_khong_de_lai_but_toan_mo_coi(self):
+        """Bút toán · dòng phí/điều chỉnh · công nợ phải cùng vào hoặc cùng không (§17)."""
+        t, u = NEN["t1"], NEN["u1"]
+        don = _tao_don(t, u, cod=0, ca_id=NEN["ca1"])
+        for nhan, mau, goi, dem_bang in (
+                ("ghi_phi", "INSERT INTO tc_phi",
+                 lambda: tai_chinh.ghi_phi(t, don, "thuc_te_hang", 50_000, "hang", "phí thật"),
+                 "tc_phi"),
+                ("dieu_chinh", "INSERT INTO tc_dieu_chinh",
+                 lambda: tai_chinh.dieu_chinh(t, u, "cod", -20_000, "hãng làm mất", don_id=don),
+                 "tc_dieu_chinh")):
+            truoc_bt = csdl.mot("SELECT COUNT(*) c FROM tc_but_toan WHERE tenant_id=?",
+                                (t,))["c"]
+            truoc_cn = tai_chinh.cong_no(t)
+            truoc_dem = csdl.mot(f"SELECT COUNT(*) c FROM {dem_bang} WHERE tenant_id=?",
+                                 (t,))["c"]
+            hoan = self._ep_hong(mau)
+            try:
+                with self.assertRaises(RuntimeError):
+                    goi()
+            finally:
+                hoan()
+            self.assertEqual(csdl.mot("SELECT COUNT(*) c FROM tc_but_toan WHERE tenant_id=?",
+                                      (t,))["c"], truoc_bt,
+                             f"{nhan}: bút toán mồ côi nằm lại sau lượt hỏng")
+            self.assertEqual(csdl.mot(f"SELECT COUNT(*) c FROM {dem_bang} WHERE tenant_id=?",
+                                      (t,))["c"], truoc_dem)
+            self.assertEqual(tai_chinh.cong_no(t), truoc_cn,
+                             f"{nhan}: công nợ đã đổi dù lượt ghi hỏng")
+
+    def test_k8_dieu_chinh_sau_khi_DA_TRA_MOT_PHAN_chi_doi_so_CON_LAI(self):
+        """Đã trả 50/100 rồi điều chỉnh còn 80: sổ cái phải còn 30, không phải 80.
+
+        Đây là chỗ dễ sai thứ hai của cùng một luật cân sổ: số mục tiêu của SỔ CÁI là số CÒN
+        LẠI (đã trừ tiền hãng trả), còn số chốt lưu ở `tc_cod` vẫn là số gross 80.000.
+        """
+        t, u, ca = NEN["t1"], NEN["u1"], NEN["ca1"]
+        truoc = tai_chinh.cong_no(t)["tong_phai_thu"]
+        don = _tao_don(t, u, cod=100_000, ca_id=ca)
+        tai_chinh.mo_so_cod(t, don)
+        tai_chinh.chuyen_cod(t, don, "COD_COLLECTED", "hang", "hãng báo thu", nguoi=u,
+                             so_tien_hang_bao=100_000)
+        tai_chinh.chuyen_cod(t, don, "COD_RECONCILED", "nguoi", "chốt", nguoi=u)
+        dot1 = tai_chinh.tao_dot_thanh_toan(t, u, "vtp", f"DOT-k8a-{don}", 50_000)
+        tai_chinh.ghi_nhan_thanh_toan(t, u, dot1, don, 50_000)
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc + 50_000)
+        tai_chinh.chuyen_cod(t, don, "COD_ADJUSTED", "nguoi", "chốt lại 80k", nguoi=u,
+                             so_tien_hang_bao=80_000)
+        c = tai_chinh.cod_cua_don(t, don)
+        self.assertEqual(c["so_tien_doi_soat"], 80_000, "cột số chốt phải là gross")
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc + 30_000,
+                         "sổ cái phải còn 30.000 (80.000 − 50.000 đã trả)")
+        dot2 = tai_chinh.tao_dot_thanh_toan(t, u, "vtp", f"DOT-k8b-{don}", 30_000)
+        kq = tai_chinh.ghi_nhan_thanh_toan(t, u, dot2, don, 30_000)
+        self.assertTrue(kq["du"])
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_thu"], truoc,
+                         "tất toán xong sổ cái phải về 0")
+
+    def test_k7_ba_loai_phi_tach_roi_va_chi_phi_thuc_te_dong_cong_no(self):
+        """`bao_gia` (Estimated) · `thuc_te_hang` (Actual) · `du_kien_thu_khach` (Contract):
+        ba loại tách rời, hai chênh lệch riêng, và chỉ phí THỰC TẾ mới phát sinh phải trả."""
+        t, u = NEN["t1"], NEN["u1"]
+        don = _tao_don(t, u, cod=0, ca_id=NEN["ca1"])
+        truoc_pt = tai_chinh.cong_no(t)["tong_phai_tra"]
+        tai_chinh.ghi_phi(t, don, "bao_gia", 30_000, "hang", "hãng báo giá")
+        tai_chinh.ghi_phi(t, don, "thuc_te_hang", 35_000, "hang", "hãng tính thật")
+        tai_chinh.ghi_phi(t, don, "du_kien_thu_khach", 40_000, "nguoi", "giá hợp đồng")
+        p = tai_chinh.phi_cua_don(t, don)
+        self.assertEqual((p["tong_theo_loai"]["bao_gia"],
+                          p["tong_theo_loai"]["thuc_te_hang"],
+                          p["tong_theo_loai"]["du_kien_thu_khach"]),
+                         (30_000, 35_000, 40_000),
+                         "ba loại phí bị gộp/lẫn vào nhau trong sổ")
+        self.assertEqual(p["phi_thuc_te"], 35_000)
+        self.assertEqual(p["lech_so_bao_gia"], 5_000)
+        self.assertEqual(p["lech_so_thu_khach"], 5_000)
+        self.assertEqual(tai_chinh.cong_no(t)["tong_phai_tra"], truoc_pt + 35_000,
+                         "báo giá/giá hợp đồng đã động vào công nợ — phải chỉ ghi nhận")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

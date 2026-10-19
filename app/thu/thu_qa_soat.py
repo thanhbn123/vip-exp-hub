@@ -574,17 +574,35 @@ class ThuQaSoat(unittest.TestCase):
     def test_q09f_ANTOAN_tenant_id_trong_body_khong_doi_duoc_ngu_canh(self):
         """Mọi đường nghiệp vụ lấy tenant_id từ phiên. Bắn `tenant_id` trong body/query không
         đổi được ngữ cảnh, kể cả ở endpoint tạo (`POST /don`, `POST /khach-hang`).
+
+        HỢP ĐỒNG HIỆN HÀNH (G22): lớp truy vấn TỪ CHỐI 400 tên lọc lạ. Vì vậy `tenant_id`
+        trong query phải bị TỪ CHỐI 400, KHÔNG được bỏ qua im lặng rồi trả 200 — bỏ qua im
+        lặng chính là lỗi cũ mà ca này canh. Kèm ĐỐI CHỨNG DƯƠNG (truy vấn hợp lệ vẫn 200,
+        thấy đơn của chính tenant) và CÁCH LY TENANT (B không thấy đơn của A).
         """
         st, kq = self.a.goi("/api/v2/don", "POST", dict(DON_MAU, tenant_id=self.tid_b))
         self.assertEqual(st, 201, kq)
-        d = csdl.mot("SELECT tenant_id FROM don_hang WHERE id=?", (kq["don"]["id"],))
+        don_id = kq["don"]["id"]
+        d = csdl.mot("SELECT tenant_id FROM don_hang WHERE id=?", (don_id,))
         self.assertEqual(d["tenant_id"], self.tid_a, "tenant_id trong body đã ghi đè ngữ cảnh!")
         st, kq = self.a.goi("/api/v2/khach-hang", "POST", {"ten": "KH soát", "tenant_id": self.tid_b})
         self.assertEqual(st, 201, kq)
         k = csdl.mot("SELECT tenant_id FROM khach_hang WHERE id=?", (kq["id"],))
         self.assertEqual(k["tenant_id"], self.tid_a)
-        st, _ = self.a.goi(f"/api/v2/don?tenant_id={self.tid_b}")
-        self.assertEqual(st, 200)
+        # TỪ CHỐI theo hợp đồng: `tenant_id` là tên lọc LẠ → 400, không im lặng bỏ qua.
+        st, kq = self.a.goi(f"/api/v2/don?tenant_id={self.tid_b}")
+        self.assertEqual(st, 400, f"query tenant_id lạ phải bị TỪ CHỐI 400, nhận {st}: {kq}")
+        self.assertIn("loi", kq, "từ chối 400 phải nêu lý do đọc được")
+        # ĐỐI CHỨNG DƯƠNG: truy vấn HỢP LỆ vẫn 200 và trả đơn của CHÍNH tenant A.
+        st, kq = self.a.goi("/api/v2/don")
+        self.assertEqual(st, 200, kq)
+        self.assertIn(don_id, [x["id"] for x in kq["dong"]],
+                      "đơn vừa tạo không có trong truy vấn hợp lệ của tenant A")
+        # CÁCH LY TENANT: B đăng nhập B, danh sách của B KHÔNG chứa đơn của A.
+        st, kq = self.b.goi("/api/v2/don")
+        self.assertEqual(st, 200, kq)
+        self.assertNotIn(don_id, [x["id"] for x in kq["dong"]],
+                         "tenant B thấy đơn của tenant A ⇒ rò chéo tenant")
 
     # Sáu câu SQL KHÔNG mang điều kiện tenant, đã soát từng câu và kết luận an toàn vì ngay
     # TRƯỚC chúng có một lượt đọc đã khóa tenant (và thoát 404/raise nếu không khớp).

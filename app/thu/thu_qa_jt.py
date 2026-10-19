@@ -55,6 +55,40 @@ def _doc(ten):
         return f.read()
 
 
+# ── Dò I/O mạng bằng AST: PHÂN BIỆT xử lý CHUỖI với THỰC HIỆN I/O ─────────────────────────
+# `urllib.parse` chỉ tách/ghép URL (`adapter_best.py` dùng `urlsplit`) — KHÔNG mở socket.
+# `urllib.request` / `urllib.error` / `http.client` mới là đường I/O. Vì vậy cấm TÊN GỐC cho
+# các thư viện mạng, còn họ `urllib`/`http` chỉ cấm theo TÊN ĐẦY ĐỦ. Dò AST nên chú thích
+# và chuỗi không bao giờ bị tính là mã chạy.
+MANG_GOC = {"requests", "httpx", "aiohttp", "urllib3", "socket", "socketserver",
+            "ftplib", "telnetlib", "smtplib", "asyncio", "ssl", "xmlrpc", "pycurl",
+            "websocket"}
+MANG_DAY_DU = {"urllib.request", "urllib.error", "http.client", "http.server"}
+
+
+def _vi_pham_io_mang(nguon):
+    """Trả danh sách đường I/O mạng trong MÃ CHẠY của `nguon` (chú thích bị AST bỏ qua)."""
+    vi_pham = []
+    for n in ast.walk(ast.parse(nguon)):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name in MANG_DAY_DU or a.name.split(".")[0] in MANG_GOC:
+                    vi_pham.append(f"import {a.name}")
+        elif isinstance(n, ast.ImportFrom) and n.module:
+            if n.module in MANG_DAY_DU or n.module.split(".")[0] in MANG_GOC:
+                vi_pham.append(f"from {n.module} import …")
+            else:
+                # dạng `from urllib import request` — tên bị cấm nằm ở ALIAS
+                for a in n.names:
+                    if f"{n.module}.{a.name}" in MANG_DAY_DU:
+                        vi_pham.append(f"from {n.module} import {a.name}")
+        elif isinstance(n, ast.Call):
+            nm = getattr(n.func, "attr", None) or getattr(n.func, "id", None)
+            if nm in ("urlopen", "connect", "Session"):
+                vi_pham.append(f"gọi {nm}()")
+    return vi_pham
+
+
 # =======================================================================================
 # A — CHỮ KÝ · KHÔNG CHẠM MẠNG · MỨC XÁC NHẬN ĐƯỜNG DẪN
 # =======================================================================================
@@ -101,22 +135,29 @@ class A_ChuKyVaTransport(unittest.TestCase):
         _ = io  # giữ import rõ ràng
 
     def test_a4_khong_co_duong_cham_mang_bang_AST(self):
-        """Dò bằng AST chứ không grep: bắt được cả `from urllib import request` và lời gọi."""
-        cam = {"requests", "httpx", "aiohttp", "urllib", "http", "socket", "socketserver",
-               "ftplib", "telnetlib", "smtplib", "asyncio", "ssl", "xmlrpc", "pycurl"}
+        """Dò bằng AST chứ không grep: bắt được cả `from urllib import request` và lời gọi.
+
+        PHÂN BIỆT `urllib.parse` (xử lý CHUỖI: tách URL) với I/O THẬT. Bản cũ cấm gốc
+        `urllib` nên bắt nhầm `from urllib.parse import urlsplit` của `adapter_best.py`
+        (Finding QA JT) — nơi chỉ tách URL, không mở socket.
+        """
         for ten in sorted(f for f in os.listdir(GOC_APP)
                           if f.startswith("adapter") or f in ("transport.py", "loi_hang.py")):
-            cay = ast.parse(_doc(ten))
-            for n in ast.walk(cay):
-                if isinstance(n, ast.Import):
-                    for a in n.names:
-                        self.assertNotIn(a.name.split(".")[0], cam, f"{ten}: import {a.name}")
-                elif isinstance(n, ast.ImportFrom):
-                    self.assertNotIn((n.module or "").split(".")[0], cam, f"{ten}: from {n.module}")
-                elif isinstance(n, ast.Call):
-                    nm = getattr(n.func, "attr", None) or getattr(n.func, "id", None)
-                    self.assertNotIn(nm, ("urlopen", "connect", "Session"),
-                                     f"{ten}: gọi {nm}()")
+            vi_pham = _vi_pham_io_mang(_doc(ten))
+            self.assertEqual(vi_pham, [], f"{ten}: đường chạm mạng trong MÃ CHẠY: {vi_pham}")
+
+        # ĐỐI CHỨNG ÂM — tiêm lại từng dạng I/O thật: bộ dò PHẢI thấy.
+        for mau in ("import urllib.request\n", "from urllib import request\n",
+                    "import http.client\n", "import socket\n",
+                    "urllib.request.urlopen(u)\n"):
+            with self.subTest(tiem=mau.strip()):
+                self.assertTrue(_vi_pham_io_mang(mau),
+                                f"tiêm I/O thật {mau.strip()!r} mà bộ dò im ⇒ vô giá trị")
+        # ĐỐI CHỨNG DƯƠNG — xử lý chuỗi/chú thích KHÔNG được kêu.
+        self.assertEqual(_vi_pham_io_mang("from urllib.parse import urlsplit\n"), [],
+                         "urllib.parse chỉ xử lý chuỗi, không phải I/O")
+        self.assertEqual(_vi_pham_io_mang("# import urllib.request trong chú thích\n"), [],
+                         "chú thích không phải mã chạy")
 
     def test_a5_moi_duong_api_deu_khai_muc_xac_nhan(self):
         """Đường dẫn CHƯA xác nhận phải để `None`, không được đoán một URL rồi dùng."""

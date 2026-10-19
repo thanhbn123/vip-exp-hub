@@ -53,6 +53,7 @@ RUN groupadd -r hub && useradd -r -g hub -d /du-lieu -s /usr/sbin/nologin hub \
  && chown -R hub:hub /du-lieu \
  && chmod 700 /du-lieu \
  && chmod 755 /app/trien_khai/*.sh \
+ && chmod -R a+rX /app \
  && chmod -R a-w /app
 
 VOLUME ["/du-lieu"]

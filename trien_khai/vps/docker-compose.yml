@@ -1,0 +1,61 @@
+# VIP Express Hub — compose RIÊNG cho VPS 160.22.170.20 (chưa chạy lượt nào).
+#
+# Ràng buộc đã đo:
+#   · cổng 80/443 thuộc Caddy dùng chung (host network); KHÔNG map 80/443 ở đây;
+#   · app chỉ lắng nghe 127.0.0.1:18897 trên HOST, Caddy proxy vào;
+#   · dữ liệu nằm ở bind mount persistent /home/deploy/vip-express-hub/data, KHÔNG /tmp;
+#   · container chạy UID 1000 (deploy) để ghi được bind mount, root filesystem read-only.
+#
+# Dùng:
+#   cd /home/deploy/vip-express-hub/src/trien_khai/vps
+#   cp .env.production.example .env && chmod 600 .env
+#   docker compose config                 # kiểm cú pháp, KHÔNG khởi động
+#   docker compose build                  # sau khi Owner duyệt
+#   docker compose up -d                  # sau khi Owner duyệt
+name: vip-express-hub
+
+services:
+  hub:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: vip-express-hub:${VIP_HUB_IMAGE_TAG:-2026-10-19}
+    container_name: vip-express-hub
+    user: "1000:1000"
+    env_file:
+      - .env
+    environment:
+      VIP_HUB_DATA: /du-lieu
+      VIP_HUB_PORT: "8897"
+      # Bên trong container phải bind 0.0.0.0 thì Docker port mapping mới tới được.
+      # Ra ngoài chỉ có 127.0.0.1:18897; không mở cổng app trực tiếp.
+      VIP_HUB_BIND: 0.0.0.0
+      # Caddy kết thúc TLS; cờ này để cookie có Secure + HSTS.
+      VIP_HUB_HTTPS: "1"
+      # Cấm tuyệt đối: bật là lỗ hổng chiếm tài khoản.
+      VIP_HUB_RESET_TOKEN: "0"
+      VIP_HUB_PHIEN_BAN: 0.3-SaaS
+    ports:
+      - "127.0.0.1:18897:8897"
+    volumes:
+      - /home/deploy/vip-express-hub/data:/du-lieu
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8897/api/v2/suc-khoe',timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

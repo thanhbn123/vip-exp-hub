@@ -1,0 +1,49 @@
+# Khối Caddy cho VIP Express Hub UAT — DÁN SAU KHI OWNER DUYỆT.
+#
+# Đích: /srv/vip-staging-proxy/Caddyfile (Caddy dùng chung, host network, đang giữ 80/443).
+# Sao lưu trước, validate, rồi reload (không restart):
+#   docker exec vip-staging-caddy cat /etc/caddy/Caddyfile > ~/Caddyfile.bak-$(date +%F-%H%M)
+#   docker exec -i vip-staging-caddy sh -c 'cat >> /etc/caddy/Caddyfile' < Caddyfile.best-uat
+#   docker exec vip-staging-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   docker exec vip-staging-caddy caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+#
+# DNS BẮT BUỘC trước khi dán: best-uat.viporder.vn A 160.22.170.20 (DNS-only, không proxy).
+# Caddy tự xin Let's Encrypt qua HTTP-01; cổng 80/443 đã mở sẵn, KHÔNG sửa firewall.
+#
+# Rollback:
+#   docker exec -i vip-staging-caddy sh -c 'cat > /etc/caddy/Caddyfile' < ~/Caddyfile.bak-...
+#   docker exec vip-staging-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   docker exec vip-staging-caddy caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+
+best-uat.viporder.vn {
+	encode zstd gzip
+
+	# Webhook BEST nhỏ; 1 MB là trần rộng rãi, app vẫn tự chặn 256 KiB.
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:18897 {
+		header_up X-Real-IP {remote_host}
+		transport http {
+			read_timeout 30s
+			write_timeout 30s
+		}
+	}
+
+	log {
+		output file /data/access-vip-express-hub.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

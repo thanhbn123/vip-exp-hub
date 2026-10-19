@@ -226,6 +226,45 @@ class TestUATHTTP(Nen):
         self.assertIn("su_kien", kq)
         self.assertIn("audit", kq)
 
+    def test_13_cac_thao_tac_moi_chua_phe_duyet_bi_chan(self):
+        os.environ["VIP_BEST_OWNER_APPROVED"] = "1"
+        os.environ["VIP_BEST_OWNER_APPROVAL_ID"] = "UAT-2026-001"
+        st, kq, raw = self._tk("sandbox", "BEST sandbox new ops")
+        self.assertEqual(st, 201, raw)
+        tk = kq["id"]
+        for duong, than in (
+            ("/api/v2/best/cap-nhat",
+             {"don": {"ma_van_don": "W1", "hang_hoa": "A", "khoi_luong_gram": 500}}),
+            ("/api/v2/best/sua-dia-chi",
+             {"don": {"ma_van_don": "W1", "nguoi_nhan_tinh": "HCM",
+                      "nguoi_nhan_xa": "P1", "nguoi_nhan_dia_chi": "1",
+                      "nguoi_nhan_ten": "B", "nguoi_nhan_sdt": "0902"},
+              "address_type_id": 2}),
+            ("/api/v2/best/huy", {"ma_van_don": "W1"}),
+            ("/api/v2/best/in-pdf", {"codes": ["W1"]}),
+        ):
+            st2, kq2, raw2 = self.req("POST", duong,
+                                      dict(than, tai_khoan_id=tk, xac_nhan_that=False))
+            self.assertEqual(st2, 403, (duong, raw2))
+            self.assertTrue(kq2.get("blocked"), (duong, kq2))
+
+    def test_14_trang_thai_tra_webhook_url_va_bearer(self):
+        os.environ["VIP_BEST_OWNER_APPROVED"] = "1"
+        os.environ["VIP_BEST_OWNER_APPROVAL_ID"] = "UAT-2026-001"
+        st, kq, raw = self._tk("sandbox", "BEST sandbox webhook status")
+        self.assertEqual(st, 201, raw)
+        tk = kq["id"]
+        st2, kq2, raw2 = self.req("POST", "/api/v2/best/webhook-bearer",
+                                  {"tai_khoan_id": tk, "bearer": "v9." + "c" * 30})
+        self.assertEqual(st2, 200, raw2)
+        st3, kq3, raw3 = self.req("GET", "/api/v2/best/trang-thai")
+        self.assertEqual(st3, 200, raw3)
+        dong = [x for x in kq3["tai_khoan"] if int(x["id"]) == int(tk)]
+        self.assertEqual(len(dong), 1)
+        self.assertIn("webhook_url", dong[0])
+        self.assertTrue(dong[0]["webhook_bearer"]["co_bearer"])
+        self.assertNotIn(b"v9.", raw3.lower())
+
 
 if __name__ == "__main__":
     import unittest as _ut

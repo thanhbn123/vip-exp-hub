@@ -21,6 +21,35 @@ def doc(duong):
         return f.read()
 
 
+# ── Dò nhập thư viện gọi mạng bằng AST (test_05) ─────────────────────────────────────────────
+# Grep bắt cả `http.client` trong CHÚ THÍCH (dương tính giả đã đo ở `adapter_best.py`) và bỏ
+# sót `from urllib import request`. AST chỉ thấy MÃ CHẠY. `urllib.parse` là xử lý CHUỖI (tách
+# URL) — không phải I/O; họ `urllib`/`http` chỉ cấm theo TÊN ĐẦY ĐỦ của mô-đun con.
+MANG_GOC = {"requests", "httpx", "aiohttp", "urllib3", "socket", "socketserver",
+            "ftplib", "telnetlib", "smtplib", "asyncio", "ssl", "xmlrpc", "pycurl",
+            "websocket"}
+MANG_DAY_DU = {"urllib.request", "urllib.error", "http.client", "http.server"}
+
+
+def _vi_pham_nhap_mang(nguon):
+    """Trả danh sách mô-đun gọi mạng được NHẬP trong mã chạy của `nguon`."""
+    import ast
+    vi_pham = []
+    for n in ast.walk(ast.parse(nguon)):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name in MANG_DAY_DU or a.name.split(".")[0] in MANG_GOC:
+                    vi_pham.append(f"import {a.name}")
+        elif isinstance(n, ast.ImportFrom) and n.module:
+            if n.module in MANG_DAY_DU or n.module.split(".")[0] in MANG_GOC:
+                vi_pham.append(f"from {n.module} import …")
+            else:
+                for a in n.names:
+                    if f"{n.module}.{a.name}" in MANG_DAY_DU:
+                        vi_pham.append(f"from {n.module} import {a.name}")
+    return vi_pham
+
+
 class CanhCauTruc(unittest.TestCase):
 
     def test_01_moi_cot_ma_hoa_deu_duoc_xoay_khoa_phu(self):
@@ -73,12 +102,25 @@ class CanhCauTruc(unittest.TestCase):
         self.assertEqual(theo_doi, "", f"git đang theo dõi file trong app/du-lieu: {theo_doi}")
 
     def test_05_adapter_khong_co_duong_goi_mang_nao(self):
-        """Mọi adapter còn ở chế độ MOCK: không file nào được nhập thư viện gọi mạng."""
-        cam = ("requests", "httpx", "urllib.request", "http.client", "socket")
+        """Mọi adapter còn ở chế độ MOCK: không file nào được nhập thư viện gọi mạng.
+
+        Dò bằng **AST**, không grep: bản cũ trúng chữ `http.client` trong CHÚ THÍCH của
+        `adapter_best.py` (dương tính giả đã đo), đồng thời bỏ sót `from urllib import request`.
+        `urllib.parse` là xử lý CHUỖI (tách URL), không phải I/O.
+        """
         for ten in [f for f in os.listdir(GOC_APP) if f.startswith("adapter")]:
-            noi_dung = doc(os.path.join(GOC_APP, ten))
-            for tu in cam:
-                self.assertNotIn(tu, noi_dung, f"{ten} có thể gọi mạng thật qua '{tu}'")
+            vi_pham = _vi_pham_nhap_mang(doc(os.path.join(GOC_APP, ten)))
+            self.assertEqual(vi_pham, [], f"{ten} có thể gọi mạng thật qua: {vi_pham}")
+        # ĐỐI CHỨNG ÂM — tiêm I/O thật vào mã: bộ dò PHẢI bắt.
+        for mau in ("import http.client\n", "from urllib import request\n", "import socket\n"):
+            with self.subTest(tiem=mau.strip()):
+                self.assertTrue(_vi_pham_nhap_mang(mau),
+                                f"tiêm {mau.strip()!r} mà bộ dò im ⇒ ca này vô giá trị")
+        # ĐỐI CHỨNG DƯƠNG — chú thích và xử lý chuỗi KHÔNG được kêu.
+        self.assertEqual(_vi_pham_nhap_mang("# import http.client trong chú thích\n"), [],
+                         "chú thích không phải mã chạy")
+        self.assertEqual(_vi_pham_nhap_mang("from urllib.parse import urlsplit\n"), [],
+                         "urllib.parse chỉ tách URL, không mở socket")
 
     def test_06_live_bi_khoa_o_moi_adapter(self):
         import adapter, adapter_jt, adapter_vtp  # noqa: F401

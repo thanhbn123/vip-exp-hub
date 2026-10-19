@@ -1024,6 +1024,29 @@ class C_Credentials(unittest.TestCase):
             '\nMAT_KHAU_MAC_DINH = "Xk9#mQ2$vL7@nR4"\n')
         self.assertTrue(quet_hardcode(ban_sao),
                         "tiêm secret THẬT vào bản sao transport.py mà bộ dò KHÔNG thấy ⇒ vô giá trị")
+        # ĐỐI CHỨNG ÂM 3 — TIÊM vào CHÍNH tệp đã bị bắt nhầm (`xac_thuc_best.py`) cả hai dạng:
+        # phép gán và giá trị dict. Nếu bản sửa chỉ "tắt tiếng" tệp này thì hai phép tiêm dưới
+        # đây sẽ im ⇒ ca này đỏ ngay.
+        ban_sao = io.open(os.path.join(GOC_APP, "xac_thuc_best.py"),
+                          encoding="utf-8").read() + (
+            '\nTOKEN_TIEM_VAO_TEP_THAT = "Xk9#mQ2$vL7@nR4"\n'
+            'MA_LOI_TIEM = {"TOKEN_KHONG_HOP_LE": "Xk9#mQ2$vL7@nR4"}\n')
+        self.assertTrue(
+            quet_hardcode(ban_sao),
+            "tiêm secret THẬT vào bản sao xac_thuc_best.py (phép gán + dict) mà bộ dò KHÔNG "
+            "thấy ⇒ bản sửa đã tắt bộ dò chứ không phân biệt ngữ cảnh")
+        # PHÂN BIỆT THÔNG BÁO LỖI với SECRET THẬT — cùng một mã lỗi, hai giá trị khác nhau:
+        # câu chẩn đoán KHÔNG kêu; token tiêm vào CHÍNH mã ấy PHẢI kêu.
+        self.assertEqual(
+            quet_hardcode(
+                'MA_LOI = {"CREDENTIAL_KHONG_HOP_LE": "Username rỗng/sai kiểu/ký tự điều khiển; '
+                'Password rỗng/sai kiểu/quá dài/NUL"}\n'),
+            [], "câu thông báo lỗi bị nhận nhầm là credential hard-code")
+        self.assertTrue(
+            quet_hardcode('MA_LOI = {"CREDENTIAL_KHONG_HOP_LE": "Xk9#mQ2$vL7@nR4"}\n'),
+            "tiêm secret vào CÙNG mã lỗi mà bộ dò im ⇒ đã miễn cả mã lỗi, không phải phân biệt")
+        self.assertTrue(quet_hardcode('PASSWORD = "correct horse battery staple"\n'),
+                        "tên trường bí mật chuẩn + câu nhiều từ vẫn phải bắt")
         # ĐỐI CHỨNG ÂM — những thứ KHÔNG được kêu (đúng 5 dương tính giả của lượt đầu):
         for mau, vi_sao in (
             ('D = {"credentials hãng / khoá / token / mật khẩu / hash": "cấm tuyệt đối vì lý do"}\n',
@@ -1155,14 +1178,51 @@ def _du_manh(v):
     return loai >= 2
 
 
+# Mã lỗi ổn định trong sản phẩm là UPPER_SNAKE (`CREDENTIAL_KHONG_HOP_LE`). Tên ấy khớp
+# `TEN_NHAY_CAM` ở tiền tố "credential"/"token", nhưng GIÁ TRỊ của nó là CÂU VĂN chẩn đoán —
+# không phải bí mật. Đây là ngữ cảnh AST cần phân biệt (Finding G16: 3 dòng trong `MA_LOI`).
+MA_LOI_UPPER_SNAKE = re.compile(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+")
+
+# Tên trường bí mật CHUẨN — dù giá trị là câu nhiều từ vẫn phải bắt. `ADMIN_PASSWORD` /
+# `API_KEY` là tên người ta hard-code thật; còn `CREDENTIAL_KHONG_HOP_LE` là MÃ LỖI.
+TEN_BI_MAT_CHUAN = {"password", "passwd", "pwd", "matkhau", "secret", "token",
+                    "apikey", "privatekey", "accesskey", "credential", "clientsecret"}
+DUOI_TEN_BI_MAT = ("password", "passwd", "matkhau", "secret", "apikey", "privatekey",
+                   "accesskey")
+
+
+def _ten_truong_bi_mat(ten):
+    chuan = re.sub(r"[^a-z0-9]", "", str(ten).lower())
+    return chuan in TEN_BI_MAT_CHUAN or any(chuan.endswith(d) for d in DUOI_TEN_BI_MAT)
+
+
+def _la_cau_thong_bao(ten, v):
+    """THÔNG BÁO LỖI ≠ SECRET THẬT: mã lỗi UPPER_SNAKE đi với CÂU VĂN nhiều từ.
+
+    Secret thật là một TOKEN LIỀN MẠCH (`Xk9#mQ2$vL7@nR4`); thông báo lỗi là câu chẩn đoán
+    ("Username rỗng/sai kiểu/ký tự điều khiển; ..."). Miễn trừ này CHỈ áp cho định danh dạng mã
+    lỗi và KHÔNG áp cho tên trường bí mật chuẩn — nên `PASSWORD = "correct horse ..."` vẫn bị
+    bắt, và tiêm một token vào chính `CREDENTIAL_KHONG_HOP_LE` cũng vẫn bị bắt (đối chứng âm
+    trong `test_c5`). Không có danh sách trắng tệp/dòng nào ở đây.
+    """
+    if not MA_LOI_UPPER_SNAKE.fullmatch(str(ten)) or _ten_truong_bi_mat(ten):
+        return False
+    tu = v.split()
+    if len(tu) < 3:
+        return False
+    return sum(bool(re.search(r"[^\W\d_]{2,}", t)) for t in tu) >= 2
+
+
 def quet_hardcode(nguon):
     """Quét AST (KHÔNG grep — grep bắt cả chú thích, bài học §L2.9). Trả danh sách vi phạm.
 
-    Ba luật để KHÔNG kêu nhầm:
+    Bốn luật để KHÔNG kêu nhầm:
       1. chỉ literal ở **vế phải phép gán** hoặc **giá trị của dict** — không xét KHOÁ dict,
          không xét literal nằm trong câu văn;
       2. tên trường phải là **định danh** (`privateKey`), không phải câu mô tả có dấu cách;
-      3. giá trị phải **đủ mạnh** và **không mang dấu hiệu giữ chỗ**.
+      3. giá trị phải **đủ mạnh** và **không mang dấu hiệu giữ chỗ**;
+      4. giá trị là **CÂU VĂN của một MÃ LỖI** thì là thông báo, không phải secret (xem
+         `_la_cau_thong_bao`) — nhưng token tiêm vào cùng mã lỗi vẫn bị bắt.
     """
     try:
         cay = ast.parse(nguon)
@@ -1195,6 +1255,8 @@ def quet_hardcode(nguon):
                 continue
             v = gt.value.decode("utf-8", "replace") if isinstance(gt.value, bytes) else gt.value
             if not _du_manh(v) or _la_giu_cho(v):
+                continue
+            if _la_cau_thong_bao(ten, v):
                 continue
             ra.append(f"dòng {getattr(gt, 'lineno', '?')}: {ten} = <literal {len(v)} ký tự>")
     return ra

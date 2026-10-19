@@ -85,8 +85,27 @@ DU_AN = os.path.dirname(GOC)
 # KHÔNG đẻ thư mục riêng — thư mục của con do CHA dọn, và `tearDownModule` của con không đụng vào.
 _TAM_GOC_DO_TOI = "VIP_G21_TAM_GOC" not in os.environ
 _TAM_GOC = (os.environ["VIP_G21_TAM_GOC"] if not _TAM_GOC_DO_TOI
-            else tempfile.mkdtemp(prefix="vh-g21bimat-goc-"))
+            else tempfile.mkdtemp(prefix="vh-g21bimat-luot-"))
 os.environ["VIP_HUB_DATA"] = _TAM_GOC
+
+# ── R27 · CÔ LẬP FIXTURE: SỔ TÀI NGUYÊN CỦA **CHÍNH LƯỢT NÀY** ────────────────────────────────
+# NGUYÊN NHÂN GỐC (QA_NGUYENNHAN §5): `Z4` cũ quét TOÀN BỘ `tempfile.gettempdir()` tìm tiền tố
+# `vh-g21bimat-*`/`vip-hub-g21-*` rồi phán "bộ thử để lại rác". Hai lượt chạy SONG SONG (hoặc một
+# thư mục còn sót của lượt trước) làm lượt này ĐỎ vì tài nguyên **không do nó tạo** — fixture không
+# có tính cô lập, và một bản vá "xoá sạch mọi thư mục khớp tiền tố" sẽ xoá tài nguyên của lượt khác.
+# LUẬT TỪ ĐÂY: mọi thư mục tạm được tạo BÊN TRONG `_TAM_GOC` của lượt này và ghi vào sổ
+# `_TAM_DA_TAO`; `Z4` chỉ canh SỔ + GỐC ấy. KHÔNG quét thư mục của lượt khác, KHÔNG xoá gì ngoài
+# tài nguyên đã đăng ký. `tearDownModule` chỉ xoá `_TAM_GOC` khi chính lượt này tạo nó.
+_TAM_DA_TAO = []        # [(đường, mô tả)] — tài nguyên do lượt này tạo, phải tự dọn
+
+
+def _tao_thu_muc_tam(prefix, mo_ta):
+    """Tạo thư mục tạm **trong gốc của lượt này** và ghi sổ để `Z4` canh."""
+    p = tempfile.mkdtemp(prefix=prefix, dir=_TAM_GOC)
+    _TAM_DA_TAO.append((p, mo_ta))
+    return p
+
+
 # Vân tay CSDL THẬT của dự án, chụp TRƯỚC mọi phép đo — `Z5` canh nó không đổi.
 _DU_LIEU_THAT = os.path.join(GOC, "du-lieu")
 _CSDL_THAT_TRUOC = {t: (os.path.exists(os.path.join(_DU_LIEU_THAT, t)),
@@ -1011,7 +1030,7 @@ BOOT_SERVER = (
 
 def dung_nen_tam(ten="vh-g21bimat-"):
     """Nền CSDL tạm + một cổng do OS cấp. KHÔNG BAO GIỜ `app/du-lieu/`."""
-    tam = tempfile.mkdtemp(prefix=ten)
+    tam = _tao_thu_muc_tam(ten, "nền CSDL của một ca")
     env = dict(os.environ, VIP_HUB_DATA=tam)
     for lenh in ("migrate.py", "khoi_tao.py"):
         subprocess.run([sys.executable, os.path.join(GOC, lenh)], capture_output=True, text=True,
@@ -1260,7 +1279,7 @@ def chay_ca_trong_con(ten_ca, dot_bien=""):
     # Con phải có CSDL RIÊNG: để con thừa hưởng `VIP_HUB_DATA` của cha thì con mở lại đúng tệp
     # CSDL cha vừa xoá, và SQLite TẠO LẠI tệp ấy trong thư mục của cha (đo được: thư mục tạm của
     # cha mọc lại sau khi con thoát). Dọn thư mục của con ngay tại đây, sau khi con kết thúc.
-    tam_con = tempfile.mkdtemp(prefix="vh-g21bimat-con-")
+    tam_con = _tao_thu_muc_tam("vh-g21bimat-con-", "CSDL riêng của tiến trình con")
     try:
         return subprocess.run([sys.executable, "-c", ma], capture_output=True, text=True,
                               timeout=300, cwd=DU_AN,
@@ -1386,12 +1405,18 @@ class Z_TongKet(unittest.TestCase):
         bang_ghi("Z5 CSDL thật của dự án", "app/du-lieu", "—", "KHÔNG bị đụng")
 
     def test_z4_khong_con_thu_muc_tam_cua_bo_thu(self):
-        # `_TAM_GOC` là thư mục CSDL của CHÍNH mô-đun này; nó bị xoá ở `tearDownModule` (sau ca
-        # cuối), nên ở đây chỉ canh mọi thư mục KHÁC — thứ sẽ nằm lại vĩnh viễn nếu rò.
-        goc = os.path.basename(_TAM_GOC)
-        con = [d for d in os.listdir(tempfile.gettempdir())
-               if (d.startswith("vh-g21bimat-") or d.startswith("vip-hub-g21-")) and d != goc]
-        self.assertEqual(con, [], "bộ thử để lại thư mục tạm: %r" % con)
+        # R27: CHỈ canh tài nguyên do CHÍNH LƯỢT NÀY tạo. Không quét `tempfile.gettempdir()` để
+        # phán về thư mục của lượt khác (nguyên nhân gốc: hai lượt song song làm nhau ĐỎ). Bản cũ
+        # quét cả thư mục hệ thống; bản này đọc SỔ `_TAM_DA_TAO` + GỐC của lượt, nên vẫn bắt được
+        # rác do chính mình để lại, kể cả thư mục "mọc lại" sau `rmtree` (SQLite WAL).
+        con = sorted((p, mo_ta) for p, mo_ta in _TAM_DA_TAO if os.path.exists(p))
+        self.assertEqual(con, [], "LƯỢT NÀY để lại thư mục tạm: %r" % (con,))
+        # Thư mục LẠ trong gốc của lượt = fixture đang bị DÙNG CHUNG với lượt khác (đối chứng âm
+        # ở `thu_r27_fixture.py` dựng đúng tình huống này). Tài nguyên hợp lệ của lượt là các tệp
+        # CSDL/khoá (không phải thư mục con); mọi thư mục con còn lại đều phải đã được dọn.
+        la = sorted(d for d in os.listdir(_TAM_GOC)
+                    if os.path.isdir(os.path.join(_TAM_GOC, d)))
+        self.assertEqual(la, [], "gốc tạm của lượt có thư mục LẠ (fixture dùng chung?): %r" % la)
 
 
 def setUpModule():

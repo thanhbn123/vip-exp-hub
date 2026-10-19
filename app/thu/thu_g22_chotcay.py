@@ -17,15 +17,19 @@ nhớ thêm một dòng — và nếu một bản sao biến mất thì bảng n
 
 BỐN PHÉP ĐO CHO MỖI BẢN SAO (không phép nào suy ra từ phép nào)
 --------------------------------------------------------------
-  1. **XANH** — chạy CHÍNH CA CỔNG trên CÂY THẬT (cây đang có tệp mới của làn khác) ⇒ mã thoát 0.
-     Kèm phép canh chống RỖNG: cây PHẢI thật sự có thay đổi NGOÀI làn của bản sao ấy — nếu cây
-     sạch trơn thì "xanh" không chứng minh được gì (đó đúng là cách G21 đếm ra "2/2").
+  1. **XANH** — chạy CHÍNH CA CỔNG trên **BẢN SAO của HEAD** trong thư mục tạm, bản sao ấy có
+     MỘT tệp mới của làn KHÁC ⇒ mã thoát 0. Cây thật KHÔNG bị tạo/xoá tệp nào và được canh
+     `git status` trước/sau. Kèm phép canh chống RỖNG: bản sao PHẢI thật sự có thay đổi NGOÀI làn
+     của từng bản sao — nếu cây sạch trơn thì "xanh" không chứng minh được gì (đó đúng là cách G21
+     đếm ra "2/2"). (R27: bản cũ đòi CÂY THẬT phải bẩn; trên clone sạch D2 ĐỎ vì chống rỗng.)
   2. **RĂNG** — dựng một tệp **SẢN PHẨM** tạm ⇒ CÙNG ca ấy PHẢI **ĐỎ**; xoá đi ⇒ XANH LẠI.
      Không có tầng này thì "xanh" có thể chỉ là một cổng đã bị nới thành "bỏ qua hết".
   3. **QUY TẮC** — đọc NGUỒN của bản sao: miễn trừ phải đến từ **LUẬT VÙNG DÙNG CHUNG**
      (`thu_g21_chotcay`), không được là một danh sách tên riêng. Phép đo này là **HÀM THUẦN** trên
      nguồn, nên nó tự kiểm được HAI CHIỀU — và nó được kiểm trên **NGUỒN THẬT TRONG LỊCH SỬ GIT**
-     (bản trước khi vá, đọc bằng `git show`): bản cũ PHẢI bị bắt, bản mới PHẢI qua.
+     (bản trước khi vá, đọc bằng `git show`): bản cũ PHẢI bị bắt, bản mới PHẢI qua. R27: chọn bản
+     LỊCH SỬ **GẦN NHẤT MÀ BỘ DÒ BẮT ĐƯỢC**, không mặc định "bản khác gần nhất là bản trước khi
+     vá" (trên nền này bản khác gần nhất đã ĐẠT quy tắc).
   4. **CHỨNG MINH VÙNG** — vùng được tha phải chứng minh được là không chạy trong sản phẩm
      (`thu_g21_chotcay.chung_minh_vung`); chứng minh hỏng ⇒ chốt TỪ CHỐI tha (không tha mù).
 
@@ -337,21 +341,30 @@ def _ham(cay, ten):
 # C. PHÉP ĐO HÀNH VI — CHẠY CHÍNH CA CỔNG TRONG TIẾN TRÌNH CON
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
-def _dong_porcelain():
+def _dong_porcelain(goc=None):
     """Các dòng `git status --porcelain -uall` của cây ĐANG ĐO (môi trường git đã chuẩn hoá)."""
-    r = chotcay._git("status", "--porcelain=v1", "-uall")
+    r = chotcay._git("status", "--porcelain=v1", "-uall", goc=goc)
     if r.returncode != 0:
         raise RuntimeError("`git status` hỏng (mã thoát %d): %s"
                            % (r.returncode, (r.stderr or "").strip()))
     return [d for d in r.stdout.splitlines() if d.strip()]
 
 
-def chay_ca(duong, ds_ca, giay=600):
-    """Chạy THẬT các ca của một bộ thử trong TIẾN TRÌNH CON. Trả (mã thoát, output, số ca, skip)."""
+def chay_ca(duong, ds_ca, giay=600, goc=None, tmpdir=None):
+    """Chạy THẬT các ca của một bộ thử trong TIẾN TRÌNH CON. Trả (mã thoát, output, số ca, skip).
+
+    `goc`/`tmpdir`: chạy trên BẢN SAO (R27/D2) và cô lập TMPDIR của tiến trình con — không để
+    thư mục tạm của bộ thử được đo rơi vào TMPDIR dùng chung.
+    """
+    goc = goc or GOC_CAY
     e = chotcay.env_git(im_lang=True)
     e["PYTHONDONTWRITEBYTECODE"] = "1"
-    r = subprocess.run([sys.executable, duong] + list(ds_ca), capture_output=True, text=True,
-                       cwd=GOC_CAY, env=e, timeout=giay)
+    if tmpdir:
+        e["TMPDIR"] = tmpdir
+        e["TMP"] = tmpdir
+        e["TEMP"] = tmpdir
+    r = subprocess.run([sys.executable, os.path.join(goc, duong)] + list(ds_ca),
+                       capture_output=True, text=True, cwd=goc, env=e, timeout=giay)
     out = (r.stdout or "") + (r.stderr or "")
     m = re.findall(r"Ran (\d+)", out)
     so_ca = int(m[-1]) if m else 0
@@ -365,7 +378,7 @@ def _mau_ten_cung(nguon):
             if not any(_la_mau_vung(x) for x in gt)]
 
 
-def thay_doi_ngoai_lan(nguon, duong):
+def thay_doi_ngoai_lan(nguon, duong, goc=None):
     """Các dòng `git status` KHÔNG thuộc "làn" của bộ thử này (tệp của chính nó + tên cứng của nó).
 
     Đây là phép canh CHỐNG RỖNG cho cột XANH: nếu cây không có thay đổi nào ngoài làn ấy thì
@@ -373,7 +386,7 @@ def thay_doi_ngoai_lan(nguon, duong):
     """
     lan = [m for gt in _mau_ten_cung(nguon) for m in gt] + [duong]
     ra = []
-    for d in _dong_porcelain():
+    for d in _dong_porcelain(goc=goc):
         ds = chotcay.duong_tu_dong_porcelain(d)
         if all(any(fnmatch.fnmatch(x, m) for m in lan) for x in ds):
             continue
@@ -402,6 +415,33 @@ def nguon_truoc_khi_va(duong, goc=None):
     return None, None
 
 
+def nguon_cu_hong(duong, mau_tu_do, goc=None, so_ban=40):
+    """Bản **LỊCH SỬ GẦN NHẤT mà `kiem_quy_tac` BẮT ĐƯỢC** của `duong`. Trả `(sha, nguon, kq)`.
+
+    R27 — NGUYÊN NHÂN GỐC của D4: bản cũ lấy "bản khác bản đang có GẦN NHẤT" rồi ĐÒI nó hỏng.
+    Trên nền `c909ebb`, bản gần nhất (`6ac4d0a8`) đã ĐẠT quy tắc, nên D4 ĐỎ dù bộ dò không mù:
+    tiền đề "bản gần nhất là bản trước khi vá" SAI. Chọn đúng bản để kiểm = bỏ qua các bản đã đạt
+    và lấy bản gần nhất THẬT SỰ bị quy tắc bắt; bản không có ca cổng (tệp còn quá cũ/đổi tên) cũng
+    không phải "bản trước khi vá" nên bị bỏ qua. Không ghim SHA — lịch sử đổi vẫn đọc được.
+    """
+    goc = goc or GOC_CAY
+    with open(os.path.join(goc, duong), encoding="utf-8") as f:
+        hien_tai = f.read()
+    r = chotcay._git("log", "-n", str(so_ban), "--format=%H", "--", duong, goc=goc)
+    if r.returncode != 0:
+        return None, None, None
+    for sha in [x.strip() for x in r.stdout.splitlines() if x.strip()]:
+        s = chotcay._git("show", "%s:%s" % (sha, duong), goc=goc)
+        if s.returncode != 0 or s.stdout == hien_tai:
+            continue
+        if not ca_cong_cay_sach(s.stdout):
+            continue                        # bản chưa có cổng: không phải "bản trước khi vá"
+        kq = kiem_quy_tac(s.stdout, mau_tu_do)
+        if not kq["dat"]:
+            return sha, s.stdout, kq
+    return None, None, None
+
+
 def do_mot_ban_sao(ban, mau_tu_do=None, goc=None):
     """ĐO MỘT BẢN SAO: XANH · RĂNG · QUY TẮC (· và nguồn TRƯỚC để làm bảng đối chiếu)."""
     goc = goc or GOC_CAY
@@ -413,8 +453,8 @@ def do_mot_ban_sao(ban, mau_tu_do=None, goc=None):
     ma, out, so_ca, skip = chay_ca(ban["duong"], ban["ca"])
     kq["xanh"] = {"ma": ma, "ca": so_ca, "skip": skip, "dat": ma == 0 and so_ca > 0}
     kq["ngoai_lan"] = thay_doi_ngoai_lan(nguon, ban["duong"])
-    sha, truoc = nguon_truoc_khi_va(ban["duong"], goc=goc)
-    kq["truoc"] = None if truoc is None else {"sha": sha, "quy_tac": kiem_quy_tac(truoc, mau_tu_do)}
+    sha, truoc, kq_truoc = nguon_cu_hong(ban["duong"], mau_tu_do, goc=goc)
+    kq["truoc"] = None if truoc is None else {"sha": sha, "quy_tac": kq_truoc}
     return kq
 
 
@@ -425,6 +465,77 @@ def bang(goc=None):
     ds = bo_ung_vien(goc)
     ra = [do_mot_ban_sao(b, mau_tu_do=mau_tu_do, goc=goc) for b in ds]
     return ra, sum(0 if (r["xanh"]["dat"] and r["quy_tac"]["dat"]) else 1 for r in ra)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# C2. D2 TRÊN BẢN SAO — R27: KHÔNG ĐÒI CÂY THẬT PHẢI BẨN, KHÔNG LÀM BẨN CÂY THẬT
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NGUYÊN NHÂN GỐC của D2 (QA_NGUYENNHAN §5): D2 chạy cổng trên CÂY THẬT và đòi cây ấy có sẵn một
+# tệp mới của "làn khác" (`assertGreaterEqual(len(_dong_porcelain()), 1)`). Trên một bản clone sạch
+# — đúng điều kiện "cây sạch" mà chốt cần đo — D2 ĐỎ vì phép canh chống rỗng, không phải vì sản
+# phẩm. Cách chữa KHÔNG phải làm bẩn cây thật (hay tạo tệp rồi xoá trong lúc chạy): dựng **BẢN SAO**
+# của HEAD trong thư mục tạm, tự tạo MỘT tệp của làn khác trong bản sao, chạy cổng ở đó, rồi xoá.
+# Cây thật được chụp `git status` trước/sau và PHẢI không đổi.
+LAN_KHAC_D2 = "docs/_r27_lan_khac.md"
+NOI_DUNG_LAN_KHAC = "# Tệp của LÀN KHÁC (R27) — tạo trong BẢN SAO, không tạo trong cây thật\n"
+
+
+def tao_ban_sao_d2(co_lan_khac=True):
+    """Clone HEAD của cây ĐANG ĐO vào thư mục tạm; tuỳ chọn thêm tệp của làn khác.
+
+    Trả dict: `goc` (thư mục tạm chứa tất cả), `cay` (bản sao), `tmp` (TMPDIR riêng cho tiến
+    trình con), `head`, `head_that`, `status_truoc`, `tep_lan_khac`. Người gọi PHẢI xoá `goc`.
+    """
+    goc_tam = tempfile.mkdtemp(prefix="veh-g22-d2-")
+    cay = os.path.join(goc_tam, "cay")
+    tmp = os.path.join(goc_tam, "tmp")
+    os.makedirs(tmp)
+    e = chotcay.env_git()
+    r = subprocess.run(["git", "clone", "-q", "--no-hardlinks", GOC_CAY, cay],
+                       capture_output=True, text=True, env=e, timeout=300)
+    if r.returncode != 0:
+        shutil.rmtree(goc_tam, ignore_errors=True)
+        raise RuntimeError("không dựng được BẢN SAO của cây (git clone thoát %d): %s"
+                           % (r.returncode, (r.stderr or "").strip()))
+    head = chotcay._git("rev-parse", "HEAD", goc=cay).stdout.strip()
+    head_that = chotcay._git("rev-parse", "HEAD").stdout.strip()
+    status_truoc = _dong_porcelain(goc=cay)
+    tep = None
+    if co_lan_khac:
+        tep = os.path.join(cay, LAN_KHAC_D2)
+        os.makedirs(os.path.dirname(tep), exist_ok=True)
+        with open(tep, "w", encoding="utf-8") as f:
+            f.write(NOI_DUNG_LAN_KHAC)
+    return {"goc": goc_tam, "cay": cay, "tmp": tmp, "head": head, "head_that": head_that,
+            "status_truoc": status_truoc, "tep_lan_khac": LAN_KHAC_D2 if co_lan_khac else None}
+
+
+def do_d2_tren_cay(cay, ban_sao, tmpdir=None):
+    """ĐO D2 trên cây `cay`: trả `(danh_sach_loi, bang, dong_status)`. Rỗng = ĐẠT.
+
+    Tách khỏi `unittest` để `thu_r27_fixture.py` gọi được ĐỐI CHỨNG ÂM: cùng hàm này chạy trên
+    bản sao KHÔNG có tệp của làn khác PHẢI trả lỗi "cây SẠCH TRƠN ⇒ phép đo rỗng".
+    """
+    loi, tds = [], []
+    for b in ban_sao:
+        ma, out, ca, skip = chay_ca(b["duong"], b["ca"], goc=cay, tmpdir=tmpdir)
+        tds.append((b["duong"], ma, ca, skip, out))
+        if ma != 0:
+            loi.append("%s::%s ĐỎ trên bản sao (mã thoát %d, %d ca, %d skip):\n%s"
+                       % (b["duong"], b["ca"], ma, ca, skip, out[-1200:]))
+        if ca <= 0:
+            loi.append("%s: chạy 0 ca (DORMANT?) ⇒ không đo được gì" % b["duong"])
+    dong = _dong_porcelain(goc=cay)
+    if len(dong) < 1:
+        loi.append("cây SẠCH TRƠN ⇒ phép đo rỗng (không có tệp của làn khác để đo)")
+    for b in ban_sao:
+        with open(os.path.join(cay, b["duong"]), encoding="utf-8") as f:
+            nguon = f.read()
+        ngoai = thay_doi_ngoai_lan(nguon, b["duong"], goc=cay)
+        if not ngoai:
+            loi.append("%s: cây KHÔNG có thay đổi nào ngoài làn của nó ⇒ XANH ở trên không "
+                       "chứng minh được `N-G19-03` đã được chữa" % b["duong"])
+    return loi, tds, dong
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -453,31 +564,39 @@ class D_BanSao(unittest.TestCase):
     def test_d2_moi_ban_sao_xanh_tren_cay_co_tep_moi_cua_lan_khac(self):
         """C1: một tệp MỚI hợp lệ của làn KHÁC không được làm cổng của wave trước ĐỎ.
 
+        R27: phép đo chạy trên **BẢN SAO của HEAD trong thư mục tạm**, không đòi cây thật phải
+        bẩn và không tạo/xoá tệp nào trong cây thật. Bản sao được tự thêm đúng MỘT tệp của làn
+        khác; cây thật được chụp `git status` trước/sau và phải KHÔNG đổi.
+
         Kèm phép canh CHỐNG RỖNG: mỗi bản sao phải thật sự thấy thay đổi NGOÀI làn của nó. Trên
         cây sạch trơn thì phép đo này xanh vô nghĩa — đúng cách G21 đếm ra "2/2".
         """
-        tds = []
-        for b in self.ban_sao:
-            ma, out, ca, skip = chay_ca(b["duong"], b["ca"])
-            tds.append((b["duong"], ma, ca, skip, out))
-            self.assertEqual(ma, 0, "%s::%s ĐỎ trên cây thật (mã thoát %d, %d ca, %d skip):\n%s"
-                             % (b["duong"], b["ca"], ma, ca, skip, out[-1200:]))
-            self.assertGreater(ca, 0, "%s: chạy 0 ca (DORMANT?) ⇒ không đo được gì" % b["duong"])
-        self.assertGreaterEqual(len(_dong_porcelain()), 1, "cây SẠCH TRƠN ⇒ phép đo rỗng")
-        # chống rỗng, cấp từng bản sao
-        for b in self.ban_sao:
-            with open(os.path.join(GOC_CAY, b["duong"]), encoding="utf-8") as f:
-                nguon = f.read()
-            ngoai = thay_doi_ngoai_lan(nguon, b["duong"])
-            self.assertTrue(ngoai, "%s: cây KHÔNG có thay đổi nào ngoài làn của nó ⇒ XANH ở trên "
-                                   "không chứng minh được `N-G19-03` đã được chữa" % b["duong"])
+        truoc = _dong_porcelain()
+        ban = tao_ban_sao_d2(co_lan_khac=True)
+        try:
+            self.assertEqual(ban["head"], ban["head_that"],
+                             "bản sao không đúng HEAD của cây đang đo")
+            self.assertEqual(ban["status_truoc"], [],
+                             "bản sao HEAD phải SẠCH trước khi thêm tệp của làn khác: %r"
+                             % (ban["status_truoc"],))
+            dong_sau = _dong_porcelain(goc=ban["cay"])
+            self.assertEqual(len(dong_sau), 1,
+                             "bản sao phải có ĐÚNG MỘT tệp của làn khác: %r" % (dong_sau,))
+            self.assertIn(ban["tep_lan_khac"], dong_sau[0],
+                          "tệp của làn khác không xuất hiện trong `git status` bản sao")
+            loi, tds, dong = do_d2_tren_cay(ban["cay"], self.ban_sao, tmpdir=ban["tmp"])
+            self.assertEqual(loi, [], "D2 HỎNG trên bản sao:\n  - " + "\n  - ".join(loi))
+        finally:
+            shutil.rmtree(ban["goc"], ignore_errors=True)
+        self.assertEqual(_dong_porcelain(), truoc,
+                         "D2 đã ĐỔI cây thật — phép đo phải chạy trên bản sao")
         _dc_duong("cay-sach-c1")
-        print("  [D2] C1 — %d/%d bản sao XANH trên cây có tệp mới của làn khác:"
+        print("  [D2] C1 — %d/%d bản sao XANH trên BẢN SAO có tệp mới của làn khác:"
               % (len(self.ban_sao), len(self.ban_sao)))
         for duong, ma, ca, skip, _ in tds:
             print("        · %-28s mã thoát %d · %d ca · %d bỏ qua" % (duong, ma, ca, skip))
-        print("        cây có %d dòng `git status` (ngoài làn của từng bản sao ⇒ phép đo không rỗng)"
-              % len(_dong_porcelain()))
+        print("        bản sao HEAD=%s · tệp làn khác=%s · cây thật KHÔNG đổi"
+              % (ban["head"][:8], ban["tep_lan_khac"]))
 
     def test_d3_moi_ban_sao_con_RANG(self):
         """Tệp **SẢN PHẨM** tạm ⇒ MỌI bản sao PHẢI ĐỎ; xoá đi ⇒ XANH LẠI. Không có tầng này thì
@@ -512,8 +631,11 @@ class D_BanSao(unittest.TestCase):
     def test_d4_moi_ban_sao_theo_QUY_TAC_va_ban_CU_bi_bat(self):
         """QUY TẮC — và bảng TRƯỚC/SAU đọc từ **LỊCH SỬ GIT THẬT** (không phải nguồn tự bịa).
 
-        Mỗi bản sao phải đạt `kiem_quy_tac`; bản NGAY TRƯỚC lần vá gần nhất của chính tệp ấy phải
-        bị chính hàm đó BẮT. Nếu bản cũ cũng "đạt" thì bộ dò mù, và cột QUY TẮC ở trên vô nghĩa.
+        Mỗi bản sao phải đạt `kiem_quy_tac`; một bản LỊCH SỬ THẬT của chính tệp ấy phải bị chính
+        hàm đó BẮT. R27 sửa TIỀN ĐỀ: bản "khác bản đang có gần nhất" KHÔNG chắc là bản trước khi
+        vá (trên nền này nó đã ĐẠT quy tắc). Chọn đúng bản = bản GẦN NHẤT mà bộ dò BẮT ĐƯỢC
+        (`nguon_cu_hong`); các bản đã đạt bị bỏ qua và được in ra để thấy rõ. Nếu bản cũ cũng
+        "đạt" thì bộ dò mù — và D6 là đối chứng mẫu sai TIÊM CÓ CHỦ ĐÍCH.
         """
         dong = []
         for b in self.ban_sao:
@@ -522,20 +644,27 @@ class D_BanSao(unittest.TestCase):
             kq = kiem_quy_tac(nguon, self.mau_tu_do)
             self.assertTrue(kq["dat"], "%s: miễn trừ KHÔNG theo quy tắc vùng — %s"
                             % (b["duong"], kq["ly_do"]))
-            sha, truoc = nguon_truoc_khi_va(b["duong"])
-            self.assertIsNotNone(truoc, "%s: không tìm được bản TRƯỚC trong git ⇒ không có đối "
-                                        "chứng âm cho bộ dò" % b["duong"])
-            kq_cu = kiem_quy_tac(truoc, self.mau_tu_do)
+            # Bản "khác gần nhất" (cách chọn CŨ) — chỉ để đối chiếu, không dùng để kết luận.
+            sha_gan, nguon_gan = nguon_truoc_khi_va(b["duong"])
+            kq_gan = kiem_quy_tac(nguon_gan, self.mau_tu_do) if nguon_gan is not None else None
+            sha, truoc, kq_cu = nguon_cu_hong(b["duong"], self.mau_tu_do)
+            self.assertIsNotNone(truoc, "%s: KHÔNG có bản lịch sử nào bị quy tắc bắt ⇒ không có "
+                                        "đối chứng âm cho bộ dò (D6 là đối chứng mẫu tiêm)"
+                                 % b["duong"])
             self.assertFalse(kq_cu["dat"], "%s: bản CŨ (%s) cũng ĐẠT ⇒ bộ dò QUY TẮC mù:\n%s"
                              % (b["duong"], sha[:8], json.dumps(kq_cu, ensure_ascii=False)))
-            dong.append((b["duong"], sha, kq_cu["ly_do"], kq["nguon_vung"]))
+            dong.append((b["duong"], sha, truoc, kq_cu, kq, sha_gan, kq_gan))
         _dc_am("quy-tac-truoc-sau")
         _dc_duong("quy-tac-truoc-sau")
-        print("  [D4] QUY TẮC — %d/%d bản sao ĐẠT; bản NGAY TRƯỚC khi vá của từng tệp đều BỊ BẮT:"
+        print("  [D4] QUY TẮC — %d/%d bản sao ĐẠT; mỗi tệp có một bản LỊCH SỬ bị bắt:"
               % (len(dong), len(self.ban_sao)))
-        for duong, sha, ly_do, nguon_vung in dong:
-            print("        · %-28s cũ %s bị bắt (%s)" % (duong, sha[:8], ly_do[:70]))
-            print("        %-30s nay ĐẠT qua %s" % ("", nguon_vung))
+        for duong, sha, truoc, kq_cu, kq, sha_gan, kq_gan in dong:
+            bo_qua = ""
+            if sha_gan and sha_gan != sha and kq_gan and kq_gan["dat"]:
+                bo_qua = " · bỏ qua bản khác gần nhất %s (ĐẠT)" % sha_gan[:8]
+            print("        · %-28s bản bị bắt %s (%s)%s"
+                  % (duong, sha[:8], kq_cu["ly_do"][:60], bo_qua))
+            print("        %-30s nay ĐẠT qua %s" % ("", kq["nguon_vung"]))
 
     def test_d5_bo_do_KHONG_mu_voi_mot_ban_sao_gia(self):
         """ĐỐI CHỨNG DƯƠNG cho bộ DÒ: một bản sao GIẢ dựng trong cây tạm phải được TÌM RA."""

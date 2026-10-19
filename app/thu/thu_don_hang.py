@@ -1118,5 +1118,158 @@ class G_ImportSangDon(unittest.TestCase):
         self.assertEqual(kq["bo_qua"], 1, "dòng INVALID vẫn được tạo đơn")
 
 
+# =============================================================================
+# H — TRACKING 23 MÃ + PHÍ HÃNG BÁO + TOÀN VẸN ĐƠN/MẶT HÀNG
+# =============================================================================
+class H_TrackingVaPhi(unittest.TestCase):
+    """Canh phần GHÉP giữa Order Service và dữ liệu hãng:
+
+    - bảng 23 mã BEST phải phủ đúng danh sách đã đối chiếu và ánh xạ vào ĐÚNG trục giao vận;
+    - đơn đã hủy không được nhận thêm trạng thái giao (mọi webhook/polling đều đi qua đây);
+    - phí hãng trả là tiền NGOÀI: không được ghi float/âm vào cột INTEGER (§16);
+    - tạo đơn kèm mặt hàng hỏng không được để lại đơn mồ côi.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        seed_chung()
+        ap_ddl()
+        cls.n = dung_nen("TRK")
+
+    def test_h01_bang_23_ma_BEST_phu_dung_danh_sach_va_anh_xa_vao_truc_giao(self):
+        """23 mã là hợp đồng với hãng. Thiếu một mã = một trạng thái không ai đọc; thừa một
+        mã = một mã chưa có tài liệu. Cả hai đều là bịa/ bỏ im lặng, nên đo bằng TẬP."""
+        import best_hop_dong
+        import cau_hinh
+        ma_de_bai = (211, 203, 202, 301, 302, 303, 304, 309, 601, 604, 666, 605, 606,
+                     701, 702, 703, 704, 705, 707, 708, 777, 1000, 2)
+        self.assertEqual(len(best_hop_dong.BANG_MA), 23)
+        self.assertEqual(set(best_hop_dong.BANG_MA), set(ma_de_bai),
+                         "bảng mã BEST lệch danh sách 23 mã đã đối chiếu")
+        hop_le = set(cau_hinh.HANG_TRANG_THAI_GIAO) | {"da_huy"}
+        for ma, (mo_ta, chung, _can_soat) in best_hop_dong.BANG_MA.items():
+            self.assertIn(chung, hop_le, f"mã {ma} ({mo_ta}) ánh xạ ra trạng thái lạ {chung!r}")
+        self.assertEqual(best_hop_dong.MA_MO_LAI, 606, "mã mở lại chiều giao phải là 606")
+        self.assertEqual(best_hop_dong.BANG_MA[606][1], "dang_giao")
+        for ma in (777, 1000):
+            self.assertNotEqual(best_hop_dong.BANG_MA[ma][1], "giao_thanh_cong",
+                                f"mã {ma} là SỰ CỐ, không được coi là giao thành công")
+
+    def test_h02_moi_trang_thai_chung_cua_23_ma_deu_di_qua_duoc_truc_giao_va_chan_lui(self):
+        """Duyệt trục giao vận theo đúng thứ hạng tăng dần — chứng minh rank guard KHÔNG chặn
+        oan một mã nào trong 6 trạng thái chung, và CHẶN sự kiện đến muộn."""
+        import best_hop_dong
+        import cau_hinh
+        don = _don_da_gui(self.n, "vtp")
+        da_ap = []
+        for chung, hang in sorted(((d[1], cau_hinh.HANG_TRANG_THAI_GIAO[d[1]])
+                                   for d in best_hop_dong.BANG_MA.values()
+                                   if d[1] in cau_hinh.HANG_TRANG_THAI_GIAO),
+                                  key=lambda x: x[1]):
+            hien_tai = don_hang.lay_don(self.n["tid"], don["id"])["hang_trang_thai_giao"]
+            if hang <= hien_tai:
+                # cùng hạng (nhiều mã cùng một trạng thái chung) hoặc thấp hơn: phải bị chặn
+                ap, ly_do = don_hang.ap_trang_thai_giao(self.n["tid"], don["id"], chung,
+                                                         "thu:23ma")
+                self.assertEqual(ap, 0, f"{chung} (hạng {hang}) lọt qua khi đang ở {hien_tai}")
+                self.assertEqual(ly_do, "out-of-order")
+            else:
+                ap, ly_do = don_hang.ap_trang_thai_giao(self.n["tid"], don["id"], chung,
+                                                         "thu:23ma")
+                self.assertEqual((ap, ly_do), (1, ""), f"không áp được {chung} (hạng {hang})")
+                da_ap.append(chung)
+        d = don_hang.lay_don(self.n["tid"], don["id"])
+        self.assertEqual((d["trang_thai_giao"], d["hang_trang_thai_giao"]), ("hoan_hang", 6))
+        # `cho_lay` đã có sẵn từ lúc gửi (rank 1), nên tập "đã đi qua" là phần còn lại + nó.
+        self.assertEqual(set(da_ap) | {"cho_lay"}, set(cau_hinh.HANG_TRANG_THAI_GIAO),
+                         f"thiếu trạng thái chưa đi qua được: "
+                         f"{set(cau_hinh.HANG_TRANG_THAI_GIAO) - set(da_ap) - {'cho_lay'}}")
+        # mã 2 = đã hủy: tầng webhook ghi nhận, KHÔNG đổi trục giao vận
+        ap, _ = don_hang.ap_trang_thai_giao(self.n["tid"], don["id"], "da_huy", "thu:23ma")
+        self.assertEqual(ap, 0)
+
+    def test_h03_don_da_huy_khong_nhan_trang_thai_giao(self):
+        """Hủy là quyết định NGHIỆP VỤ; sự kiện giao đến sau không được đẩy đơn đã hủy đi tiếp.
+        `webhook_best` đã tự chặn, nhưng `webhook.py` và `polling.py` gọi thẳng tầng này."""
+        don = _don_da_gui(self.n, "vtp")
+        don_hang.huy_don(self.n["tid"], self.n["u"]["owner"], don["id"])
+        ap, ly_do = don_hang.ap_trang_thai_giao(self.n["tid"], don["id"], "lay_hang", "webhook:99")
+        self.assertEqual((ap, ly_do), (0, "đơn đã hủy ở trục nghiệp vụ"))
+        d = don_hang.lay_don(self.n["tid"], don["id"])
+        self.assertEqual((d["trang_thai"], d["trang_thai_giao"]), ("huy", "cho_lay"),
+                         "đơn đã hủy vẫn bị đổi trục giao vận")
+        ls = csdl.nhieu("SELECT noi_dung FROM don_lich_su WHERE don_id=? ORDER BY id", (don["id"],))
+        self.assertTrue(any("sau khi đơn đã hủy" in r["noi_dung"] for r in ls),
+                        "sự kiện bị chặn không để lại vết")
+
+    def _gui_voi_phi(self, phi):
+        """Gửi một đơn mới với `getShippingFee` trả đúng `phi` (adapter thật, chỉ thay phí)."""
+        import adapter_vtp
+        don, _ = don_hang.tao_don(self.n["tid"], self.n["u"]["staff"], don_moi())
+        don_hang.duyet_don(self.n["tid"], self.n["u"]["owner"], don["id"])
+        goc = adapter_vtp.AdapterVTP.getShippingFee
+        adapter_vtp.AdapterVTP.getShippingFee = \
+            lambda self, d: adapter.KetQuaHang(True, phi=phi, tho={})
+        try:
+            d = don_hang.gui_don(self.n["tid"], self.n["u"]["owner"], don["id"], self.n["tk"]["vtp"])
+        finally:
+            adapter_vtp.AdapterVTP.getShippingFee = goc
+        return d
+
+    def test_h04_phi_hang_bao_float_hoac_am_KHONG_duoc_vao_cot_tien_INTEGER(self):
+        """§16: tiền là INTEGER đồng. Đo bằng `typeof()` của SQLite — không đọc lời khai."""
+        truoc = csdl.mot("SELECT COUNT(*) c FROM don_hang WHERE tenant_id=?", (self.n["tid"],))["c"]
+        for phi_xau in (22000.5, -1500):
+            d = self._gui_voi_phi(phi_xau)
+            r = csdl.mot("SELECT phi_van_chuyen p, typeof(phi_van_chuyen) t FROM don_hang"
+                         " WHERE id=?", (d["id"],))
+            self.assertIsNone(r["p"], f"phí {phi_xau!r} đã vào đơn: {r['p']!r}")
+            self.assertNotEqual(r["t"], "real", f"cột tiền thành REAL vì phí {phi_xau!r}")
+            ls = csdl.nhieu("SELECT noi_dung FROM don_lich_su WHERE don_id=? ORDER BY id",
+                            (d["id"],))
+            self.assertTrue(any("CẢNH BÁO" in r["noi_dung"] for r in ls),
+                            "phí hỏng bị bỏ im lặng — người đối soát không biết vì sao thiếu phí")
+        # Đối chứng dương: số thực NGUYÊN (JSON hay gửi 22000.0) phải được nhận thành INTEGER
+        d = self._gui_voi_phi(22000.0)
+        r = csdl.mot("SELECT phi_van_chuyen p, typeof(phi_van_chuyen) t FROM don_hang WHERE id=?",
+                     (d["id"],))
+        self.assertEqual((r["p"], r["t"]), (22000, "integer"))
+
+    def test_h05_tao_don_voi_mat_hang_hong_KHONG_de_lai_don_mo_coi(self):
+        """Lỗi đo 2026-10-19: đơn được ghi trước, `luu_mat_hang` hỏng sau ⇒ đơn mồ côi. Lượt
+        thử lại cùng `idem_key` còn nhận đúng cái đơn không có mặt hàng nào."""
+        n = self.n
+        truoc = csdl.mot("SELECT COUNT(*) c FROM don_hang WHERE tenant_id=?", (n["tid"],))["c"]
+        with self.assertRaises(don_hang.LoiNghiepVu):
+            don_hang.tao_don(n["tid"], n["u"]["staff"],
+                             don_moi(mat_hang=[{"ten": "", "so_luong": 1}]), idem_key="K-MO-COI")
+        sau = csdl.mot("SELECT COUNT(*) c FROM don_hang WHERE tenant_id=?", (n["tid"],))["c"]
+        self.assertEqual(sau, truoc, "tạo đơn hỏng mặt hàng vẫn để lại đơn mồ côi")
+        d, trung = don_hang.tao_don(n["tid"], n["u"]["staff"], don_moi(mat_hang=[
+            {"ten": "Áo", "so_luong": 1, "don_gia": 1000, "khoi_luong_gram": 100}]),
+            idem_key="K-MO-COI")
+        self.assertFalse(trung, "lượt thử lại nhận đơn mồ côi của lượt hỏng")
+        self.assertEqual(len(don_hang.lay_mat_hang(n["tid"], d["id"])), 1)
+
+    def test_h06_luu_mat_hang_dong_bo_tong_ke_ca_khi_tong_bang_0(self):
+        """Docstring `luu_mat_hang` cam kết tổng của đơn = tổng mặt hàng. Bản cũ bỏ qua lần
+        đồng bộ khi tổng khối lượng = 0, để đơn giữ khối lượng/giá trị CŨ."""
+        don, _ = don_hang.tao_don(self.n["tid"], self.n["u"]["staff"], don_moi())
+        don_hang.luu_mat_hang(self.n["tid"], self.n["u"]["staff"], don["id"],
+                              [{"ten": "A", "so_luong": 1, "don_gia": 1000,
+                                "khoi_luong_gram": 300}])
+        kq = don_hang.luu_mat_hang(self.n["tid"], self.n["u"]["staff"], don["id"],
+                                   [{"ten": "B", "so_luong": 2, "don_gia": 2000,
+                                     "khoi_luong_gram": 0}])
+        d = don_hang.lay_don(self.n["tid"], don["id"])
+        self.assertEqual((d["khoi_luong_gram"], d["gia_tri_khai"]),
+                         (kq["tong_khoi_luong_gram"], kq["tong_gia_tri_dong"]),
+                         "tổng của đơn lệch tổng mặt hàng — hai con số nói hai chuyện")
+        self.assertEqual((d["khoi_luong_gram"], d["gia_tri_khai"]), (0, 4000))
+        # Hệ quả đúng: đơn chưa hợp lệ thì KHÔNG duyệt được — không có đường ship số cũ
+        with self.assertRaises(don_hang.LoiNghiepVu):
+            don_hang.duyet_don(self.n["tid"], self.n["u"]["owner"], don["id"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

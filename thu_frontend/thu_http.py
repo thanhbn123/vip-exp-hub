@@ -291,11 +291,20 @@ class ThuFrontendHTTP(unittest.TestCase):
         self.assertEqual(st, 200)
         self.assertIn("admin.js", body.decode("utf-8"))
 
-    def test_04_muoi_trang_demo_g00_khong_bi_pha(self):
-        """F05: 10 trang demo G00 dùng CHUNG CSS — sửa CSS không được làm chúng gãy."""
+    def test_04_moi_trang_demo_g00_khong_bi_pha(self):
+        """F05: MỌI trang demo G00 dùng CHUNG CSS — sửa CSS không được làm chúng gãy.
+
+        Bản cũ ghim `len(ten_trang) == 10`. Mười là số trang tại lượt đo G00; thêm một trang
+        hợp lệ (`best.html`) làm phép thử ĐỎ dù không trang nào gãy. Bất biến đúng là:
+          · danh sách trang ĐỌC TỪ ĐĨA, không chép tay;
+          · danh sách KHÁC RỖNG (chốt chống phép đo rỗng);
+          · MỌI trang đọc được phải tải được và dùng đúng hai tệp dùng chung.
+        Số trang là KẾT QUẢ ĐO TẠI CHỖ, không còn là kỳ vọng ghim.
+        """
         p = Phien(self.goc_url)
         ten_trang = sorted(x for x in os.listdir(os.path.join(GOC_DU_AN, "pages")) if x.endswith(".html"))
-        self.assertEqual(len(ten_trang), 10, "số trang demo đổi — xem lại trước khi sửa bộ thử")
+        self.assertGreaterEqual(len(ten_trang), 1,
+                                "không có trang demo nào — phép đo rỗng, không chứng minh gì")
         for t in ten_trang:
             st, body, _ = p.goi("/pages/" + t)
             self.assertEqual(st, 200, t)

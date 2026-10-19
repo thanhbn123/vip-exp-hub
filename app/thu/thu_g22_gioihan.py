@@ -417,6 +417,68 @@ def _khoi_phuc(goc):
         _GOC_DANG_GIU.pop()
 
 
+# ── CÔ LẬP DANH SÁCH ỨNG VIÊN C5 ─────────────────────────────────────────────────────────────
+#
+# HỢP ĐỒNG ĐO ĐƯỢC CỦA C5 (đọc trong `app/thu/thu_qa_g20.py`, KHÔNG sửa tệp đó):
+#     `chay = min(Σ(ứng viên chạy thật & thoát 0), 1)`  ⇒  C5 = OR trên danh sách ứng viên.
+# Vì vậy với HAI ứng viên, tiêm lỗi vào MỘT ứng viên rồi thấy `1/2 · DONG` là ĐÚNG hợp đồng
+# OR, không phải bằng chứng "C5 bắt được lỗi". Muốn đo CHIỀU ĐỎ của C5, phải làm cho MỌI ứng
+# viên đều hỏng — hoặc cô lập danh sách còn ĐÚNG MỘT ứng viên rồi tiêm vào nó. Fixture này chọn
+# cách thứ hai: tạm đưa `thu_qa_g19.py` (ứng viên không phải bản uỷ quyền) ra khỏi khuôn tên
+# `thu_qa_g19*.py`, chạy các phép tiêm, rồi TRẢ LẠI và đối chiếu sự tồn tại. Không sửa nội dung
+# của bất kỳ tệp nào trong bước cô lập.
+UNG_VIEN_C5_KHONG_UY_QUYEN = os.path.join("app", "thu", "thu_qa_g19.py")
+_CACH_LY_C5 = []            # (đường gốc, đường tạm) — để `atexit` trả lại nếu có sự cố
+
+
+def _phuc_hoi_cach_ly_cu():
+    """Dọn dấu vết cô lập của một lượt trước bị chết giữa chừng (nếu có)."""
+    goc = os.path.join(DU_AN, UNG_VIEN_C5_KHONG_UY_QUYEN)
+    tam = goc + ".r3-c5-cach-ly"
+    if not os.path.isfile(tam):
+        return
+    assert not os.path.exists(goc), \
+        "có CẢ %s lẫn bản cách ly %s — không đoán bản nào đúng" % (goc, tam)
+    os.replace(tam, goc)
+
+
+def _tra_lai_cach_ly_khi_thoat():
+    while _CACH_LY_C5:
+        goc, tam = _CACH_LY_C5.pop()
+        try:
+            if os.path.isfile(tam) and not os.path.exists(goc):
+                os.replace(tam, goc)
+        except OSError:
+            pass
+
+
+atexit.register(_tra_lai_cach_ly_khi_thoat)
+
+
+def _cach_ly_ung_vien_c5():
+    """Tạm đưa ứng viên KHÔNG phải bản uỷ quyền ra khỏi khuôn tên C5. Trả cờ để trả lại."""
+    goc = os.path.join(DU_AN, UNG_VIEN_C5_KHONG_UY_QUYEN)
+    if not os.path.isfile(goc):
+        return None
+    tam = goc + ".r3-c5-cach-ly"
+    assert not os.path.exists(tam), "đã có bản cách ly cũ: %s" % tam
+    os.replace(goc, tam)
+    _CACH_LY_C5.append((goc, tam))
+    return goc, tam
+
+
+def _tra_lai_ung_vien_c5(giu):
+    if not giu:
+        return
+    goc, tam = giu
+    assert os.path.isfile(tam), "mất bản cách ly: %s" % tam
+    os.replace(tam, goc)
+    if _CACH_LY_C5:
+        _CACH_LY_C5.pop()
+    assert os.path.isfile(goc) and not os.path.exists(tam), \
+        "KHÔNG trả lại được ứng viên C5: %s" % goc
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # B2 — CHIỀU XANH: BẢN UỶ QUYỀN LÀNH ⇒ C5 PHẢI CHUYỂN `1/1`
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -424,6 +486,7 @@ def _khoi_phuc(goc):
 def b2_chieu_xanh(nguon):
     muc("B2. CHIỀU XANH — C5 chạy THẬT. Lượt TRƯỚC đo `0/1` (chỉ `thu_qa_g19.py` khớp tên, và nó "
         "tự bỏ qua). Nay bản uỷ quyền thành ứng viên thứ HAI, nên tỷ lệ ĐÚNG phải là `1/2`.")
+    _phuc_hoi_cach_ly_cu()
     da_chep = _dat_ban_sao_qa_g20(nguon)
     try:
         goc = open(os.path.join(DU_AN, BO_UY_QUYEN), "rb").read()
@@ -432,8 +495,9 @@ def b2_chieu_xanh(nguon):
         xanh, ty, dong = _phan_quyet_c5(ra)
         print("  $ python3 %s %s   →  mã thoát %d · %.1f giây" % (QA_G20, CA_C5, ma, giay))
         print("  %s" % dong)
-        # Lưu ý: `ung_vien` gồm CẢ `thu_qa_g19.py` (của AG-01, tự bỏ qua ⇒ 0 ca) LẪN bản uỷ
-        # quyền, nên tỷ lệ đúng là `1/2` chứ không phải `1/1`. Điều kiện là TỬ SỐ >= 1.
+        # HỢP ĐỒNG OR: C5 chỉ đòi TỬ SỐ >= 1. Với hai ứng viên, một ứng viên còn xanh là đủ để
+        # cổng xanh. Vì thế `1/2` ở đây chỉ là ĐỐI CHỨNG DƯƠNG của hợp đồng OR — nó KHÔNG chứng
+        # minh C5 bắt được lỗi trong bản uỷ quyền. Chiều ĐỎ được đo ở B3 sau khi cô lập fixture.
         ket("B2", "C5 phán XANH THẬT với bản uỷ quyền lành (`%s`)" % (ty,),
             DAT if (ma == 0 and xanh) else HONG,
             "mã thoát %d · phán quyết %s · dòng C5: %s" % (ma, ty, dong),
@@ -454,10 +518,21 @@ def b3_chieu_do(nguon):
     muc("B3/B4. CHIỀU ĐỎ — tiêm lỗi vào BẢN SAO của bản uỷ quyền, ĐO QUA CHÍNH C5")
     print("  Mỗi phép tiêm ĐÚNG MỘT DÒNG. Bản gốc được giữ trong bộ nhớ và TRẢ LẠI trong `finally`,")
     print("  rồi đối chiếu sha256. Không phép tiêm nào chạm vào bộ gốc `%s`." % BO_GOC)
+    print("  HỢP ĐỒNG C5 = OR: `chay = min(Σ ứng viên chạy thật & thoát 0, 1)`. Vì vậy một ứng")
+    print("  viên còn xanh là đủ làm cổng xanh (B2 đo đúng `1/2`). Để đo CHIỀU ĐỎ, fixture CÔ LẬP")
+    print("  danh sách còn đúng bản uỷ quyền trước khi tiêm; trả lại sau `finally`.")
+    _phuc_hoi_cach_ly_cu()
     da_chep = _dat_ban_sao_qa_g20(nguon)
     that_bai = []
+    giu = None
     try:
         truoc = _sha(os.path.join(DU_AN, BO_UY_QUYEN))
+        giu = _cach_ly_ung_vien_c5()
+        con_lai = sorted(t for t in os.listdir(GOC_THU)
+                         if re.match(r"thu_qa_g19.*\.py$", t))
+        print("  [C5] ứng viên sau cô lập: %s" % con_lai)
+        assert con_lai == [os.path.basename(BO_UY_QUYEN)], \
+            "cô lập C5 thất bại — còn ứng viên khác: %s" % con_lai
         for ten in TIEM:
             goc, khac = _tiem(ten)
             try:
@@ -485,6 +560,7 @@ def b3_chieu_do(nguon):
                     "KHÔI PHỤC THẤT BẠI sau phép tiêm %s" % ten
         _dc_duong("c5-chieu-do")
     finally:
+        _tra_lai_ung_vien_c5(giu)
         _don_ban_sao_qa_g20(da_chep)
     return that_bai
 

@@ -32,8 +32,17 @@ sys.path.insert(0, GOC_APP)
 _tam = tempfile.mkdtemp(prefix="vip-hub-thu-truyvan-")
 os.environ["VIP_HUB_DATA"] = _tam
 
+import cau_hinh    # noqa: E402
 import csdl        # noqa: E402
 import truy_van    # noqa: E402
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.py` được spawn thành TIẾN TRÌNH CON (`_migrate`, `do_hieu_nang`); khai dưới đây vào
+# `os.environ` nên con kế thừa, và chỗ spawn còn truyền TƯỜNG MINH `VIP_KHO_DANG_CHAY=sqlite`.
+# KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh khi người chạy
+# nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ thư mục TẠM ở trên, nên hai chốt cô lập của hàm
+# khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
 
 TENANT_A = 901
 TENANT_B = 902
@@ -44,7 +53,8 @@ def _migrate(thu_muc=None):
     import subprocess
     tm = thu_muc or _tam
     r = subprocess.run([sys.executable, os.path.join(GOC_APP, "migrate.py")],
-                       capture_output=True, text=True, env={**os.environ, "VIP_HUB_DATA": tm})
+                       capture_output=True, text=True,
+                       env={**os.environ, "VIP_HUB_DATA": tm, "VIP_KHO_DANG_CHAY": "sqlite"})
     if r.returncode != 0:
         raise RuntimeError(f"migrate hỏng: {r.stdout}\n{r.stderr}")
 
@@ -604,7 +614,7 @@ def do_hieu_nang(so_don=20_000):
     import subprocess
     subprocess.run([sys.executable, os.path.join(GOC_APP, "migrate.py")],
                    capture_output=True, text=True, check=True,
-                   env={**os.environ, "VIP_HUB_DATA": tam})
+                   env={**os.environ, "VIP_HUB_DATA": tam, "VIP_KHO_DANG_CHAY": "sqlite"})
     duong = glob.glob(os.path.join(tam, "*.db"))[0]
     kn = sqlite3.connect(duong)
     kn.row_factory = sqlite3.Row

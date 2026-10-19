@@ -99,6 +99,15 @@ import doi_soat        # noqa: E402
 import nhap_file       # noqa: E402
 import tai_chinh       # noqa: E402
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.chay()` gọi TRỰC TIẾP trong tiến trình này (dựng nền ở `dung_nen`); ca `e4` còn chạy
+# lại CHÍNH tệp này trong TIẾN TRÌNH CON trên bản sao `app/`, nên đứa con cũng phải thấy khai.
+# Khai dưới đây vào `os.environ` nên con kế thừa, và chỗ spawn của `e4` truyền TƯỜNG MINH
+# `VIP_KHO_DANG_CHAY=sqlite`. KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`:
+# một bộ chỉ xanh khi người chạy nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ nền TẠM ở trên,
+# nên hai chốt cô lập của hàm khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
+
 MK = "MatKhauAg06-123"
 # DẤU VẾT A: chuỗi NGẪU NHIÊN mỗi lượt chạy, nhét vào MỌI loại dữ liệu của A (tên tenant, tên
 # khách, tên hàng, credentials, tên file, lý do điều chỉnh…). Nhờ vậy "B có thấy dữ liệu của A
@@ -627,6 +636,10 @@ def bang_cua():
         _c("/api/v2/don/kiem", "POST", "tenant.don.ghi", "tao", than=D, than_B=DB, ok_A=(200,),
            chan_B=(200,), rb=True),
         _c("/api/v2/don/can-doi-soat", "GET", "tenant.don.xem", "doc_ds", rb=True),
+        # G22/AG-02 thêm cửa tự mô tả bộ lọc (`truy_van.mo_ta_bo_loc`) SAU khi bảng này được
+        # viết; `test_v1` bắt đúng việc "route mới mà chưa khai". Khai ở đây để cửa đó cũng
+        # được quét cách ly như mọi cửa đọc khác — KHÔNG phải nới ngưỡng: ca V1/V2/R5 sẽ đo nó.
+        _c("/api/v2/don/loc-mo-ta", "GET", "tenant.don.xem", "doc_ds", rb=True),
         _c("/api/v2/don", "GET", "tenant.don.xem", "doc_ds", sentinel=True, rb=True),
         _c("/api/v2/don/xuat-csv", "GET", "tenant.don.xem", "doc_ds", sentinel=True, rb=True),
         _c("/api/v2/don", "POST", "tenant.don.ghi", "tao", ok_A=(201,), than=D, than_B=DB,
@@ -1734,7 +1747,8 @@ class E_TuKiemBoDo(unittest.TestCase):
         with open(tep, "w", encoding="utf-8") as f:
             f.write(src.replace(neo, moi, 1))
         du_lieu = os.path.join(_tam, "du-lieu-dot-bien")
-        moi_truong = dict(os.environ, VIP_HUB_DATA=du_lieu, VIP_AG06_KHONG_TU_DOT_BIEN="1")
+        moi_truong = dict(os.environ, VIP_HUB_DATA=du_lieu, VIP_AG06_KHONG_TU_DOT_BIEN="1",
+                          VIP_KHO_DANG_CHAY="sqlite")
         r = subprocess.run([sys.executable, os.path.join(goc_app, "thu", "thu_g17_baomat.py")],
                            capture_output=True, text=True, timeout=900, env=moi_truong, cwd=_tam)
         ra = r.stdout + r.stderr

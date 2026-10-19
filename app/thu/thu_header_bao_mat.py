@@ -27,9 +27,18 @@ GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, GOC)
 os.environ.setdefault("VIP_HUB_DATA", tempfile.mkdtemp(prefix="veh-hdr-"))
 
+import cau_hinh     # noqa: E402
 import migrate      # noqa: E402
 import quyen        # noqa: E402
 import server       # noqa: E402
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.chay()` gọi TRỰC TIẾP trong tiến trình này (`setUpClass`) — không có tiến trình con
+# nào chạy `migrate`. Bộ thử tự khai bằng giao diện chung `cau_hinh.khai_kho_kiem_thu()` —
+# KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh khi người chạy
+# nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ thư mục TẠM ở trên, nên hai chốt cô lập của hàm
+# khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
 
 CONG = 0
 BAT_BUOC = ("X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy",

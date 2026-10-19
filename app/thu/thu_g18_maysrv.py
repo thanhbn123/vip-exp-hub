@@ -69,6 +69,15 @@ GOC_APP = os.path.join(DU_AN, "app")
 if GOC_APP not in sys.path:
     sys.path.insert(0, GOC_APP)
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.py`/`khoi_tao.py` được spawn thành TIẾN TRÌNH CON trong `setUpModule`; khai dưới đây
+# vào `os.environ` nên con kế thừa, và chỗ spawn còn truyền TƯỜNG MINH
+# `VIP_KHO_DANG_CHAY=sqlite` (môi trường của con được dựng lại từ `os.environ`). KHÔNG dựa vào
+# việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh khi người chạy nhớ khai là
+# một bộ GIỎ. `VIP_HUB_DATA` đã trỏ nền TẠM ở trên, nên hai chốt cô lập của hàm khai đều thoả.
+import cau_hinh                                                          # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
+
 
 def _nap_harness():
     """Nạp bộ đo THẬT theo đường dẫn — xem "BỘ ĐO ĐƯỢC MƯỢN" ở docstring đầu tệp."""
@@ -116,7 +125,8 @@ def setUpModule():
     for lenh in ("migrate.py", "khoi_tao.py"):
         p = subprocess.run([sys.executable, os.path.join(GOC_APP, lenh)],
                            capture_output=True, text=True, cwd=DU_AN,
-                           env=dict(os.environ, VIP_HUB_DATA=_tam))
+                           env=dict(os.environ, VIP_HUB_DATA=_tam,
+                                    VIP_KHO_DANG_CHAY="sqlite"))
         if p.returncode:
             raise RuntimeError("%s hỏng: %s" % (lenh, (p.stderr or p.stdout)[-500:]))
 

@@ -10,6 +10,7 @@ credentials thật, không có đơn thật, không push/deploy, không đổi `
 |---|---|
 | Agent | AG-00 — tích hợp webhook BEST |
 | Nền | `best/integration` @ `5429c6d` |
+| Commit gộp | `dd42fdf` trên `best/integration`; `main` = `de740dc`; không push |
 | Tệp sửa | `app/server.py` (nhánh phân luồng BEST) · `app/webhook_best.py` (ba lỗi QA: `modified_at` dị dạng/mốc xa, hủy đơn xen giữa đọc/cập nhật) |
 | Tệp mới | `app/thu/thu_best_e2e_http.py` · `docs/BEST_EXPRESS_HTTP_E2E.md` |
 | Không sửa | `main` · `app/webhook.py` · `app/adapter_best.py` · `app/xac_thuc_best.py` |
@@ -322,8 +323,8 @@ Không đặt biến môi trường trỏ tới BEST thật. Không gọi mạng
 | Lệnh chạy | §3.3 + §5 |
 | Exit / số ca | E2E `57/57` exit 0 · B3 `51/51` exit 0 · hub `68/68` exit 0 · J&T `99/99` exit 0 · adapter `118/118` exit 0 · auth `47/47` exit 0 |
 | Đối chứng âm | N1 ĐỎ (47 ca) · N2 ĐỎ (`c11`) · N3 ĐỎ (`h01`,`h02`) · N4 ĐỎ (`d01`,`k01`) · N5 ĐỎ (`c12`–`c16`) · N6 ĐỎ (`f07`,`f08`) · gỡ tiêm xanh lại 57/57 |
-| Chưa chạy / chưa đo | `chay_tat_ca.sh` sau gộp; REAL PASS; sandbox BEST; TLS/credentials thật |
-| Gộp/commit | **BLOCKED** — sandbox từ chối ghi `.git` (`index.lock: Operation not permitted`); HEAD vẫn `5429c6d`, thay đổi còn ở working tree |
+| Chưa chạy / chưa đo | REAL PASS; sandbox BEST; TLS/credentials thật; hồi quy toàn bộ đang chạy trên checkout `dd42fdf` |
+| Gộp/commit | **ĐÃ COMMIT** `dd42fdf` trên `best/integration`; `main` = `de740dc`; không push/deploy |
 
 ### 7.1 Bảng đo cuối (workspace, 19/10/2026)
 
@@ -338,13 +339,12 @@ Không đặt biến môi trường trỏ tới BEST thật. Không gọi mạng
 | G22 regression | `python3 app/thu/thu_g22_regression.py` | 0 | 35 | 35 | 0 | 0 | 0 | – |
 | G19 tích hợp | `python3 app/thu/thu_g19_tich_hop.py` | 0 | 8 | 8 | 0 | 0 | 0 | – |
 | Header bảo mật | `python3 app/thu/thu_header_bao_mat.py` | 0 | 8 | 8 | 0 | 0 | 0 | – |
-| B5 10 cổng | `python3 app/thu/thu_best_qa.py` | 1 | 10 | 1 | 1 | 0 | 7 | BEST-01 đỏ vì `server.py`/`webhook_best.py` chưa commit; các cổng BEST-03…10 BLOCKED/PENDING có lý do |
-| Hồi quy toàn bộ | `sh app/thu/chay_tat_ca.sh` (bản sao sạch, commit tạm `f09ad8e`, `VIP_KHO_DANG_CHAY=sqlite`) | 1 | 2559 ca / 79 bộ | – | 24 bộ đỏ | – | – | E2E shell 41/41; frontend 56+40; E2E BEST 57/57. 24 bộ đỏ là các bộ đã ghi nhận có sẵn, không do vá BEST (xem dưới) |
+| B5 10 cổng | `python3 app/thu/thu_best_qa.py` | 0 | 10 | 2 | 0 | 0 | 8 | Sau commit: BEST-01 `NOT TESTED` (HEAD khác nền B5 `cb23312`); BEST-03…10 BLOCKED/PENDING có lý do |
+| Hồi quy toàn bộ | `sh app/thu/chay_tat_ca.sh` trên checkout sạch của `dd42fdf` (`VIP_KHO_DANG_CHAY=sqlite`) | **chờ** | – | – | – | – | – | đang chạy; kết quả điền sau |
 
-**Ghi chú B5:** `thu_best_qa.test_01` coi cây có thay đổi ĐÃ THEO DÕI chưa commit là đỏ. Vì môi
-trường này không cho ghi `.git`, nó sẽ còn đỏ cho tới khi AG-00/Owner commit. Đây là hệ quả của
-chặn gộp, không phải lỗi mã. Sau commit, cổng BEST-01 sẽ là `NOT TESTED` (HEAD khác nền B5
-`cb23312`), không phải PASS.
+**Ghi chú B5 (sau commit):** `python3 app/thu/thu_best_qa.py` → **exit 0 · Ran 10 · 2 đạt · 8 skip**.
+`BEST-01` là `NOT TESTED` vì HEAD `dd42fdf` khác nền B5 `cb23312`; đây không phải PASS. Các cổng
+phụ thuộc tài liệu/credentials thật vẫn `BLOCKED`/`PENDING`.
 
 **Hồi quy toàn bộ — đọc đúng phạm vi:** chạy trên **bản sao sạch có commit tạm** (vì workspace
 thật không cho ghi `.git`), `VIP_KHO_DANG_CHAY=sqlite`, `PYTHONDONTWRITEBYTECODE=1`. Kết quả:

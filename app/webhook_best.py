@@ -30,10 +30,11 @@
 #   5 kiem_merchant_order_code 11 ghi_audit
 #   6 kiem_trung_su_kien
 #
-# GHI CHÚ VỀ SỐ LƯỢNG MÃ: đề bài nói "24 mã" nhưng danh sách liệt kê chỉ có 23 con số
-# (211/203/202/301/302/303/304/309/601/604/666/605/606/701/702/703/704/705/707/708/777/1000/2).
-# Mô-đun KHÔNG tự bịa thêm mã thứ 24. `SO_MA_DE_BAI=24`, `SO_MA_LIET_KE=23`,
-# `GHI_CHU_SO_LUONG` nói thẳng chênh lệch; bộ thử phủ đủ 23 mã + 1 ca "mã lạ" làm đối chứng
+# GHI CHÚ VỀ SỐ LƯỢNG MÃ: tài liệu BEST liệt kê 23 mã trạng thái
+# (211/203/202/301/302/303/304/309/601/604/666/605/606/701/702/703/704/705/707/708/777/1000/2)
+# + nhãn chữ `customer Cancel`. Đề bài cũ ghi "24 mã" nhưng danh sách chỉ có 23 con số.
+# Mô-đun KHÔNG tự bịa thêm mã thứ 24. `SO_MA_DE_BAI=23`, `SO_MA_LIET_KE=23`,
+# `GHI_CHU_SO_LUONG` nói thẳng; bộ thử phủ đủ 23 mã + 1 ca "mã lạ" làm đối chứng
 # (tổng 24 lượt kịch bản, không phải 24 mã hãng).
 import hashlib
 import json
@@ -247,6 +248,13 @@ def _kiem_ma(v, ten):
         raise LoiDuLieu(f"{ten} dài quá 128 ký tự")
     if re.search(r"[\s\x00-\x1f\x7f]", s):
         raise LoiDuLieu(f"{ten} chứa khoảng trắng/ký tự điều khiển")
+    try:
+        s.encode("utf-8")
+    except UnicodeEncodeError:
+        # JSON hợp lệ vẫn có thể chứa surrogate đơn lẻ (`"\ud800"`). Chuỗi đó không mã hoá
+        # được UTF-8 nên không thể băm khoá sự kiện hay ghi CSDL; từ chối ở đây thay vì để
+        # `UnicodeEncodeError` nổ ở bước 6 (500 mù, không lưu thô, không audit).
+        raise LoiDuLieu(f"{ten} chứa ký tự không mã hoá được UTF-8")
     return s
 
 
@@ -350,6 +358,12 @@ def doc_payload(body):
         best_hop_dong.chuan_hoa_ma_trang_thai(d["status"])
     if status is None or status < 0:
         raise LoiDuLieu("status phải là số nguyên không âm hoặc nhãn 'customer Cancel'")
+    try:
+        status_raw.encode("utf-8")
+    except UnicodeEncodeError:
+        # Nhãn chữ được parser bỏ dấu (chỉ giữ chữ cái) nên `customer \ud800 Cancel` vẫn lọt
+        # qua như "customer Cancel". Nhưng nhãn gốc có surrogate không ghi/băm được — chặn.
+        raise LoiDuLieu("status chứa ký tự không mã hoá được UTF-8")
 
     try:
         moc = hub._moc_chuan(d["modified_at"])
@@ -384,6 +398,11 @@ def doc_payload(body):
             raise LoiDuLieu(f"status_content dài quá {GIOI_HAN_MO_TA} ký tự")
         if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", mo_ta):
             raise LoiDuLieu("status_content chứa ký tự điều khiển")
+        try:
+            mo_ta.encode("utf-8")
+        except UnicodeEncodeError:
+            # Surrogate đơn lẻ không ghi được vào cột TEXT của SQLite (và không phải UTF-8).
+            raise LoiDuLieu("status_content chứa ký tự không mã hoá được UTF-8")
 
     for ten in TRUONG_SO:
         _so_khong_am(d.get(ten), ten)
@@ -395,6 +414,7 @@ def doc_payload(body):
         "merchant_order_code": merchant,
         "status": status,
         "status_raw": status_raw,
+        "customer_cancel": bool(_la_customer_cancel),
         "status_content": mo_ta,
         "modified_at_raw": d["modified_at"],
         "moc": moc,
@@ -596,8 +616,11 @@ def _luu_su_kien_tho(tk, tenant_id, event_id, p, headers):
     Mọi câu đọc lại đều JOIN `carrier_accounts` để tenant nằm trong điều kiện, không chỉ trong
     lời cam kết của tầng gọi.
     """
-    payload = json.dumps(p["tho_sach"], ensure_ascii=False, sort_keys=True).encode("utf-8")
-    headers_json = json.dumps(_headers_an_toan(headers), ensure_ascii=False, sort_keys=True)
+    # `ensure_ascii=True` là chốt an toàn cho TRƯỜNG LẠ: trường nghiệp vụ đã được kiểm UTF-8,
+    # nhưng payload có thể mang thêm khóa không dùng để quyết định gì. Ghi JSON escape được
+    # surrogate đơn lẻ, thay vì để `encode("utf-8")` nổ trước bước 7 (mất sự kiện, 500 mù).
+    payload = json.dumps(p["tho_sach"], ensure_ascii=True, sort_keys=True).encode("utf-8")
+    headers_json = json.dumps(_headers_an_toan(headers), ensure_ascii=True, sort_keys=True)
     with csdl.khoa_ghi:
         try:
             con = csdl.ghi(
@@ -787,19 +810,26 @@ def _ghi_dau_vet(sk_id, p, qd, don_id, ap_dung):
 
     Không ghi `hang_moc_thoi_gian` ở đây — mốc chỉ do `_ghi_moc()` ghi khi ĐÃ ÁP, đúng bài học
     G14: sự kiện không được áp không được đẩy watermark.
+
+    `can_soat` KHÔNG được suy từ "có áp hay không": 203/707/777/1000 là mã ĐƯỢC ÁP nhưng tài
+    liệu đánh dấu cần người soát (lấy hàng thất bại/trả hàng thất bại/thất lạc/hư hỏng). Ghi 0
+    cho chúng là làm mất chúng khỏi hàng đợi soát — đúng loại sự kiện cần soát nhất. Vì vậy:
+    cần soát nếu CHÍNH mã cần soát, hoặc sự kiện không được áp.
     """
     try:
         dat, ts = [], []
         for cot, gt in (
             ("hang_ma_goc", str(p.get("status_raw", p["status"]))),
             ("hang_mo_ta_goc", p["status_content"]),
+            # `ensure_ascii=True`: cột TEXT của SQLite không nhận surrogate đơn lẻ. Payload đã
+            # được kiểm UTF-8 ở bước 4; cờ này chỉ để một trường lạ không làm hỏng cả dòng.
             ("hang_su_kien_goc", json.dumps({"status": p.get("status_raw", p["status"]),
                                              "status_content": p["status_content"],
                                              "modified_at": p["modified_at_raw"]},
-                                            ensure_ascii=False)),
+                                            ensure_ascii=True)),
             ("anh_xa_do_tin_cay", MUC_CHUA_KIEM_CHUNG),
             ("anh_xa_nguon", f"{NGUON_DE_BAI} / {MUC_CHUA_KIEM_CHUNG}"),
-            ("can_soat", 0 if ap_dung else 1),
+            ("can_soat", 1 if (qd.get("can_soat") or not ap_dung) else 0),
             ("trang_thai_chuan", qd["chung"] if ap_dung else None),
             ("don_id", don_id),
         ):
@@ -836,6 +866,8 @@ def _audit(hanh_dong, tk, tenant_id, sk_id, p, qd, ket_cuc, ly_do="", ap_dung=0,
         "code_best": None,
         "merchant_order_code": None,
         "status": None,
+        "status_raw": None,
+        "customer_cancel": None,
         "modified_at": None,
         "moc": None,
         "trang_thai_chung": None,
@@ -854,12 +886,15 @@ def _audit(hanh_dong, tk, tenant_id, sk_id, p, qd, ket_cuc, ly_do="", ap_dung=0,
             "code_best": p["code_best"],
             "merchant_order_code": p["merchant_order_code"],
             "status": p["status"],
+            "status_raw": p.get("status_raw", p["status"]),
+            "customer_cancel": bool(p.get("customer_cancel")),
             "modified_at": p["modified_at_raw"],
             "moc": p["moc"],
         })
     if qd is not None:
         chi_tiet.update({"trang_thai_chung": qd["chung"], "biet_ma": qd["biet_ma"],
-                         "mo_lai": qd["mo_lai"]})
+                         "mo_lai": qd["mo_lai"],
+                         "customer_cancel": bool(qd.get("customer_cancel"))})
     if them:
         chi_tiet.update(them)
     doi_tuong = (f"su_kien:{sk_id}" if sk_id is not None
@@ -989,7 +1024,11 @@ def xu_ly_voi_account(tk, body, headers=None):
     try:
         # ---- 8. chuẩn hoá ----
         buoc.append("chuan_hoa_trang_thai")
-        qd = chuan_hoa_trang_thai(p["status"])
+        # Dùng NHÃN GỐC, không dùng số đã chuẩn hoá: `customer Cancel` ánh xạ về 2, nhưng nếu
+        # đưa số 2 vào đây thì cờ `customer_cancel` (và mã gốc) biến mất — audit không còn phân
+        # biệt được sự kiện hủy bằng NHÃN CHỮ với sự kiện hủy bằng số 2. Hàm chuẩn hoá đã đọc
+        # được cả hai dạng, nên truyền bản gốc là đúng và không đổi hành vi trạng thái.
+        qd = chuan_hoa_trang_thai(p["status_raw"])
 
         # ---- 9. cập nhật đơn ----
         buoc.append("cap_nhat_don")
@@ -1035,7 +1074,8 @@ def xu_ly_voi_account(tk, body, headers=None):
                       ket_cuc=("cap_nhat" if ap_dung else "ghi_nhan"), event_id=event_id,
                       don_id=(don["id"] if don is not None else None),
                       chi_tiet={"ap_dung": bool(ap_dung), "ly_do": ly_do_ap,
-                                "chung": qd["chung"], "mo_lai": qd["mo_lai"]})
+                                "chung": qd["chung"], "mo_lai": qd["mo_lai"],
+                                "customer_cancel": bool(qd.get("customer_cancel"))})
     except Exception as e:
         # Từ bước 8 trở đi sự kiện ĐÃ bền. Không ACK "xong" khi chưa xử lý xong, nhưng cũng
         # không nói dối là chưa nhận: đánh dấu DLQ + audit lỗi, trả 500 để hãng gửi lại.

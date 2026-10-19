@@ -13,7 +13,11 @@
 #      cứu đơn đã hủy nghiệp vụ.
 #   F. Xác thực · lưu thất bại ⇒ KHÔNG ACK · không rò secret · đúng thân phản hồi · đủ 11 bước ·
 #      BEST sandbox/production BLOCKED · sai hãng bị chặn.
-#   G. Payload đủ 18 trường; dữ liệu sai bị từ chối trước khi ghi.
+#   G. Payload đủ 18 trường; dữ liệu sai bị từ chối trước khi ghi; nhãn `customer Cancel` giữ
+#      nguyên nhãn gốc + cờ `customer_cancel` trong audit.
+#   H. Bearer sandbox/production đúng/sai/thiếu; HMAC mock và Bearer KHÔNG lẫn nhau; token gắn
+#      chết với tenant + account + `webhook_ma`; gửi lại bằng Bearer vẫn idempotent.
+#   I. CSDL ĐÃ migrate: cột dấu vết + `hang_moc_thoi_gian` chỉ ghi khi sự kiện được áp.
 #
 # Chạy: python3 app/thu/thu_best_webhook.py
 # Mã thoát: 0 = tất cả ca đạt; 1 = có ca hỏng/lỗi. "skip" chỉ dùng cho ca bị bỏ có lý do.
@@ -37,6 +41,7 @@ import csdl             # noqa: E402
 import quyen            # noqa: E402
 import webhook as hub   # noqa: E402
 import webhook_best as wb   # noqa: E402
+import xac_thuc_best    # noqa: E402  — LỚP B: Bearer webhook của BEST
 
 SECRET_A = "secret-best-webhook-A-11111111"
 SECRET_B = "secret-best-webhook-B-22222222"
@@ -51,6 +56,36 @@ WH_SB = "best-wh-sandbox"
 WH_JT = "jt-wh-test"
 
 _BANG_CHUNG = []
+
+# Ánh xạ ĐỘC LẬP với `wb.BANG_MA` — chép từ bảng tài liệu BEST (mục 7 của
+# docs/BEST_EXPRESS_DOCX_AUDIT.md), KHÔNG đọc lại chính bảng đang được kiểm. Nếu ai sửa nhầm
+# `BANG_MA` thì ca thử đỏ, thay vì "bảng tự khớp với chính nó".
+#   mã: (trạng thái chung, cần người soát)
+ANH_XA_DOC_LAP = {
+    211: ("cho_lay", False),
+    203: ("cho_lay", True),          # lấy hàng không thành công
+    202: ("lay_hang", False),
+    301: ("dang_giao", False),
+    302: ("dang_giao", False),
+    303: ("dang_giao", False),
+    304: ("dang_giao", False),
+    309: ("dang_giao", False),
+    601: ("dang_giao", False),
+    604: ("giao_that_bai", False),
+    666: ("giao_thanh_cong", False),
+    605: ("hoan_hang", False),       # xác nhận chuyển hoàn
+    606: ("dang_giao", False),       # huỷ trạng thái trả hàng, mở lại chiều giao
+    701: ("hoan_hang", False),
+    702: ("hoan_hang", False),
+    703: ("hoan_hang", False),
+    704: ("hoan_hang", False),
+    705: ("hoan_hang", False),
+    707: ("hoan_hang", True),        # trả hàng không thành công
+    708: ("hoan_hang", False),
+    777: ("giao_that_bai", True),    # thất lạc
+    1000: ("giao_that_bai", True),   # hư hỏng
+    2: ("da_huy", False),            # huỷ đơn (customer Cancel)
+}
 
 
 def _ghi_bang_chung(loai, **kw):
@@ -228,16 +263,24 @@ class TestA_BangMa(Nen):
         self.assertIn("23", wb.GHI_CHU_SO_LUONG)
         self.assertIn("23", wb.GHI_CHU_SO_LUONG)
         self.assertEqual(set(wb.BANG_MA), set(wb.MA_TRONG_DE_BAI))
+        self.assertEqual(set(ANH_XA_DOC_LAP), set(wb.MA_TRONG_DE_BAI),
+                         "bảng ánh xạ độc lập không phủ đúng 23 mã")
         self.assertEqual(wb.kiem_bat_bien(), [])
         for ma in wb.MA_TRONG_DE_BAI:
             self.assertEqual(wb.BANG_MA[ma]["muc"], wb.MUC_DA_TAI_LIEU,
                              f"mã {ma} không được tự nhận là đã kiểm chứng")
+            # Đối chiếu với bản chép ĐỘC LẬP, không phải với chính bảng đang kiểm.
+            self.assertEqual((wb.BANG_MA[ma]["chung"], bool(wb.BANG_MA[ma]["can_soat"])),
+                             ANH_XA_DOC_LAP[ma], f"mã {ma}: lệch bảng tài liệu")
         self.assertTrue(wb.BANG_MA[606]["mo_lai"])
         self.assertEqual([m for m, d in wb.BANG_MA.items() if d["mo_lai"]], [606],
                          "chỉ 606 được mang cờ mở lại chiều giao")
 
     def _chay_ca_ma(self, ma):
         d = wb.BANG_MA[ma]
+        chung_doc_lap, can_soat_doc_lap = ANH_XA_DOC_LAP[ma]
+        self.assertEqual(d["chung"], chung_doc_lap, f"mã {ma}: lệch bảng tài liệu")
+        self.assertIs(bool(d["can_soat"]), can_soat_doc_lap, f"mã {ma}: cờ soát sai")
         code = f"BEST-A2-{ma}"
         merchant = f"MD-A2-{ma}"
         # 606 chỉ có nghĩa "mở lại" khi đơn đang ở trạng thái cuối. Các mã khác bắt đầu từ đơn
@@ -253,12 +296,12 @@ class TestA_BangMa(Nen):
         self.assertEqual(kq.don_id, don_id)
 
         don = self._don(don_id)
-        if d["chung"] == "da_huy":
-            self.assertIsNone(don["trang_thai_giao"], "777 không được tự đổi trạng thái đơn")
+        if chung_doc_lap == "da_huy":
+            self.assertIsNone(don["trang_thai_giao"], "mã hủy 2 không được tự đổi trạng thái đơn")
             self.assertEqual(kq.ket_cuc, "ghi_nhan")
-            self.assertEqual(len(self._ls(don_id)), 0, "777 không được bịa dòng lịch sử")
+            self.assertEqual(len(self._ls(don_id)), 0, "mã hủy 2 không được bịa dòng lịch sử")
         else:
-            self.assertEqual(don["trang_thai_giao"], d["chung"], f"mã {ma}")
+            self.assertEqual(don["trang_thai_giao"], chung_doc_lap, f"mã {ma}")
             self.assertEqual(kq.ket_cuc, "cap_nhat", f"mã {ma}")
             self.assertEqual(len(self._ls(don_id)), 1, f"mã {ma}: thiếu lịch sử")
 
@@ -268,7 +311,7 @@ class TestA_BangMa(Nen):
         self.assertEqual(tho["status"], ma)
         self.assertIn("status_content", tho)
         self.assertEqual(set(wb.TRUONG_PAYLOAD) - set(tho), set(), f"mã {ma}: thiếu trường thô")
-        _ghi_bang_chung("ma", ma=ma, chung=d["chung"], ket_cuc=kq.ket_cuc,
+        _ghi_bang_chung("ma", ma=ma, chung=chung_doc_lap, ket_cuc=kq.ket_cuc,
                         mo_lai=d["mo_lai"], don_id=don_id)
 
     def test_a03_ma_la_la_ca_thu_24_khong_doi_don_nhung_van_luu(self):
@@ -430,23 +473,30 @@ class TestC_Trung(Nen):
 # ============================================================================
 class TestD_DenMuon(Nen):
     def test_d01_su_kien_cu_den_muon_khong_ghi_de_trang_thai_moi(self):
-        """301 (hạng 3) đến trước; 302 (hạng 5) đến sau nhưng modified_at CŨ ⇒ KHÔNG áp."""
+        """301 (dang_giao) đến trước; 604 (giao_that_bai) đến sau nhưng modified_at CŨ ⇒ KHÔNG áp.
+
+        Chọn 604 — khác trạng thái và khác hạng — để nếu chống đến muộn hỏng thì trạng thái đơn
+        ĐỔI THẬT và ca thử bắt được; dùng một mã cùng trạng thái (302 cũng là dang_giao) sẽ
+        không phân biệt được "bỏ qua vì đến muộn" với "áp nhưng trùng trạng thái".
+        """
         code = "BEST-D1"
         don_id = self._tao_don(self.ta, self.tk_a, code, "MD-D1")
         kq1 = self._gui(self.tk_a, self._payload(code, "MD-D1", 301,
                                                  "2026-10-19T10:00:00+07:00"))
         self.assertEqual(kq1.ket_cuc, "cap_nhat")
-        kq2 = self._gui(self.tk_a, self._payload(code, "MD-D1", 302,
+        kq2 = self._gui(self.tk_a, self._payload(code, "MD-D1", 604,
                                                  "2026-10-19T09:00:00+07:00"))
         self.assertEqual(kq2.http, 200)
         self.assertTrue(kq2.thanh_cong)
         self.assertEqual(kq2.ket_cuc, "ghi_nhan")
         self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao",
                          "webhook cũ đã ghi đè trạng thái mới hơn")
+        self.assertEqual(len(self._ls(don_id)), 1,
+                         "sự kiện đến muộn không được ghi lịch sử trạng thái")
         self.assertTrue(self._audit("webhook_best_bo_qua", kq2.su_kien_id))
         self.assertEqual(wb._moc_da_ap(don_id, self.ta),
                          self._moc("2026-10-19T10:00:00+07:00"))
-        _ghi_bang_chung("cu_den_muon", ma=302, moc_cu="09:00", moc_da_ap="10:00",
+        _ghi_bang_chung("cu_den_muon", ma=604, moc_cu="09:00", moc_da_ap="10:00",
                         trang_thai_sau=self._don(don_id)["trang_thai_giao"], ket_cuc="giu")
 
     def test_d02_khong_gia_dinh_ma_tang_dan_605_moi_hon_606_van_ap(self):
@@ -475,6 +525,36 @@ class TestD_DenMuon(Nen):
         self.assertEqual(kq.ket_cuc, "ghi_nhan")
         self.assertIn("xung đột mốc", kq.chi_tiet["ly_do"])
         self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+
+    def test_d04_modified_at_epoch_ms_int_va_chuoi_cung_dong_ho(self):
+        """Đặc tả: `modified_at` là epoch mili giây. Số int và chuỗi số phải cùng một mốc.
+
+        2026-10-19 10:00 +07 = 1792378800000 ms; 09:00 = 1792375200000; 11:00 = 1792382400000.
+        Ca này canh CẢ hai dạng, và canh thứ tự đến muộn bằng số chứ không bằng chuỗi ISO.
+        """
+        code = "BEST-D4"
+        don_id = self._tao_don(self.ta, self.tk_a, code, "MD-D4")
+        kq1 = self._gui(self.tk_a, self._payload(code, "MD-D4", 301, 1792378800000))
+        self.assertEqual(kq1.ket_cuc, "cap_nhat")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+
+        # Cùng mốc 10:00 nhưng viết dạng chuỗi 13 chữ số ⇒ CÙNG sự kiện (trùng), không phải mới.
+        kq2 = self._gui(self.tk_a, self._payload(code, "MD-D4", 301, "1792378800000"))
+        self.assertTrue(kq2.trung)
+        self.assertEqual(len(self._ls(don_id)), 1)
+
+        # 09:00 (chuỗi) đến sau ⇒ cũ hơn mốc đã áp, không được lùi trạng thái.
+        kq3 = self._gui(self.tk_a, self._payload(code, "MD-D4", 302, "1792375200000"))
+        self.assertEqual(kq3.ket_cuc, "ghi_nhan")
+        self.assertIn("đến muộn", kq3.chi_tiet["ly_do"])
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+
+        # 11:00 bằng số int ⇒ mới hơn, được áp.
+        kq4 = self._gui(self.tk_a, self._payload(code, "MD-D4", 666, 1792382400000))
+        self.assertEqual(kq4.ket_cuc, "cap_nhat")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "giao_thanh_cong")
+        self.assertEqual(wb._moc_da_ap(don_id, self.ta),
+                         hub._moc_chuan(1792382400000))
 
 
 # ============================================================================
@@ -538,6 +618,35 @@ class TestE_605_606(Nen):
         self.assertEqual(self._don(don_id)["trang_thai"], "huy")
         self.assertIsNone(self._don(don_id)["trang_thai_giao"])
         self.assertIn("đơn đã hủy", kq.chi_tiet["ly_do"])
+
+    def test_e05_duyet_ca_23_ma_chi_606_mo_duoc_trang_thai_cuoi(self):
+        """Đơn đang `giao_thanh_cong`: duyệt LẦN LƯỢT cả 23 mã, chỉ 606 được mở lại.
+
+        Đây là ca canh bảng mã + máy trạng thái CÙNG LÚC: thêm một mã mới mang cờ `mo_lai` sẽ
+        làm ca này đỏ ngay; một mã thường lọt qua trạng thái cuối cũng đỏ.
+        """
+        for i, ma in enumerate(wb.MA_TRONG_DE_BAI):
+            with self.subTest(ma=ma):
+                code = f"BEST-E5-{ma}"
+                merchant = f"MD-E5-{ma}"
+                don_id = self._tao_don(self.ta, self.tk_a, code, merchant, "giao_thanh_cong")
+                moc = 1792378800000 + i * 60_000
+                kq = self._gui(self.tk_a, self._payload(code, merchant, ma, moc))
+                self.assertEqual(kq.http, 200, f"mã {ma}: {kq!r}")
+                self.assertTrue(kq.thanh_cong, f"mã {ma}: {kq.body!r}")
+                don = self._don(don_id)
+                if ma == 606:
+                    self.assertEqual(kq.ket_cuc, "cap_nhat", "606 phải mở lại chiều giao")
+                    self.assertEqual(don["trang_thai_giao"], "dang_giao")
+                    self.assertEqual(don["hang_trang_thai_giao"], 3)
+                    self.assertEqual(len(self._ls(don_id)), 1)
+                else:
+                    self.assertEqual(kq.ket_cuc, "ghi_nhan",
+                                     f"mã {ma} không được mở lại trạng thái cuối")
+                    self.assertEqual(don["trang_thai_giao"], "giao_thanh_cong",
+                                     f"mã {ma} đã ghi đè trạng thái cuối")
+                    self.assertEqual(len(self._ls(don_id)), 0,
+                                     f"mã {ma} không được bịa dòng lịch sử")
 
 
 # ============================================================================
@@ -728,6 +837,72 @@ class TestF_AnToan(Nen):
         self.assertIn("def _mo_lai_chieu_giao", nguon)
         self.assertIn("don_hang.ap_trang_thai_giao", nguon)
 
+    def test_f12_dlq_va_gui_lai_su_kien_da_luu_van_hoan_tat(self):
+        """Lỗi SAU bước 7: sự kiện đã bền nhưng chưa xử lý xong ⇒ 500 + dlq, KHÔNG ACK xong.
+
+        Lượt gửi lại dùng ĐÚNG dòng thô cũ (không tạo sự kiện thứ hai), xử lý nốt và chỉ ghi
+        MỘT dòng lịch sử. Đây là ca canh "ACK chỉ sau khi lưu bền + xử lý xong", bổ khuyết cho
+        ca f02 (lỗi NGAY ở bước lưu).
+        """
+        code = "BEST-F12"
+        don_id = self._tao_don(self.ta, self.tk_a, code, "MD-F12")
+        p = self._payload(code, "MD-F12", 301, "2026-10-19T10:00:00+07:00")
+
+        def no_ra(*_a, **_kw):
+            raise RuntimeError("hỏng sau khi đã lưu thô (MOCK fault injection)")
+
+        with mock.patch.object(wb, "_cap_nhat_don", side_effect=no_ra):
+            kq_hong = self._gui(self.tk_a, p)
+        self.assertEqual(kq_hong.http, 500)
+        self.assertEqual(kq_hong.body["Result"], 0)
+        self.assertEqual(kq_hong.ket_cuc, "loi_xu_ly")
+        self.assertEqual(self._sk(kq_hong.su_kien_id)["trang_thai"], "dlq")
+        self.assertIsNone(self._don(don_id)["trang_thai_giao"])
+        self.assertEqual(len(self._ls(don_id)), 0)
+
+        kq_lai = self._gui(self.tk_a, p)
+        self.assertEqual(kq_lai.http, 200)
+        self.assertTrue(kq_lai.thanh_cong)
+        self.assertFalse(kq_lai.trung)
+        self.assertEqual(kq_lai.su_kien_id, kq_hong.su_kien_id,
+                         "gửi lại phải dùng đúng sự kiện đã lưu, không tạo dòng thứ hai")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+        self.assertEqual(len(self._ls(don_id)), 1)
+        self.assertEqual(self._sk(kq_lai.su_kien_id)["trang_thai"], "xong")
+
+    def test_f13_audit_cuoi_hong_thi_khong_ack_va_cho_thu_lai(self):
+        """Bước 11 (audit) hỏng sau khi đã áp đơn: KHÔNG được ACK xong, phải đánh dấu chờ thử lại.
+
+        Sự kiện + đơn đã bền, nhưng mất dấu audit là mất khả năng điều tra; trả 200 lúc này sẽ
+        che mất lỗi. Lượt gửi lại thấy mốc đã áp nên KHÔNG cập nhật đơn lần hai, chỉ hoàn tất
+        audit + đánh dấu xong.
+        """
+        code = "BEST-F13"
+        don_id = self._tao_don(self.ta, self.tk_a, code, "MD-F13")
+        p = self._payload(code, "MD-F13", 301, "2026-10-19T10:00:00+07:00")
+        with mock.patch.object(wb, "_audit", return_value=False):
+            kq_hong = self._gui(self.tk_a, p)
+        self.assertEqual(kq_hong.http, 500)
+        self.assertEqual(kq_hong.ket_cuc, "loi_audit")
+        self.assertEqual(kq_hong.body["Result"], 0)
+        self.assertEqual(self._sk(kq_hong.su_kien_id)["trang_thai"], "cho_thu_lai")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+        self.assertEqual(len(self._ls(don_id)), 1)
+
+        kq_lai = self._gui(self.tk_a, p)
+        self.assertEqual(kq_lai.http, 200)
+        self.assertTrue(kq_lai.thanh_cong)
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+        self.assertEqual(len(self._ls(don_id)), 1, "gửi lại đã cập nhật đơn lần hai")
+        self.assertEqual(self._sk(kq_lai.su_kien_id)["trang_thai"], "xong")
+
+        # Đối chứng dương: cùng payload trên đơn khác, audit KHÔNG hỏng ⇒ 200 như thường.
+        don_ok = self._tao_don(self.ta, self.tk_a, "BEST-F13-OK", "MD-F13-OK")
+        kq_ok = self._gui(self.tk_a, self._payload("BEST-F13-OK", "MD-F13-OK", 301,
+                                                   "2026-10-19T10:01:00+07:00"))
+        self.assertEqual(kq_ok.http, 200)
+        self.assertEqual(self._don(don_ok)["trang_thai_giao"], "dang_giao")
+
 
 # ============================================================================
 # G. PAYLOAD ĐỦ 18 TRƯỜNG + GIỮ NGUYÊN THÔ
@@ -783,6 +958,366 @@ class TestG_Payload(Nen):
         self.assertEqual(kq.ket_cuc, "ghi_nhan")
         self.assertIsNone(self._don(don_id)["trang_thai_giao"])
         self.assertEqual(self._sk(kq.su_kien_id)["trang_thai"], "xong")
+
+    def test_g04_nhan_customer_cancel_giu_dau_vet_trong_audit(self):
+        """Nhãn chữ `customer Cancel` → mã 2 nhưng KHÔNG được đánh rơi dấu vết nhãn gốc.
+
+        Ca g03 canh payload thô; ca này canh tầng QUYẾT ĐỊNH + audit: cờ `customer_cancel`
+        phải sống sót qua bước chuẩn hoá, nếu không audit không phân biệt được hủy-bằng-nhãn
+        với hủy-bằng-số 2 và mất đúng phần "có nhãn chữ" của đặc tả.
+        """
+        code = "BEST-G4"
+        don_id = self._tao_don(self.ta, self.tk_a, code, "MD-G4", "dang_giao")
+        kq = self._gui(self.tk_a, self._payload(code, "MD-G4", "CUSTOMER CANCEL",
+                                                1792378800000))
+        self.assertEqual(kq.http, 200)
+        self.assertTrue(kq.thanh_cong)
+        self.assertEqual(kq.ket_cuc, "ghi_nhan")
+        self.assertEqual(kq.chi_tiet["chung"], "da_huy")
+        self.assertTrue(kq.chi_tiet["customer_cancel"],
+                        "cờ nhãn chữ bị mất sau bước chuẩn hoá")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+
+        audit = self._audit("webhook_best_bo_qua", kq.su_kien_id)
+        self.assertTrue(audit)
+        chi_tiet = json.loads(audit[0]["chi_tiet"])
+        self.assertEqual(chi_tiet["status"], 2)
+        self.assertEqual(chi_tiet["status_raw"], "CUSTOMER CANCEL",
+                         "audit phải giữ NHÃN GỐC, không chỉ số đã chuẩn hoá")
+        self.assertIs(chi_tiet["customer_cancel"], True)
+        self.assertEqual(chi_tiet["trang_thai_chung"], "da_huy")
+        # Nhãn gốc còn trong payload thô + cột dấu vết (nếu đã migrate).
+        sk = self._sk(kq.su_kien_id)
+        self.assertEqual(json.loads(bytes(sk["payload_tho"]))["status"], "CUSTOMER CANCEL")
+        if "hang_ma_goc" in sk.keys():
+            self.assertEqual(sk["hang_ma_goc"], "CUSTOMER CANCEL")
+
+    def test_g05_nhan_customer_cancel_va_so_2_la_hai_su_kien_khac_nguon(self):
+        """`customer Cancel` và số `2` cùng nghĩa nhưng KHÁC khoá sự kiện (giữ nhãn gốc).
+
+        Gộp chúng sẽ làm mất dấu vết nguồn gửi; tách chúng là chủ ý của `_khoa_su_kien`.
+        Cả hai đều chỉ GHI NHẬN, không đổi trạng thái đơn.
+        """
+        code = "BEST-G5"
+        don_id = self._tao_don(self.ta, self.tk_a, code, "MD-G5", "dang_giao")
+        moc = 1792378800000
+        kq_nhan = self._gui(self.tk_a, self._payload(code, "MD-G5", "customer Cancel", moc))
+        kq_so = self._gui(self.tk_a, self._payload(code, "MD-G5", 2, moc))
+        self.assertTrue(kq_nhan.thanh_cong)
+        self.assertTrue(kq_so.thanh_cong)
+        self.assertEqual(kq_nhan.ket_cuc, "ghi_nhan")
+        self.assertEqual(kq_so.ket_cuc, "ghi_nhan")
+        self.assertNotEqual(kq_nhan.event_id, kq_so.event_id)
+        self.assertEqual(self._dem_su_kien_theo_ma(self.tk_a, code), 2)
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+
+        chi_nhan = json.loads(self._audit("webhook_best_bo_qua", kq_nhan.su_kien_id)[0]["chi_tiet"])
+        chi_so = json.loads(self._audit("webhook_best_bo_qua", kq_so.su_kien_id)[0]["chi_tiet"])
+        self.assertEqual(chi_nhan["status_raw"], "customer Cancel")
+        self.assertIs(chi_nhan["customer_cancel"], True)
+        self.assertEqual(chi_so["status_raw"], "2")
+        self.assertIs(chi_so["customer_cancel"], False)
+
+    def test_g06_surrogate_don_le_bi_tu_choi_422_khong_lam_sap(self):
+        """JSON hợp lệ vẫn có thể chứa surrogate đơn lẻ (`"\\ud800"`). Trường nghiệp vụ phải bị
+        từ chối 422 TRƯỚC khi băm khoá/ghi CSDL; trường LẠ không được làm sập bước lưu thô.
+
+        Trước khi vá: `_kiem_ma` cho surrogate đi qua rồi `_khoa_su_kien().encode("utf-8")`
+        ném `UnicodeEncodeError` ngoài mọi try ⇒ 500 mù, không lưu thô, không audit.
+        """
+        truoc = self._so_su_kien(self.tk_a)
+        ca = (
+            ("code_best", lambda p: p.__setitem__("code_best", "BEST\ud800X")),
+            ("merchant_order_code",
+             lambda p: p.__setitem__("merchant_order_code", "MD\ud800X")),
+            # Parser bỏ dấu chỉ giữ chữ cái, nên nhãn này lọt qua như "customer Cancel".
+            ("status", lambda p: p.__setitem__("status", "customer \ud800 cancel")),
+            ("status_content", lambda p: p.__setitem__("status_content", "x\ud800y")),
+        )
+        for ten, sua in ca:
+            with self.subTest(truong=ten):
+                p = self._payload(f"BEST-G6-{ten}", f"MD-G6-{ten}", 211, 1792378800000)
+                sua(p)
+                # ensure_ascii=True (mặc định) ⇒ surrogate thành escape JSON hợp lệ.
+                body = json.dumps(p).encode()
+                kq = self._gui_body(self.tk_a, body)
+                self.assertEqual(kq.http, 422, f"{ten}: {kq!r}")
+                self.assertEqual(kq.body["Result"], 0, ten)
+                self.assertNotEqual(kq.body["Message"], "", ten)
+        self.assertEqual(self._so_su_kien(self.tk_a), truoc,
+                         "payload surrogate vẫn bị ghi thô")
+
+        # Trường LẠ: bỏ qua khi quyết định, nhưng phải LƯU được bằng JSON escape. Kèm
+        # `tenant_id` surrogate để canh cả đường audit "claim tenant bị bỏ qua".
+        p = self._payload("BEST-G6-EXTRA", "MD-G6-EXTRA", 211, 1792378800000,
+                          ghi_chu="x\ud800y", tenant_id="\ud800")
+        kq = self._gui_body(self.tk_a, json.dumps(p).encode())
+        self.assertEqual(kq.http, 200)
+        self.assertTrue(kq.thanh_cong)
+        tho = json.loads(bytes(self._sk(kq.su_kien_id)["payload_tho"]))
+        self.assertEqual(tho["ghi_chu"], "x\ud800y",
+                         "trường lạ có surrogate bị mất khi lưu thô")
+
+
+# ============================================================================
+# H. XÁC THỰC BEARER (sandbox/production) — KHÁC HẲN HMAC CỦA MOCK
+# ============================================================================
+class TestH_XacThucBearer(Nen):
+    """BEST thật dùng JWT Bearer; mock dùng HMAC của hub. Bộ thử canh CẢ HAI chiều không lẫn.
+
+    `xac_thuc_best` là LỚP B (kho Bearer mã hoá) do AG-00 sở hữu; ở đây chỉ gọi hàm CÔNG KHAI
+    `luu_bearer_webhook`, không sửa tệp đó. Mỗi ca tự tạo tài khoản sandbox riêng để không phụ
+    thuộc thứ tự chạy của các lớp khác (đặc biệt `test_f06` cần `tk_sb` KHÔNG có Bearer).
+    """
+
+    def _tai_khoan_sandbox(self, wh_ma, tenant_id=None):
+        return _account(tenant_id if tenant_id is not None else self.ta,
+                        "best", wh_ma, "secret-" + wh_ma, moi_truong="sandbox")
+
+    def _luu_bearer(self, tk_id, tenant_id, bearer, wh_ma):
+        xac_thuc_best.luu_bearer_webhook(str(tenant_id), str(tk_id), bearer,
+                                         webhook_ma=wh_ma)
+
+    def _goi_bearer(self, tk_id, payload, bearer):
+        body = json.dumps(payload, ensure_ascii=False).encode()
+        return wb.xu_ly_voi_account(self._tk(tk_id), body,
+                                    {"authorization": "Bearer " + bearer})
+
+    def test_h01_bearer_dung_duoc_nhan_cap_nhat_va_ack_dung_dac_ta(self):
+        """Token ĐÚNG của ĐÚNG account/môi trường: qua 11 bước, ACK đặc tả, đơn đổi."""
+        wh = "best-wh-h1"
+        tk_id = self._tai_khoan_sandbox(wh)
+        bearer = "v9." + "h1" * 24
+        self._luu_bearer(tk_id, self.ta, bearer, wh)
+        don_id = self._tao_don(self.ta, tk_id, "BEST-H1", "MD-H1")
+        kq = self._goi_bearer(tk_id, self._payload("BEST-H1", "MD-H1", 211, 1792378800000),
+                              bearer)
+        self.assertEqual(kq.http, 200)
+        self.assertEqual(kq.body, {"Result": 1, "Message": ""})
+        self.assertEqual(kq.buoc, wb.TEN_BUOC)
+        self.assertEqual(kq.ket_cuc, "cap_nhat")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "cho_lay")
+        self.assertEqual(self._sk(kq.su_kien_id)["trang_thai"], "xong")
+
+        audit = self._audit("webhook_best_cap_nhat_don", kq.su_kien_id)
+        self.assertTrue(audit)
+        chi_tiet = json.loads(audit[0]["chi_tiet"])
+        self.assertEqual(chi_tiet["so_do_xac_thuc"], "best_bearer")
+        self.assertEqual(chi_tiet["muc_xac_thuc"], wb.MUC_DA_TAI_LIEU)
+
+        # Bearer KHÔNG được rơi vào kho thô/headers/audit/response.
+        sk = self._sk(kq.su_kien_id)
+        self.assertNotIn(bearer, str(sk["headers_json"]))
+        self.assertNotIn(bearer, bytes(sk["payload_tho"]).decode("utf-8"))
+        self.assertNotIn(bearer, json.dumps(kq.body, ensure_ascii=False))
+        for r in csdl.nhieu("SELECT chi_tiet, dia_chi FROM audit"):
+            self.assertNotIn(bearer, f"{r['chi_tiet']} {r['dia_chi']}")
+
+    def test_h02_bearer_sai_bi_tu_choi_khong_luu_khong_doi_don(self):
+        wh = "best-wh-h2"
+        tk_id = self._tai_khoan_sandbox(wh)
+        bearer = "v9." + "h2" * 24
+        self._luu_bearer(tk_id, self.ta, bearer, wh)
+        don_id = self._tao_don(self.ta, tk_id, "BEST-H2", "MD-H2")
+        kq = self._goi_bearer(tk_id, self._payload("BEST-H2", "MD-H2", 211, 1792378800000),
+                              "x" * 48)
+        self.assertEqual(kq.http, 401)
+        self.assertEqual(kq.body["Result"], 0)
+        self.assertIn("BEARER_KHONG_KHOP", kq.body["Message"])
+        self.assertEqual(self._dem_su_kien_theo_ma(tk_id, "BEST-H2"), 0)
+        self.assertIsNone(self._don(don_id)["trang_thai_giao"])
+        self.assertTrue(self._audit("webhook_best_tu_choi", tk_id))
+
+    def test_h03_thieu_hoac_sai_dinh_dang_bearer_deu_401(self):
+        wh = "best-wh-h3"
+        tk_id = self._tai_khoan_sandbox(wh)
+        bearer = "v9." + "h3" * 24
+        self._luu_bearer(tk_id, self.ta, bearer, wh)
+        don_id = self._tao_don(self.ta, tk_id, "BEST-H3", "MD-H3")
+        body = json.dumps(self._payload("BEST-H3", "MD-H3", 211, 1792378800000)).encode()
+        tk = self._tk(tk_id)
+        for ten, headers, ma in (
+            ("thiếu header", {}, "THIEU_HEADER"),
+            ("thiếu token", {"authorization": "Bearer"}, "SAI_DINH_DANG_BEARER"),
+            ("sai tiền tố", {"authorization": "Token " + bearer}, "SAI_DINH_DANG_BEARER"),
+        ):
+            with self.subTest(ten=ten):
+                kq = wb.xu_ly_voi_account(tk, body, headers)
+                self.assertEqual(kq.http, 401, ten)
+                self.assertIn(ma, kq.body["Message"], ten)
+        self.assertEqual(self._dem_su_kien_theo_ma(tk_id, "BEST-H3"), 0)
+        self.assertIsNone(self._don(don_id)["trang_thai_giao"])
+
+    def test_h04_sandbox_khong_chap_nhan_hmac_mock_du_chu_ky_dung(self):
+        """Môi trường THẬT chỉ Bearer: HMAC đúng của mock cũng bị từ chối (không có đường lùi)."""
+        wh = "best-wh-h4"
+        tk_id = self._tai_khoan_sandbox(wh)
+        don_id = self._tao_don(self.ta, tk_id, "BEST-H4", "MD-H4")
+        body = json.dumps(self._payload("BEST-H4", "MD-H4", 211, 1792378800000)).encode()
+        chu_ky = hmac.new(("secret-" + wh).encode(), body, hashlib.sha256).hexdigest()
+        kq = wb.xu_ly_voi_account(self._tk(tk_id), body,
+                                  {"x-webhook-signature": chu_ky})
+        self.assertEqual(kq.http, 401)
+        self.assertIn("THIEU_HEADER", kq.body["Message"],
+                      "HMAC mock đã lọt vào đường Bearer")
+        self.assertEqual(self._dem_su_kien_theo_ma(tk_id, "BEST-H4"), 0)
+        self.assertIsNone(self._don(don_id)["trang_thai_giao"])
+
+    def test_h05_mock_khong_chap_nhan_bearer_du_token_dung(self):
+        """Môi trường mock vẫn là HMAC của hub: Bearer (dù đúng kho) không phải vé vào."""
+        bearer = "v9." + "h5" * 24
+        self._luu_bearer(self.tk_a, self.ta, bearer, WH_A)
+        don_id = self._tao_don(self.ta, self.tk_a, "BEST-H5", "MD-H5")
+        body = json.dumps(self._payload("BEST-H5", "MD-H5", 211, 1792378800000)).encode()
+        kq = wb.xu_ly_voi_account(self._tk(self.tk_a), body,
+                                  {"authorization": "Bearer " + bearer})
+        self.assertEqual(kq.http, 401)
+        self.assertIn("x-webhook-signature", kq.body["Message"])
+        self.assertEqual(self._dem_su_kien_theo_ma(self.tk_a, "BEST-H5"), 0)
+        self.assertIsNone(self._don(don_id)["trang_thai_giao"])
+
+    def test_h06_bearer_gan_chet_voi_account_va_webhook_ma(self):
+        """Token của account A KHÔNG dùng được cho account B; token lưu sai `webhook_ma` cũng bị chặn."""
+        wh_a, wh_b = "best-wh-h6-a", "best-wh-h6-b"
+        tk_a = self._tai_khoan_sandbox(wh_a)
+        tk_b = self._tai_khoan_sandbox(wh_b)
+        bearer_a, bearer_b = "v9." + "6a" * 24, "v9." + "6b" * 24
+        self._luu_bearer(tk_a, self.ta, bearer_a, wh_a)
+        self._luu_bearer(tk_b, self.ta, bearer_b, wh_b)
+        don_b = self._tao_don(self.ta, tk_b, "BEST-H6", "MD-H6")
+        p = self._payload("BEST-H6", "MD-H6", 211, 1792378800000)
+
+        kq = self._goi_bearer(tk_b, p, bearer_a)
+        self.assertEqual(kq.http, 401, "token account A lọt vào account B")
+        self.assertIn("BEARER_KHONG_KHOP", kq.body["Message"])
+        self.assertEqual(self._dem_su_kien_theo_ma(tk_b, "BEST-H6"), 0)
+        self.assertIsNone(self._don(don_b)["trang_thai_giao"])
+
+        # Token ĐÚNG nhưng lưu kèm `webhook_ma` khác ⇒ từ chối, không đoán.
+        self._luu_bearer(tk_a, self.ta, bearer_a, "best-wh-h6-khac")
+        kq2 = self._goi_bearer(tk_a, p, bearer_a)
+        self.assertEqual(kq2.http, 401)
+        self.assertIn("DU_LIEU_KHONG_KHOP", kq2.body["Message"])
+
+    def test_h07_bearer_khong_qua_duoc_tenant_khac(self):
+        wh_a, wh_b = "best-wh-h7-a", "best-wh-h7-b"
+        tk_a = self._tai_khoan_sandbox(wh_a, tenant_id=self.ta)
+        tk_b = self._tai_khoan_sandbox(wh_b, tenant_id=self.tb)
+        bearer_a, bearer_b = "v9." + "7a" * 24, "v9." + "7b" * 24
+        self._luu_bearer(tk_a, self.ta, bearer_a, wh_a)
+        self._luu_bearer(tk_b, self.tb, bearer_b, wh_b)
+        don_b = self._tao_don(self.tb, tk_b, "BEST-H7", "MD-H7")
+        kq = self._goi_bearer(tk_b, self._payload("BEST-H7", "MD-H7", 211, 1792378800000),
+                              bearer_a)
+        self.assertEqual(kq.http, 401)
+        self.assertEqual(self._dem_su_kien_theo_ma(tk_b, "BEST-H7"), 0)
+        self.assertIsNone(self._don(don_b)["trang_thai_giao"],
+                          "Bearer tenant A đã cập nhật đơn tenant B")
+
+    def test_h08_gui_lai_cung_su_kien_bang_bearer_van_idempotent(self):
+        wh = "best-wh-h8"
+        tk_id = self._tai_khoan_sandbox(wh)
+        bearer = "v9." + "h8" * 24
+        self._luu_bearer(tk_id, self.ta, bearer, wh)
+        don_id = self._tao_don(self.ta, tk_id, "BEST-H8", "MD-H8")
+        p = self._payload("BEST-H8", "MD-H8", 301, 1792378800000)
+        kq1 = self._goi_bearer(tk_id, p, bearer)
+        kq2 = self._goi_bearer(tk_id, p, bearer)
+        self.assertTrue(kq1.thanh_cong)
+        self.assertTrue(kq2.thanh_cong)
+        self.assertFalse(kq1.trung)
+        self.assertTrue(kq2.trung)
+        self.assertEqual(kq1.su_kien_id, kq2.su_kien_id)
+        self.assertEqual(self._dem_su_kien_theo_ma(tk_id, "BEST-H8"), 1)
+        self.assertEqual(len(self._ls(don_id)), 1)
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao")
+
+
+# ============================================================================
+# I. CSDL ĐÃ MIGRATE — CỘT DẤU VẾT CỦA HUB ĐƯỢC GHI THẬT
+# ============================================================================
+class TestI_CSDLDaMigrate(Nen):
+    """Lớp CUỐI: chạy lại đường ĐÃ MIGRATE của `wh_su_kien` (bộ chính canh đường chưa migrate).
+
+    `migrate.py` mới thêm các cột dấu vết; nếu mô-đun chỉ "chạy được" mà không ghi đúng cột thì
+    dashboard/soát DLQ sẽ trống. Lớp này thêm ĐÚNG bộ cột đó (không đụng tệp ngoài phạm vi),
+    xoá cache dò cột của hub, rồi canh: mã gốc, cờ cần soát, trạng thái chuẩn, `don_id`, và
+    `hang_moc_thoi_gian` CHỈ có khi sự kiện thực sự được áp.
+    """
+
+    COT_MIGRATE = (("hang_ma_goc", "TEXT"), ("hang_mo_ta_goc", "TEXT"),
+                   ("hang_su_kien_goc", "TEXT"), ("anh_xa_do_tin_cay", "TEXT"),
+                   ("anh_xa_nguon", "TEXT"), ("can_soat", "INTEGER NOT NULL DEFAULT 0"),
+                   ("hang_moc_thoi_gian", "TEXT"),
+                   ("don_id", "INTEGER REFERENCES don_hang(id)"),
+                   ("trang_thai_chuan", "TEXT"))
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        da_co = {r[1] for r in csdl.nhieu("PRAGMA table_info(wh_su_kien)")}
+        for ten, kieu in cls.COT_MIGRATE:
+            if ten not in da_co:
+                csdl.ghi(f"ALTER TABLE wh_su_kien ADD COLUMN {ten} {kieu}")
+        hub.xoa_cache_cot()
+
+    def test_i01_cot_dau_vet_va_moc_chi_ghi_khi_su_kien_duoc_ap(self):
+        # (1) Sự kiện ĐƯỢC ÁP: đủ dấu vết + mốc hãng.
+        don_ap = self._tao_don(self.ta, self.tk_a, "BEST-I1-AP", "MD-I1-AP")
+        moc_ap = 1792378800000
+        kq_ap = self._gui(self.tk_a, self._payload("BEST-I1-AP", "MD-I1-AP", 301, moc_ap))
+        self.assertEqual(kq_ap.ket_cuc, "cap_nhat")
+        sk_ap = self._sk(kq_ap.su_kien_id)
+        self.assertEqual(sk_ap["hang_ma_goc"], "301")
+        self.assertEqual(sk_ap["trang_thai_chuan"], "dang_giao")
+        self.assertEqual(sk_ap["can_soat"], 0)
+        self.assertEqual(sk_ap["don_id"], don_ap)
+        self.assertEqual(sk_ap["hang_moc_thoi_gian"], hub._moc_chuan(moc_ap))
+        self.assertIn("301", sk_ap["hang_su_kien_goc"])
+
+        # (2) customer Cancel: biết mã nhưng KHÔNG áp ⇒ can_soat=1, không trạng thái chuẩn,
+        # KHÔNG được đẩy mốc hãng (nếu đẩy, một sự kiện có thật đến sau bị chặn oan).
+        don_nhan = self._tao_don(self.ta, self.tk_a, "BEST-I1-NHAN", "MD-I1-NHAN", "dang_giao")
+        kq_nhan = self._gui(self.tk_a, self._payload("BEST-I1-NHAN", "MD-I1-NHAN",
+                                                     "customer Cancel", moc_ap + 60_000))
+        self.assertEqual(kq_nhan.ket_cuc, "ghi_nhan")
+        sk_nhan = self._sk(kq_nhan.su_kien_id)
+        self.assertEqual(sk_nhan["hang_ma_goc"], "customer Cancel")
+        self.assertEqual(sk_nhan["hang_mo_ta_goc"], "Trạng thái thử MOCK — không phải dữ liệu BEST thật")
+        self.assertIsNone(sk_nhan["trang_thai_chuan"])
+        self.assertEqual(sk_nhan["can_soat"], 1)
+        self.assertIsNone(sk_nhan["hang_moc_thoi_gian"],
+                          "sự kiện KHÔNG áp đã đẩy mốc hãng — lỗi G14 tái phát")
+        self.assertEqual(sk_nhan["don_id"], don_nhan)
+        self.assertIn("customer Cancel", sk_nhan["hang_su_kien_goc"])
+        self.assertEqual(self._don(don_nhan)["trang_thai_giao"], "dang_giao")
+
+    def test_i02_ma_can_soat_duoc_ap_van_giu_co_can_soat(self):
+        """203/707/777/1000 ĐƯỢC ÁP nhưng tài liệu đánh dấu CẦN SOÁT (lấy/trả thất bại, thất lạc,
+        hư hỏng). Cột `can_soat` không được suy từ "có áp hay không" — nếu suy, đúng những sự
+        kiện cần người soát nhất lại rơi khỏi hàng đợi soát.
+        """
+        for ma in (203, 707, 777, 1000):
+            with self.subTest(ma=ma):
+                code = f"BEST-I2-{ma}"
+                don_id = self._tao_don(self.ta, self.tk_a, code, f"MD-I2-{ma}")
+                kq = self._gui(self.tk_a, self._payload(code, f"MD-I2-{ma}", ma,
+                                                        1792378800000 + ma))
+                self.assertEqual(kq.ket_cuc, "cap_nhat", f"mã {ma}: {kq!r}")
+                sk = self._sk(kq.su_kien_id)
+                self.assertEqual(sk["can_soat"], 1,
+                                 f"mã {ma} được áp nhưng MẤT cờ cần soát")
+                self.assertEqual(sk["trang_thai_chuan"], ANH_XA_DOC_LAP[ma][0])
+                self.assertEqual(self._don(don_id)["trang_thai_giao"],
+                                 ANH_XA_DOC_LAP[ma][0])
+
+        # Đối chứng: mã thường được áp ⇒ can_soat=0.
+        don_ok = self._tao_don(self.ta, self.tk_a, "BEST-I2-OK", "MD-I2-OK")
+        kq_ok = self._gui(self.tk_a, self._payload("BEST-I2-OK", "MD-I2-OK", 301,
+                                                   1792380000000))
+        self.assertEqual(kq_ok.ket_cuc, "cap_nhat")
+        self.assertEqual(self._sk(kq_ok.su_kien_id)["can_soat"], 0)
+        self.assertEqual(self._don(don_ok)["trang_thai_giao"], "dang_giao")
 
 
 # ============================================================================

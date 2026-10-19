@@ -72,8 +72,10 @@ CHẠY
 import atexit
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 
@@ -91,6 +93,19 @@ MA_QUA_HAN = 124
 MA_KHONG_CO_CA = 4
 MA_TU_KIEM_HONG = 3
 GIAY_TOI_DA = 2400
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# Cổng này KHÔNG gọi `migrate` trực tiếp: nó chạy runner thật trong tiến trình con. Bộ thử vẫn
+# phải TỰ KHAI trước, rồi TRUYỀN khai báo sang con (subprocess kế thừa `os.environ`) — nếu không,
+# một dòng `VIP_KHO_DANG_CHAY=sqlite` do người chạy nhớ đặt là điều kiện để cổng xanh, và cổng
+# thành GIỎ. `VIP_HUB_DATA` phải trỏ thư mục TẠM trước khi khai (hai chốt cô lập của hàm khai).
+if not os.environ.get("VIP_HUB_DATA"):
+    _TAM_KHAI = tempfile.mkdtemp(prefix="vh-g19-tichhop-")
+    os.environ["VIP_HUB_DATA"] = _TAM_KHAI
+    atexit.register(lambda p=_TAM_KHAI: shutil.rmtree(p, ignore_errors=True))
+sys.path.insert(0, GOC_APP)
+import cau_hinh                                                            # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
 
 # Khuôn cần tiêm: dòng gọi bộ đo trong runner. Khẳng định `count == 1` trước khi thay, để một
 # lần refactor runner làm khuôn biến mất thì ca tự kiểm HỎNG (kêu to) chứ không im lặng bỏ qua.

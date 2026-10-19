@@ -76,6 +76,28 @@ import secret_provider                                                  # noqa: 
 import server                                                           # noqa: E402
 import trang_thai_hang as tth                                           # noqa: E402
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# Bộ thử gọi `migrate.chay()` (dựng nền) và chạy các bộ con; khai báo dưới đây vào `os.environ`
+# nên mọi tiến trình con cũng thấy. KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`:
+# một bộ chỉ xanh khi người chạy nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ nền TẠM ở trên.
+#
+# VÌ SAO KHÔNG GỌI THẲNG: driver đột biến (`_cay_dot_bien`) đặt một BẢN SAO `app/` trong thư mục
+# tạm LÊN TRƯỚC `sys.path`, nên trong tiến trình con `cau_hinh` được nạp từ bản sao và
+# `cau_hinh.THU_MUC_GOC` là chính thư mục tạm — mọi nền tạm đều bị coi là "trong cây repo" và
+# `khai_kho_kiem_thu()` TỪ CHỐI OAN (đo được: 1 FAIL ở `f7`/M4). Gốc repo THẬT luôn suy được
+# từ `__file__` của bộ thử, nên chỉ trong lúc gọi ta cho hàm khai nhìn gốc THẬT.
+# Chốt cô lập KHÔNG nới: dữ liệu nằm trong repo thật vẫn bị từ chối như cũ.
+def _khai_kho_cua_bo_thu():
+    cu = getattr(cau_hinh, "THU_MUC_GOC", None)
+    try:
+        cau_hinh.THU_MUC_GOC = GOC_CAY
+        return cau_hinh.khai_kho_kiem_thu()
+    finally:
+        cau_hinh.THU_MUC_GOC = cu
+
+
+_khai_kho_cua_bo_thu()
+
 # CHỐT "CÂY SẠCH" + VÂN TAY + MÔI TRƯỜNG GIT — MỘT chỗ duy nhất (AG-05 G21). Ba bản sao của cùng
 # một luật là ba bản sẽ trôi khỏi nhau — đúng khuôn `N-G18-00` (hai nhiệt kế, hai kết quả).
 # `sys.path[0]` là thư mục chứa tệp này khi chạy trực tiếp; nhánh dưới chỉ để chắc chắn.

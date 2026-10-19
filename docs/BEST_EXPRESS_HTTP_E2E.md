@@ -10,7 +10,8 @@ credentials thật, không có đơn thật, không push/deploy, không đổi `
 |---|---|
 | Agent | AG-00 — tích hợp webhook BEST |
 | Nền | `best/integration` @ `5429c6d` |
-| Commit gộp | `dd42fdf` (mã + E2E), `5067d1a`/`c2f96ea` (bàn giao) trên `best/integration`; các nhánh R1/R2/R27/R3/R6 gộp xen giữa; `main` = `de740dc`; không push |
+| Commit gộp | `dd42fdf` (mã + E2E) + các commit bàn giao tiếp theo trên `best/integration`; các nhánh R1/R2/R27/R3/R6 gộp xen giữa; `main` = `de740dc`; không push |
+| HEAD khi đo hồi quy cuối | `cced0f5` (sau khi gộp R6; cây sạch, không có `origin`) |
 | Tệp sửa | `app/server.py` (nhánh phân luồng BEST) · `app/webhook_best.py` (ba lỗi QA: `modified_at` dị dạng/mốc xa, hủy đơn xen giữa đọc/cập nhật) |
 | Tệp mới | `app/thu/thu_best_e2e_http.py` · `docs/BEST_EXPRESS_HTTP_E2E.md` |
 | Không sửa | `main` · `app/webhook.py` · `app/adapter_best.py` · `app/xac_thuc_best.py` |

@@ -40,6 +40,7 @@
 #      (nguồn CÓ đột biến ⇒ ĐỎ). Lớp `CaTuKiem`.
 #   2. ĐỐI CHỨNG DƯƠNG CHO MỌI CA PHỦ ĐỊNH: mỗi ca "phải bị từ chối" đi kèm khẳng định cửa đó MỞ
 #      khi hợp lệ. Xem `CaGanChat.test_c1b` và mọi `assertTrue` đứng cạnh một `assertRaises`.
+import ast
 import base64
 import hashlib
 import json
@@ -80,6 +81,57 @@ MOC_THU_HTTP_JT = 57
 def _sha256(duong):
     with open(duong, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
+
+
+def _dong_nguon(duong):
+    """Các dòng nguồn THẬT của một tệp — dùng để đối chiếu tại chỗ, không ghim số dòng."""
+    with open(duong, encoding="utf-8") as f:
+        return f.read().splitlines()
+
+
+def _vung_ham(duong):
+    """Tên hàm → (dòng đầu, dòng cuối) đọc từ AST của chính tệp đang đo."""
+    with open(duong, encoding="utf-8") as f:
+        cay = ast.parse(f.read(), filename=duong)
+    return {n.name: (n.lineno, n.end_lineno)
+            for n in ast.walk(cay)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+
+def _vung_chuoi(duong):
+    """Mọi literal chuỗi trong tệp: (dòng đầu, dòng cuối, giá trị).
+
+    Cần `dòng cuối` vì một chuỗi Python có thể viết nối nhiều dòng liền kề; kiểm "đoạn trích nằm
+    trên đúng một dòng nguồn" sẽ báo HỎNG GIẢ cho những chuỗi như vậy.
+    """
+    with open(duong, encoding="utf-8") as f:
+        cay = ast.parse(f.read(), filename=duong)
+    return [(n.lineno, n.end_lineno, n.value)
+            for n in ast.walk(cay)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+def _nhan_hieu_doc_lap(duong):
+    """Quét ĐỘC LẬP các literal chuỗi CHẠY ĐƯỢC có dấu hiệu hãng.
+
+    Đây là phép đối chiếu thứ hai cho `PT.phan_tich`: cùng một câu hỏi ("nhãn hãng nằm ở những
+    dòng nào trong thông điệp THẬT"), nhưng viết thẳng bằng AST tại đây. Không ghim số dòng —
+    nếu mã dịch dòng, cả hai nguồn cùng dịch và phép so vẫn đúng; nếu một nguồn bỏ sót/thêm,
+    phép so ĐỎ. Docstring bị loại bằng đúng định nghĩa của Python (`ast.get_docstring`).
+    """
+    with open(duong, encoding="utf-8") as f:
+        cay = ast.parse(f.read(), filename=duong)
+    docstring = set()
+    for x in ast.walk(cay):
+        if isinstance(x, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            d = ast.get_docstring(x, clean=False)
+            if d is not None and x.body and isinstance(x.body[0], ast.Expr):
+                docstring.add(id(x.body[0].value))
+    dau = tuple(getattr(PT, "_DAU_HIEU_TEN_HANG", ("jtexpress", "j&t"))) + ("bizcontent",)
+    return sorted({n.lineno for n in ast.walk(cay)
+                   if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                   and id(n) not in docstring
+                   and any(d in n.value.lower() for d in dau)})
 
 
 def _git(*a):
@@ -335,11 +387,38 @@ class CaRanhGioi(CaGoc):
 
     # -- a2: hàm giữ chốt chặn hãng vs hàm lõi -----------------------------------------------
     def test_a2_hai_ham_giu_chot_chan_hang_bi_gan_nhan_dung(self):
-        # CON SỐ GIM: `docs/G20_DA_HANG.md` §3.2 trích "7/37 hàm chạm đặc thù; 30 vendor-neutral".
+        """BẤT BIẾN PHÂN HOẠCH — không ghim tổng số hàm của một lượt đo.
+
+        Bản cũ ghim cứng số hàm CHUNG (30) và số hàm DAC_THU_JT (7) của một lượt đo. Con số 30 là số đo của `docs/G20_DA_HANG.md`
+        ở một thời điểm; sản phẩm thêm hàm vendor-neutral là chuyện bình thường, nên mọi lượt
+        thêm hàm đều làm phép thử ĐỎ dù không có lỗi. Bất biến đúng là QUAN HỆ giữa nhãn và
+        bằng chứng mà bộ dò tự thu được:
+          · DAC_THU_JT ⇔ `hang_dac_thu` KHÁC rỗng (và mọi tên dẫn ra đều là hằng có thật);
+          · CHUNG      ⇔ `hang_dac_thu` RỖNG;
+          · hai tập hợp phủ đúng toàn bộ số hàm đã đọc.
+        Hai chốt chặn và danh sách hàm lõi vẫn được neo bằng TÊN, không bằng số đếm.
+        """
         dem = {}
         for v in self.kq["ham"].values():
             dem[v["vai_tro"]] = dem.get(v["vai_tro"], 0) + 1
-        self.assertEqual(dem, {"CHUNG": 30, "DAC_THU_JT": 7}, f"bảng phân loại hàm đã đổi: {dem}")
+        self.assertEqual(set(dem), {"CHUNG", "DAC_THU_JT"}, f"nhãn lạ trong bảng: {dem}")
+        self.assertEqual(sum(dem.values()), len(self.kq["ham"]),
+                         f"phân hoạch không phủ hết {len(self.kq['ham'])} hàm: {dem}")
+        for ten, v in self.kq["ham"].items():
+            with self.subTest(ham=ten):
+                if v["vai_tro"] == "DAC_THU_JT":
+                    self.assertTrue(v["hang_dac_thu"],
+                                    f"{ten} bị gán DAC_THU_JT mà không có bằng chứng")
+                    self.assertLessEqual(set(v["hang_dac_thu"]), set(self.kq["hang"]),
+                                         f"{ten} dẫn hằng không tồn tại: {v['hang_dac_thu']}")
+                else:
+                    self.assertEqual(v["hang_dac_thu"], [],
+                                     f"{ten} là CHUNG nhưng chạm hằng đặc thù")
+        # Nhãn phải SUY ĐƯỢC TỪ BẰNG CHỨNG, không phải một bảng đếm tay đặt cạnh.
+        self.assertEqual(
+            {t for t, v in self.kq["ham"].items() if v["vai_tro"] == "DAC_THU_JT"},
+            {t for t, v in self.kq["ham"].items() if v["hang_dac_thu"]},
+            "nhãn DAC_THU_JT và danh sách hằng đặc thù lệch nhau")
         for ten in ("host_duoc_phep", "tach_url"):
             with self.subTest(ham=ten):
                 self.assertEqual(self.kq["ham"][ten]["vai_tro"], "DAC_THU_JT")
@@ -411,14 +490,33 @@ class CaRanhGioi(CaGoc):
 
         Bài học `thu_bien_driver.py` ca a4 ("grep đọc cả chú thích") lặp lại y hệt ở tầng AST nếu
         không lọc: bản đầu của bộ dò báo 10 dòng "nhãn hiệu lộ" trong khi thực tế chỉ 4 dòng thật.
+
+        Bản cũ ghim bốn SỐ DÒNG của lượt đo. Mã dịch một dòng là phép thử ĐỎ dù nhãn
+        vẫn nằm đúng chỗ. Bất biến ở đây là QUAN HỆ HAI NGUỒN:
+          · mỗi bản ghi phải trỏ vào một LITERAL CHUỖI THẬT trong AST, không phải một dòng trống;
+          · tập dòng do `PT.phan_tich` báo phải BẰNG tập dòng do một phép quét AST độc lập
+            (`_nhan_hieu_doc_lap`) tìm ra, cũng bỏ docstring.
+        Nhờ vậy phép thử bắt được cả bỏ sót lẫn báo nhầm, mà không phụ thuộc số dòng.
         """
-        dong = [d["dong"] for d in self.kq["nhan_hieu_ten_hang"]]
-        self.assertTrue(dong, "bộ dò phải tìm thấy nhãn hiệu hãng trong thông điệp thật")
-        # 4 chỗ THẬT trong `http_jt.py`: hằng hai host (115,116), tiền tố `J&T/` của
-        # `chan_moi_truong` (108), và thông điệp thân-rỗng của `_ma_hoa_form` (831).
-        for d in (108, 115, 116, 831):
-            with self.subTest(dong=d):
-                self.assertIn(d, dong)
+        ds = self.kq["nhan_hieu_ten_hang"]
+        self.assertTrue(ds, "bộ dò phải tìm thấy nhãn hiệu hãng trong thông điệp thật")
+        dong = [d["dong"] for d in ds]
+        self.assertEqual(len(dong), len(set(dong)), f"cùng một dòng bị báo nhiều lần: {dong}")
+        nguon = _dong_nguon(DUONG_HTTP)
+        vung_chuoi = _vung_chuoi(DUONG_HTTP)
+        for d in ds:
+            with self.subTest(dong=d["dong"]):
+                self.assertGreaterEqual(d["dong"], 1)
+                self.assertLessEqual(d["dong"], len(nguon),
+                                     f"báo dòng {d['dong']} ngoài tệp {len(nguon)} dòng")
+                khop = [v for v in vung_chuoi
+                        if v[0] == d["dong"] and d["trich"] in v[2]]
+                self.assertTrue(khop,
+                                f"dòng {d['dong']} không có literal chuỗi chứa {d['trich']!r}")
+                self.assertTrue(nguon[d["dong"] - 1].strip(),
+                                f"dòng {d['dong']} rỗng — không thể là thông điệp chạy được")
+        self.assertEqual(sorted(set(dong)), _nhan_hieu_doc_lap(DUONG_HTTP),
+                         "bộ dò trong sản phẩm và phép quét AST độc lập không khớp nhau")
         # ĐỐI CHỨNG DƯƠNG hai chiều: nhãn trong DOCSTRING không được tính; nhãn trong THÔNG ĐIỆP
         # thật thì phải được tính. Cùng một chuỗi "J&T", hai vị trí, hai kết quả khác nhau.
         with self._nguon_tam('def f():\n    """J&T la hang gi."""\n    return 1\n') as duong:
@@ -430,12 +528,42 @@ class CaRanhGioi(CaGoc):
 
     # -- a7: bảng 2b — nhánh mã bị ràng buộc hãng, đo ở CHỖ DÙNG -----------------------------
     def test_a7_bon_nhanh_ma_bi_rang_buoc_hang(self):
+        """BẤT BIẾN THEO HÀM — không ghim tọa độ dòng.
+
+        Bản cũ đòi đúng bốn TỌA ĐỘ DÒNG của lượt đo; chỉ cần chèn một dòng phía trên là ĐỎ dù bốn
+        nhánh vẫn nguyên. Nay mỗi bản ghi được kiểm bằng QUAN HỆ với chính cây AST:
+          · dòng báo cáo phải NẰM TRONG khoảng dòng của hàm mà nó khai (`ham`);
+          · hàm đó phải THẬT SỰ dùng hằng đặc thù trong `hang_dac_thu` ở đâu đó trong thân;
+          · nhánh phải có ít nhất một lệnh, không phải một `if` rỗng;
+          · tập hàm bị ràng buộc hãng được neo bằng TÊN (bốn hàm lõi), không bằng số dòng.
+        """
         nhanh = self.kq["nhanh_ma_gan_hang"]
-        self.assertEqual([d["dong"] for d in nhanh], [285, 311, 343, 742],
-                         f"các nhánh ràng buộc hãng đã đổi: {nhanh}")
-        the_ham = {d["dong"]: d["ham"] for d in nhanh}
-        self.assertEqual(the_ham[742], "tach_url")
-        self.assertEqual(the_ham[285], "_gia_tri_trong_json")
+        self.assertTrue(nhanh, "bộ dò phải thấy ít nhất một nhánh ràng buộc hãng")
+        self.assertEqual(len({d["dong"] for d in nhanh}), len(nhanh),
+                         f"cùng một dòng bị báo nhiều lần: {nhanh}")
+        vung = _vung_ham(DUONG_HTTP)
+        nguon = _dong_nguon(DUONG_HTTP)
+        for d in nhanh:
+            with self.subTest(dong=d["dong"], ham=d["ham"]):
+                self.assertIn(d["ham"], vung, f"báo hàm không tồn tại: {d['ham']}")
+                dau, cuoi = vung[d["ham"]]
+                self.assertGreaterEqual(d["dong"], dau,
+                                        f"dòng {d['dong']} nằm TRƯỚC hàm {d['ham']} ({dau})")
+                self.assertLessEqual(d["dong"], cuoi,
+                                     f"dòng {d['dong']} nằm SAU hàm {d['ham']} ({cuoi})")
+                self.assertTrue(d["hang_dac_thu"],
+                                f"nhánh {d['ham']} không chỉ ra hằng đặc thù nào")
+                than_ham = "\n".join(nguon[dau - 1:cuoi])
+                for ten_bang in d["hang_dac_thu"]:
+                    self.assertIn(ten_bang, than_ham,
+                                  f"{d['ham']} khai {ten_bang} nhưng thân hàm không dùng")
+                self.assertGreaterEqual(d["so_lenh_trong_nhanh"], 1,
+                                        f"nhánh {d['ham']} rỗng")
+        self.assertEqual(
+            {d["ham"] for d in nhanh},
+            {"_gia_tri_trong_json", "_gia_tri_bi_mat_trong_json",
+             "_gia_tri_bi_mat_tu_phan_hoi", "tach_url"},
+            "tập hàm bị ràng buộc hãng đã đổi — phải xem lại ranh giới, không chỉ cập nhật số")
 
     # tiện ích: ghi một nguồn Python tạm để đột biến
     class _nguon_tam:

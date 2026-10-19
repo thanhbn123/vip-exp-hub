@@ -105,9 +105,20 @@ class A_VongTronTrenDuLieuThat(unittest.TestCase):
                          "sao_luu() đã làm ĐỔI CSDL gốc")
 
     def test_a5_ban_sao_luu_co_byte_va_mo_duoc(self):
+        """BẤT BIẾN: khôi phục giữ NGUYÊN phiên bản schema của nguồn — không ghim một số cụ thể.
+
+        Bản cũ đòi `phien_ban_sau == 9`. Đó là số của schema tại lượt đo G20; khi migration lên
+        v10, phép thử ĐỎ dù bản sao lưu khôi phục ĐÚNG phiên bản của chính nó. Câu hỏi đúng là
+        quan hệ NGUỒN → BẢN KHÔI PHỤC: hai bên phải cùng một phiên bản, bất kể phiên bản đó là 9,
+        10 hay N. Số N được đọc TẠI CHỖ từ cùng lượt đo (`_truoc`), không chép tay vào tệp.
+        """
         self.assertGreater(self.kq["so_byte_ban_sao"] or 0, 0, "bản sao lưu 0 byte")
         self.assertEqual(self.kq["integrity_sau"], "ok", "CSDL khôi phục không qua integrity_check")
-        self.assertEqual(self.kq["phien_ban_sau"], 9, "phiên bản schema sau khôi phục khác 9")
+        pb_truoc = self.kq["_truoc"].get("phien_ban")
+        self.assertIsNotNone(pb_truoc, "không đọc được phiên bản schema của CSDL NGUỒN")
+        self.assertEqual(self.kq["phien_ban_sau"], pb_truoc,
+                         "phiên bản schema sau khôi phục KHÁC nguồn: %r != %r"
+                         % (self.kq["phien_ban_sau"], pb_truoc))
 
 
 # ============================================================================

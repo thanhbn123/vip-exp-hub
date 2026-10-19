@@ -127,6 +127,27 @@ class CanhCauTruc(unittest.TestCase):
         for ma, lop in adapter._DANG_KY.items():
             self.assertFalse(lop.CHO_PHEP_LIVE, f"{ma} đã MỞ đường LIVE — Owner chưa duyệt")
 
+    def test_07_xoay_khoa_phu_ca_ba_kho_tep_best(self):
+        """Kho BEST là BA tệp NGOÀI schema; `xoay_khoa()` quét `carrier_accounts` nên không
+        đại diện cho chúng. Thiếu dây nối là secret BEST sống mãi dưới khóa cũ — rủi ro #11
+        của `docs/BEST_EXPRESS_SECURITY_REVIEW.md`.
+
+        Ca này canh CẤU TRÚC (dây nối + phủ đủ ba lớp); phép đo HÀNH VI nằm ở
+        `thu_best_auth.Test07_XoayKhoaPhuBaKho` — đọc kết quả cả hai, đừng coi một là đủ.
+        """
+        nguon_bm = doc(os.path.join(GOC_APP, "bao_mat.py"))
+        self.assertIn("def xoay_khoa", nguon_bm, "xoay_khoa() đã biến mất?")
+        than_bm = nguon_bm[nguon_bm.index("def xoay_khoa"):]
+        self.assertIn("ma_hoa_lai_kho(", than_bm,
+                      "`bao_mat.xoay_khoa()` KHÔNG gọi `xac_thuc_best.ma_hoa_lai_kho` — "
+                      "ba tệp kho BEST sẽ không bao giờ được xoay")
+        nguon_xb = doc(os.path.join(GOC_APP, "xac_thuc_best.py"))
+        self.assertIn("def ma_hoa_lai_kho", nguon_xb, "thiếu hàm xoay khóa cho kho BEST")
+        than_xb = nguon_xb[nguon_xb.index("def ma_hoa_lai_kho"):]
+        for ten in ("LOAI_CREDENTIAL", "LOAI_TOKEN_TRUY_CAP", "LOAI_WEBHOOK"):
+            self.assertIn(ten, than_xb,
+                          f"xoay khóa kho BEST KHÔNG phủ lớp {ten} — secret lớp đó không xoay được")
+
 
 # ============================================================================
 # G16 — cấu hình credentials, cổng môi trường, và LUẬT PHÂN TẦNG của lớp HTTP
@@ -297,6 +318,43 @@ class G16_CauHinhVaPhanTang(unittest.TestCase):
             T.goi(hong_ghi, thao_tac="createOrder", co_khoa_chong_trung=False,
                   ngu=lambda s: None)
         self.assertEqual(lan[0], 1, "createOrder bị gửi lại — nguy cơ tạo đơn trùng!")
+
+
+# ============================================================================
+# G22 — KHÔI PHỤC PHẢI FAIL-CLOSED THEO KHO ĐANG CHẠY
+# ============================================================================
+class G22_KhoiPhucFailClosed(unittest.TestCase):
+    """`khoi_phuc()` chỉ chép đè `hub.db` (SQLite). Trên deployment ĐÃ KHAI PostgreSQL, chạy
+    tiếp là một ĐƯỜNG LÙI GIẢ: nó báo "Đã khôi phục" trong khi dữ liệu thật không được chạm —
+    đúng lớp P-G15-02 `do2b` mà `sao_luu()` đã đóng. Ca này đo cả hai vế.
+    """
+
+    def test_01_khoi_phuc_tu_choi_khi_kho_dang_chay_da_khai_postgresql(self):
+        import cau_hinh
+        import migrate
+        cu = getattr(cau_hinh, "KHO_DANG_CHAY", None)
+        cau_hinh.KHO_DANG_CHAY = cau_hinh.KHO_POSTGRESQL
+        try:
+            with self.assertRaises(SystemExit) as ctx:
+                migrate.khoi_phuc("/khong/co/that.db")
+        finally:
+            cau_hinh.KHO_DANG_CHAY = cu
+        msg = str(ctx.exception)
+        self.assertIn("PostgreSQL", msg, "từ chối nhưng không nói rõ kho đang chạy là gì")
+        self.assertIn("pg_restore", msg, "từ chối nhưng không chỉ đường khôi phục đúng")
+        self.assertNotIn("không thấy tệp", msg,
+                         "chốt kho phải chạy TRƯỚC khi kiểm tệp backup — một lượt từ chối "
+                         "không được chạm/đọc gì")
+        # ĐỐI CHỨNG DƯƠNG: khai sqlite ⇒ CÙNG lời gọi đi tiếp tới bước kiểm tệp. Nhờ vậy lượt
+        # đỏ trên là do CHỐT KHO, không phải do hàm "luôn từ chối".
+        cau_hinh.KHO_DANG_CHAY = cau_hinh.KHO_SQLITE
+        try:
+            with self.assertRaises(SystemExit) as ctx2:
+                migrate.khoi_phuc("/khong/co/that.db")
+        finally:
+            cau_hinh.KHO_DANG_CHAY = cu
+        self.assertIn("không thấy tệp", str(ctx2.exception),
+                      "khai sqlite mà vẫn bị chặn trước bước kiểm tệp — chốt đang chặn nhầm")
 
 
 if __name__ == "__main__":

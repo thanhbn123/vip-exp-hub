@@ -1291,6 +1291,119 @@ class Test06_Transport(_CoSo):
 
 
 # ============================================================================
+# 07 — XOAY KHÓA PHẢI PHỦ BA TỆP KHO BEST (rủi ro #11 của báo cáo B2)
+# ============================================================================
+class Test07_XoayKhoaPhuBaKho(_CoSo):
+    """`bao_mat.xoay_khoa()` quét `carrier_accounts`; ba tệp kho BEST KHÔNG nằm trong schema.
+
+    Trước bản vá, chúng không bao giờ được xoay: secret BEST sống mãi dưới khóa cũ, và tới lúc
+    cho nghỉ khóa cũ thì credential/token/bearer thành rác — im lặng cho tới lượt gọi hãng đầu
+    tiên (docs/BEST_EXPRESS_SECURITY_REVIEW.md §11, rủi ro #11). Ca này đo bằng kho THẬT.
+    """
+
+    def test_01_xoay_khoa_phu_ca_ba_kho_va_giu_token_cache(self):
+        self.luu()
+        token1 = self.lay(now=1_700_000_000.0)
+        bearer = "BEARER-XOAY-KHOA-" + secrets.token_hex(16)
+        webhook_ma = "wh-xoay-" + secrets.token_hex(5)
+        xb.luu_bearer_webhook(self.tenant, self.tai_khoan, bearer, webhook_ma=webhook_ma)
+        cu = {ten: bao_mat.key_id_cua(_ban_ma_cua(duong, self.tenant, self.tai_khoan))
+              for ten, duong in (("cred", TEP_CREDENTIAL), ("token", TEP_TOKEN),
+                                 ("bearer", TEP_BEARER))}
+        so_login_truoc = MAY_CHU.so_lan_dang_nhap
+
+        kq = bao_mat.xoay_khoa()
+
+        best = kq.get("best_auth")
+        self.assertIsInstance(best, dict, "xoay_khoa() không trả kết quả xoay kho BEST")
+        self.assertNotEqual(kq["key_id"], kq["key_id_cu"], "xoay khóa không đổi khóa")
+        hong_cua_ca_nay = [h for h in best.get("hong", []) if str(self.tenant) in h]
+        self.assertEqual(hong_cua_ca_nay, [],
+                         "bản ghi của ca này bị báo hỏng: %r" % hong_cua_ca_nay)
+        # Cả BA tệp mang key_id MỚI (không chỉ carrier_accounts).
+        for ten, duong in (("cred", TEP_CREDENTIAL), ("token", TEP_TOKEN),
+                           ("bearer", TEP_BEARER)):
+            ban_ma = _ban_ma_cua(duong, self.tenant, self.tai_khoan)
+            self.assertEqual(bao_mat.key_id_cua(ban_ma), kq["key_id"],
+                             "kho %s KHÔNG được xoay sang khóa mới" % ten)
+            self.assertNotEqual(cu[ten], kq["key_id"])
+            self.assertFalse(bao_mat.can_xoay(ban_ma), "kho %s vẫn cần xoay" % ten)
+        # Secret vẫn DÙNG ĐƯỢC, không chỉ "không ném lỗi".
+        self.assertTrue(xb.trang_thai_credential(self.tenant, self.tai_khoan)["doc_duoc"])
+        self.assertTrue(xb.kiem_bearer_webhook(self.tenant, self.tai_khoan,
+                                              "Bearer " + bearer, webhook_ma=webhook_ma).hop_le)
+        # Token cache PHẢI sống: xoay khóa không phải lý do để đăng nhập lại. Nếu
+        # `credential_bam` không được cập nhật, token bị bỏ cache ⇒ login lại ⇒ ca này HỎNG.
+        self.assertEqual(self.lay(now=1_700_000_010.0), token1,
+                         "xoay khóa làm mất token cache (credential_bam không được cập nhật)")
+        self.assertEqual(MAY_CHU.so_lan_dang_nhap, so_login_truoc, "xoay khóa gây đăng nhập lại")
+        # Khóa cũ GIỮ LẠI, và không plaintext nào lọt vào ba tệp sau lượt xoay.
+        import secret_provider as sp
+        self.assertIn(kq["key_id_cu"], sp.nha_cung_cap().danh_sach_key_id(),
+                      "khóa cũ bị xóa — bản mã chưa chuyển sẽ MẤT")
+        self.assertIsNone(_quet_thu_muc(_TAM, self.password))
+        self.assertIsNone(_quet_thu_muc(_TAM, bearer))
+
+    def test_02_ban_ma_cheo_tenant_khong_duoc_hop_phap_hoa(self):
+        """Bản mã của tenant A chép sang slot tenant B KHÔNG được xoay lại dưới AAD của B.
+
+        Nếu lượt xoay khóa cứ giải rồi mã hóa lại theo slot đích, nó biến một bản ghi trộm
+        (đang vô dụng vì sai AAD) thành bản ghi DÙNG ĐƯỢC — tức là "hợp pháp hóa" đúng thứ mà
+        AAD sinh ra để chặn. Hàm xoay phải BÁO hỏng và để nguyên bản mã.
+        """
+        self.luu()
+        tenant_b = "tenant-b-xoay-" + secrets.token_hex(5)
+        tai_khoan_b = "BEST-B-" + secrets.token_hex(4)
+        _chep_ban_ma(TEP_CREDENTIAL, self.tenant, self.tai_khoan, tenant_b, tai_khoan_b)
+        ban_ma_truoc = _ban_ma_cua(TEP_CREDENTIAL, tenant_b, tai_khoan_b)
+
+        kq = bao_mat.xoay_khoa()
+
+        self.assertEqual(_ban_ma_cua(TEP_CREDENTIAL, tenant_b, tai_khoan_b), ban_ma_truoc,
+                         "xoay khóa đã mã hóa lại bản mã chép từ tenant khác — HỢP PHÁP HÓA")
+        st = xb.trang_thai_credential(tenant_b, tai_khoan_b)
+        self.assertTrue(st["co_credential"])
+        self.assertFalse(st["doc_duoc"], "bản mã chép từ tenant khác giải được ở tenant B")
+        self.assertTrue(any(tenant_b in h for h in kq["best_auth"]["hong"]),
+                        "không báo ra bản ghi chép chéo tenant: %r" % kq["best_auth"]["hong"])
+        # ĐỐI CHỨNG DƯƠNG: bản gốc của tenant A vẫn được xoay và vẫn dùng được.
+        self.assertEqual(
+            bao_mat.key_id_cua(_ban_ma_cua(TEP_CREDENTIAL, self.tenant, self.tai_khoan)),
+            kq["key_id"])
+        self.assertTrue(self.lay(now=1_700_000_000.0).startswith(PREFIX_TOKEN_GIA))
+
+    def test_03_sai_khoa_dich_thi_khong_ghi_va_bao_hong(self):
+        """Gọi thẳng `ma_hoa_lai_kho()` với một khóa KHÔNG phải khóa hiện hành.
+
+        `ma_hoa_cred()` luôn dùng khóa hiện hành, nên hợp đồng của hàm xoay là: bên gọi đã đặt
+        `key_id_dich` làm hiện hành TRƯỚC (đúng thứ tự `bao_mat.xoay_khoa`). Gọi sai thứ tự mà
+        hàm cứ ghi thì bản mã nằm dưới khóa hiện hành còn kết quả báo "đã xoay sang khóa cũ" —
+        một lời nói sai về chính nó. Ca này đòi: KHÔNG ghi gì + BÁO hỏng.
+        """
+        import secret_provider as sp
+        self.luu()
+        hien_hanh = sp.nha_cung_cap().khoa_hien_hanh()[0]
+        kho_khac = next((k for k in sp.nha_cung_cap().danh_sach_key_id() if k != hien_hanh),
+                        None) or sp.nha_cung_cap().tao_khoa_moi()
+        ban_ma_truoc = _ban_ma_cua(TEP_CREDENTIAL, self.tenant, self.tai_khoan)
+        with open(TEP_CREDENTIAL, "rb") as f:
+            tep_truoc = f.read()
+
+        kq = xb.ma_hoa_lai_kho(kho_khac)
+
+        self.assertEqual(_ban_ma_cua(TEP_CREDENTIAL, self.tenant, self.tai_khoan), ban_ma_truoc,
+                         "sai khóa đích mà vẫn ghi bản mã mới")
+        with open(TEP_CREDENTIAL, "rb") as f:
+            self.assertEqual(f.read(), tep_truoc, "sai khóa đích mà tệp kho bị ghi lại")
+        self.assertEqual(kq["so_credential_dang_nhap"], 0)
+        self.assertTrue(any(str(self.tenant) in h and "SAI_KEY_ID_DICH" in h
+                            for h in kq["hong"]),
+                        "không báo ra lý do sai khóa đích: %r" % kq["hong"])
+        # ĐỐI CHỨNG DƯƠNG: bản ghi vẫn nguyên vẹn và đọc được bằng khóa hiện hành.
+        self.assertTrue(xb.trang_thai_credential(self.tenant, self.tai_khoan)["doc_duoc"])
+
+
+# ============================================================================
 # IN BẢNG BẰNG CHỨNG — chỉ in PASS khi unittest thật sự đạt
 # ============================================================================
 if __name__ == "__main__":

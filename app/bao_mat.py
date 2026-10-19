@@ -477,6 +477,13 @@ def xoay_khoa(user_id=None, dia_chi=None) -> dict:
     Khóa cũ GIỮ LẠI. Audit chỉ ghi key_id và số lượng — KHÔNG ghi secret, không ghi nội dung khóa.
     KHÔNG đụng `credentials_doi_luc`: cột đó ghi lần đổi CREDENTIALS của hãng, còn đây là đổi KHÓA
     mã hóa; gộp hai việc vào một cột làm mất nghĩa cả hai.
+
+    PHẢI PHỦ CẢ BA TỆP KHO BEST (`xac_thuc_best.credential_dang_nhap/token_truy_cap/
+    bearer_webhook`): chúng KHÔNG nằm trong schema, nên quét `carrier_accounts` không đại diện
+    cho chúng. Trước bản vá, secret BEST sống mãi dưới khóa cũ mà không ai thấy — tới lúc cho
+    nghỉ khóa cũ thì credential/token/bearer thành rác, im lặng (rủi ro #11 của
+    docs/BEST_EXPRESS_SECURITY_REVIEW.md). Hàng nào không xoay được thì BÁO RA (`hong`), không
+    ghi đè: `xac_thuc_best.ma_hoa_lai_kho` chỉ mã hóa lại bản ghi giải được ĐÚNG slot của nó.
     """
     p = secret_provider.nha_cung_cap()
     key_id_cu = p.khoa_hien_hanh()[0]
@@ -484,10 +491,24 @@ def xoay_khoa(user_id=None, dia_chi=None) -> dict:
     p.dat_khoa_hien_hanh(key_id_moi)
     kq = ma_hoa_lai_carrier_accounts(key_id_dich=key_id_moi)
     kq["key_id_cu"] = key_id_cu
+    try:
+        import xac_thuc_best
+        kq_best = xac_thuc_best.ma_hoa_lai_kho(key_id_moi)
+    except Exception:  # noqa: BLE001 — lỗi ở kho tệp KHÔNG được nuốt, nhưng cũng không che
+        # việc `carrier_accounts` đã xoay xong. Không đưa chuỗi lỗi gốc vào audit (có thể chứa
+        # đường dẫn/định danh lạ); chỉ báo một mã cố định.
+        kq_best = {"key_id": key_id_moi, "so_credential_dang_nhap": 0,
+                   "so_token_truy_cap": 0, "so_bearer_webhook": 0, "so_ban_ghi": 0,
+                   "so_giu_nguyen": 0, "hong": ["best_auth: KHONG_XOAY_DUOC"]}
+    kq["best_auth"] = kq_best
+    kq["hong"] = list(kq["hong"]) + ["best_auth " + x for x in kq_best.get("hong", [])]
     kq["so_khoa_dang_giu"] = len(p.danh_sach_key_id())
     csdl.audit("xoay_khoa_ma_hoa", f"khoa:{key_id_moi}",
                f"từ {key_id_cu}; mã hóa lại {kq['so_credentials']} credentials"
                f" + {kq['so_webhook_secret']} webhook secret trên {kq['so_hang_da_doc']} tài khoản hãng"
+               f"; BEST: {kq_best.get('so_credential_dang_nhap', 0)} credential"
+               f" + {kq_best.get('so_token_truy_cap', 0)} token"
+               f" + {kq_best.get('so_bearer_webhook', 0)} bearer"
                + (f"; HỎNG: {'; '.join(kq['hong'])}" if kq["hong"] else ""),
                user_id=user_id, dia_chi=dia_chi,
                ket_qua="that_bai" if kq["hong"] else "thanh_cong")

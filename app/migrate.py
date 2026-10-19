@@ -1150,8 +1150,51 @@ def chay(im_lang=False):
             "truoc": truoc, "sau": sau, "buoc": buoc}
 
 
+def _kiem_kho_truoc_khi_khoi_phuc():
+    """CHỐT: kho đang chạy ĐÃ KHAI là PostgreSQL ⇒ TỪ CHỐI `khoi_phuc()`.
+
+    Vì sao: `khoi_phuc()` chỉ chép đè `hub.db` — một tệp SQLite. Trên deployment đã khai
+    PostgreSQL, `hub.db` (nếu còn sót) KHÔNG phải kho đang phục vụ. Chạy tiếp thì hàm này
+    "khôi phục thành công" một tệp không ai đọc, in dòng "Đã khôi phục", trong khi dữ liệu thật
+    vẫn nguyên trạng — đúng lớp ĐƯỜNG LÙI GIẢ của P-G15-02 `do2b` mà `sao_luu()` đã đóng.
+    Một lượt khôi phục báo ĐẠT trong khi không có gì được khôi phục còn tệ hơn một lượt TỪ CHỐI:
+    người trực sẽ thôi tìm đường khôi phục thật (`pg_restore`).
+
+    Cùng một nguồn trả lời như `sao_luu()`: KHAI BÁO của người triển khai (`KHO_DANG_CHAY`
+    hoặc `VIP_KHO_DANG_CHAY`). KHÔNG suy ra từ tên tệp/mtime/kích thước.
+
+    ====== VÌ SAO CHỈ CHẶN KHI ĐÃ KHAI `postgresql` ======
+    Chưa khai thì vẫn đi tiếp như trước: `khoi_phuc()` là đường CỨU hộ, và trên một máy local
+    chưa khai kho, `hub.db` vẫn có thể CHÍNH LÀ kho đang chạy — chặn ở đây là chặn nhầm đúng
+    lúc cần nhất. Khác với `sao_luu()`: hàm đó TẠO ra một "đường lùi" mới nên phải chắc chắn
+    kho là gì trước khi ghi; hàm này chỉ đọc lại một tệp đã có. Chỗ cần khai bắt buộc là lúc
+    TẠO bản sao lưu và lúc nâng cấp, không phải lúc khôi phục khẩn cấp. Muốn khôi phục thật sự
+    một `hub.db` trên deployment PostgreSQL thì khai đúng đích cho riêng tiến trình đó
+    (`VIP_KHO_DANG_CHAY=sqlite`) — đó là hành động có ý thức, không phải mặc định im lặng.
+    """
+    kho, nguon = kho_dang_chay()
+    # Viết dạng DANH SÁCH TRẮNG (`not in`) thay vì so trực tiếp với `KHO_POSTGRESQL` là CỐ Ý:
+    # `trien_khai/g20-saoluu/ban_va.py` ghim đoạn so sánh của `sao_luu()` xuất hiện ĐÚNG MỘT
+    # lần để phép tiêm lỗi D5 còn khớp. Hành vi y hệt — `_chuan_hoa_kho()` chỉ trả `sqlite`
+    # hoặc `postgresql` (giá trị lạ bị TỪ CHỐI trước đó), nên "không phải None, không phải
+    # sqlite" chỉ có thể là PostgreSQL.
+    if kho not in (None, KHO_SQLITE):
+        raise SystemExit(
+            "[migrate] TỪ CHỐI: kho đang chạy là PostgreSQL (khai ở %s) nên KHÔNG khôi phục\n"
+            "          bằng `khoi_phuc()`: hàm này chỉ chép đè `hub.db` (SQLite). Chạy tiếp thì\n"
+            "          nó báo 'Đã khôi phục' trong khi dữ liệu PostgreSQL KHÔNG được chạm —\n"
+            "          một ĐƯỜNG LÙI GIẢ, đúng lớp P-G15-02 `do2b`.\n"
+            "          Khôi phục PostgreSQL bằng `pg_restore` (xem docs/G22_SAOLUU.md).\n"
+            "          Nếu đích THẬT SỰ là `hub.db` SQLite thì khai cho riêng tiến trình này:\n"
+            "            %s=%s rồi chạy lại." % (nguon, BIEN_KHAI_KHO, KHO_SQLITE))
+
+
 def khoi_phuc(duong_backup, toi_da_biet_chua_kiem_duoc=False, luc=None):
     """Rollback CSDL về đúng tệp backup — **FAIL-CLOSED**.
+
+    CHỐT MỚI: kho đang chạy ĐÃ KHAI là PostgreSQL ⇒ TỪ CHỐI trước khi chạm bất cứ thứ gì —
+    xem `_kiem_kho_truoc_khi_khoi_phuc`. Không có chốt này, `--rollback` trên deployment
+    PostgreSQL là một đường lùi giả: nó đè `hub.db` cũ và báo thành công.
 
     ====== BẤT BIẾN ======
     Hỏng ở BẤT KỲ bước nào thì CSDL ĐANG CHẠY phải còn NGUYÊN VẸN, và phải có thông báo nói
@@ -1169,6 +1212,9 @@ def khoi_phuc(duong_backup, toi_da_biet_chua_kiem_duoc=False, luc=None):
     `datetime.now()`; bộ đo truyền một mốc CỐ ĐỊNH để ba lượt liên tiếp rơi chắc chắn vào cùng
     một mốc và ca đo KHÔNG phụ thuộc đồng hồ hệ thống — xem `_duong_chua_dung`.
     """
+    # CHỐT PHẢI CHẠY TRƯỚC MỌI THỨ: trước khi đọc/kiểm tệp backup, trước `os.makedirs`, trước
+    # khi chạm CSDL đang chạy. Một lượt TỪ CHỐI không được để lại dấu vết nào.
+    _kiem_kho_truoc_khi_khoi_phuc()
     tt = _kiem_ban_sao_luu(duong_backup, bat_buoc_dau_kiem=not toi_da_biet_chua_kiem_duoc)
     os.makedirs(THU_MUC_SAO_LUU, exist_ok=True)
 

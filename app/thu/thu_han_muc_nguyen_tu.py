@@ -25,9 +25,18 @@ os.environ.setdefault("VIP_HUB_DATA", tempfile.mkdtemp(prefix="veh-hmnt-"))
 
 import bao_mat          # noqa: E402
 import billing          # noqa: E402
+import cau_hinh         # noqa: E402
 import csdl             # noqa: E402
 import migrate          # noqa: E402
 import quyen            # noqa: E402
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.chay()` gọi TRỰC TIẾP trong tiến trình này (`setUpClass`) — không có tiến trình con
+# nào chạy `migrate`. Bộ thử tự khai bằng giao diện chung `cau_hinh.khai_kho_kiem_thu()` —
+# KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh khi người chạy
+# nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ thư mục TẠM ở trên, nên hai chốt cô lập của hàm
+# khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
 
 LUONG = 12
 

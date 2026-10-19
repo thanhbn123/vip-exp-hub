@@ -95,10 +95,23 @@ THU_MUC_TAM = os.path.realpath(tempfile.gettempdir())
 DU_LIEU_MAC_DINH = os.path.realpath(os.path.join(GOC_APP, "du-lieu"))
 DUONG_DANG_NHAP = "/api/v2/auth/dang-nhap"
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.py` được spawn thành TIẾN TRÌNH CON (`dung_nen`); khai dưới đây vào `os.environ` nên
+# con kế thừa, và `moi_truong_sach()` còn truyền TƯỜNG MINH `VIP_KHO_DANG_CHAY=sqlite` cho MỌI
+# tiến trình con. KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh
+# khi người chạy nhớ khai là một bộ GIỎ. Nền khai dưới đây CHỈ để thoả chốt cô lập của hàm khai;
+# mọi nền ĐO vẫn do `nen_tam()` tạo riêng trong thư mục tạm.
+_NEN_KHAI = tempfile.mkdtemp(prefix="vh-g21-ag04-khai-")
+os.environ.setdefault("VIP_HUB_DATA", _NEN_KHAI)
+if GOC_APP not in sys.path:
+    sys.path.insert(0, GOC_APP)
+import cau_hinh                                                          # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
+
 DAT, HONG, BO_QUA, KHUYET = "DAT", "HONG", "BO_QUA", "KHUYET"
 KY = {DAT: "✓", HONG: "✗", BO_QUA: "–", KHUYET: "!"}
 KQ = []
-NENS = []
+NENS = [_NEN_KHAI]     # nền khai cũng được dọn ở cuối, như mọi nền tạm khác
 CON = []
 LENH = []              # (lệnh, mã thoát) — BẰNG CHỨNG "lệnh thật + mã thoát thật"
 BANG_N = []            # (chiều, N, tổng lượt qua, trần khai báo, phán quyết)
@@ -159,7 +172,7 @@ def dung_nen(nen):
 
 def moi_truong_sach(**them):
     """Môi trường cho tiến trình con, KHÔNG tự đặt `VIP_HUB_DATA` (tiến trình tự chọn nền)."""
-    env = dict(os.environ, **them)
+    env = dict(os.environ, VIP_KHO_DANG_CHAY="sqlite", **them)
     env.pop("VIP_THU_POSTGRES", None)          # D-8: bộ đo này KHÔNG chạm PostgreSQL
     env.pop("VIP_HUB_CHO_PHEP_LIVE", None)     # KHÔNG mở cờ live, kể cả qua môi trường thừa hưởng
     return env

@@ -14,6 +14,7 @@ sys.path.insert(0, GOC)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 _TM = tempfile.mkdtemp(prefix="vh-giaodich-")
+os.environ["VIP_HUB_DATA"] = _TM
 import cau_hinh                                                          # noqa: E402
 cau_hinh.THU_MUC_DU_LIEU = _TM
 cau_hinh.DUONG_DAN_CSDL = os.path.join(_TM, "hub.db")
@@ -21,6 +22,14 @@ import csdl                                                             # noqa: 
 import don_hang                                                         # noqa: E402
 import migrate                                                          # noqa: E402
 import tai_chinh                                                        # noqa: E402
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.chay()` gọi TRỰC TIẾP trong tiến trình này (`setUpModule`) — không có tiến trình con
+# nào chạy `migrate`. Bộ thử tự khai bằng giao diện chung `cau_hinh.khai_kho_kiem_thu()` —
+# KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh khi người chạy
+# nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ thư mục TẠM ở trên, nên hai chốt cô lập của hàm
+# khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
 
 
 def setUpModule():

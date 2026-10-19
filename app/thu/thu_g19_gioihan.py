@@ -67,10 +67,23 @@ THU_MUC_TAM = os.path.realpath(tempfile.gettempdir())
 DU_LIEU_MAC_DINH = os.path.realpath(os.path.join(GOC_APP, "du-lieu"))
 DUONG_DANG_NHAP = "/api/v2/auth/dang-nhap"
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.py` được spawn thành TIẾN TRÌNH CON trong `dung_nen`; khai dưới đây vào `os.environ`
+# nên con kế thừa, và chỗ spawn còn truyền TƯỜNG MINH `VIP_KHO_DANG_CHAY=sqlite`. KHÔNG dựa vào
+# việc người chạy nhớ `export VIP_KHO_DANG_CHAY`: một bộ chỉ xanh khi người chạy nhớ khai là một
+# bộ GIỎ. Nền khai dưới đây CHỈ để thoả chốt cô lập của hàm khai; mọi nền ĐO vẫn do `nen_tam()`
+# tạo riêng trong thư mục tạm.
+_NEN_KHAI = tempfile.mkdtemp(prefix="vh-g19-khai-")
+os.environ.setdefault("VIP_HUB_DATA", _NEN_KHAI)
+if GOC_APP not in sys.path:
+    sys.path.insert(0, GOC_APP)
+import cau_hinh                                                          # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
+
 DAT, HONG, BO_QUA, KHUYET = "DAT", "HONG", "BO_QUA", "KHUYET"
 KY = {DAT: "✓", HONG: "✗", BO_QUA: "–", KHUYET: "!"}
 KQ = []
-NENS = []
+NENS = [_NEN_KHAI]     # nền khai cũng được dọn ở cuối, như mọi nền tạm khác
 CON = []
 LENH = []          # (lệnh, mã thoát) — BẰNG CHỨNG dạng "lệnh thật + mã thoát thật"
 GIOI_HAN_LUOT_CSDL = 0      # số dòng bảng `gioi_han_luot` đã đọc TRỰC TIẾP bằng sqlite3
@@ -108,7 +121,8 @@ def nen_tam(tien_to):
 
 def dung_nen(nen, *, them_env=None):
     """Dựng schema trên nền tạm bằng ĐÚNG hai bộ cài của dự án (`migrate.py` + `khoi_tao.py`)."""
-    env = dict(os.environ, VIP_HUB_DATA=nen, VIP_HUB_BIND="127.0.0.1")
+    env = dict(os.environ, VIP_HUB_DATA=nen, VIP_HUB_BIND="127.0.0.1",
+               VIP_KHO_DANG_CHAY="sqlite")
     env.pop("VIP_THU_POSTGRES", None)          # D-8: bộ đo này KHÔNG chạm PostgreSQL
     env.update(them_env or {})
     for ten in ("migrate.py", "khoi_tao.py"):
@@ -906,7 +920,8 @@ def p7_hoi_quy():
     for ten in ("thu_gioi_han.py", "thu_han_muc_nguyen_tu.py"):
         duong = os.path.join(GOC_APP, "thu", ten)
         nen = nen_tam("hq-" + ten.replace(".py", ""))
-        p = chay([sys.executable, duong], env=dict(os.environ, VIP_HUB_DATA=nen), gio=600)
+        p = chay([sys.executable, duong],
+                 env=dict(os.environ, VIP_HUB_DATA=nen, VIP_KHO_DANG_CHAY="sqlite"), gio=600)
         ra = (p.stdout or "") + (p.stderr or "")
         m = re.search(r"Ran (\d+) tests?", ra)
         so_ca = int(m.group(1)) if m else 0

@@ -757,6 +757,23 @@ class TestG_Payload(Nen):
         self.assertTrue(audit)
         self.assertIn("301", audit[0]["chi_tiet"])
 
+    def test_g03_nhan_customer_cancel_giu_nguyen_nhan_goc(self):
+        """Tài liệu có nhãn chữ `customer Cancel`; không được vứt sự kiện vì không phải số."""
+        code = "BEST-G3"
+        don_id = self._tao_don(self.ta, self.tk_a, code, "MD-G3", trang_thai_giao="dang_giao")
+        kq = self._gui(self.tk_a, self._payload(code, "MD-G3", "customer Cancel",
+                                                "2026-10-19T10:00:00+07:00"))
+        self.assertTrue(kq.thanh_cong)
+        self.assertEqual(kq.ket_cuc, "ghi_nhan")
+        sk = self._sk(kq.su_kien_id)
+        tho = json.loads(bytes(sk["payload_tho"]))
+        self.assertEqual(tho["status"], "customer Cancel")
+        # Cột dấu vết là TUỲ CHỌN (chỉ có sau migrate); payload_tho mới là nguồn đầy đủ.
+        if "hang_ma_goc" in sk.keys():
+            self.assertEqual(sk["hang_ma_goc"], "customer Cancel")
+        self.assertEqual(self._don(don_id)["trang_thai_giao"], "dang_giao",
+                         "hủy là quyết định nghiệp vụ — webhook chỉ ghi nhận, không hạ trạng thái")
+
     def test_g02_ma_lan_can_soat_nhung_van_luu_du(self):
         code = "BEST-G2"
         don_id = self._tao_don(self.ta, self.tk_a, code, "MD-G2")

@@ -9,8 +9,8 @@
 #
 # TRẠNG THÁI BẰNG CHỨNG: MOCK. Tài liệu API BEST trong đề bài là Google Docs và KHÔNG đọc được
 # trong môi trường này. Vì vậy:
-#   · 11 bước, tên trường payload, phản hồi `{"Result": 1, "Message": ""}`, luật tenant và cặp
-#     605→606 là ĐẶC TẢ ĐÃ XÁC NHẬN trong đề bài;
+#   · 11 bước, tên trường payload, phản hồi `{"Result": 1, "Message": ""}`, luật tenant và
+#     nghĩa "606 mở lại chiều giao" là ĐẶC TẢ ĐÃ XÁC NHẬN trong đề bài; nghĩa 605 là GIẢ THUYẾT;
 #   · NGHĨA của từng mã trạng thái và CƠ CHẾ XÁC THỰC của BEST là CHƯA KIỂM CHỨNG. Bảng mã dưới
 #     đây là GIẢ THUYẾT PHÂN NHÓM để dựng máy trạng thái, mỗi dòng ghi rõ `muc = CHUA_KIEM_CHUNG`.
 #     Không dùng bảng này để đối soát tài chính hay để tuyên bố đã hiểu tài liệu hãng.
@@ -37,6 +37,7 @@
 import hashlib
 import json
 import re
+import time
 from decimal import Decimal, InvalidOperation
 
 import cau_hinh
@@ -82,6 +83,11 @@ TRANG_THAI_HOAN_TAT = ("giao_thanh_cong", "hoan_hang", "da_huy")
 # payload phi lý, không phải suy đoán giới hạn của hãng.
 GIOI_HAN_BODY = 256 * 1024
 GIOI_HAN_MO_TA = 4000
+# Cửa sổ hợp lý cho mốc hãng. Đây KHÔNG phải đặc tả BEST (chưa có tài liệu): chỉ là chốt an
+# toàn nội bộ để một `modified_at` xa tương lai không đẩy watermark lên năm 5138 rồi đóng băng
+# mọi sự kiện sau của đơn. Cho phép lệch đồng hồ 1 ngày về tương lai và tối đa 5 năm về quá khứ.
+CUA_SO_TUONG_LAI_MS = 24 * 60 * 60 * 1000
+CUA_SO_QUA_KHU_MS = 5 * 365 * 24 * 60 * 60 * 1000
 
 # ============================================================================
 # BẢNG MÃ BEST — 23 mã LIỆT KÊ + ghi chú chênh lệch với con số 24 của đề bài
@@ -236,11 +242,11 @@ def _so_khong_am(v, ten):
     try:
         d = Decimal(s)
     except (InvalidOperation, ValueError):
-        raise LoiDuLieu(f"{ten} không phải số hợp lệ: {v!r}")
+        raise LoiDuLieu(f"{ten} không phải số hợp lệ")
     if not d.is_finite():
         raise LoiDuLieu(f"{ten} không hữu hạn")
     if d < 0:
-        raise LoiDuLieu(f"{ten} không được âm: {v!r}")
+        raise LoiDuLieu(f"{ten} không được âm")
     return d
 
 
@@ -355,11 +361,33 @@ def doc_payload(body):
     merchant = _kiem_ma(d["merchant_order_code"], "merchant_order_code")
     status = _so_nguyen(d["status"])
     if status is None or status < 0:
-        raise LoiDuLieu(f"status phải là số nguyên không âm: {d['status']!r}")
+        raise LoiDuLieu("status phải là số nguyên không âm")
 
-    moc = hub._moc_chuan(d["modified_at"])
+    try:
+        moc = hub._moc_chuan(d["modified_at"])
+    except (TypeError, ValueError, OverflowError) as e:
+        # `_moc_chuan` là hàm dùng chung của hub. Nó ném với NaN/Infinity hoặc offset múi giờ
+        # không hợp lệ (ví dụ +99:99). Payload sai kiểu là lỗi NGƯỜI GỬI (422), không phải 500;
+        # không chép giá trị thô vào thông điệp để không biến một trường số thành đường rò dữ liệu.
+        raise LoiDuLieu(f"modified_at không đọc được thành mốc thời gian ({type(e).__name__})")
     if not moc:
-        raise LoiDuLieu(f"modified_at không đọc được thành mốc thời gian: {d['modified_at']!r}")
+        raise LoiDuLieu("modified_at không đọc được thành mốc thời gian")
+    if len(moc) != 14:
+        # Hợp đồng nội bộ dùng chuỗi 14 chữ số (epoch mili giây). Mốc dài hơn là dữ liệu nằm
+        # ngoài dải đã chọn, không được để nó âm thầm đi vào so sánh watermark.
+        raise LoiDuLieu("modified_at nằm ngoài dải thời gian 14 chữ số đã chọn")
+    try:
+        moc_ms = int(moc)
+    except ValueError:
+        raise LoiDuLieu("modified_at không đọc được thành mốc thời gian")
+    now_ms = int(time.time() * 1000)
+    # 14 chữ số vẫn có thể là năm 5138 (`99999999999999`). Nếu nhận, watermark của đơn bị đẩy
+    # lên mốc đó và MỌI sự kiện sau — kể cả 606 — bị coi là "đến muộn", đóng băng trạng thái.
+    # Đây là chặn an toàn nội bộ, không phải khẳng định về múi giờ/định dạng của hãng.
+    if moc_ms > now_ms + CUA_SO_TUONG_LAI_MS:
+        raise LoiDuLieu("modified_at ở tương lai quá xa — không dùng làm mốc")
+    if moc_ms < now_ms - CUA_SO_QUA_KHU_MS:
+        raise LoiDuLieu("modified_at quá cũ — không dùng làm mốc")
 
     mo_ta = d.get("status_content")
     if mo_ta is not None:
@@ -390,8 +418,8 @@ def _khoa_su_kien(p):
 
     Gồm mã vận đơn + MỐC ĐÃ CHUẨN HOÁ + mã trạng thái + mã đơn. Dùng mốc chuẩn hoá (không dùng
     chuỗi thô) để cùng một sự kiện gửi lại với định dạng thời gian khác vẫn trùng. KHÔNG băm
-    toàn bộ thân: hai sự kiện khác nhau mà thân giống nhau (hoặc chỉ khác khoảng trắng) phải
-    được nhận ra là một, và ngược lại.
+    toàn bộ thân: đây là KHÓA NGHIỆP VỤ. Hai sự kiện cùng bốn trường nhưng khác fees/
+    status_content được coi là MỘT sự kiện; bản ghi đầu thắng, bản sau được ACK idempotent.
     """
     goc = f"{p['code_best']}\x1f{p['moc']}\x1f{p['status']}\x1f{p['merchant_order_code']}"
     return "best-" + hashlib.sha256(goc.encode("utf-8")).hexdigest()[:40]
@@ -645,12 +673,12 @@ def _mo_lai_chieu_giao(sk_id, tk, tenant_id, don, p, qd):
     with csdl.giao_dich():
         con = csdl.ghi(
             "UPDATE don_hang SET trang_thai_giao=?, hang_trang_thai_giao=?, cap_nhat_luc=?"
-            " WHERE id=? AND tenant_id=? AND carrier_account_id=?",
+            " WHERE id=? AND tenant_id=? AND carrier_account_id=? AND trang_thai!='huy'",
             (qd["chung"], hang, csdl.bay_gio(), don["id"], tenant_id, tk["id"]))
         if con.rowcount != 1:
             raise RuntimeError(
                 f"không mở lại được đơn {don['id']} cho tenant {tenant_id}/account {tk['id']}"
-                " — điều kiện tenant/account không khớp")
+                " — điều kiện tenant/account/trạng thái hủy không khớp")
         _ghi_lich_su(don["id"], f"webhook_best:{sk_id}", noi_dung)
         _ghi_moc(sk_id, don["id"], p["moc"], tenant_id)
     return 1, "mã 606: mở lại chiều giao"
@@ -690,6 +718,14 @@ def _cap_nhat_don_quyet_dinh(sk_id, tk, tenant_id, don, p, qd):
     KHÔNG dùng thứ hạng trạng thái để quyết định đến muộn; `hang_trang_thai_giao` chỉ là cột
     dẫn xuất để tương thích hub, không phải nguồn quyết định.
     """
+    # Đọc LẠI trong giao dịch: `tim_don` đọc ngoài giao dịch, nên đơn có thể bị hủy giữa hai
+    # bước. Quyết định trên bản đọc cũ là khe đọc-rồi-ghi; đọc lại dưới khoá ghi đóng khe đó.
+    don_moi = csdl.mot(
+        "SELECT * FROM don_hang WHERE id=? AND tenant_id=? AND carrier_account_id=?",
+        (don["id"], tenant_id, tk["id"]))
+    if don_moi is None:
+        return 0, "đơn không còn khớp tenant/account tại thời điểm cập nhật — không đổi"
+    don = don_moi
     if str(don["trang_thai"]) == "huy":
         return 0, "đơn đã hủy ở trạng thái nghiệp vụ — webhook không tự mở lại"
     if qd["chung"] == "da_huy":

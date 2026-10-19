@@ -1,5 +1,10 @@
 # BEST EXPRESS — WEBHOOK + TRACKING (AGENT B3)
 
+> **CẬP NHẬT AG-00 — 19/10/2026:** route HTTP đã được nối trong `app/server.py`; `webhook_best.py`
+> được vá ba lỗi (modified_at dị dạng/mốc xa, hủy đơn xen giữa đọc/cập nhật). Xem
+> `docs/BEST_EXPRESS_HTTP_E2E.md`. Các mục "Nối route — BLOCKED" và dòng 4 bảng §11 dưới đây là
+> **trạng thái lịch sử của B3**, không còn đúng. Xác thực BEST thật và REAL PASS vẫn **BLOCKED**.
+
 **Trạng thái bằng chứng: MOCK PASS — KHÔNG phải REAL PASS.**
 Chưa gọi API BEST lần nào, kể cả test host. Không dùng credentials thật, không tạo đơn thật,
 không push GitHub, không deploy VPS, không chạy production. Toàn bộ "đơn" trong bộ thử là dòng

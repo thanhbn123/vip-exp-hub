@@ -34,6 +34,7 @@ import tai_chinh
 import truy_van
 import usage
 import webhook
+import webhook_best
 
 GOC_TINH = cau_hinh.THU_MUC_GOC
 
@@ -457,6 +458,28 @@ class BoXuLy(BaseHTTPRequestHandler):
             tk = webhook.tim_account_theo_webhook_ma(m.group(1))
             if not tk:
                 return self._tra(404, {"loi": "webhook không tồn tại"})
+            # --- BEST Express: phân luồng theo HÃNG CỦA CHÍNH DÒNG ACCOUNT đã tra từ URL ---
+            # Đặt TRƯỚC `kiem_chu_ky()` / `nhan_su_kien()` để callback BEST không đi qua HMAC,
+            # ACK hay hàng đợi của J&T/hub. `webhook_best` tự chọn sơ đồ xác thực theo
+            # (hãng, môi trường), tự đọc tenant từ chính `tk`, và tự trả `{"Result":...}`.
+            # Không truyền tenant từ payload/query: không có tham số nào để truyền.
+            #
+            # Hợp đồng BEST CHƯA được xác minh (thiếu tài liệu hãng), nên môi trường
+            # sandbox/production vẫn bị `webhook_best` từ chối (fail-closed). Nhánh này không
+            # nới chốt LIVE; nó chỉ nối đúng bộ xử lý đã có cho đường mock/local.
+            if str(tk["hang"] or "") == "best":
+                try:
+                    # BEST có trần thân riêng (256 KiB). Đọc bằng trần đó rồi mới giao cho bộ xử
+                    # lý; nếu để trần mặc định 64 KiB của server, một payload hợp lệ theo hợp
+                    # đồng nội bộ của BEST sẽ bị chặn ở tầng không biết gì về BEST.
+                    body = self._doc_body(webhook_best.GIOI_HAN_BODY)
+                except don_hang.LoiNghiepVu as e:
+                    # Hình dạng NACK của BEST CHƯA có trong đặc tả hãng. Giữ đúng hai khóa của
+                    # bộ xử lý (`Result`/`Message`) và mã HTTP của lớp giới hạn nội bộ; không
+                    # thêm trường, không ACK thành công khi chưa đọc/lưu được.
+                    return self._tra(e.ma, webhook_best.that_bai(str(e)))
+                kq = webhook_best.xu_ly_voi_account(tk, body, self._headers_thuong())
+                return self._tra(kq.http, kq.body)
             body = self._doc_body()
             if not webhook.kiem_chu_ky(tk, self._headers_thuong(), body):
                 # Chỉ lượt SAI mới cộng vào bộ đếm — hãng thật không bao giờ chạm trần này.

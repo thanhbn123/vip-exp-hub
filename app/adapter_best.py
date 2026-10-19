@@ -41,6 +41,7 @@
 import hashlib
 import json
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from urllib.parse import urlsplit
@@ -92,6 +93,12 @@ DON_VI = {"Weight": "GRAM", "Length": "MILIMET", "Width": "MILIMET", "Height": "
           "Cod": "VND", "ProductPrice": "VND"}
 GIOI_HAN_QUERY = 10
 GIOI_HAN_PRINT = 50
+
+# Tài liệu: token đăng nhập sống 30 NGÀY, tính từ lúc NHẬN (không phải lúc hãng phát hành).
+# Adapter giữ token trong bộ nhớ tiến trình; nếu không đếm hạn, một tiến trình chạy quá 30 ngày sẽ
+# gửi mãi một token chết và mọi thao tác đều bị từ chối cho tới khi khởi động lại. Cùng quy ước
+# với `xac_thuc_best.HAN_TOKEN_GIAY` (30 ngày, mốc = lúc nhận).
+TOKEN_TTL_GIAY = bhd.TOKEN_TTL_DAYS * 24 * 60 * 60
 
 # ── 31 trường nền của Order/Add (tài liệu có 34; 3 trường Cargo/khuyến mãi là tuỳ chọn) ───────
 TRUONG_BAT_BUOC_ORDER_ADD = tuple(bhd.TRUONG_ORDER_ADD_NEN)
@@ -268,6 +275,7 @@ class AdapterBEST(CarrierAdapter):
         self.address_adapter = address_adapter or BestAddressAdapter()
         self.gui_http = bool(gui_http)
         self._token = None
+        self._token_luc = None          # monotonic lúc NHẬN token (None = chưa có)
         self._token_lock = threading.Lock()
         self._so = OrderedDict()
         self._so_lock = threading.Lock()
@@ -381,6 +389,8 @@ class AdapterBEST(CarrierAdapter):
             "gioi_han": {"queryTracking": GIOI_HAN_QUERY, "printWaybill": GIOI_HAN_PRINT},
             "don_vi": dict(DON_VI),
             "service_id": DICH_VU_ID,
+            "token_ttl_ngay": bhd.TOKEN_TTL_DAYS,
+            "token_ttl_giay": TOKEN_TTL_GIAY,
             "journey_type_hop_le": list(JOURNEY_TYPE_HOP_LE),
             "pickup_type_hop_le": list(PICKUP_TYPE_HOP_LE),
             "tai_lieu_da_xac_minh": True,
@@ -648,6 +658,10 @@ class AdapterBEST(CarrierAdapter):
         try:
             tra_loi, so_lan, _nhat_ky = transport.goi(_mot_lan, thao_tac, chinh_sach=cs)
         except (transport.LoiTamThoi, transport.LoiVinhVien) as e:
+            # 401/403 = hãng TỪ CHỐI token. Bỏ token đang giữ NGAY: nếu không, mọi lượt sau
+            # (tới 30 ngày) sẽ gửi lại đúng token chết đó và không bao giờ đăng nhập lại.
+            if (getattr(e, "ma_http", 0) or 0) in (401, 403):
+                self._xoa_token()
             return self._ket_qua_tu_loi(e, thao_tac, request_id, dem["so_lan"]), None
 
         try:
@@ -750,6 +764,28 @@ class AdapterBEST(CarrierAdapter):
     # =============================================================================================
     # 7. XÁC THỰC
     # =============================================================================================
+    # ── vòng đời token: 30 NGÀY tính từ lúc NHẬN (tài liệu §2.1) ────────────────────────────────
+    def _dat_token(self, token):
+        with self._token_lock:
+            self._token = token
+            self._token_luc = time.monotonic()
+
+    def _xoa_token(self):
+        """Bỏ token đã chết. Giữ lại là tiếp tục gửi nó cho tới 30 ngày."""
+        with self._token_lock:
+            self._token = None
+            self._token_luc = None
+
+    def _token_con_han(self):
+        if not self._token or self._token_luc is None:
+            return False
+        return (time.monotonic() - self._token_luc) < TOKEN_TTL_GIAY
+
+    def _token_con_lai_giay(self):
+        if not self._token or self._token_luc is None:
+            return 0
+        return max(0, int(TOKEN_TTL_GIAY - (time.monotonic() - self._token_luc)))
+
     def _thong_tin_dang_nhap(self):
         c = self.credentials
         user = _chuoi(c.get("username") or c.get("user") or c.get("tai_khoan") or c.get("account"))
@@ -768,8 +804,7 @@ class AdapterBEST(CarrierAdapter):
             return self._ket_qua_tu_choi("authenticate", str(e), request_id)
 
         if self.moi_truong == MOCK and not self.gui_http:
-            with self._token_lock:
-                self._token = "MOCK-TOKEN-KHONG-THAT"
+            self._dat_token("MOCK-TOKEN-KHONG-THAT")
             return self._ket_qua_ok(
                 "authenticate", request_id, mock=True, co_token=True,
                 token_khong_duoc_tra_ra=True,
@@ -792,23 +827,28 @@ class AdapterBEST(CarrierAdapter):
             return self._ket_qua_tu_choi(
                 "authenticate", "token trả về có ký tự không hợp lệ — TỪ CHỐI dùng",
                 request_id, so_lan_goi=kq.tho.get("so_lan_goi", 0))
-        with self._token_lock:
-            self._token = token
-        kq.tho.update({"co_token": True, "token_khong_duoc_tra_ra": True})
+        self._dat_token(token)
+        kq.tho.update({"co_token": True, "token_khong_duoc_tra_ra": True,
+                       "token_ttl_ngay": bhd.TOKEN_TTL_DAYS,
+                       "token_het_han_sau_giay": self._token_con_lai_giay()})
         return kq
 
     def _dam_bao_token(self):
-        """Đăng nhập nếu chưa có token. Trả `KetQuaHang` lỗi, hoặc None nếu ổn."""
+        """Đăng nhập nếu chưa có token / token quá 30 ngày. Trả `KetQuaHang` lỗi, hoặc None."""
         if self.moi_truong == MOCK and not self.gui_http:
             return None
         with self._token_lock:
-            if self._token:
+            if self._token_con_han():
                 return None
+            # Token hết hạn (hoặc không có): BỎ hẳn trước khi đăng nhập. Giữ lại một token quá
+            # 30 ngày chỉ để gửi tiếp là tự khoá mọi thao tác cho tới khi khởi động lại.
+            self._token = None
+            self._token_luc = None
         kq = self.authenticate()
         if not kq.ok:
             return kq
         with self._token_lock:
-            if not self._token:
+            if not self._token_con_han():
                 return self._ket_qua_tu_choi(
                     "authenticate", "login báo thành công nhưng không giữ được token",
                     kq.tho.get("request_id", ""))
@@ -1399,5 +1439,8 @@ class AdapterBEST(CarrierAdapter):
             "cho_phep_live": bool(self.CHO_PHEP_LIVE),
             "gui_http": bool(self.gui_http),
             "co_token": bool(self._token),
+            "token_con_han": bool(self._token_con_han()),
+            "token_con_lai_giay": self._token_con_lai_giay(),
+            "token_ttl_ngay": bhd.TOKEN_TTL_DAYS,
             "endpoint": dict(DUONG_API),
         }

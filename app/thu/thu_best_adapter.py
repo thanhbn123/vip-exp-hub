@@ -197,6 +197,9 @@ class StubBEST:
                 time.sleep(0.6)
             if any(str(x).startswith("FAILQ") for x in ma_list):
                 return self._gui(handler, 500, {"Result": 2, "Message": "query failed"})
+            if any(str(x) == "AUTH401" for x in ma_list):
+                # Hãng từ chối TOKEN (không phải sai tham số): adapter phải bỏ token đã giữ.
+                return self._gui(handler, 401, {"Result": 2, "Message": "unauthorized"})
             return self._gui(handler, 200, {"Result": 1, "Message": None, "data": [
                 {"merchant_order_code": str(x), "code_best": str(x),
                  "traceLogs": [{"status": "211", "modified_at": 1700000000000,
@@ -382,6 +385,16 @@ class A_HopDong(Base):
         self.assertEqual(ab.DON_VI["Cod"], "VND")
         self.assertEqual(ab.DON_VI["ProductPrice"], "VND")
 
+    def test_a8_token_30_ngay_theo_tai_lieu(self):
+        import best_hop_dong as bhd
+        self.assertEqual(bhd.TOKEN_TTL_DAYS, 30)
+        self.assertEqual(ab.TOKEN_TTL_GIAY, 30 * 24 * 60 * 60)
+        ad = self.ad_mock()
+        cap = ad.getCapabilities()
+        self.assertEqual(cap["token_ttl_ngay"], 30)
+        self.assertEqual(cap["token_ttl_giay"], 30 * 24 * 60 * 60)
+        self.assertFalse(ad.kiem_ket_noi()["token_con_han"])
+
 
 # =================================================================================================
 # B. MÔI TRƯỜNG / HTTP CHƯA MÃ HOÁ
@@ -538,6 +551,34 @@ class C_DuongDi(Base):
         self.assertTrue(kq.ok)
         self.assertEqual(kq.ma_van_don, "BEST-T1-C6")
 
+    def test_c7_token_30_ngay_het_han_thi_dang_nhap_lai(self):
+        """Token sống 30 ngày tính từ lúc NHẬN (tài liệu §2.1). Quá hạn ⇒ đăng nhập lại."""
+        ad = self.ad_stub_auth()
+        self.assertEqual(STUB.count("User/Login"), 1)
+        self.assertTrue(ad.kiem_ket_noi()["token_con_han"])
+        # 29 ngày: còn hạn — KHÔNG đăng nhập lại.
+        ad._token_luc = time.monotonic() - 29 * 24 * 60 * 60
+        self.assertTrue(ad.queryTracking("W29").ok)
+        self.assertEqual(STUB.count("User/Login"), 1)
+        # 31 ngày: quá hạn — phải đăng nhập lại trước khi gửi.
+        ad._token_luc = time.monotonic() - 31 * 24 * 60 * 60
+        self.assertFalse(ad.kiem_ket_noi()["token_con_han"])
+        self.assertTrue(ad.queryTracking("W31").ok)
+        self.assertEqual(STUB.count("User/Login"), 2)
+        self.assertTrue(ad.kiem_ket_noi()["token_con_han"])
+
+    def test_c8_401_xoa_token_va_lan_sau_dang_nhap_lai(self):
+        ad = self.ad_stub_auth()
+        kq = ad.queryTracking("AUTH401")
+        self.assertFalse(kq.ok)
+        self.assertFalse(kq.timeout)
+        # Token bị hãng từ chối KHÔNG được giữ lại (nếu giữ, mọi lượt sau gửi token chết).
+        self.assertIsNone(ad._token)
+        self.assertTrue(ad.queryTracking("W-SAU-401").ok)
+        self.assertEqual(STUB.count("User/Login"), 2)
+        h = STUB.headers_for("Order/Query")[-1]
+        self.assertEqual(h.get("Authorization"), "Bearer MOCK-TOKEN-KHONG-THAT")
+
 
 # =================================================================================================
 # D. 21 TRƯỜNG ORDER/ADD
@@ -666,6 +707,33 @@ class D_31Truong(Base):
         self.assertEqual(body["Code"], "T1-D10")
         for ten in ab.TRUONG_META_CHONG_TRUNG:
             self.assertNotIn(ten, body)
+
+    def test_d11_du_34_truong_tai_lieu_va_ba_truong_tuy_chon(self):
+        import best_hop_dong as bhd
+        self.assertEqual(len(bhd.TRUONG_ORDER_ADD), 34)
+        body = self._tao_va_lay_than(ma_don="T1-D11", idem_key="IDEM-D11")
+        self.assertTrue(set(body) <= set(bhd.TRUONG_ORDER_ADD))
+        self.assertEqual(set(body), set(ab.TRUONG_BAT_BUOC_ORDER_ADD))
+        body2 = self._tao_va_lay_than(ma_don="T1-D11B", idem_key="IDEM-D11B",
+                                      number_of_products=2,
+                                      bonus_product_name1="Quà 1",
+                                      bonus_product_name2="Quà 2")
+        self.assertEqual(body2["NumberOfProducts"], 2)
+        self.assertEqual(body2["BonusProductName1"], "Quà 1")
+        self.assertEqual(body2["BonusProductName2"], "Quà 2")
+        self.assertTrue(set(body2) <= set(bhd.TRUONG_ORDER_ADD))
+
+    def test_d12_service_id_12490_bi_tu_choi_o_estimate_va_update(self):
+        # Đơn khai Express (12490) không được LẶNG LẼ báo giá/cập nhật bằng Eco (12491).
+        ad = self.ad_stub_auth()
+        don = make_don(service_id=12490, ma_don="T1-D12", idem_key="IDEM-D12")
+        kq = ad.estimateFee(don)
+        self.assertFalse(kq.ok)
+        self.assertFalse(kq.timeout)
+        self.assertEqual(STUB.count("Service/EstimateFee"), 0)
+        kq2 = ad.updateOrder(don, "BEST-T1-D12")
+        self.assertFalse(kq2.ok)
+        self.assertEqual(STUB.count("Order/Update"), 0)
 
 
 # =================================================================================================
@@ -1278,6 +1346,24 @@ class L_ChotChan(Base):
         kq = ad.getShippingLabel("X")
         self.assertTrue(kq.ok)
         self.assertEqual(kq.tho["label"], "MOCK-PDF")
+
+    def test_l8_tls_chi_ba_host_tai_lieu(self):
+        # Danh sách trắng TLS đúng ba host đã đo; host lạ (kể cả tên giả mạo) không được nhận.
+        self.assertEqual(hb.HOST_HANG, {"sgp-seaedi.800best.com", "sgp-seaedi-test.800best.com",
+                                        "sea-edi-hxtest.800best.com"})
+        for host in hb.HOST_HANG:
+            self.assertTrue(hb.host_duoc_phep(host), host)
+        for host in ("example.com", "sgp-seaedi.800best.com.evil", "800best.com",
+                     "sea-edi-hxtest.800best.com.evil"):
+            self.assertFalse(hb.host_duoc_phep(host), host)
+
+    def test_l9_kiem_ket_noi_khong_secret_va_co_han_token(self):
+        ad = self.ad_stub_auth()
+        tt = ad.kiem_ket_noi()
+        self.assertEqual(quet_bi_mat(tt), [])
+        self.assertTrue(tt["token_con_han"])
+        self.assertGreater(tt["token_con_lai_giay"], 0)
+        self.assertEqual(tt["token_ttl_ngay"], 30)
 
 
 if __name__ == "__main__":

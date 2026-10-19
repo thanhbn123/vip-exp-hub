@@ -87,6 +87,7 @@ import adapter          # noqa: E402
 import adapter_jt       # noqa: E402,F401
 import adapter_vtp      # noqa: E402,F401
 import bao_mat          # noqa: E402
+import http_best        # noqa: E402
 import cau_hinh         # noqa: E402
 import csdl             # noqa: E402
 import don_hang         # noqa: E402
@@ -618,22 +619,22 @@ def _gate_05():
     co_best_wh = "best" in so_do
     bc.append("BEST: bảng mã=%s · sơ đồ webhook=%s" % (bool(co_best_ma), co_best_wh))
     if co_best_ma is not None:
-        bc.append("BEST: %d mã trạng thái (đề bài: 24)" % len(co_best_ma))
+        bc.append("BEST: %d mã trạng thái (tài liệu: 23)" % len(co_best_ma))
         for ma in (605, 606):
             kq = trang_thai_hang.anh_xa("best", ma)
             bc.append("  · ánh xạ %d → %r" % (ma, kq.trang_thai))
     else:
-        bc.append("BEST: 0 mã trạng thái đã đăng ký ⇒ KHÔNG đo được 24 mã / 605→606")
+        bc.append("BEST: 0 mã trạng thái đã đăng ký ⇒ KHÔNG đo được 23 mã / 605→606")
     bc.append("11 bước webhook: CHƯA KIỂM CHỨNG (đề bài nêu số bước, KHÔNG nêu tên bước; "
               "không được đoán)")
     if co_best_ma is None and not co_best_wh:
         return KetQua("BEST-05", "Webhook+Tracking", "BLOCKED", bc,
-                      "chưa có bảng mã / sơ đồ webhook BEST ⇒ không có bề mặt để đo 24 mã, "
+                      "chưa có bảng mã / sơ đồ webhook BEST ⇒ không có bề mặt để đo 23 mã, "
                       "605→606, đến muộn, tenant của BEST. Nền tảng chỉ có %s."
                       % ", ".join(sorted(so_ma)), so_ca=1, so_skip=1)
     thieu = []
-    if co_best_ma is None or len(co_best_ma) != 24:
-        thieu.append("số mã trạng thái BEST != 24")
+    if co_best_ma is None or len(co_best_ma) != 23:
+        thieu.append("số mã trạng thái BEST != 23")
     if co_best_ma is not None:
         a = trang_thai_hang.anh_xa("best", 605)
         b = trang_thai_hang.anh_xa("best", 606)
@@ -667,8 +668,8 @@ def _gate_06():
     bc.append("chênh lệch KHÔNG gộp: lệch báo giá=%s · lệch thu khách=%s"
               % (p["lech_so_bao_gia"], p["lech_so_thu_khach"]))
     # PDF/SSRF: nền tảng có danh sách trắng + ép HTTPS cho host hãng; BEST chưa có host.
-    best_host = "api.bestexpress.vn"
-    best_duoc_phep = http_jt.host_duoc_phep(best_host)
+    best_host = "sgp-seaedi-test.800best.com"
+    best_duoc_phep = http_best.host_duoc_phep(best_host)
     http_bi_chan = https_ok = evil_bi_chan = False
     try:
         http_jt.tach_url("http://%s/nhan.pdf" % http_jt.HOST_HANG[0])

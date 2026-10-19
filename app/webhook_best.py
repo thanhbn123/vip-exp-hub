@@ -40,10 +40,12 @@ import re
 import time
 from decimal import Decimal, InvalidOperation
 
+import best_hop_dong
 import cau_hinh
 import csdl
 import don_hang
 import webhook as hub
+import xac_thuc_best
 
 HANG = "best"
 TEN_HANG = "BEST Express"
@@ -52,12 +54,13 @@ PHIEN_BAN = "b3-best-webhook-2026-10-19"
 # Mức bằng chứng — dùng đúng từ vựng của hub để không nâng mức bằng lời.
 MUC_MOCK = "MOCK VERIFIED"
 MUC_CHUA_KIEM_CHUNG = "CHUA_KIEM_CHUNG"
+MUC_DA_TAI_LIEU = "DA_TAI_LIEU"
 MUC_BLOCKED = "BLOCKED"
-MUC_TAI_LIEU = MUC_CHUA_KIEM_CHUNG
+MUC_TAI_LIEU = MUC_DA_TAI_LIEU
 
-NGUON_DE_BAI = "đặc tả AGENT B3 đã xác nhận trong đề bài"
-NGUON_GIA_THUYET = ("đề bài CHỈ cung cấp danh sách mã, KHÔNG cung cấp nghĩa từng mã; "
-                    "tài liệu Google Docs của BEST chưa đọc được — đây là giả thuyết phân nhóm")
+NGUON_DE_BAI = "đề bài AGENT B3 (danh sách mã)"
+NGUON_TAI_LIEU = best_hop_dong.NGUON
+NGUON_GIA_THUYET = ("mã không có trong tài liệu chính thức — KHÔNG đoán nghĩa")
 
 # 11 bước bắt buộc. Tên là HỢP ĐỒNG: bộ thử canh đúng thứ tự này, không chỉ canh "có chạy".
 TEN_BUOC = (
@@ -92,59 +95,40 @@ CUA_SO_QUA_KHU_MS = 5 * 365 * 24 * 60 * 60 * 1000
 # ============================================================================
 # BẢNG MÃ BEST — 23 mã LIỆT KÊ + ghi chú chênh lệch với con số 24 của đề bài
 # ============================================================================
-SO_MA_DE_BAI = 24
+SO_MA_DE_BAI = 23          # tài liệu chính thức liệt kê 23 mã
 SO_MA_LIET_KE = 23
 # Danh sách NGUYÊN VĂN trong đề bài, giữ đúng thứ tự. Bảng `BANG_MA` phải phủ đúng tập này;
 # bộ thử so hai tập thay vì tin rằng người viết đã chép đủ.
 MA_TRONG_DE_BAI = (211, 203, 202, 301, 302, 303, 304, 309, 601, 604, 666, 605, 606,
                    701, 702, 703, 704, 705, 707, 708, 777, 1000, 2)
 GHI_CHU_SO_LUONG = (
-    "Đề bài ghi '24 mã' nhưng danh sách chỉ liệt kê 23 con số. KHÔNG bịa thêm mã thứ 24; "
-    "bộ thử phủ 23 mã liệt kê + 1 ca mã lạ (đối chứng), tức 24 LƯỢT KỊCH BẢN."
+    "Tài liệu chính thức của BEST (đọc 2026-10-19) liệt kê ĐÚNG 23 mã trạng thái. "
+    "Đề bài cũ ghi '24 mã' nhưng chỉ có 23 con số — KHÔNG bịa mã thứ 24. "
+    "Bộ thử phủ 23 mã + 1 mã lạ đối chứng (24 LƯỢT KỊCH BẢN)."
 )
 
 
-def _dong(ma, mo_ta, chung, mo_lai=False):
-    """Một dòng bảng mã. Mọi dòng đều `CHUA_KIEM_CHUNG` — không dòng nào tự nhận là tài liệu."""
+def _dong(ma, mo_ta, chung, mo_lai=False, can_soat=False):
+    """Một dòng bảng mã ĐỌC TỪ TÀI LIỆU CHÍNH THỨC (mức `DA_TAI_LIEU`)."""
     return {
         "ma": ma,
         "mo_ta": mo_ta,
         "chung": chung,
         "mo_lai": bool(mo_lai),
-        "muc": MUC_CHUA_KIEM_CHUNG,
-        "nguon": NGUON_GIA_THUYET,
+        "can_soat": bool(can_soat),
+        "muc": MUC_DA_TAI_LIEU,
+        "nguon": NGUON_TAI_LIEU,
     }
 
 
 # Thứ tự dòng GIỮ NGUYÊN thứ tự đề bài. `606` mang cờ `mo_lai=True` theo đặc tả đã xác nhận:
 # "606 mở lại chiều giao". `605` đứng ngay trước nó để cặp 605→606 đọc được thành một khối.
 BANG_MA = {
-    211: _dong(211, "Đang vận chuyển/trên đường (giả thuyết)", "dang_giao"),
-    203: _dong(203, "Đã lấy hàng (giả thuyết)", "lay_hang"),
-    202: _dong(202, "Đã tiếp nhận đơn (giả thuyết)", "cho_lay"),
-    301: _dong(301, "Đang giao hàng (giả thuyết)", "dang_giao"),
-    302: _dong(302, "Giao hàng thành công (giả thuyết)", "giao_thanh_cong"),
-    303: _dong(303, "Giao hàng thất bại (giả thuyết)", "giao_that_bai"),
-    304: _dong(304, "Giao hàng thất bại/khách hẹn lại (giả thuyết)", "giao_that_bai"),
-    309: _dong(309, "Giao hàng thất bại (giả thuyết)", "giao_that_bai"),
-    601: _dong(601, "Yêu cầu chuyển hoàn (giả thuyết)", "hoan_hang"),
-    604: _dong(604, "Đang chuyển hoàn (giả thuyết)", "hoan_hang"),
-    666: _dong(666, "Đã hoàn về người gửi (giả thuyết)", "hoan_hang"),
-    605: _dong(605, "Đóng/hoàn tất chiều giao cũ (giả thuyết; cặp với 606)", "hoan_hang"),
-    606: _dong(606, "MỞ LẠI CHIỀU GIAO — đặc tả đã xác nhận; nghĩa các mã xung quanh chưa xác minh",
-               "dang_giao", mo_lai=True),
-    701: _dong(701, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    702: _dong(702, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    703: _dong(703, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    704: _dong(704, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    705: _dong(705, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    707: _dong(707, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    708: _dong(708, "Đang xử lý hoàn (giả thuyết)", "hoan_hang"),
-    777: _dong(777, "Hủy đơn (giả thuyết) — chỉ ghi nhận, không tự đổi trạng thái nghiệp vụ",
-               "da_huy"),
-    1000: _dong(1000, "Hoàn tất (giả thuyết)", "giao_thanh_cong"),
-    2: _dong(2, "Đơn mới/tiếp nhận (giả thuyết)", "cho_lay"),
+    ma: _dong(ma, mo_ta, chung, mo_lai=(ma == best_hop_dong.MA_MO_LAI), can_soat=can_soat)
+    for ma, (mo_ta, chung, can_soat) in best_hop_dong.BANG_MA.items()
 }
+assert set(BANG_MA) == set(MA_TRONG_DE_BAI), "BANG_MA phải khớp đúng 23 mã tài liệu"
+
 
 # Máy trạng thái: chỉ những bước có nghĩa nghiệp vụ mới được đi. Đây KHÔNG phải bảng xếp hạng
 # mã; thứ tự đến/đi do `modified_at` quyết định (xem `_cap_nhat_don`). Bảng này chỉ chặn bước
@@ -359,9 +343,12 @@ def doc_payload(body):
 
     code_best = _kiem_ma(d["code_best"], "code_best")
     merchant = _kiem_ma(d["merchant_order_code"], "merchant_order_code")
-    status = _so_nguyen(d["status"])
+    # Tài liệu có 22 mã số + nhãn chữ `customer Cancel`. Không được `int()` thẳng rồi vứt sự
+    # kiện hủy thật thành "payload sai kiểu". Mã số lạ vẫn được nhận để lưu thô + cần soát.
+    status, status_raw, _la_customer_cancel, _biet = \
+        best_hop_dong.chuan_hoa_ma_trang_thai(d["status"])
     if status is None or status < 0:
-        raise LoiDuLieu("status phải là số nguyên không âm")
+        raise LoiDuLieu("status phải là số nguyên không âm hoặc nhãn 'customer Cancel'")
 
     try:
         moc = hub._moc_chuan(d["modified_at"])
@@ -406,6 +393,7 @@ def doc_payload(body):
         "code_best": code_best,
         "merchant_order_code": merchant,
         "status": status,
+        "status_raw": status_raw,
         "status_content": mo_ta,
         "modified_at_raw": d["modified_at"],
         "moc": moc,
@@ -421,7 +409,9 @@ def _khoa_su_kien(p):
     toàn bộ thân: đây là KHÓA NGHIỆP VỤ. Hai sự kiện cùng bốn trường nhưng khác fees/
     status_content được coi là MỘT sự kiện; bản ghi đầu thắng, bản sau được ACK idempotent.
     """
-    goc = f"{p['code_best']}\x1f{p['moc']}\x1f{p['status']}\x1f{p['merchant_order_code']}"
+    # Dùng nhãn gốc (`customer Cancel` khác `2`) để hai sự kiện khác nguồn không bị gộp oan.
+    goc = (f"{p['code_best']}\x1f{p['moc']}\x1f{p.get('status_raw', p['status'])}"
+           f"\x1f{p['merchant_order_code']}")
     return "best-" + hashlib.sha256(goc.encode("utf-8")).hexdigest()[:40]
 
 
@@ -431,13 +421,17 @@ def chuan_hoa_trang_thai(ma):
     KHÔNG ném lỗi với mã lạ: một mã mới của hãng không được làm sập đường nhận. Nó được lưu
     thô, đánh dấu cần soát và KHÔNG đổi trạng thái đơn.
     """
-    so = _so_nguyen(ma)
-    d = BANG_MA.get(so)
+    so, raw, la_customer_cancel, biet_ma = best_hop_dong.chuan_hoa_ma_trang_thai(ma)
+    d = BANG_MA.get(so) if biet_ma else None
     if d is None:
-        return {"biet_ma": False, "ma": so, "chung": None, "mo_lai": False,
+        return {"biet_ma": False, "ma": so, "ma_goc": raw, "chung": None, "mo_lai": False,
+                "can_soat": True,
                 "mo_ta": "mã lạ, chưa có trong danh sách đã xác nhận", "muc": MUC_CHUA_KIEM_CHUNG,
                 "nguon": NGUON_GIA_THUYET}
-    return {"biet_ma": True, "ma": so, "chung": d["chung"], "mo_lai": d["mo_lai"],
+    return {"biet_ma": True, "ma": so, "ma_goc": raw,
+            "customer_cancel": bool(la_customer_cancel),
+            "chung": d["chung"], "mo_lai": d["mo_lai"],
+            "can_soat": d.get("can_soat", False),
             "mo_ta": d["mo_ta"], "muc": d["muc"], "nguon": d["nguon"]}
 
 
@@ -475,6 +469,18 @@ def xac_thuc_webhook(tk, headers, body):
     Trả `(ok, ly_do, ten_so_do, muc)`. Với BEST ở sandbox/production, hub chưa có sơ đồ
     (BLOCKED) nên hàm từ chối — KHÔNG đoán header/chữ ký của hãng.
     """
+    mt = str(tk["moi_truong"] if "moi_truong" in tk.keys() else "mock") or "mock"
+    if mt != cau_hinh.JT_MOCK:
+        # Tài liệu chính thức: webhook dùng JWT Bearer token, không phải HMAC.
+        try:
+            kq = xac_thuc_best.kiem_bearer_webhook(
+                str(tk["tenant_id"]), str(tk["id"]), _headers_thuong(headers).get("authorization"),
+                webhook_ma=str(tk["webhook_ma"]) if "webhook_ma" in tk.keys() else None)
+        except Exception as e:
+            return False, f"lỗi xác thực Bearer: {type(e).__name__} — BLOCKED", "best_bearer", MUC_BLOCKED
+        if kq.hop_le:
+            return True, "", "best_bearer", MUC_DA_TAI_LIEU
+        return False, f"Bearer webhook không hợp lệ ({kq.ma_ly_do}) — BLOCKED", "best_bearer", MUC_BLOCKED
     try:
         ten, ham, muc = hub.chon_so_do(tk)
     except Exception as e:
@@ -784,9 +790,9 @@ def _ghi_dau_vet(sk_id, p, qd, don_id, ap_dung):
     try:
         dat, ts = [], []
         for cot, gt in (
-            ("hang_ma_goc", str(p["status"])),
+            ("hang_ma_goc", str(p.get("status_raw", p["status"]))),
             ("hang_mo_ta_goc", p["status_content"]),
-            ("hang_su_kien_goc", json.dumps({"status": p["status"],
+            ("hang_su_kien_goc", json.dumps({"status": p.get("status_raw", p["status"]),
                                              "status_content": p["status_content"],
                                              "modified_at": p["modified_at_raw"]},
                                             ensure_ascii=False)),
@@ -1086,7 +1092,7 @@ def kiem_bat_bien():
         thua = sorted(set(BANG_MA) - set(MA_TRONG_DE_BAI))
         loi.append(f"BANG_MA lệch danh sách đề bài: thiếu={thieu} thừa={thua}")
     for ma, d in BANG_MA.items():
-        if d["muc"] != MUC_CHUA_KIEM_CHUNG:
+        if d["muc"] != MUC_DA_TAI_LIEU:
             loi.append(f"mã {ma}: bị nâng mức bằng chứng lên {d['muc']}")
         if d["chung"] not in TRANG_THAI_CHUNG:
             loi.append(f"mã {ma}: trạng thái chung lạ {d['chung']!r}")

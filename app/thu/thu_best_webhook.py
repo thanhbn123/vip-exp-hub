@@ -223,14 +223,14 @@ class TestA_BangMa(Nen):
         """Đề bài nói 24 nhưng liệt kê 23: mô-đun KHÔNG bịa thêm mã; bộ thử phủ 23 + mã lạ."""
         self.assertEqual(len(wb.MA_TRONG_DE_BAI), 23)
         self.assertEqual(len(set(wb.MA_TRONG_DE_BAI)), 23)
-        self.assertEqual(wb.SO_MA_DE_BAI, 24)
+        self.assertEqual(wb.SO_MA_DE_BAI, 23)
         self.assertEqual(wb.SO_MA_LIET_KE, 23)
         self.assertIn("23", wb.GHI_CHU_SO_LUONG)
-        self.assertIn("24", wb.GHI_CHU_SO_LUONG)
+        self.assertIn("23", wb.GHI_CHU_SO_LUONG)
         self.assertEqual(set(wb.BANG_MA), set(wb.MA_TRONG_DE_BAI))
         self.assertEqual(wb.kiem_bat_bien(), [])
         for ma in wb.MA_TRONG_DE_BAI:
-            self.assertEqual(wb.BANG_MA[ma]["muc"], wb.MUC_CHUA_KIEM_CHUNG,
+            self.assertEqual(wb.BANG_MA[ma]["muc"], wb.MUC_DA_TAI_LIEU,
                              f"mã {ma} không được tự nhận là đã kiểm chứng")
         self.assertTrue(wb.BANG_MA[606]["mo_lai"])
         self.assertEqual([m for m, d in wb.BANG_MA.items() if d["mo_lai"]], [606],
@@ -311,7 +311,7 @@ class TestB_Tenant(Nen):
         code = "BEST-B1"
         merchant = "MD-B1"
         truoc = self._so_su_kien(self.tk_ghost)
-        kq = self._gui(self.tk_ghost, self._payload(code, merchant, 2,
+        kq = self._gui(self.tk_ghost, self._payload(code, merchant, 211,
                                                    "2026-10-19T11:01:00+07:00"),
                        secret=SECRET_GHOST)
         self.assertEqual(kq.http, 403)
@@ -324,7 +324,7 @@ class TestB_Tenant(Nen):
 
         # ĐỐI CHỨNG ĐƯỜNG: cùng payload với tài khoản có tenant thật ⇒ qua bước 3 và áp được.
         don_id = self._tao_don(self.ta, self.tk_a, code, merchant)
-        kq2 = self._gui(self.tk_a, self._payload(code, merchant, 2,
+        kq2 = self._gui(self.tk_a, self._payload(code, merchant, 211,
                                                  "2026-10-19T11:01:00+07:00"))
         self.assertEqual(kq2.http, 200)
         self.assertTrue(kq2.thanh_cong)
@@ -382,7 +382,7 @@ class TestB_Tenant(Nen):
         kq = self._gui(self.tk_a, p)
         self.assertEqual(kq.http, 200)
         self.assertEqual(kq.ket_cuc, "cap_nhat")
-        self.assertEqual(self._don(a_don)["trang_thai_giao"], "lay_hang")
+        self.assertEqual(self._don(a_don)["trang_thai_giao"], "cho_lay")
         self.assertIsNone(self._don(b_don)["trang_thai_giao"])
         self.assertTrue(csdl.mot(
             "SELECT 1 x FROM audit WHERE hanh_dong='webhook_best_claim_tenant_bi_bo_qua'"
@@ -470,7 +470,7 @@ class TestD_DenMuon(Nen):
         don_id = self._tao_don(self.ta, self.tk_a, code, "MD-D3")
         self._gui(self.tk_a, self._payload(code, "MD-D3", 301,
                                            "2026-10-19T10:00:00+07:00"))
-        kq = self._gui(self.tk_a, self._payload(code, "MD-D3", 302,
+        kq = self._gui(self.tk_a, self._payload(code, "MD-D3", 604,
                                                 "2026-10-19T10:00:00+07:00"))
         self.assertEqual(kq.ket_cuc, "ghi_nhan")
         self.assertIn("xung đột mốc", kq.chi_tiet["ly_do"])

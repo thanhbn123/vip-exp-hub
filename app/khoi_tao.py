@@ -6,6 +6,7 @@ import os
 import secrets
 
 import adapter
+import adapter_best  # noqa: F401 — để carrier_providers có BEST
 import adapter_jt   # noqa: F401
 import adapter_vtp  # noqa: F401
 import bao_mat

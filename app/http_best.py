@@ -9,12 +9,14 @@
 #   KHÔNG tự ngủ, ba kết cục tách rời.
 #
 # SỰ THẬT NỀN TẢNG, GHI NGAY ĐẦU TỆP:
-#   Hai base URL của BEST trong đề bài là **HTTP**, KHÔNG mã hoá:
-#     production http://sgp-seaedi.800best.com/VietNamV3/v3/api/process/sears
-#     test       http://sgp-seaedi-test.800best.com/VietNamV3/v3/api/process/sears
+#   Tài liệu BEST ghi URL dạng **HTTP**, nhưng cả ba host đều phục vụ **HTTPS** với chứng chỉ
+#   hợp lệ (`*.800best.com`, GlobalSign). Đo lại 2026-10-19: HTTP/2 + TLS xác minh thành công.
+#     production https://sgp-seaedi.800best.com/VietNamV3/v3/api/process/sears
+#     test       https://sgp-seaedi-test.800best.com/VietNamV3/v3/api/process/sears
+#     query-test https://sea-edi-hxtest.800best.com/VietNamV3/v3/api/process/sears
 #   Gửi credential (mật khẩu, token) hoặc dữ liệu đơn thật qua HTTP là gửi bản rõ qua mạng.
-#   Vì vậy lớp này **TỪ CHỐI** scheme `http` cho host hãng, trừ khi người gọi bật cờ
-#   `cho_phep_http_khong_ma_hoa=True` MỘT CÁCH TƯỜNG MINH. Mặc định là CHẶN. Cờ đó chỉ để mở
+#   Vì vậy lớp này dùng HTTPS và **TỪ CHỐI** scheme `http` cho host hãng, trừ khi người gọi bật
+#   cờ `cho_phep_http_khong_ma_hoa=True` MỘT CÁCH TƯỜNG MINH. Mặc định là CHẶN. Cờ đó chỉ để mở
 #   cho một môi trường thử ĐÃ ĐƯỢC DUYỆT, không phải để tiện tay.
 #
 # BA KẾT CỤC — KHÔNG GỘP (hợp đồng `docs/SHARED_CONTRACTS.md` §4):
@@ -50,12 +52,14 @@ PRODUCTION = "production"
 # ── Host của BEST (ĐÃ XÁC NHẬN trong đề bài) ──────────────────────────────────────────────────
 HOST_PRODUCTION = "sgp-seaedi.800best.com"
 HOST_SANDBOX = "sgp-seaedi-test.800best.com"
-HOST_HANG = frozenset({HOST_PRODUCTION, HOST_SANDBOX})
+# Tài liệu chính thức (đọc 2026-10-19) xác nhận Query TEST dùng host RIÊNG này.
+HOST_QUERY_TEST = "sea-edi-hxtest.800best.com"
+HOST_HANG = frozenset({HOST_PRODUCTION, HOST_SANDBOX, HOST_QUERY_TEST})
 
-# Hostname của endpoint test Order/Query mà đề bài nói tới nhưng CHƯA XÁC MINH. KHÔNG đưa vào
-# danh sách trắng: một hostname chưa xác minh không được trở thành đường gửi chỉ vì nó được nhắc
-# trong tài liệu. Ghi ra đây để người sau thấy nó đã được biết tới và cố ý KHÔNG dùng.
-HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH = "sea-edi-hxtest.800best.com"
+# Hostname Query TEST đã xác nhận trong tài liệu chính thức. Vẫn giữ tên cũ như bí danh để
+# mã/bộ thử cũ không gãy, nhưng từ 2026-10-19 host này NẰM TRONG allowlist và chỉ dùng cho
+# `/Order/Query` qua lớp `best_hop_dong.py`.
+HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH = HOST_QUERY_TEST
 
 # Loopback chỉ để bộ thử dựng stub cục bộ (cổng do OS cấp). Không phải đường LIVE.
 HOST_CUC_BO = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -67,12 +71,14 @@ HOST_METADATA = frozenset({
     "100.100.100.200",  # metadata Alibaba Cloud
 })
 
-# ── Base URL (ĐÃ XÁC NHẬN trong đề bài; CẢ HAI LÀ HTTP, CHƯA MÃ HOÁ) ─────────────────────────
+# ── Base URL — DÙNG HTTPS (tài liệu ghi http; TLS đã đo được trên cả ba host) ─────────────────
 BASE_URL = {
-    PRODUCTION: f"http://{HOST_PRODUCTION}/VietNamV3/v3/api/process/sears",
-    SANDBOX: f"http://{HOST_SANDBOX}/VietNamV3/v3/api/process/sears",
+    PRODUCTION: f"https://{HOST_PRODUCTION}/VietNamV3/v3/api/process/sears",
+    SANDBOX: f"https://{HOST_SANDBOX}/VietNamV3/v3/api/process/sears",
 }
-CO_HTTP_CHUA_MA_HOA = True          # sự thật của đề bài, không phải lựa chọn của lớp này
+# Tài liệu in URL http, nhưng chạy thật dùng https để credential/token không đi bản rõ.
+# Giữ tên hằng cũ để bộ thử/ báo cáo cũ không gãy; giá trị đã đổi thành False.
+CO_HTTP_CHUA_MA_HOA = False
 CONG_HTTPS = 443
 CONG_HTTP = 80
 
@@ -465,6 +471,30 @@ def _kiem_ip_cong_khai(host):
                 "ssrf-dns-noi-bo",
                 f"TỪ CHỐI tải: host {host!r} phân giải vào địa chỉ KHÔNG công khai ({ip}). "
                 "Đây là dấu hiệu SSRF/DNS rebinding.", host=host)
+
+
+def nang_cap_https_cho_url_hang(url):
+    """Đổi `http://<host BEST>/...` thành `https://<host BEST>/...`; URL khác giữ nguyên.
+
+    Tài liệu BEST trả URL PDF dạng `http://sgp-seaedi-test.800best.com/...`. Tải URL đó bằng
+    HTTP là tải bản rõ và cũng không cần thiết: cùng host đã phục vụ HTTPS với chứng chỉ hợp lệ.
+    Hàm này CHỈ đổi scheme khi host nằm đúng danh sách trắng và cổng là 80/mặc định; mọi URL
+    khác trả nguyên trạng để `tai_waybill()` từ chối theo luật SSRF của nó.
+    """
+    if not isinstance(url, str):
+        return url
+    try:
+        u = urlsplit(url.strip())
+    except ValueError:
+        return url
+    host = (u.hostname or "").lower()
+    if (u.scheme != "http" or host not in HOST_HANG or u.username or u.password
+            or u.port not in (None, CONG_HTTP)):
+        return url
+    duong = u.path or "/"
+    if u.query:
+        duong += "?" + u.query
+    return f"https://{host}{duong}"
 
 
 def tai_waybill(url, *, timeout, cho_phep_http_khong_ma_hoa=False, cho_phep_loopback=False):

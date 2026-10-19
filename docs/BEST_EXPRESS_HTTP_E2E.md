@@ -1,3 +1,8 @@
+> **CẬP NHẬT 2026-10-19 (sau khi đọc Google Docs chính thức):** bộ E2E hiện **59 ca** (thêm
+> `b11`/`b12` Bearer webhook); bảng trạng thái đã chuyển sang **23 mã chính thức**; route BEST đã
+> có backend/UI. Các con số 57/23-giả-thuyết trong tệp này là **lịch sử của lượt trước**. Hợp
+> đồng mới: `docs/BEST_EXPRESS_VERIFIED_CONTRACT.md`; bàn giao Owner: `docs/BEST_EXPRESS_OWNER_UAT.md`.
+
 # BEST EXPRESS — NỐI ROUTE HTTP + E2E LOCAL (AG-00)
 
 **Trạng thái bằng chứng: `LOCAL E2E PASS` — KHÔNG phải `REAL PASS`.**

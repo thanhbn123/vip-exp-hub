@@ -1,3 +1,9 @@
+> **CẬP NHẬT 2026-10-19 — TÀI LIỆU HÃNG ĐÃ ĐỌC ĐƯỢC.** Owner cung cấp Google Docs chính thức;
+> toàn văn đã tải và đối chiếu trong `docs/BEST_EXPRESS_VERIFIED_CONTRACT.md`. Các câu trong tệp
+> này nói “Google Docs không đọc được”/“schema chưa xác minh” là **trạng thái lịch sử**, không
+> còn đúng. Schema Order/Add, auth Bearer, Query test host và bảng 23 mã đã được sửa theo tài liệu.
+> REAL PASS vẫn **BLOCKED** vì chưa có credential/phê duyệt.
+
 # BEST EXPRESS — WEBHOOK + TRACKING (AGENT B3)
 
 > **CẬP NHẬT AG-00 — 19/10/2026:** route HTTP đã được nối trong `app/server.py`; `webhook_best.py`

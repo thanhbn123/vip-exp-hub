@@ -343,11 +343,14 @@ class A_HopDong(Base):
         self.assertTrue(ab.CO_HTTP_CHUA_MA_HOA)
         self.assertTrue(hb.CO_HTTP_CHUA_MA_HOA)
 
-    def test_a5_host_test_query_chua_xac_minh_khong_duoc_dung(self):
+    def test_a5_host_test_query_da_xac_minh_chi_dung_cho_query(self):
         self.assertEqual(ab.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH,
                          "sea-edi-hxtest.800best.com")
-        self.assertNotIn(ab.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH, hb.HOST_HANG)
-        self.assertFalse(hb.host_duoc_phep(ab.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH))
+        self.assertIn(ab.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH, hb.HOST_HANG)
+        self.assertTrue(hb.host_duoc_phep(ab.HOST_TEST_ORDER_QUERY_CHUA_XAC_MINH))
+        import best_hop_dong
+        self.assertTrue(best_hop_dong.BASE_URL_QUERY["sandbox"].startswith(
+            "https://sea-edi-hxtest.800best.com"))
 
     def test_a6_live_mac_dinh_dong(self):
         self.assertFalse(ab.AdapterBEST.CHO_PHEP_LIVE)

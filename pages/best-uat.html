@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BEST Express — Bàn nghiệm thu Owner · VIP Express Hub</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+<style>
+  body { background: var(--nen, #f7f8fa); }
+  .uat { max-width: 1120px; margin: 0 auto; padding: 24px 18px 48px; }
+  .uat h1 { font-size: 24px; margin: 0 0 6px; }
+  .uat .phu { color: #555; margin: 0 0 18px; }
+  .uat .the { background: #fff; border: 1px solid #e3e6ea; border-radius: 10px; padding: 16px 18px; margin: 14px 0; }
+  .uat .the h2 { font-size: 17px; margin: 0 0 10px; }
+  .uat .luoi { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+  .uat label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .uat input, .uat select { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #cfd5dc; border-radius: 6px; font: inherit; }
+  .uat button { padding: 8px 12px; border: 0; border-radius: 6px; background: #1f6feb; color: #fff; font-weight: 600; cursor: pointer; margin: 8px 6px 0 0; }
+  .uat button.phu { background: #6b7280; }
+  .uat button:disabled { background: #aab2bd; cursor: not-allowed; }
+  .uat .ketqua { margin-top: 12px; padding: 10px 12px; border-radius: 7px; background: #f3f4f6; white-space: pre-wrap; font-size: 13px; }
+  .uat .ok { background: #e8f7ee; color: #14532d; }
+  .uat .loi { background: #fdecec; color: #7f1d1d; }
+  .uat .canhbao { background: #fff7e6; color: #7c4a03; }
+  .uat table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .uat th, .uat td { border: 1px solid #e3e6ea; padding: 6px 7px; text-align: left; vertical-align: top; }
+  .uat th { background: #f6f8fa; }
+  .uat .hang { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+  .uat .ma { font-family: ui-monospace, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="uat">
+  <h1>BEST Express — Bàn nghiệm thu Owner</h1>
+  <p class="phu">LOCAL · Không tự gọi hãng. Mọi thao tác thật đi qua backend và chỉ mở khi Owner đã
+    đặt phê duyệt + chứng từ. Trang này không hiển thị token/secret.</p>
+
+  <div id="auth" class="the canhbao">Đang kiểm tra phiên đăng nhập…</div>
+
+  <section class="the" id="khoi-trang-thai">
+    <h2>1. Trạng thái hợp đồng, TLS, quyền</h2>
+    <div id="trang-thai" class="ketqua">Đang tải…</div>
+    <button id="btn-trang-thai" class="phu" type="button">Tải lại trạng thái + TLS</button>
+  </section>
+
+  <section class="the" id="khoi-tai-khoan">
+    <h2>2. Tài khoản BEST (credential mã hoá khi lưu)</h2>
+    <div id="ds-tai-khoan" class="ketqua">Đang tải…</div>
+    <form id="form-tk" autocomplete="off">
+      <div class="luoi">
+        <div><label for="tk-ten">Tên gợi nhớ</label><input id="tk-ten" value="BEST Express" maxlength="120"></div>
+        <div><label for="tk-mt">Môi trường</label>
+          <select id="tk-mt"><option value="mock">mock (local)</option><option value="sandbox">sandbox (TEST)</option><option value="production">production (REAL)</option></select>
+        </div>
+        <div><label for="tk-user">Username BEST</label><input id="tk-user" autocomplete="username" maxlength="255"></div>
+        <div><label for="tk-pass">Password BEST</label><input id="tk-pass" type="password" autocomplete="new-password" maxlength="1024"></div>
+      </div>
+      <label style="margin-top:10px;font-weight:400"><input id="tk-xac-nhan" type="checkbox" style="width:auto"> Tôi xác nhận đã có phê duyệt của Owner và đang nhập credential TEST (không phải production).</label>
+      <button id="btn-luu-tk" type="submit">Lưu tài khoản</button>
+      <span class="ma" id="tk-ghi-chu"></span>
+    </form>
+  </section>
+
+  <section class="the" id="khoi-ket-noi">
+    <h2>3. Kiểm tra kết nối (chỉ đăng nhập; không tạo đơn)</h2>
+    <div class="luoi">
+      <div><label for="kn-tk">Tài khoản</label><select id="kn-tk"></select></div>
+      <div><label for="kn-xac-nhan">Xác nhận</label><select id="kn-xac-nhan"><option value="0">Chưa phê duyệt</option><option value="1">Tôi đã phê duyệt kiểm tra thật</option></select></div>
+    </div>
+    <button id="btn-kiem-ket-noi" type="button">Kiểm tra đăng nhập BEST</button>
+    <div id="kq-ket-noi" class="ketqua">Chưa chạy.</div>
+  </section>
+
+  <section class="the" id="khoi-webhook">
+    <h2>4. Webhook Bearer (BEST gửi callback)</h2>
+    <div class="luoi">
+      <div><label for="wh-tk">Tài khoản</label><select id="wh-tk"></select></div>
+      <div><label for="wh-token">Bearer token do BEST cấp</label><input id="wh-token" type="password" autocomplete="new-password" maxlength="8192"></div>
+    </div>
+    <button id="btn-luu-webhook" type="button">Lưu Bearer (mã hoá)</button>
+    <div id="kq-webhook" class="ketqua">Chưa lưu.</div>
+  </section>
+
+  <section class="the" id="khoi-cuoc">
+    <h2>5. Báo cước / COD / phí (sandbox)</h2>
+    <form id="form-cuoc">
+      <div class="luoi">
+        <div><label for="cuoc-tk">Tài khoản</label><select id="cuoc-tk"></select></div>
+        <div><label for="cuoc-sc">Tỉnh gửi</label><input id="cuoc-sc" value="Hồ Chí Minh"></div>
+        <div><label for="cuoc-sd">Quận gửi</label><input id="cuoc-sd" value="Bình Thạnh"></div>
+        <div><label for="cuoc-sw">Phường gửi</label><input id="cuoc-sw" value="Phường 12"></div>
+        <div><label for="cuoc-dc">Tỉnh nhận</label><input id="cuoc-dc" value="Hồ Chí Minh"></div>
+        <div><label for="cuoc-dd">Quận nhận</label><input id="cuoc-dd" value="Tân Bình"></div>
+        <div><label for="cuoc-dw">Phường nhận</label><input id="cuoc-dw" value="Phường 10"></div>
+        <div><label for="cuoc-can">Cân (gram)</label><input id="cuoc-can" type="number" min="1" value="120"></div>
+        <div><label for="cuoc-dai">Dài (mm)</label><input id="cuoc-dai" type="number" min="0" value="100"></div>
+        <div><label for="cuoc-rong">Rộng (mm)</label><input id="cuoc-rong" type="number" min="0" value="100"></div>
+        <div><label for="cuoc-cao">Cao (mm)</label><input id="cuoc-cao" type="number" min="0" value="100"></div>
+        <div><label for="cuoc-cod">COD (VND)</label><input id="cuoc-cod" type="number" min="0" value="0"></div>
+        <div><label for="cuoc-gia">Khai giá (VND)</label><input id="cuoc-gia" type="number" min="0" value="0"></div>
+      </div>
+      <button id="btn-bao-gia" type="submit">Báo cước BEST</button>
+    </form>
+    <div id="kq-cuoc" class="ketqua">Chưa chạy.</div>
+  </section>
+
+  <section class="the" id="khoi-tao-don">
+    <h2>6. Tạo đơn sandbox (chỉ sau phê duyệt; production bị khoá)</h2>
+    <form id="form-don">
+      <div class="luoi">
+        <div><label for="don-tk">Tài khoản</label><select id="don-tk"></select></div>
+        <div><label for="don-ma">Mã đơn đối tác</label><input id="don-ma" value="UAT-001"></div>
+        <div><label for="don-hang">Tên hàng</label><input id="don-hang" value="Hàng kiểm thử UAT"></div>
+        <div><label for="don-sname">Người gửi</label><input id="don-sname" value="Nguyễn Gửi"></div>
+        <div><label for="don-sdt">SĐT gửi</label><input id="don-sdt" value="0901000001"></div>
+        <div><label for="don-sc">Tỉnh gửi</label><input id="don-sc" value="Hồ Chí Minh"></div>
+        <div><label for="don-sd">Quận gửi (2 cấp: để trống)</label><input id="don-sd" value=""></div>
+        <div><label for="don-sw">Phường gửi</label><input id="don-sw" value="Phường 12"></div>
+        <div><label for="don-sa">Địa chỉ gửi</label><input id="don-sa" value="12 Đường ABCD"></div>
+        <div><label for="don-dname">Người nhận</label><input id="don-dname" value="Trần Nhận"></div>
+        <div><label for="don-ddt">SĐT nhận</label><input id="don-ddt" value="0902000002"></div>
+        <div><label for="don-dc">Tỉnh nhận</label><input id="don-dc" value="Hồ Chí Minh"></div>
+        <div><label for="don-dd">Quận nhận</label><input id="don-dd" value="Tân Bình"></div>
+        <div><label for="don-dw">Phường nhận</label><input id="don-dw" value="Phường 10"></div>
+        <div><label for="don-da">Địa chỉ nhận</label><input id="don-da" value="34 Đường XYZ"></div>
+        <div><label for="don-can">Cân (gram)</label><input id="don-can" type="number" min="1" value="500"></div>
+        <div><label for="don-dai">Dài (mm)</label><input id="don-dai" type="number" min="0" value="100"></div>
+        <div><label for="don-rong">Rộng (mm)</label><input id="don-rong" type="number" min="0" value="100"></div>
+        <div><label for="don-cao">Cao (mm)</label><input id="don-cao" type="number" min="0" value="100"></div>
+        <div><label for="don-cod">COD (VND)</label><input id="don-cod" type="number" min="0" value="0"></div>
+        <div><label for="don-gia">Khai giá (VND)</label><input id="don-gia" type="number" min="0" value="0"></div>
+        <div><label for="don-journey">JourneyType</label><select id="don-journey"><option value="1">1 — Giao hàng</option><option value="2">2 — Thu hồi</option><option value="3">3 — Đổi hàng</option></select></div>
+        <div><label for="don-pickup">PickupType</label><select id="don-pickup"><option value="2">2 — Postman</option><option value="1">1 — DropOff</option></select></div>
+        <div><label for="don-xac-nhan">Câu xác nhận ghi</label><input id="don-xac-nhan" value=""></div>
+      </div>
+      <button id="btn-tao-don" type="submit">Gửi tạo đơn sandbox</button>
+    </form>
+    <div id="kq-don" class="ketqua">Chưa chạy.</div>
+  </section>
+
+  <section class="the" id="khoi-tra-cuu">
+    <h2>7. Tra cứu vận đơn / in PDF</h2>
+    <div class="luoi">
+      <div><label for="tc-tk">Tài khoản</label><select id="tc-tk"></select></div>
+      <div><label for="tc-codes">Mã (cách nhau dấu phẩy; Query ≤10, Print ≤50)</label><input id="tc-codes" value=""></div>
+    </div>
+    <button id="btn-tra-cuu" type="button">Tra cứu hành trình</button>
+    <button id="btn-in" type="button" class="phu">Lấy URL PDF</button>
+    <div id="kq-tra-cuu" class="ketqua">Chưa chạy.</div>
+  </section>
+
+  <section class="the" id="khoi-lich-su">
+    <h2>8. Lịch sử đồng bộ / nhật ký lỗi</h2>
+    <button id="btn-lich-su" type="button" class="phu">Tải lịch sử</button>
+    <div id="kq-lich-su" class="ketqua">Chưa tải.</div>
+  </section>
+</div>
+<script src="../admin/best_uat.js"></script>
+</body>
+</html>

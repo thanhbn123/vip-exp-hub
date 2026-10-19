@@ -1,3 +1,9 @@
+> **CẬP NHẬT 2026-10-19 — TÀI LIỆU HÃNG ĐÃ ĐỌC ĐƯỢC.** Owner cung cấp Google Docs chính thức;
+> toàn văn đã tải và đối chiếu trong `docs/BEST_EXPRESS_VERIFIED_CONTRACT.md`. Các câu trong tệp
+> này nói “Google Docs không đọc được”/“schema chưa xác minh” là **trạng thái lịch sử**, không
+> còn đúng. Schema Order/Add, auth Bearer, Query test host và bảng 23 mã đã được sửa theo tài liệu.
+> REAL PASS vẫn **BLOCKED** vì chưa có credential/phê duyệt.
+
 # BEST EXPRESS — GIAO DIỆN 12 MÀN (AGENT B4)
 
 > Trạng thái: **LOCAL ONLY · MOCK PASS (phần cần backend BEST) + REAL PASS (các đường đọc đã có)**

@@ -47,6 +47,7 @@ import quyen                # noqa: E402
 import server               # noqa: E402
 import webhook as hub       # noqa: E402
 import webhook_best as wb   # noqa: E402
+import xac_thuc_best        # noqa: E402
 
 # Các cột dấu vết của hub đã migrate. Thêm tại chỗ để bộ thử chạy trên schema ĐẦY ĐỦ, không
 # phải schema rút gọn — đường ghi dấu vết mới là đường dễ bỏ sót nhất.
@@ -277,7 +278,7 @@ class A_HopLe(Nen):
     def test_a01_callback_hop_le_qua_http_du_11_buoc_va_du_lieu(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-A1", "MD-A1")
-        p = _payload("BEST-A1", "MD-A1", 2, "2026-10-19T10:00:00+07:00")
+        p = _payload("BEST-A1", "MD-A1", 211, "2026-10-19T10:00:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 200, raw)
         self.assertEqual(than, {"Result": 1, "Message": ""},
@@ -316,7 +317,7 @@ class A_HopLe(Nen):
         """Chứng minh đây là HTTP thật qua `server.BoXuLy`, không phải gọi hàm."""
         tk = self.tk_moi()
         self.tao_don(tk, "BEST-A2", "MD-A2")
-        p = _payload("BEST-A2", "MD-A2", 2, "2026-10-19T10:01:00+07:00")
+        p = _payload("BEST-A2", "MD-A2", 211, "2026-10-19T10:01:00+07:00")
         status, raw, hs = _gui(tk, p)
         self.assertEqual(status, 200)
         self.assertIn("X-Request-Id", hs, "route thật phải gắn X-Request-Id")
@@ -328,7 +329,7 @@ class A_HopLe(Nen):
         """ACK chỉ sau khi dòng `wh_su_kien` đã bền: event phải tồn tại trước/đồng thời ACK."""
         tk = self.tk_moi()
         self.tao_don(tk, "BEST-A3", "MD-A3")
-        p = _payload("BEST-A3", "MD-A3", 2, "2026-10-19T10:02:00+07:00")
+        p = _payload("BEST-A3", "MD-A3", 211, "2026-10-19T10:02:00+07:00")
         status, raw, _ = _gui(tk, p)
         self.assertEqual(status, 200)
         sk = _sk(tk["id"])
@@ -344,7 +345,7 @@ class B_XacThuc(Nen):
     def test_b01_thieu_chu_ky_tra_401_va_khong_ghi_gi(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-B1", "MD-B1")
-        p = _payload("BEST-B1", "MD-B1", 2, "2026-10-19T11:00:00+07:00")
+        p = _payload("BEST-B1", "MD-B1", 211, "2026-10-19T11:00:00+07:00")
         status, than, raw = self.soi(*_post(tk["wh_ma"], _body(p),
                                            {"Content-Type": "application/json"})[:2])
         self.assertEqual(status, 401, raw)
@@ -358,7 +359,7 @@ class B_XacThuc(Nen):
     def test_b02_chu_ky_sai_tra_401_va_khong_ghi_gi(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-B2", "MD-B2")
-        p = _payload("BEST-B2", "MD-B2", 2, "2026-10-19T11:01:00+07:00")
+        p = _payload("BEST-B2", "MD-B2", 211, "2026-10-19T11:01:00+07:00")
         status, than, raw = self.soi(*_post(tk["wh_ma"], _body(p),
                                            {"X-Webhook-Signature": "0" * 64})[:2])
         self.assertEqual(status, 401, raw)
@@ -370,7 +371,7 @@ class B_XacThuc(Nen):
         tk_a = self.tk_moi()
         tk_b = self.tk_moi()
         self.tao_don(tk_a, "BEST-B3", "MD-B3")
-        p = _payload("BEST-B3", "MD-B3", 2, "2026-10-19T11:02:00+07:00")
+        p = _payload("BEST-B3", "MD-B3", 211, "2026-10-19T11:02:00+07:00")
         status, than, raw = self.soi(*_gui(tk_a, p, secret=tk_b["secret"])[:2])
         self.assertEqual(status, 401, raw)
         self.assertEqual(than["Result"], 0)
@@ -380,7 +381,7 @@ class B_XacThuc(Nen):
         """Chưa có sơ đồ xác thực BEST đã xác minh ⇒ KHÔNG đoán, KHÔNG nhận callback."""
         tk = self.tk_moi(moi_truong="sandbox")
         don_id = self.tao_don(tk, "BEST-B4", "MD-B4")
-        p = _payload("BEST-B4", "MD-B4", 2, "2026-10-19T11:03:00+07:00")
+        p = _payload("BEST-B4", "MD-B4", 211, "2026-10-19T11:03:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 401, raw)
         self.assertEqual(than["Result"], 0)
@@ -392,8 +393,37 @@ class B_XacThuc(Nen):
     def test_b05_best_production_bi_tu_choi_fail_closed(self):
         tk = self.tk_moi(moi_truong="production")
         don_id = self.tao_don(tk, "BEST-B5", "MD-B5")
-        p = _payload("BEST-B5", "MD-B5", 2, "2026-10-19T11:04:00+07:00")
+        p = _payload("BEST-B5", "MD-B5", 211, "2026-10-19T11:04:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
+        self.assertEqual(status, 401, raw)
+        self.assertEqual(than["Result"], 0)
+        self.assertEqual(_sk(tk["id"]), [])
+        self.assertIsNone(_don_row(don_id)["trang_thai_giao"])
+
+    def test_b11_sandbox_bearer_hop_le_duoc_nhan_va_cap_nhat(self):
+        """Webhook BEST thật dùng JWT Bearer, không phải HMAC. Token lưu mã hoá theo account."""
+        tk = self.tk_moi(moi_truong="sandbox")
+        don_id = self.tao_don(tk, "BEST-B11", "MD-B11")
+        bearer = "v9." + uuid.uuid4().hex
+        xac_thuc_best.luu_bearer_webhook(str(tk["tenant_id"]), str(tk["id"]), bearer,
+                                         webhook_ma=tk["wh_ma"])
+        p = _payload("BEST-B11", "MD-B11", 211, "2026-10-19T11:09:00+07:00")
+        status, than, raw = self.soi(*_post(tk["wh_ma"], _body(p),
+                                           {"Authorization": "Bearer " + bearer})[:2])
+        self.assertEqual(status, 200, raw)
+        self.assertEqual(than, {"Result": 1, "Message": ""})
+        self.assertEqual(len(_sk(tk["id"])), 1)
+        self.assertEqual(_don_row(don_id)["trang_thai_giao"], "cho_lay")
+
+    def test_b12_sandbox_bearer_sai_bi_tu_choi(self):
+        tk = self.tk_moi(moi_truong="sandbox")
+        don_id = self.tao_don(tk, "BEST-B12", "MD-B12")
+        bearer = "v9." + uuid.uuid4().hex
+        xac_thuc_best.luu_bearer_webhook(str(tk["tenant_id"]), str(tk["id"]), bearer,
+                                         webhook_ma=tk["wh_ma"])
+        p = _payload("BEST-B12", "MD-B12", 211, "2026-10-19T11:10:00+07:00")
+        status, than, raw = self.soi(*_post(tk["wh_ma"], _body(p),
+                                           {"Authorization": "Bearer " + "x" * 20})[:2])
         self.assertEqual(status, 401, raw)
         self.assertEqual(than["Result"], 0)
         self.assertEqual(_sk(tk["id"]), [])
@@ -410,7 +440,7 @@ class B_XacThuc(Nen):
     def test_b07_tai_khoan_bi_khoa_khong_nhan_callback(self):
         tk = self.tk_moi(kich_hoat=0)
         don_id = self.tao_don(tk, "BEST-B7", "MD-B7")
-        p = _payload("BEST-B7", "MD-B7", 2, "2026-10-19T11:06:00+07:00")
+        p = _payload("BEST-B7", "MD-B7", 211, "2026-10-19T11:06:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 404, raw)
         self.assertEqual(_sk(tk["id"]), [])
@@ -420,7 +450,7 @@ class B_XacThuc(Nen):
         """Payload BEST gửi vào định danh J&T, ký bằng secret BEST ⇒ J&T từ chối ở HMAC."""
         tk_jt = self.tk_moi(hang="jt")
         don_id = self.tao_don(tk_jt, "BEST-B8", "MD-B8")
-        p = _payload("BEST-B8", "MD-B8", 2, "2026-10-19T11:07:00+07:00")
+        p = _payload("BEST-B8", "MD-B8", 211, "2026-10-19T11:07:00+07:00")
         status, than, raw = self.soi(*_gui(tk_jt, p, secret="secret-best-khac")[:2])
         self.assertEqual(status, 401, raw)
         self.assertIn("loi", than)
@@ -438,7 +468,7 @@ class B_XacThuc(Nen):
         của chính nó (202, `code=1`), KHÔNG có `Result` của BEST và KHÔNG có audit cập nhật BEST.
         """
         tk_jt = self.tk_moi(hang="jt")
-        p = _payload("BEST-B9", "MD-B9", 2, "2026-10-19T11:08:00+07:00")
+        p = _payload("BEST-B9", "MD-B9", 211, "2026-10-19T11:08:00+07:00")
         body = _body(p)
         status, than, raw = self.soi(*_post(tk_jt["wh_ma"], body,
                                            _ky(tk_jt["secret"], body))[:2])
@@ -481,7 +511,7 @@ class C_Payload(Nen):
 
     def test_c02_thieu_truong_bat_buoc_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C2")
-        p = _payload("BEST-C2", "MD-BEST-C2", 2, "2026-10-19T11:10:00+07:00")
+        p = _payload("BEST-C2", "MD-BEST-C2", 211, "2026-10-19T11:10:00+07:00")
         del p["status"]
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
@@ -499,7 +529,7 @@ class C_Payload(Nen):
 
     def test_c04_sai_kieu_modified_at_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C4")
-        p = _payload("BEST-C4", "MD-BEST-C4", 2, "khong-phai-thoi-gian")
+        p = _payload("BEST-C4", "MD-BEST-C4", 211, "khong-phai-thoi-gian")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertIn("modified_at", than["Message"])
@@ -507,7 +537,7 @@ class C_Payload(Nen):
 
     def test_c05_status_content_qua_dai_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C5")
-        p = _payload("BEST-C5", "MD-BEST-C5", 2, "2026-10-19T11:13:00+07:00",
+        p = _payload("BEST-C5", "MD-BEST-C5", 211, "2026-10-19T11:13:00+07:00",
                      status_content="x" * (wb.GIOI_HAN_MO_TA + 1))
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
@@ -515,7 +545,7 @@ class C_Payload(Nen):
 
     def test_c06_than_qua_lon_tra_413_va_khong_luu(self):
         tk, don_id = self._nen_ca("BEST-C6")
-        p = _payload("BEST-C6", "MD-BEST-C6", 2, "2026-10-19T11:14:00+07:00",
+        p = _payload("BEST-C6", "MD-BEST-C6", 211, "2026-10-19T11:14:00+07:00",
                      padding="x" * (wb.GIOI_HAN_BODY + 1024))
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 413, raw)
@@ -530,7 +560,7 @@ class C_Payload(Nen):
         trả 413 cho thân 300 KiB. Đây là ca làm phép tiêm "đọc bằng trần mặc định" phải ĐỎ.
         """
         tk, don_id = self._nen_ca("BEST-C11")
-        p = _payload("BEST-C11", "MD-BEST-C11", 2, "2026-10-19T11:18:00+07:00",
+        p = _payload("BEST-C11", "MD-BEST-C11", 211, "2026-10-19T11:18:00+07:00",
                      padding="x" * (100 * 1024))
         body = _body(p)
         self.assertGreater(len(body), 64 * 1024)
@@ -545,7 +575,7 @@ class C_Payload(Nen):
     def test_c12_modified_at_nan_tra_422(self):
         """NaN không phải mốc thời gian; phải là 422 Result/Message, không phải 500 generic."""
         tk, don_id = self._nen_ca("BEST-C12")
-        p = _payload("BEST-C12", "MD-BEST-C12", 2, float("nan"))
+        p = _payload("BEST-C12", "MD-BEST-C12", 211, float("nan"))
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertEqual(than["Result"], 0)
@@ -554,7 +584,7 @@ class C_Payload(Nen):
 
     def test_c13_modified_at_infinity_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C13")
-        p = _payload("BEST-C13", "MD-BEST-C13", 2, float("inf"))
+        p = _payload("BEST-C13", "MD-BEST-C13", 211, float("inf"))
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertEqual(than["Result"], 0)
@@ -563,7 +593,7 @@ class C_Payload(Nen):
 
     def test_c14_modified_at_offset_sai_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C14")
-        p = _payload("BEST-C14", "MD-BEST-C14", 2, "2026-10-19T10:00:00+99:99")
+        p = _payload("BEST-C14", "MD-BEST-C14", 211, "2026-10-19T10:00:00+99:99")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertEqual(than["Result"], 0)
@@ -573,7 +603,7 @@ class C_Payload(Nen):
     def test_c15_modified_at_xa_tuong_lai_tra_422(self):
         """14 chữ số nhưng là năm ~5138: không được đẩy watermark rồi đóng băng đơn."""
         tk, don_id = self._nen_ca("BEST-C15")
-        p = _payload("BEST-C15", "MD-BEST-C15", 2, 99999999999999)
+        p = _payload("BEST-C15", "MD-BEST-C15", 211, 99999999999999)
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertEqual(than["Result"], 0)
@@ -582,7 +612,7 @@ class C_Payload(Nen):
 
     def test_c16_modified_at_qua_cu_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C16")
-        p = _payload("BEST-C16", "MD-BEST-C16", 2, "2000-01-01T00:00:00+07:00")
+        p = _payload("BEST-C16", "MD-BEST-C16", 211, "2000-01-01T00:00:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertEqual(than["Result"], 0)
@@ -606,7 +636,7 @@ class C_Payload(Nen):
 
     def test_c09_ma_co_khoang_trang_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C9")
-        p = _payload("BEST C9", "MD-BEST-C9", 2, "2026-10-19T11:16:00+07:00")
+        p = _payload("BEST C9", "MD-BEST-C9", 211, "2026-10-19T11:16:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertIn("khoảng trắng", than["Message"])
@@ -614,7 +644,7 @@ class C_Payload(Nen):
 
     def test_c10_so_tien_am_tra_422(self):
         tk, don_id = self._nen_ca("BEST-C10")
-        p = _payload("BEST-C10", "MD-BEST-C10", 2, "2026-10-19T11:17:00+07:00", cod=-1)
+        p = _payload("BEST-C10", "MD-BEST-C10", 211, "2026-10-19T11:17:00+07:00", cod=-1)
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 422, raw)
         self.assertEqual(_sk(tk["id"]), [])
@@ -631,7 +661,7 @@ class D_Tenant(Nen):
         tk_b = self.tk_trong_tenant(tb)
         don_a = self.tao_don(tk_a, "BEST-D1-A", "MD-D1-A")
         don_b = self.tao_don(tk_b, "BEST-D1-B", "MD-D1-B")
-        p = _payload("BEST-D1-A", "MD-D1-A", 2, "2026-10-19T12:00:00+07:00",
+        p = _payload("BEST-D1-A", "MD-D1-A", 211, "2026-10-19T12:00:00+07:00",
                      tenant_id=tb)
         status, than, raw = self.soi(*_gui(tk_a, p)[:2])
         self.assertEqual(status, 200, raw)
@@ -650,7 +680,7 @@ class D_Tenant(Nen):
         tk_a = self.tk_trong_tenant(ta)
         tk_b = self.tk_trong_tenant(tb)
         don_b = self.tao_don(tk_b, "BEST-D2-B", "MD-D2-B")
-        p = _payload("BEST-D2-B", "MD-D2-B", 2, "2026-10-19T12:01:00+07:00")
+        p = _payload("BEST-D2-B", "MD-D2-B", 211, "2026-10-19T12:01:00+07:00")
         status, than, raw = self.soi(*_gui(tk_a, p)[:2])
         self.assertEqual(status, 200, raw)
         self.assertEqual(len(_sk(tk_a["id"])), 1)
@@ -662,7 +692,7 @@ class D_Tenant(Nen):
     def test_d03_merchant_lech_khong_cap_nhat_don(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-D3", "MD-D3-DUNG")
-        p = _payload("BEST-D3", "MD-D3-SAI", 2, "2026-10-19T12:02:00+07:00")
+        p = _payload("BEST-D3", "MD-D3-SAI", 211, "2026-10-19T12:02:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 200, raw)
         self.assertEqual(_sk(tk["id"])[0]["trang_thai"], "xong")
@@ -676,7 +706,7 @@ class D_Tenant(Nen):
         tk_b = self.tk_trong_tenant(tb)
         don_a = self.tao_don(tk_a, "BEST-D4-SHARED", "MD-D4-A")
         don_b = self.tao_don(tk_b, "BEST-D4-SHARED", "MD-D4-B")
-        p = _payload("BEST-D4-SHARED", "MD-D4-A", 2, "2026-10-19T12:03:00+07:00")
+        p = _payload("BEST-D4-SHARED", "MD-D4-A", 211, "2026-10-19T12:03:00+07:00")
         status, than, raw = self.soi(*_gui(tk_a, p)[:2])
         self.assertEqual(status, 200, raw)
         self.assertEqual(_don_row(don_a)["trang_thai_giao"], "cho_lay")
@@ -688,7 +718,7 @@ class D_Tenant(Nen):
             tk = _account(999999999, "best")
         finally:
             csdl.ghi("PRAGMA foreign_keys=ON")
-        p = _payload("BEST-D5", "MD-D5", 2, "2026-10-19T12:04:00+07:00")
+        p = _payload("BEST-D5", "MD-D5", 211, "2026-10-19T12:04:00+07:00")
         status, than, raw = self.soi(*_gui(tk, p)[:2])
         self.assertEqual(status, 403, raw)
         self.assertEqual(than["Result"], 0)
@@ -702,7 +732,7 @@ class D_Tenant(Nen):
         tk1 = self.tk_trong_tenant(ta)
         tk2 = self.tk_trong_tenant(ta)
         don2 = self.tao_don(tk2, "BEST-D6", "MD-D6")
-        p = _payload("BEST-D6", "MD-D6", 2, "2026-10-19T12:05:00+07:00")
+        p = _payload("BEST-D6", "MD-D6", 211, "2026-10-19T12:05:00+07:00")
         status, than, raw = self.soi(*_gui(tk1, p)[:2])
         self.assertEqual(status, 409, raw)
         self.assertEqual(than["Result"], 0)
@@ -718,7 +748,7 @@ class E_Trung(Nen):
     def test_e01_gui_trung_tuan_tu_mot_event_mot_lich_su(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-E1", "MD-E1")
-        p = _payload("BEST-E1", "MD-E1", 2, "2026-10-19T13:00:00+07:00")
+        p = _payload("BEST-E1", "MD-E1", 211, "2026-10-19T13:00:00+07:00")
         body = _body(p)
         r1 = _post(tk["wh_ma"], body, _ky(tk["secret"], body))
         r2 = _post(tk["wh_ma"], body, _ky(tk["secret"], body))
@@ -733,7 +763,7 @@ class E_Trung(Nen):
     def test_e02_gui_dong_thoi_nam_luong_mot_event_mot_lich_su(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-E2", "MD-E2")
-        p = _payload("BEST-E2", "MD-E2", 2, "2026-10-19T13:01:00+07:00")
+        p = _payload("BEST-E2", "MD-E2", 211, "2026-10-19T13:01:00+07:00")
         body = _body(p)
         hd = _ky(tk["secret"], body)
         rao = threading.Barrier(5)
@@ -754,8 +784,8 @@ class E_Trung(Nen):
     def test_e03_cung_moc_khac_dinh_dang_van_la_mot_su_kien(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-E3", "MD-E3")
-        p1 = _payload("BEST-E3", "MD-E3", 2, "2026-10-19T10:00:00+07:00")
-        p2 = _payload("BEST-E3", "MD-E3", 2, "2026-10-19T03:00:00Z")  # cùng thời điểm
+        p1 = _payload("BEST-E3", "MD-E3", 211, "2026-10-19T10:00:00+07:00")
+        p2 = _payload("BEST-E3", "MD-E3", 211, "2026-10-19T03:00:00Z")  # cùng thời điểm
         r1 = _gui(tk, p1)
         r2 = _gui(tk, p2)
         self.assertEqual(r1[0], 200)
@@ -790,7 +820,7 @@ class F_ThuTu(Nen):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-F2", "MD-F2")
         p1 = _payload("BEST-F2", "MD-F2", 301, "2026-10-19T10:00:00+07:00")
-        p2 = _payload("BEST-F2", "MD-F2", 303, "2026-10-19T10:00:00+07:00")
+        p2 = _payload("BEST-F2", "MD-F2", 604, "2026-10-19T10:00:00+07:00")
         self.assertEqual(_gui(tk, p1)[0], 200)
         r2 = _gui(tk, p2)
         self.assertEqual(r2[0], 200)
@@ -920,13 +950,13 @@ class G_605_606(Nen):
         """Đề bài nói 24 nhưng chỉ liệt kê 23: KHÔNG bịa mã thứ 24, KHÔNG tự nhận đã kiểm chứng."""
         self.assertEqual(len(wb.MA_TRONG_DE_BAI), 23)
         self.assertEqual(set(wb.BANG_MA), set(wb.MA_TRONG_DE_BAI))
-        self.assertEqual(wb.SO_MA_DE_BAI, 24)
+        self.assertEqual(wb.SO_MA_DE_BAI, 23)
         self.assertEqual(wb.SO_MA_LIET_KE, 23)
         self.assertNotIn(99999, wb.BANG_MA)
         self.assertTrue(wb.BANG_MA[606]["mo_lai"])
         self.assertEqual([m for m, d in wb.BANG_MA.items() if d["mo_lai"]], [606])
         for ma, d in wb.BANG_MA.items():
-            self.assertEqual(d["muc"], wb.MUC_CHUA_KIEM_CHUNG, f"mã {ma} bị nâng mức")
+            self.assertEqual(d["muc"], wb.MUC_DA_TAI_LIEU, f"mã {ma} sai mức")
         self.assertEqual(wb.kiem_bat_bien(), [])
 
 
@@ -937,7 +967,7 @@ class H_LuuThatBai(Nen):
     def test_h01_insert_su_kien_no_tra_500_va_khong_doi_du_lieu(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-H1", "MD-H1")
-        p = _payload("BEST-H1", "MD-H1", 2, "2026-10-19T14:00:00+07:00")
+        p = _payload("BEST-H1", "MD-H1", 211, "2026-10-19T14:00:00+07:00")
         body = _body(p)
         hd = _ky(tk["secret"], body)
         that = csdl.ghi
@@ -964,7 +994,7 @@ class H_LuuThatBai(Nen):
     def test_h02_doi_chung_duong_sau_khi_go_loi_van_ack_va_cap_nhat(self):
         tk = self.tk_moi()
         don_id = self.tao_don(tk, "BEST-H2", "MD-H2")
-        p = _payload("BEST-H2", "MD-H2", 2, "2026-10-19T14:01:00+07:00")
+        p = _payload("BEST-H2", "MD-H2", 211, "2026-10-19T14:01:00+07:00")
         body = _body(p)
         hd = _ky(tk["secret"], body)
         that = csdl.ghi
@@ -1026,7 +1056,7 @@ class J_BaoMat(Nen):
         secret_canary = "SECRET-" + uuid.uuid4().hex
         tk = self.tk_moi(secret=secret_canary)
         don_id = self.tao_don(tk, "BEST-J1", "MD-J1")
-        p = _payload("BEST-J1", "MD-J1", 2, "2026-10-19T15:00:00+07:00",
+        p = _payload("BEST-J1", "MD-J1", 211, "2026-10-19T15:00:00+07:00",
                      token=canary, password=canary, api_key=canary)
         body = _body(p)
         hd = _ky(tk["secret"], body)

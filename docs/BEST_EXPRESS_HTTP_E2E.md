@@ -10,7 +10,7 @@ credentials thật, không có đơn thật, không push/deploy, không đổi `
 |---|---|
 | Agent | AG-00 — tích hợp webhook BEST |
 | Nền | `best/integration` @ `5429c6d` |
-| Commit gộp | `dd42fdf` trên `best/integration`; `main` = `de740dc`; không push |
+| Commit gộp | `dd42fdf` (mã + E2E) và `5067d1a` (tài liệu bàn giao) trên `best/integration`; `main` = `de740dc`; không push |
 | Tệp sửa | `app/server.py` (nhánh phân luồng BEST) · `app/webhook_best.py` (ba lỗi QA: `modified_at` dị dạng/mốc xa, hủy đơn xen giữa đọc/cập nhật) |
 | Tệp mới | `app/thu/thu_best_e2e_http.py` · `docs/BEST_EXPRESS_HTTP_E2E.md` |
 | Không sửa | `main` · `app/webhook.py` · `app/adapter_best.py` · `app/xac_thuc_best.py` |
@@ -323,8 +323,8 @@ Không đặt biến môi trường trỏ tới BEST thật. Không gọi mạng
 | Lệnh chạy | §3.3 + §5 |
 | Exit / số ca | E2E `57/57` exit 0 · B3 `51/51` exit 0 · hub `68/68` exit 0 · J&T `99/99` exit 0 · adapter `118/118` exit 0 · auth `47/47` exit 0 |
 | Đối chứng âm | N1 ĐỎ (47 ca) · N2 ĐỎ (`c11`) · N3 ĐỎ (`h01`,`h02`) · N4 ĐỎ (`d01`,`k01`) · N5 ĐỎ (`c12`–`c16`) · N6 ĐỎ (`f07`,`f08`) · gỡ tiêm xanh lại 57/57 |
-| Chưa chạy / chưa đo | REAL PASS; sandbox BEST; TLS/credentials thật; hồi quy toàn bộ đang chạy trên checkout `dd42fdf` |
-| Gộp/commit | **ĐÃ COMMIT** `dd42fdf` trên `best/integration`; `main` = `de740dc`; không push/deploy |
+| Chưa chạy / chưa đo | REAL PASS; sandbox BEST; TLS/credentials thật; hợp đồng hãng (xem §1.5) |
+| Gộp/commit | **ĐÃ COMMIT** `dd42fdf` (mã + E2E) + `5067d1a` (tài liệu) trên `best/integration`; `main` = `de740dc`; không push/deploy |
 
 ### 7.1 Bảng đo cuối (workspace, 19/10/2026)
 
@@ -340,32 +340,37 @@ Không đặt biến môi trường trỏ tới BEST thật. Không gọi mạng
 | G19 tích hợp | `python3 app/thu/thu_g19_tich_hop.py` | 0 | 8 | 8 | 0 | 0 | 0 | – |
 | Header bảo mật | `python3 app/thu/thu_header_bao_mat.py` | 0 | 8 | 8 | 0 | 0 | 0 | – |
 | B5 10 cổng | `python3 app/thu/thu_best_qa.py` | 0 | 10 | 2 | 0 | 0 | 8 | Sau commit: BEST-01 `NOT TESTED` (HEAD khác nền B5 `cb23312`); BEST-03…10 BLOCKED/PENDING có lý do |
-| Hồi quy toàn bộ | `sh app/thu/chay_tat_ca.sh` trên checkout sạch của `dd42fdf` (`VIP_KHO_DANG_CHAY=sqlite`) | **chờ** | – | – | – | – | – | đang chạy; kết quả điền sau |
+| Hồi quy toàn bộ | `sh app/thu/chay_tat_ca.sh` trên checkout sạch của `dd42fdf` (`VIP_KHO_DANG_CHAY=sqlite`) | 1 | 2559 ca / 79 bộ | – | 22 bộ đỏ | – | – | E2E shell 41/41; frontend 56+40; E2E BEST 57/57. 19 bộ đỏ có sẵn + 3 artefact của checkout (`thu_best_qa`, `thu_webhook_jt`, `thu_http`) |
 
 **Ghi chú B5 (sau commit):** `python3 app/thu/thu_best_qa.py` → **exit 0 · Ran 10 · 2 đạt · 8 skip**.
 `BEST-01` là `NOT TESTED` vì HEAD `dd42fdf` khác nền B5 `cb23312`; đây không phải PASS. Các cổng
 phụ thuộc tài liệu/credentials thật vẫn `BLOCKED`/`PENDING`.
 
-**Hồi quy toàn bộ — đọc đúng phạm vi:** chạy trên **bản sao sạch có commit tạm** (vì workspace
-thật không cho ghi `.git`), `VIP_KHO_DANG_CHAY=sqlite`, `PYTHONDONTWRITEBYTECODE=1`. Kết quả:
-**exit 1 · 2559 ca · 79 bộ chạy thật · 24 bộ đỏ**. E2E shell 41/41, frontend 56+40, E2E BEST
-57/57. Danh sách 24 bộ đỏ:
+**Hồi quy toàn bộ — đọc đúng phạm vi:** chạy trên **checkout sạch của commit `dd42fdf`** (clone
+riêng, không có `app/du-lieu`), `VIP_KHO_DANG_CHAY=sqlite`, `PYTHONDONTWRITEBYTECODE=1`. Kết quả:
+**exit 1 · 2559 ca · 79 bộ chạy thật · 22 bộ đỏ**. E2E shell 41/41, frontend 56+40, E2E BEST
+57/57. Danh sách 22 bộ đỏ:
 
 ```text
-thu_g01_g02.py thu_g19_route.py thu_g20_baomat.py thu_g20_dahang.py thu_g20_hop_dong.py
+thu_best_qa.py thu_g01_g02.py thu_g19_route.py thu_g20_dahang.py thu_g20_hop_dong.py
 thu_g20_saoluu.py thu_g21_bimat.py thu_g21_saoluu.py thu_g22_chotcay.py thu_g22_e2e.py
-thu_g22_gioihan.py thu_g22_phanloai.py thu_g22_zeroca.py thu_qa_g16.py thu_qa_g17.py
-thu_qa_g18.py thu_qa_g20.py thu_qa_g21.py thu_qa_g22.py thu_qa_jt.py thu_qa_soat.py
-thu_tich_hop.py thu_webhook_jt.py thu_http.py
+thu_g22_gioihan.py thu_g22_phanloai.py thu_g22_zeroca.py thu_qa_g16.py thu_qa_g18.py
+thu_qa_g21.py thu_qa_g22.py thu_qa_jt.py thu_qa_soat.py thu_tich_hop.py
+thu_webhook_jt.py thu_http.py
 ```
 
-Các bộ này **không phải hồi quy của vá BEST**: `docs/QA_NGUYENNHAN.md` §3 đã ghi nhận G01/G02,
-G19 route, G20, G21, G22, QA G16–G22 và `thu_tich_hop` là đỏ có sẵn ở nền trước đó (cùng loại
-lỗi ghim số/khai kho/Chromium/PostgreSQL). `thu_http.py` là bộ **frontend** (ghim trang/Chromium),
-không đi qua route webhook BEST. Riêng `thu_webhook_jt.py` trong bản sao `/tmp`
-có đúng 2 ca đỏ (`test_k06`, `test_n03`) vì bộ tự kiểm G16/G17 giả định dự án **ngoài** thư mục
-tạm; trên workspace thật nó **99/99, exit 0** (đo trực tiếp, xem §7.1). Không dùng 24 bộ đỏ này
-để nói vá BEST làm đỏ hồi quy, cũng không dùng chúng để nói toàn bộ hồi quy xanh.
+Phân loại:
+- **19 bộ đỏ có sẵn**, đã ghi trong `docs/QA_NGUYENNHAN.md` §3: G01/G02, G19 route, G20 (3),
+  G21 (2), G22 (5), QA G16/G18/G21/G22/JT/soat, `thu_tich_hop`. Không do vá BEST.
+- **`thu_best_qa.py`:** artefact của **clone** — cổng BEST-07 C1 đếm `git remote` và clone có
+  `origin`, nên `remote=2` bị coi là không đạt. Trên **workspace thật sau commit**, bộ này
+  **exit 0 · 2 đạt · 8 skip** (BEST-01 `NOT TESTED`, BEST-03…10 BLOCKED/PENDING).
+- **`thu_webhook_jt.py`:** bản sao nằm trong `/tmp`, nên 2 ca tự kiểm G16/G17 (`test_k06`,
+  `test_n03`) coi dự án là “trong thư mục tạm” và đỏ. Trên workspace thật: **99/99, exit 0**.
+- **`thu_http.py`:** bộ **frontend** (ghim trang/Chromium), không đi qua route webhook BEST.
+
+Không dùng 22 bộ đỏ này để nói vá BEST làm đỏ hồi quy, cũng không dùng chúng để nói toàn bộ hồi
+quy xanh. Phần đo trực tiếp của BEST và các hãng liên quan đều xanh (xem §7.1).
 
 - **BLOCKED:** U1–U11 (§1.4); BEST-09 `BLOCKED`; BEST-10 `PENDING`. Không có REAL PASS.
 

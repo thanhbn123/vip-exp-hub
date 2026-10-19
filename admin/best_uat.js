@@ -259,11 +259,20 @@
     ev.preventDefault();
     const id = $("cuoc-tk").value;
     if (!id) return loi("kq-cuoc", new Error("chưa chọn tài khoản"));
+    const diaChiGui = $("cuoc-sa").value.trim();
+    const diaChiNhan = $("cuoc-da").value.trim();
+    // `dung_estimate` / `dung_order_add` dựng Source.Address/Dest.Address và TỪ CHỐI đơn thiếu
+    // địa chỉ đường (lỗi cũ: bấm Báo cước là 502 "thiếu Source.Address"). Chặn tại UI để người
+    // nghiệm thu thấy câu tiếng Việt rõ ràng thay vì một 502 từ backend.
+    if (!diaChiGui || !diaChiNhan) {
+      return loi("kq-cuoc", new Error(
+        "thiếu địa chỉ đường gửi/nhận — backend cần Source.Address/Dest.Address; nhập cả hai ô rồi báo cước lại"));
+    }
     const don = {
       nguoi_gui_tinh: $("cuoc-sc").value.trim(), nguoi_gui_quan: $("cuoc-sd").value.trim(),
-      nguoi_gui_xa: $("cuoc-sw").value.trim(),
+      nguoi_gui_xa: $("cuoc-sw").value.trim(), nguoi_gui_dia_chi: diaChiGui,
       nguoi_nhan_tinh: $("cuoc-dc").value.trim(), nguoi_nhan_quan: $("cuoc-dd").value.trim(),
-      nguoi_nhan_xa: $("cuoc-dw").value.trim(),
+      nguoi_nhan_xa: $("cuoc-dw").value.trim(), nguoi_nhan_dia_chi: diaChiNhan,
       khoi_luong_gram: Number($("cuoc-can").value || 1),
       chieu_dai_mm: Number($("cuoc-dai").value || 0),
       chieu_rong_mm: Number($("cuoc-rong").value || 0),

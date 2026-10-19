@@ -116,9 +116,11 @@
         <div><label for="cuoc-sc">Tỉnh gửi</label><input id="cuoc-sc" value="Hồ Chí Minh"></div>
         <div><label for="cuoc-sd">Quận gửi</label><input id="cuoc-sd" value="Bình Thạnh"></div>
         <div><label for="cuoc-sw">Phường gửi</label><input id="cuoc-sw" value="Phường 12"></div>
+        <div><label for="cuoc-sa">Địa chỉ đường gửi</label><input id="cuoc-sa" value="12 Đường ABCD"></div>
         <div><label for="cuoc-dc">Tỉnh nhận</label><input id="cuoc-dc" value="Hồ Chí Minh"></div>
         <div><label for="cuoc-dd">Quận nhận</label><input id="cuoc-dd" value="Tân Bình"></div>
         <div><label for="cuoc-dw">Phường nhận</label><input id="cuoc-dw" value="Phường 10"></div>
+        <div><label for="cuoc-da">Địa chỉ đường nhận</label><input id="cuoc-da" value="34 Đường XYZ"></div>
         <div><label for="cuoc-can">Cân (gram)</label><input id="cuoc-can" type="number" min="1" value="120"></div>
         <div><label for="cuoc-dai">Dài (mm)</label><input id="cuoc-dai" type="number" min="0" value="100"></div>
         <div><label for="cuoc-rong">Rộng (mm)</label><input id="cuoc-rong" type="number" min="0" value="100"></div>
@@ -126,6 +128,9 @@
         <div><label for="cuoc-cod">COD (VND)</label><input id="cuoc-cod" type="number" min="0" value="0"></div>
         <div><label for="cuoc-gia">Khai giá (VND)</label><input id="cuoc-gia" type="number" min="0" value="0"></div>
       </div>
+      <p class="phu" style="margin:8px 0 0">Địa chỉ đường gửi/nhận là bắt buộc: backend dựng
+        <code>Source.Address</code>/<code>Dest.Address</code> từ hai ô này. Thiếu địa chỉ thì
+        trang chặn tại chỗ, không gửi báo cước.</p>
       <button id="btn-bao-gia" type="submit">Báo cước BEST</button>
     </form>
     <div id="kq-cuoc" class="ketqua">Chưa chạy.</div>

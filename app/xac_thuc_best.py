@@ -1223,3 +1223,159 @@ def trang_thai_bearer_webhook(tenant_id: str, tai_khoan: str) -> Dict[str, Any]:
         "co_bearer": True, "doc_duoc": doc_duoc, "webhook_ma": webhook_ma,
         "cap_nhat_luc": float(ban_ghi["cap_nhat_luc"]), "ma_ly_do": ma,
     }
+
+
+# ============================================================================
+# XOAY KHÓA CHO BA TỆP KHO — `bao_mat.xoay_khoa()` gọi hàm ở dưới
+# ============================================================================
+# Vì sao phải có: `bao_mat.xoay_khoa()` chỉ mã hóa lại `carrier_accounts`. Ba tệp kho của
+# module này KHÔNG nằm trong schema, nên trước bản vá chúng không bao giờ được xoay: secret
+# BEST sống mãi dưới khóa cũ, và tới lúc ai đó cho nghỉ khóa cũ thì credential/token/bearer
+# của BEST thành rác — im lặng cho tới lượt gọi hãng đầu tiên (rủi ro #11 của
+# docs/BEST_EXPRESS_SECURITY_REVIEW.md). Hàm dưới đây đóng đúng khoảng đó.
+#
+# LUẬT AN TOÀN (không phải trang trí):
+#   1. CHỈ mã hóa lại bản ghi ĐÃ GIẢI ĐƯỢC và ĐÚNG chỗ của nó (loai + tenant_id + tai_khoan
+#      nằm trong bản mã). Bản mã bị chép từ tenant/account khác hay bị chép sang lớp khác
+#      KHÔNG được mã hóa lại: làm vậy là "hợp pháp hóa" bản ghi trộm dưới AAD của nạn nhân.
+#   2. Một bản ghi hỏng KHÔNG làm hỏng cả lượt và KHÔNG bị ghi đè; nó được báo ra.
+#   3. Ghi cả tệp một lần bằng đường NGUYÊN TỬ sẵn có (`_ghi_kho_khong_khoa`), dưới khóa ghi
+#      toàn cục `_giu_khoa_kho()` — cùng khóa với mọi lượt ghi khác của module.
+#   4. Token cache tham chiếu `credential_bam = sha256(bản mã credential)`. Khi credential được
+#      mã hóa lại, băm đó đổi; hàm cập nhật luôn để KHÔNG biến một lượt xoay khóa thành một
+#      loạt lượt đăng nhập lại (mỗi tài khoản một lượt) — nếu không cập nhật, token vẫn an toàn
+#      nhưng bị bỏ cache, đúng "bão 401" mà `lam_moi_token` sinh ra để tránh.
+#   5. Không tạo thư mục/thư mục kho khi chưa có kho: một module chưa dùng BEST không được
+#      sinh tệp lạ chỉ vì ai đó xoay khóa chung.
+#
+# Hàm KHÔNG tự sinh khóa, KHÔNG đổi khóa hiện hành. `key_id_dich` do bên gọi quyết định (thường
+# là khóa vừa được đặt làm hiện hành trong `bao_mat.xoay_khoa`). Khóa cũ vẫn nằm trong
+# `secret_provider`, nên bản ghi nào chưa chuyển vẫn giải được.
+
+_MA_LOI_DOC_KHO = {
+    LOAI_CREDENTIAL: "KHONG_DOC_DUOC_CREDENTIAL",
+    LOAI_TOKEN_TRUY_CAP: "KHONG_DOC_DUOC_TOKEN",
+    LOAI_WEBHOOK: "KHONG_DOC_DUOC_BEARER",
+}
+
+_DEM_KHO = {
+    LOAI_CREDENTIAL: "so_credential_dang_nhap",
+    LOAI_TOKEN_TRUY_CAP: "so_token_truy_cap",
+    LOAI_WEBHOOK: "so_bearer_webhook",
+}
+
+
+def _xoay_mot_kho(loai: str, key_id_dich: str, kq: Dict[str, Any],
+                  bam_credential: Optional[Dict[Any, Any]] = None) -> Dict[Any, Any]:
+    """Mã hóa lại MỘT tệp kho. Trả map {(tenant, tài khoản): (băm_cũ, băm_mới)} cho credential."""
+    try:
+        kho = _doc_kho_khong_khoa(loai)
+    except LoiXacThucBest as e:
+        # Tệp hỏng/sai cấu trúc: KHÔNG ghi đè, chỉ báo. Ghi đè ở đây là xóa mất secret chưa đọc.
+        kq["hong"].append("%s: %s" % (loai, e.ma_loi))
+        return {}
+    da_doi = []
+    bam_doi = {}
+    for tenant_id, theo_tenant in kho["ban_ghi"].items():
+        if not isinstance(theo_tenant, dict):
+            kq["hong"].append("%s: KHO_HONG (nhóm tenant %r không phải object)" % (loai, tenant_id))
+            continue
+        for tai_khoan, ban_ghi in theo_tenant.items():
+            kq["so_ban_ghi"] += 1
+            if (not isinstance(ban_ghi, dict)
+                    or not isinstance(ban_ghi.get("ban_ma"), str)
+                    or not ban_ghi["ban_ma"]):
+                kq["hong"].append("%s tenant=%s tai_khoan=%s: KHO_HONG (bản ghi không đúng cấu trúc)"
+                                  % (loai, tenant_id, tai_khoan))
+                continue
+            ban_ma_cu = ban_ghi["ban_ma"]
+            can_xoay = bao_mat.can_xoay(ban_ma_cu, key_id_dich)
+            cap = (bam_credential.get((tenant_id, tai_khoan))
+                   if loai == LOAI_TOKEN_TRUY_CAP and bam_credential else None)
+            if not can_xoay and not cap:
+                kq["so_giu_nguyen"] += 1
+                continue
+            # CHỈ giải được + ĐÚNG slot thì mới được mã hóa lại (luật 1 ở trên).
+            try:
+                ro = _giai_ma_lop(loai, ban_ma_cu, tenant_id, tai_khoan, _MA_LOI_DOC_KHO[loai])
+            except LoiXacThucBest as e:
+                kq["hong"].append("%s tenant=%s tai_khoan=%s: %s"
+                                  % (loai, tenant_id, tai_khoan, e.ma_loi))
+                continue
+            if cap and ro.get("credential_bam") == cap[0]:
+                ro["credential_bam"] = cap[1]
+                can_xoay = True
+            if not can_xoay:
+                kq["so_giu_nguyen"] += 1
+                continue
+            try:
+                ban_ma_moi, _duoi = bao_mat.ma_hoa_cred(ro, tenant_id, HANG)
+                # Kiểm lại NGAY trên bản mới: sai khóa/AAD/slot thì không được ghi xuống.
+                _giai_ma_lop(loai, ban_ma_moi, tenant_id, tai_khoan, _MA_LOI_DOC_KHO[loai])
+                # `ma_hoa_cred` dùng khóa HIỆN HÀNH. Bên gọi phải đặt `key_id_dich` làm khóa
+                # hiện hành TRƯỚC (đúng thứ tự `bao_mat.xoay_khoa` làm). Nếu lệch — ví dụ gọi
+                # thẳng hàm này với một khóa cũ — thì KHÔNG được ghi: báo hỏng thay vì lặng lẽ
+                # coi như đã xoay sang một khóa mà bản mã không hề mang.
+                if bao_mat.key_id_cua(ban_ma_moi) != key_id_dich:
+                    kq["hong"].append("%s tenant=%s tai_khoan=%s: SAI_KEY_ID_DICH"
+                                      % (loai, tenant_id, tai_khoan))
+                    continue
+            except LoiXacThucBest:
+                kq["hong"].append("%s tenant=%s tai_khoan=%s: MA_HOA_LOI"
+                                  % (loai, tenant_id, tai_khoan))
+                continue
+            except Exception:  # noqa: BLE001 — không đưa chuỗi lạ vào kết quả/audit
+                kq["hong"].append("%s tenant=%s tai_khoan=%s: MA_HOA_LOI"
+                                  % (loai, tenant_id, tai_khoan))
+                continue
+            ban_ghi["ban_ma"] = ban_ma_moi
+            da_doi.append((tenant_id, tai_khoan))
+            if loai == LOAI_CREDENTIAL:
+                bam_doi[(tenant_id, tai_khoan)] = (_bam_ban_ma(ban_ma_cu),
+                                                   _bam_ban_ma(ban_ma_moi))
+    if da_doi:
+        try:
+            _ghi_kho_khong_khoa(loai, kho)
+        except LoiXacThucBest as e:
+            # Không ghi được thì KHÔNG báo đã xoay (số đếm chỉ cộng sau khi ghi thành công).
+            kq["hong"].append("%s: ghi kho hỏng (%s) — giữ nguyên %d bản ghi"
+                              % (loai, e.ma_loi, len(da_doi)))
+            return {}
+        kq[_DEM_KHO[loai]] += len(da_doi)
+    return bam_doi
+
+
+def ma_hoa_lai_kho(key_id_dich: str) -> Dict[str, Any]:
+    """Mã hóa lại MỌI secret trong ba tệp kho BEST sang `key_id_dich`.
+
+    Trả dict CÓ MÃ: số bản ghi đã xoay theo từng lớp, số bản ghi giữ nguyên, và `hong` (danh
+    sách bản ghi KHÔNG xoay được, kèm mã lý do). Không trả/ném nội dung secret.
+
+    Idempotent: gọi lần hai khi mọi bản ghi đã ở `key_id_dich` thì không ghi tệp nào
+    (`so_ban_ghi > 0`, các số `so_*` = 0). Chưa có thư mục kho ⇒ trả toàn 0, không tạo gì.
+    """
+    if (not isinstance(key_id_dich, str) or not key_id_dich or len(key_id_dich) > 128
+            or any(ord(c) < 0x21 for c in key_id_dich)):
+        raise LoiXacThucBest("THAM_SO_KHONG_HOP_LE")
+    kq = {
+        "key_id": key_id_dich,
+        "so_credential_dang_nhap": 0,
+        "so_token_truy_cap": 0,
+        "so_bearer_webhook": 0,
+        "so_ban_ghi": 0,
+        "so_giu_nguyen": 0,
+        "hong": [],
+    }
+    # KHÔNG dùng `_thu_muc_kho()` ở đây: hàm đó TẠO thư mục. Chưa có kho thì không có gì để xoay.
+    if not os.path.isdir(os.path.join(cau_hinh.THU_MUC_DU_LIEU, "best_auth")):
+        return kq
+    # MỘT khóa ghi cho cả ba tệp: token được cập nhật `credential_bam` ngay sau khi credential
+    # đổi, không để lượt đọc xen giữa thấy cặp (credential mới, token trỏ credential cũ).
+    with _giu_khoa_kho():
+        # 1) Credential TRƯỚC — token tham chiếu băm của chính bản mã credential.
+        bam_doi = _xoay_mot_kho(LOAI_CREDENTIAL, key_id_dich, kq)
+        # 2) Token — xoay khóa và/hoặc cập nhật `credential_bam` nếu credential vừa đổi.
+        _xoay_mot_kho(LOAI_TOKEN_TRUY_CAP, key_id_dich, kq, bam_credential=bam_doi)
+        # 3) Bearer webhook.
+        _xoay_mot_kho(LOAI_WEBHOOK, key_id_dich, kq)
+    return kq

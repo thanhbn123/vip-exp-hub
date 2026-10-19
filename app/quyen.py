@@ -107,14 +107,52 @@ CAP_DUOC = {
 
 
 def seed():
-    """Nạp vai trò/quyền vào CSDL (idempotent)."""
-    for ma, ten, pv in VAI_TRO:
-        csdl.ghi("INSERT OR IGNORE INTO roles (ma, ten, pham_vi) VALUES (?,?,?)", (ma, ten, pv))
-    for ma, mo_ta in QUYEN.items():
-        csdl.ghi("INSERT OR IGNORE INTO permissions (ma, mo_ta) VALUES (?,?)", (ma, mo_ta))
-    for role, ds in MA_TRAN.items():
-        for p in ds:
-            csdl.ghi("INSERT OR IGNORE INTO role_permissions (role_ma, perm_ma) VALUES (?,?)", (role, p))
+    """Nạp vai trò/quyền vào CSDL — **CHỈ CẤP PHẦN MỚI**, trong MỘT giao dịch.
+
+    ====== VÌ SAO KHÔNG CÒN "INSERT OR IGNORE MỌI Ô MỖI LƯỢT" ======
+    Bản cũ chạy lại TOÀN BỘ ma trận ở mỗi lần khởi động và sau mỗi lượt migration. Quyền là
+    dữ liệu SỐNG: backend tra `role_permissions` ở từng yêu cầu (`co_quyen`), và đường duy nhất
+    hiện có để THU một quyền là xoá đúng dòng trong bảng (không có endpoint sửa ma trận). Với
+    bản cũ, lượt `seed()` kế tiếp CẤP LẠI đúng dòng vừa bị xoá — im lặng. Đo được:
+        xoá (TENANT_STAFF, tenant.don.ghi) → co_quyen = False
+        gọi seed()                        → co_quyen = True
+    Cùng lớp lỗi ở chiều ngược lại: dòng cấp quyền đã bị gỡ khỏi `MA_TRAN` vẫn sống mãi trong
+    CSDL cũ, vì bản cũ chỉ THÊM chứ không bao giờ bớt (privilege creep qua nhiều bản nâng cấp).
+
+    ====== LUẬT MỚI — cấp khi và chỉ khi ======
+      · role vừa được tạo trong lượt này, HOẶC
+      · perm vừa được tạo trong lượt này (bản mới thêm quyền ⇒ vẫn tự seed được), HOẶC
+      · bảng `role_permissions` đang RỖNG HOÀN TOÀN (CSDL chưa được seed lần nào).
+    Hệ quả: CSDL mới nhận đủ ma trận · bản nâng cấp nhận quyền MỚI của bản mới · quyền đã bị
+    thu KHÔNG sống lại sau restart. Bỏ một ô khỏi `MA_TRAN` cũng KHÔNG tự gỡ dòng đã có —
+    muốn thu thì xoá dòng, và từ nay nó ở yên; đó là chủ ý: `MA_TRAN` là nguồn để CẤP, không
+    phải lệnh xoá quyền của người vận hành. Hệ quả kèm theo phải nói rõ: **cấp thêm một quyền
+    ĐÃ TỒN TẠI cho một vai trò khác** cũng không tự xảy ra, vì `seed()` không phân biệt được
+    đó với một lần thu quyền; thay đổi kiểu đó cần người vận hành cấp chủ động (hoặc thêm
+    permission mới, khi đó `moi_quyen` lo phần cấp).
+
+    Toàn bộ nằm trong `csdl.giao_dich()`: hỏng giữa chừng (ví dụ một ô trỏ role không tồn tại)
+    thì KHÔNG để lại ma trận nửa vời. Bản cũ chèn từng câu, mỗi câu tự chốt — hỏng ở ô thứ k
+    là CSDL mang ma trận cụt mà không ai biết.
+    """
+    with csdl.giao_dich():
+        moi_role = set()
+        for ma, ten, pv in VAI_TRO:
+            if csdl.ghi("INSERT OR IGNORE INTO roles (ma, ten, pham_vi) VALUES (?,?,?)",
+                        (ma, ten, pv)).rowcount:
+                moi_role.add(ma)
+        moi_quyen = set()
+        for ma, mo_ta in QUYEN.items():
+            if csdl.ghi("INSERT OR IGNORE INTO permissions (ma, mo_ta) VALUES (?,?)",
+                        (ma, mo_ta)).rowcount:
+                moi_quyen.add(ma)
+        # Đọc TRONG cùng giao dịch: một seed khác chen vào giữa thì không thể thấy nửa vời.
+        chua_seed = csdl.mot("SELECT COUNT(*) c FROM role_permissions")["c"] == 0
+        for role, ds in MA_TRAN.items():
+            for p in ds:
+                if chua_seed or role in moi_role or p in moi_quyen:
+                    csdl.ghi("INSERT OR IGNORE INTO role_permissions (role_ma, perm_ma)"
+                             " VALUES (?,?)", (role, p))
 
 
 def quyen_cua_vai_tro(role_ma):

@@ -1157,6 +1157,71 @@ class K_MaHoaVaThuHoi(_NenHttp):
                                  f"token phiên THÔ nằm trong bảng {b['name']}")
 
 
+class Q_SeedQuyenKhongCapLaiQuyenDaThu(unittest.TestCase):
+    """`quyen.seed()` là đường CẤP quyền — KHÔNG được là đường CẤP LẠI quyền đã bị thu.
+
+    Quyền là dữ liệu SỐNG: mọi endpoint tra `co_quyen` (bảng `role_permissions`) ở từng yêu
+    cầu, và đường duy nhất hiện có để THU một quyền là xoá đúng dòng trong bảng. Bản cũ chạy
+    lại toàn bộ ma trận ở mỗi lần khởi động/migration, nên dòng vừa bị xoá SỐNG LẠI — im lặng.
+    Đo được trên bản cũ: xoá (TENANT_STAFF, tenant.don.ghi) → `co_quyen` False; gọi `seed()`
+    → True. Cùng lớp lỗi ở chiều ngược lại: quyền đã gỡ khỏi `MA_TRAN` vẫn sống mãi trong CSDL
+    cũ vì bản cũ chỉ THÊM.
+    """
+
+    ROLE, PERM = "TENANT_STAFF", "tenant.don.ghi"
+
+    def setUp(self):
+        quyen.seed()
+        self.assertTrue(quyen.co_quyen(self.ROLE, self.PERM),
+                        "ma trận chưa được seed — phép đo vô nghĩa")
+
+    def tearDown(self):
+        # Trả CSDL + hằng số về đúng trạng thái trước ca (không để ca sau kế thừa đột biến).
+        csdl.ghi("INSERT OR IGNORE INTO role_permissions (role_ma, perm_ma) VALUES (?,?)",
+                 (self.ROLE, self.PERM))
+        for p in ("tenant.thu_nghiem.moi", "tenant.thu_nghiem.hong"):
+            quyen.QUYEN.pop(p, None)
+            ds = quyen.MA_TRAN.get("TENANT_VIEWER", [])
+            if p in ds:
+                ds.remove(p)
+        quyen.MA_TRAN.pop("KHONG_CO_ROLE", None)
+        csdl.ghi("DELETE FROM role_permissions WHERE perm_ma LIKE 'tenant.thu_nghiem.%'")
+        csdl.ghi("DELETE FROM permissions WHERE ma LIKE 'tenant.thu_nghiem.%'")
+
+    def test_01_thu_quyen_roi_seed_khong_duoc_cap_lai(self):
+        csdl.ghi("DELETE FROM role_permissions WHERE role_ma=? AND perm_ma=?",
+                 (self.ROLE, self.PERM))
+        self.assertFalse(quyen.co_quyen(self.ROLE, self.PERM))
+        quyen.seed()          # mô phỏng khởi động lại / migration chạy lại
+        self.assertFalse(quyen.co_quyen(self.ROLE, self.PERM),
+                         "seed() CẤP LẠI quyền vừa bị thu — quyền không thể thu được")
+
+    def test_02_quyen_MOI_cua_ban_moi_van_duoc_seed(self):
+        p = "tenant.thu_nghiem.moi"
+        quyen.QUYEN[p] = "Quyền thử của bản mới"
+        quyen.MA_TRAN["TENANT_VIEWER"].append(p)
+        self.assertFalse(quyen.co_quyen("TENANT_VIEWER", p))
+        quyen.seed()
+        self.assertTrue(quyen.co_quyen("TENANT_VIEWER", p),
+                        "bản mới thêm quyền mà seed() không cấp — nâng cấp hỏng im lặng")
+
+    def test_03_seed_hong_giua_chung_thi_khong_de_lai_ma_tran_nua_voi(self):
+        p = "tenant.thu_nghiem.hong"
+        quyen.QUYEN[p] = "Quyền thử gây hỏng"
+        quyen.MA_TRAN["TENANT_VIEWER"].append(p)    # ô này sẽ chèn TRƯỚC ô hỏng
+        quyen.MA_TRAN["KHONG_CO_ROLE"] = [p]        # role không tồn tại ⇒ FK chặn
+        with self.assertRaises(csdl.LoiToanVen):
+            quyen.seed()
+        self.assertIsNone(csdl.mot("SELECT 1 x FROM permissions WHERE ma=?", (p,)),
+                          "seed hỏng nhưng permission vẫn còn — không phải MỘT giao dịch")
+        self.assertFalse(quyen.co_quyen("TENANT_VIEWER", p),
+                         "seed hỏng nhưng đã kịp cấp quyền — ma trận nửa vời")
+        # ĐỐI CHỨNG DƯƠNG: bỏ đúng ô hỏng ⇒ CÙNG seed cấp được quyền mới.
+        quyen.MA_TRAN.pop("KHONG_CO_ROLE")
+        quyen.seed()
+        self.assertTrue(quyen.co_quyen("TENANT_VIEWER", p))
+
+
 def _lat_bit_hex(h: str) -> str:
     """Lật một bit trong chuỗi hex — để chứng minh AEAD bắt được sửa đổi."""
     b = bytearray(bytes.fromhex(h))

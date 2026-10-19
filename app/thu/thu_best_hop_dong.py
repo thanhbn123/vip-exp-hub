@@ -161,6 +161,74 @@ class TestBuilderMoi(unittest.TestCase):
         self.assertEqual(p["SourceWard"], " ")
         self.assertEqual(p["DestWard"], " ")
 
+    # ── Ca bổ sung AG-01: canh đúng hợp đồng sau khi đối chiếu DOCX ────────────────────────────
+    def test_51_du_34_truong_tai_lieu_va_31_truong_nen(self):
+        tai_lieu = {"NumberOfProducts", "BonusProductName1", "BonusProductName2"}
+        self.assertEqual(len(bhd.TRUONG_ORDER_ADD), 34)
+        self.assertEqual(len(bhd.TRUONG_ORDER_ADD_NEN), 31)
+        self.assertEqual(set(bhd.TRUONG_ORDER_ADD_NEN) | tai_lieu,
+                         set(bhd.TRUONG_ORDER_ADD))
+        body = bhd.dung_order_add(don_mau(), {})
+        self.assertTrue(set(body) <= set(bhd.TRUONG_ORDER_ADD))
+        self.assertEqual(set(body), set(bhd.TRUONG_ORDER_ADD_NEN))
+        for ten in tai_lieu:
+            self.assertNotIn(ten, body)
+
+    def test_52_service_id_12490_bi_tu_choi_o_update_va_estimate(self):
+        # Order/Add đã bị chặn (test_04). Update/EstimateFee từng LẶNG LẼ gửi 12491 dù đơn khai
+        # 12490 — một đơn Express được báo giá bằng bảng giá Eco mà không ai biết.
+        d = don_mau(service_id=12490)
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_update(d, "8485")
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_estimate(d)
+        # ĐỐI CHỨNG DƯƠNG: không khai, hoặc khai đúng 12491 thì vẫn dựng được.
+        self.assertEqual(bhd.dung_update(don_mau(), "8485")["ServiceId"], 12491)
+        self.assertEqual(bhd.dung_estimate(don_mau(service_id=12491))["ServiceId"], 12491)
+
+    def test_53_dia_chi_hai_cap_district_va_ward(self):
+        p = bhd.dung_order_add(don_mau(nguoi_gui_quan=None, nguoi_nhan_quan=""),
+                               {})
+        self.assertEqual(p["SourceDistrict"], " ")
+        self.assertEqual(p["DestDistrict"], " ")
+        self.assertEqual(p["ReturnDistrict"], " ")
+        self.assertIsInstance(p["SourceDistrict"], str)
+        self.assertNotEqual(p["SourceDistrict"], "")
+        # ĐỐI CHỨNG DƯƠNG: quận có giá trị thật thì giữ nguyên (bộ thử adapter e9 canh cùng luật).
+        self.assertEqual(bhd.dung_order_add(don_mau(nguoi_gui_quan="Bình Thạnh"),
+                                            {})["SourceDistrict"], "Bình Thạnh")
+        # Địa chỉ 2 cấp vẫn cần phường/xã: thiếu Ward phải TỪ CHỐI, không gửi " ".
+        d = don_mau()
+        d.pop("nguoi_gui_xa")
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_order_add(d, {})
+
+    def test_54_query_10_va_print_50_dung_bien(self):
+        ds10 = [f"W{i}" for i in range(10)]
+        self.assertEqual(len(bhd.dung_query(ds10)["Codes"]), 10)
+        self.assertEqual(len(bhd.dung_print([f"P{i}" for i in range(50)])["codes"]), 50)
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_query([f"W{i}" for i in range(11)])
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_print([f"P{i}" for i in range(51)])
+
+    def test_55_dia_chi_khong_vuot_1024_sau_khi_ghep_ward(self):
+        # Tài liệu: Source/Dest/ReturnAddress là string(1024). Ghép Ward có thể vượt trần.
+        dai = "A" * 1024
+        with self.assertRaises(bhd.LoiHopDong):
+            bhd.dung_order_add(don_mau(nguoi_gui_dia_chi=dai, nguoi_gui_xa="Phường 12"), {})
+        ok = bhd.dung_order_add(don_mau(nguoi_gui_dia_chi="A" * 1000,
+                                        nguoi_gui_xa="Phường 12"), {})
+        self.assertLessEqual(len(ok["SourceAddress"]), 1024)
+        self.assertIn("Phường 12", ok["SourceAddress"])
+
+    def test_56_dau_phay_trong_tien_chi_duoc_nhom_nghin(self):
+        self.assertEqual(bhd.dung_order_add(don_mau(cod="150,000"), {})["CollectAmount"],
+                         150000)
+        for tien in ("1,5", "150000,50", "1,50"):
+            with self.assertRaises(bhd.LoiHopDong, msg=tien):
+                bhd.dung_order_add(don_mau(cod=tien), {})
+
 
 class TestParser(unittest.TestCase):
     def test_20_result_1_thanh_cong(self):
@@ -260,6 +328,69 @@ class TestParserMoi(unittest.TestCase):
             "https://sgp-seaedi-test.800best.com/VietNamV3/x.pdf?y=1")
         self.assertEqual(http_best.nang_cap_https_cho_url_hang("http://evil.example/x.pdf"),
                          "http://evil.example/x.pdf")
+
+    # ── Ca bổ sung AG-01 ───────────────────────────────────────────────────────────────────────
+    def test_57_result_khong_nguyen_khong_duoc_coi_la_thanh_cong(self):
+        # `int()` cũ nuốt True -> 1 và 1.9 -> 1: một gói HỎNG thành "hãng XÁC NHẬN".
+        for xau in (True, False, 1.9, 2.5, None, "abc", "", [1], {"a": 1}):
+            ok, _data, loi, _r = bhd.boc_ket_qua({"Result": xau})
+            self.assertFalse(ok, xau)
+            self.assertIn("Result", loi, xau)
+        # ĐỐI CHỨNG DƯƠNG: 1 / 1.0 / "1" vẫn là thành công; 2 vẫn là thất bại có lý do.
+        for tot in (1, 1.0, "1"):
+            self.assertTrue(bhd.boc_ket_qua({"Result": tot})[0], tot)
+        ok, _data, loi, result = bhd.boc_ket_qua({"Result": 2, "Message": "đã hủy"})
+        self.assertFalse(ok)
+        self.assertEqual(result, 2)
+        self.assertIn("đã hủy", loi)
+
+    def test_58_query_trace_logs_co_return_fee_va_discount(self):
+        # 18 trường webhook có `return_fee`/`discount`; traceLogs cùng họ phí. Bản cũ bỏ hai
+        # trường này ở parser Query => đối soát phí thiếu dữ liệu hãng đã trả.
+        goi = {"Result": 1, "Message": None, "data": [{
+            "code_best": "8485", "merchant_order_code": "MD1",
+            "traceLogs": [{"status": "666", "modified_at": 1700000000000,
+                           "freight_fee": 19800, "return_fee": 3000, "discount": 5000}]}]}
+        ok, ds, loi = bhd.boc_query(goi)
+        self.assertTrue(ok, loi)
+        self.assertEqual(ds[0]["return_fee"], 3000)
+        self.assertEqual(ds[0]["discount"], 5000)
+        self.assertEqual(ds[0]["freight_fee"], 19800)
+
+    def test_59_token_30_ngay_theo_tai_lieu(self):
+        self.assertEqual(bhd.TOKEN_TTL_DAYS, 30)
+        tt = bhd.thong_tin_hop_dong()
+        self.assertEqual(tt["token_ttl_days"], 30)
+        self.assertIn("30 ngày", tt["auth"]["login"])
+        token, loi = bhd.boc_token({"token": "header.payload.chu-ky"})
+        self.assertEqual(loi, "")
+        self.assertEqual(token, "header.payload.chu-ky")
+
+class TestTLSHost(unittest.TestCase):
+    """Host TLS: chỉ ba host tài liệu; host lạ bị chặn TRƯỚC khi mở socket."""
+
+    def test_60_tls_chi_ba_host_tai_lieu(self):
+        import http_best
+        self.assertEqual(bhd.HOST_PRODUCTION, "sgp-seaedi.800best.com")
+        self.assertEqual(bhd.HOST_SANDBOX, "sgp-seaedi-test.800best.com")
+        self.assertEqual(bhd.HOST_QUERY_TEST, "sea-edi-hxtest.800best.com")
+        self.assertEqual(http_best.HOST_HANG,
+                         {bhd.HOST_PRODUCTION, bhd.HOST_SANDBOX, bhd.HOST_QUERY_TEST})
+
+    def test_61_tls_host_la_bi_tu_choi_truoc_khi_mo_socket(self):
+        from unittest import mock
+        with mock.patch.object(bhd.socket, "create_connection",
+                               side_effect=AssertionError("KHÔNG được mở socket")):
+            for host in ("example.com", "sgp-seaedi.800best.com.evil",
+                         "800best.com", "sea-edi-hxtest.800best.com.evil", ""):
+                kq = bhd.kiem_tra_tls(host)
+                self.assertFalse(kq["ok"], host)
+                self.assertIn("danh sách BEST", kq["loi"], host)
+
+    def test_62_base_url_query_dung_host_test_tai_lieu(self):
+        self.assertTrue(bhd.BASE_URL_QUERY[bhd.SANDBOX].startswith(
+            f"https://{bhd.HOST_QUERY_TEST}/"))
+        self.assertIn("/VietNamV3/v3/api/process/sears", bhd.BASE_URL_QUERY[bhd.SANDBOX])
 
 
 class TestApproval(unittest.TestCase):

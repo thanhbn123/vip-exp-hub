@@ -149,13 +149,24 @@ def _chuoi(v, ten, *, bat_buoc=False, toi_da=1024):
     return s
 
 
+# Dấu phẩy trong trường TIỀN chỉ được là phân cách nghìn nhóm 3: "150,000". Bản cũ bỏ MỌI dấu
+# phẩy trước khi parse, nên "1,5" (dấu thập phân kiểu VN) thành 15 và "150000,50" thành 15000050
+# — sai 10/100 lần trên đúng trường tiền, không có cảnh báo nào. Thà từ chối còn hơn đoán sai.
+_MAU_TIEN = re.compile(r"^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$")
+
+
 def _so(v, ten, *, nho_nhat=0, toi_da=10**15):
     if v is None or (isinstance(v, str) and not v.strip()):
         return Decimal(0)
     if isinstance(v, bool):
         raise LoiHopDong(f"{ten} phải là số, không phải boolean", "sai-kieu")
+    chuoi = str(v).strip()
+    if "," in chuoi and not _MAU_TIEN.match(chuoi):
+        raise LoiHopDong(
+            f"{ten} dùng dấu phẩy không phải phân cách nghìn (vd '1,5' hoặc '150000,50') — "
+            "từ chối thay vì đoán dấu thập phân", "sai-kieu")
     try:
-        d = Decimal(str(v).strip().replace(",", ""))
+        d = Decimal(chuoi.replace(",", ""))
     except (InvalidOperation, ValueError):
         raise LoiHopDong(f"{ten} không phải số hợp lệ", "sai-kieu") from None
     if not d.is_finite():
@@ -189,6 +200,10 @@ def _dia_chi(city, district, ward, address, ten, *, bat_buoc_city=True,
     address = _chuoi(address, f"{ten}.Address", bat_buoc=True, toi_da=1024)
     if ward and ward.lower() not in address.lower():
         address = f"{address}, {ward}"
+        # Tài liệu giới hạn Source/Dest/ReturnAddress là string(1024). Ghép Ward vào có thể vượt
+        # trần: phải kiểm LẠI, nếu không builder gửi một trường dài hơn hợp đồng.
+        address = _chuoi(address, f"{ten}.Address sau khi ghép Ward", bat_buoc=True,
+                         toi_da=1024)
     return city, district, ward or " ", address
 
 
@@ -204,6 +219,24 @@ def _ma(v, ten):
     if re.search(r"\s", s):
         raise LoiHopDong(f"{ten} chứa khoảng trắng", "sai-gia-tri")
     return s
+
+
+def _service_id(don):
+    """ServiceId WIRE — tài liệu CHỈ hỗ trợ 12491; 12490 (Express) chỉ được nhắc tới.
+
+    Order/Add đã từ chối 12490, nhưng Update và EstimateFee thì luôn gửi thẳng 12491 và LẶNG LẼ
+    bỏ qua `service_id=12490` của đơn: một đơn khai Express được báo giá/cập nhật bằng bảng giá
+    Eco mà không ai biết. Đây là chỗ duy nhất quyết định ServiceId, dùng chung cho cả ba builder.
+    """
+    if not isinstance(don, dict):
+        raise LoiHopDong("đơn phải là dict", "sai-kieu")
+    gia_tri = don.get("service_id", don.get("dich_vu_id"))
+    sid = SERVICE_ID if gia_tri in (None, "") else _nguyen(gia_tri, "ServiceId")
+    if sid != SERVICE_ID:
+        raise LoiHopDong(
+            f"ServiceId phải là {SERVICE_ID} (Eco); nhận {sid}. Không dùng {SERVICE_ID_EXPRESS}.",
+            "service-id")
+    return sid
 
 
 # ============================================================================
@@ -243,10 +276,7 @@ def dung_order_add(don, ctx):
         raise LoiHopDong("đơn phải là dict", "sai-kieu")
     code = _ma(don.get("ma_don") or don.get("merchant_order_code") or ctx.get("merchant_order_code"),
                "Code")
-    service_id = _nguyen(don.get("service_id") or don.get("dich_vu_id") or SERVICE_ID, "ServiceId")
-    if service_id != SERVICE_ID:
-        raise LoiHopDong(f"ServiceId phải là {SERVICE_ID} (Eco); nhận {service_id}. "
-                         f"Không dùng {SERVICE_ID_EXPRESS}.", "service-id")
+    service_id = _service_id(don)
     journey = _nguyen(don.get("journey_type") or don.get("loai_hanh_trinh"), "JourneyType")
     if journey not in JOURNEY_TYPES:
         raise LoiHopDong(f"JourneyType phải thuộc {JOURNEY_TYPES}", "journey-type")
@@ -276,7 +306,7 @@ def dung_order_add(don, ctx):
         "CollectAmount": _so(don.get("cod"), "CollectAmount"),
         "JourneyType": journey,
         "PickupType": pickup,
-        "ServiceId": SERVICE_ID,
+        "ServiceId": service_id,
         "Weight": _nguyen(don.get("khoi_luong_gram", don.get("weight_gram")),
                           "Weight (gram)", nho_nhat=1),
         "Width": _nguyen(_lay(don, "chieu_rong_mm", "width_mm", default=0), "Width (mm)"),
@@ -337,7 +367,7 @@ def dung_update(don, code):
                               "ProductName", bat_buoc=True, toi_da=1024),
         "ProductPrice": _so(don.get("gia_tri_khai", don.get("product_price")), "ProductPrice"),
         "CollectAmount": _so(don.get("cod"), "CollectAmount"),
-        "ServiceId": SERVICE_ID,
+        "ServiceId": _service_id(don),
         "Length": _nguyen(_lay(don, "chieu_dai_mm", "length_mm", default=0), "Length"),
         "Height": _nguyen(_lay(don, "chieu_cao_mm", "height_mm", default=0), "Height"),
         "Width": _nguyen(_lay(don, "chieu_rong_mm", "width_mm", default=0), "Width"),
@@ -405,7 +435,7 @@ def dung_estimate(don):
     dst_city, dst_dist, dst_ward, _ = _nguoi_nhan(don, bat_buoc_ward=False)
     return {
         "UserName": _chuoi(don.get("username") or don.get("ten_dang_nhap"), "UserName", toi_da=255),
-        "ServiceId": SERVICE_ID,
+        "ServiceId": _service_id(don),
         "DestCity": dst_city, "DestDistrict": dst_dist, "DestWard": dst_ward,
         "SourceCity": src_city, "SourceDistrict": src_dist, "SourceWard": src_ward,
         "COD": _so(don.get("cod"), "COD"),
@@ -450,15 +480,38 @@ def _thong_diep(v, toi_da=500):
     return s[:toi_da]
 
 
+def _result_nguyen(v):
+    """`Result` của tài liệu là SỐ NGUYÊN 1/2. Trả int hoặc ném ValueError.
+
+    Vì sao không dùng `int()` thẳng: `int(True)` = 1 và `int(1.9)` = 1. Một gói hỏng
+    (`"Result": true`, `"Result": 1.9`) sẽ được đọc thành "hãng XÁC NHẬN" — chiều sai nguy hiểm
+    nhất. Chấp nhận `1.0`/`"1"` (bộ tuần tự hoá có thể trả float/chuỗi), TỪ CHỐI phần còn lại.
+    """
+    if isinstance(v, bool):
+        raise ValueError("Result là boolean")
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        if not v.is_integer():
+            raise ValueError("Result là số lẻ")
+        return int(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if not s or not s.lstrip("+-").isdigit():
+            raise ValueError("Result không phải số nguyên")
+        return int(s)
+    raise ValueError("Result không phải số nguyên")
+
+
 def boc_ket_qua(goi):
     """Trả `(ok, data, loi, result)`. Hỗ trợ cả envelope mock cũ (`success/data`)."""
     if not isinstance(goi, dict):
         return False, None, "phản hồi không phải JSON object", None
     if "Result" in goi:
         try:
-            result = int(goi.get("Result"))
-        except (TypeError, ValueError):
-            return False, None, "Result không phải số", None
+            result = _result_nguyen(goi.get("Result"))
+        except ValueError:
+            return False, None, "Result không phải số nguyên — KHÔNG đoán kết quả", None
         msg = _thong_diep(goi.get("Message"))
         if result == 1:
             return True, goi, "", result
@@ -569,6 +622,8 @@ def boc_query(goi):
             "cod_fee": latest.get("cod_fee"),
             "insurance_fee": latest.get("insurance_fee"),
             "vat_fee": latest.get("vat_fee"),
+            "return_fee": latest.get("return_fee"),
+            "discount": latest.get("discount"),
             "total_fee": latest.get("total_fee"),
             "weight": latest.get("weight"),
             "length": latest.get("length"),

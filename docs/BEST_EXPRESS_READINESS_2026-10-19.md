@@ -1,3 +1,17 @@
+> ## CẬP NHẬT SAU WAVE 8 (2026-10-19, HEAD tích hợp 19a9244)
+>
+> Báo cáo dưới đây là **hiện trạng trước khi AG-04 vá**. Lỗi chặn cứng đã được sửa:
+> commit `7edf47b` (nhánh ag04-fix) thêm ô địa chỉ đường gửi/nhận và gửi
+> `nguoi_gui_dia_chi`/`nguoi_nhan_dia_chi` trong payload Báo cước; merge vào
+> `best/integration` tại `19a9244`. Playwright trên nhánh fix: **84/84 đạt** (trước 83/83).
+> Vì vậy mục "Báo cước FAIL / thiếu Source.Address" bên dưới là **lịch sử**, không còn là
+> blocker local.
+>
+> Kết luận mới: **LOCAL READY FOR OWNER UAT**, nhưng **CHƯA READY FOR PUBLIC OWNER
+> ACCEPTANCE** vì VPS vẫn BLOCKED ở DNS `best-uat.viporder.vn`, chưa thêm site Caddy, chưa chạy
+> service, chưa có credential BEST sandbox và chưa có public webhook. Không tuyên bố REAL PASS
+> hoặc OWNER APPROVED.
+>
 # BEST EXPRESS — BÁO CÁO READINESS CHO OWNER ACCEPTANCE (AG-08)
 
 **Ngày đo:** 2026-10-19 (khoảng 20:29–20:45 +07)

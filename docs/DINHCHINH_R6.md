@@ -24,8 +24,17 @@ chép lại regex để tự xác nhận**. Kết quả: **24/24 suite Python, b
 > *"Các số 0 cũ của G22 giới hạn đã được bộ đếm hiện tại sửa: đọc được **32**. Bộ đếm cũng đọc E2E
 > **80**, không còn 0."*
 
-⇒ Cái AG-00 nhìn thấy ("0 ca HỎNG") là **bộ thử KHÔNG CHẠY ĐƯỢC trong môi trường của lượt đó**
-(thiếu khai kho / khác bootstrap), **không phải bộ đếm đọc sai**. AG-00 đã quy sai nguyên nhân.
+## 2bis. CÂU QUY NGUYÊN NHÂN ĐÚNG — bản chuẩn, không suy diễn thêm
+
+> **"Lượt lịch sử báo 0 ca; lượt QA trực tiếp đạt.
+> Chưa xác định được khác biệt gây ra kết quả này."**
+
+AG-00 đã hai lần quy sai nguyên nhân cho cùng một hiện tượng:
+ - lần 1: đổ cho "bộ đếm đọc sai" — SAI, §7 nói bộ đếm khớp 24/24.
+ - lần 2: đổ cho "thiếu khai kho / khác bootstrap" — **cũng là SUY ĐOÁN**, chưa tái hiện.
+
+**Chốt lại: CHƯA XÁC ĐỊNH ĐƯỢC NGUYÊN NHÂN.** Chỉ chốt nguyên nhân khi **tái hiện trên cùng HEAD**
+và **chứng minh bằng can thiệp đúng MỘT yếu tố**.
 
 ## 3. R6 THẬT SỰ LÀ GÌ — theo §8
 

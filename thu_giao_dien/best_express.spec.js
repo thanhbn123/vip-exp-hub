@@ -918,3 +918,78 @@ test("16 — bàn nghiệm thu: mọi nút gọi đúng API, lỗi tiếng Việ
   expect(chu).not.toContain("undefined");
   expect(raNgoai, `có request ra ngoài loopback: ${raNgoai.join(" · ")}`).toEqual([]);
 });
+
+// ============================================================================================
+// 17 — BÁO CƯỚC: PAYLOAD ĐỦ Source.Address/Dest.Address; THIẾU ĐỊA CHỈ THÌ CHẶN TẠI UI
+// ============================================================================================
+// Lỗi AG-08 đo được: UI mục 5 không gửi địa chỉ đường, backend `best_hop_dong._dia_chi` từ chối
+// "thiếu Source.Address" và máy chủ trả 502. Ca này KHÔNG gọi hãng: chặn `/api/v2/best/bao-gia`
+// và mô phỏng ĐÚNG luật address bắt buộc của backend để thấy payload nào thật sự rời trình duyệt.
+test("17 — báo cước: payload đủ Source.Address/Dest.Address; thiếu địa chỉ thì chặn tại UI", async ({ page }) => {
+  const daGui = [];
+  await datNenUat(page);
+  await page.route("**/api/v2/best/bao-gia", (r) => {
+    let than = {};
+    try { than = JSON.parse(r.request().postData() || "{}"); } catch { /* body lạ */ }
+    daGui.push(than);
+    const don = than.don || {};
+    // Mô phỏng `_dia_chi`: address bat_buoc=True cho CẢ EstimateFee (dù EstimateFee không dùng
+    // address trong payload, hàm vẫn từ chối đơn thiếu). Đây chính là nguồn lỗi 502 của AG-08.
+    const thieu = [];
+    if (!String(don.nguoi_gui_dia_chi || "").trim()) thieu.push("Source.Address");
+    if (!String(don.nguoi_nhan_dia_chi || "").trim()) thieu.push("Dest.Address");
+    if (thieu.length) {
+      return r.fulfill(json({ ok: false, blocked: false, loi: `thiếu ${thieu.join(", ")}` }, 502));
+    }
+    return r.fulfill(json({
+      ok: true,
+      data: { TotalFee: 22000, FreightFee: 20000, CODFee: 0, InsuranceFee: 0,
+              FreightFeeVAT: 2000, TotalFeeVAT: 22000, TotalFeeVATWithDiscount: 22000,
+              ServiceType: "ECO", Cod: 0, ProductPrice: 0 },
+      meta: { endpoint: "/EstimateFee", http_status: 200 },
+    }));
+  });
+
+  await U.dangNhap(page, "shopa-owner");
+  await page.goto("/pages/best-uat.html", { waitUntil: "networkidle" });
+  await expect(page.locator("#auth")).toContainText("Đã đăng nhập");
+  await page.locator("#phe-duyet-that").check();
+  await page.locator("#cuoc-tk").selectOption("77");
+
+  // ĐỐI CHỨNG DƯƠNG: hai ô địa chỉ đường có NHÃN RÕ và có giá trị mặc định dùng được ngay.
+  await expect(page.locator('label[for="cuoc-sa"]')).toContainText("Địa chỉ đường gửi");
+  await expect(page.locator('label[for="cuoc-da"]')).toContainText("Địa chỉ đường nhận");
+  for (const id of ["cuoc-sa", "cuoc-da"]) {
+    expect(await page.locator("#" + id).inputValue(), `${id} không có giá trị mặc định`)
+      .not.toBe("");
+  }
+
+  await page.locator("#cuoc-sa").fill("12 Đường ABCD");
+  await page.locator("#cuoc-da").fill("34 Đường XYZ");
+  await page.locator("#btn-bao-gia").click();
+  await expect.poll(() => daGui.length, { timeout: 5000 }).toBe(1);
+
+  const don = daGui[0].don || {};
+  expect(don.nguoi_gui_dia_chi, "payload thiếu nguoi_gui_dia_chi ⇒ backend 502 Source.Address")
+    .toBe("12 Đường ABCD");
+  expect(don.nguoi_nhan_dia_chi, "payload thiếu nguoi_nhan_dia_chi ⇒ backend 502 Dest.Address")
+    .toBe("34 Đường XYZ");
+  // Chờ UI XỬ LÝ XONG phản hồi (không chỉ chờ request rời đi) rồi mới đọc chữ.
+  await expect(page.locator("#kq-cuoc")).toContainText("Tổng phí");
+  const kqCuoc = gon(await page.locator("#kq-cuoc").innerText());
+  expect(kqCuoc, `UI còn hiện lỗi thiếu địa chỉ: ${kqCuoc}`).not.toContain("Source.Address");
+
+  // ĐỐI CHỨNG ÂM: xoá địa chỉ GỬI ⇒ UI chặn TRƯỚC khi gọi; không payload thiếu địa chỉ nào
+  // rời trình duyệt (đúng lỗi 502 mà AG-08 đã đo).
+  await page.locator("#cuoc-sa").fill("");
+  await page.locator("#btn-bao-gia").click();
+  await expect(page.locator("#kq-cuoc")).toContainText("địa chỉ");
+  expect(daGui.length, "vẫn gửi báo cước khi thiếu địa chỉ gửi — backend sẽ 502").toBe(1);
+
+  // ĐỐI CHỨNG ÂM phụ: địa chỉ NHẬN trống cũng bị chặn — không chỉ kiểm một ô.
+  await page.locator("#cuoc-sa").fill("12 Đường ABCD");
+  await page.locator("#cuoc-da").fill("");
+  await page.locator("#btn-bao-gia").click();
+  await expect(page.locator("#kq-cuoc")).toContainText("địa chỉ");
+  expect(daGui.length, "vẫn gửi báo cước khi thiếu địa chỉ nhận").toBe(1);
+});

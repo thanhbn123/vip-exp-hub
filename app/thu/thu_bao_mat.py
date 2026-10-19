@@ -39,6 +39,12 @@ import secret_provider as sp   # noqa: E402
 import server                  # noqa: E402
 import webhook                 # noqa: E402
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate.chay()`/`sao_luu()` TỪ CHỐI khi chưa khai kho. Bộ thử tự khai bằng giao diện chung
+# `cau_hinh.khai_kho_kiem_thu()` — KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`.
+# `VIP_HUB_DATA` đã trỏ thư mục TẠM ở trên, nên hai chốt cô lập của hàm khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
+
 SECRET_WH = "secret-webhook-RAT-DAC-BIET-9f3a"
 CRED_KEY = "API-KEY-RAT-DAC-BIET-7b21"
 

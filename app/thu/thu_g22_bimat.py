@@ -87,9 +87,16 @@ for _d in (GOC, THU, G20_DAHANG):
         sys.path.insert(0, _d)
 
 import adapter_jt as aj                                                 # noqa: E402
+import cau_hinh                                                         # noqa: E402
 import http_jt                                                          # noqa: E402
 import transport                                                        # noqa: E402
 from stub_hang_gia import KHOA_GIA_DAI, KHOA_GIA_NGAN, StubHangGia      # noqa: E402
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# `migrate` chạy trong tiến trình này và trong các con (env kế thừa). Bộ thử tự khai bằng
+# `cau_hinh.khai_kho_kiem_thu()` — KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`.
+# `VIP_HUB_DATA` đã trỏ thư mục TẠM ở trên, nên hai chốt cô lập của hàm khai đều thoả.
+cau_hinh.khai_kho_kiem_thu()
 
 # =================================================================================================
 # 0. BÍ MẬT GIẢ — mọi giá trị dưới đây do tệp này tự đặt, KHÔNG phải credential của ai

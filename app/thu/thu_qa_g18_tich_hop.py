@@ -60,6 +60,13 @@ os.environ.pop("VIP_G18_GIAY_PHEP", None)
 sys.path.insert(0, APP)
 atexit.register(lambda: shutil.rmtree(TAM, ignore_errors=True))
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# Dòng `_MIGRATE` ngay dưới đây gọi `migrate.py` THẬT, nên khai báo phải xảy ra TRƯỚC nó. Bộ thử
+# tự khai bằng `cau_hinh.khai_kho_kiem_thu()` — KHÔNG dựa vào việc người chạy nhớ
+# `export VIP_KHO_DANG_CHAY=sqlite`. `VIP_HUB_DATA` đã trỏ nền TẠM ở trên.
+import cau_hinh      # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
+
 _MIGRATE = subprocess.run([sys.executable, os.path.join(APP, "migrate.py")], cwd=GOC,
                           env=dict(os.environ), stdout=subprocess.DEVNULL,
                           stderr=subprocess.STDOUT)

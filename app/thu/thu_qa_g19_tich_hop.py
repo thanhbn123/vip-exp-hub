@@ -45,11 +45,14 @@ CHẠY
     python3 app/thu/thu_qa_g19_tich_hop.py     # ~2 phút, phần lớn thời gian nằm ở bộ gốc
 """
 
+import atexit
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 0. HẰNG SỐ — suy từ chính tệp này, không điền tay
@@ -60,6 +63,19 @@ BO_THU = os.path.join("app", "thu", "thu_g19_tich_hop.py")   # ← MỘT bản l
 
 MA_KHONG_CHAY_DUOC = 127        # trùng mã mà bộ gốc dùng cho cùng tình huống
 GIAY_TOI_DA = 1080              # phải NHỎ HƠN hạn 1200s của cổng C5, để kịp in lý do
+
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# Bản uỷ quyền này chạy bộ gốc trong tiến trình con, nên nó TỰ KHAI rồi TRUYỀN khai báo sang con
+# (subprocess kế thừa `os.environ`). KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`:
+# như thế bộ gốc chỉ xanh nhờ một dòng người chạy nhớ đặt — và nó thành GIỎ. `VIP_HUB_DATA` phải
+# trỏ thư mục TẠM trước khi khai (hai chốt cô lập của `khai_kho_kiem_thu()`).
+if not os.environ.get("VIP_HUB_DATA"):
+    _TAM_KHAI = tempfile.mkdtemp(prefix="vh-qa-g19-tichhop-")
+    os.environ["VIP_HUB_DATA"] = _TAM_KHAI
+    atexit.register(lambda p=_TAM_KHAI: shutil.rmtree(p, ignore_errors=True))
+sys.path.insert(0, os.path.join(GOC, "app"))
+import cau_hinh                                                            # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
 
 
 def _lenh():

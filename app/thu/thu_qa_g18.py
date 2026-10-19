@@ -101,6 +101,28 @@ import csdl                                                             # noqa: 
 import quyen                                                            # noqa: E402
 import server                                                           # noqa: E402
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# Bộ thử gọi `migrate.chay()` (dựng nền) và chạy các bộ con; khai báo dưới đây vào `os.environ`
+# nên mọi tiến trình con cũng thấy. KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`:
+# một bộ chỉ xanh khi người chạy nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ nền TẠM ở trên.
+#
+# VÌ SAO KHÔNG GỌI THẲNG: driver đột biến (`_cay_dot_bien`) đặt một BẢN SAO `app/` trong thư mục
+# tạm LÊN TRƯỚC `sys.path`, nên trong tiến trình con `cau_hinh` được nạp từ bản sao và
+# `cau_hinh.THU_MUC_GOC` là chính thư mục tạm — mọi nền tạm đều bị coi là "trong cây repo" và
+# `khai_kho_kiem_thu()` TỪ CHỐI OAN (đo được: 5 FAIL ở `j3`–`j7`). Gốc repo THẬT luôn suy được
+# từ `__file__` của bộ thử, nên chỉ trong lúc gọi ta cho hàm khai nhìn gốc THẬT. Chốt cô lập
+# KHÔNG nới: dữ liệu nằm trong repo thật vẫn bị từ chối như cũ.
+def _khai_kho_cua_bo_thu():
+    cu = getattr(cau_hinh, "THU_MUC_GOC", None)
+    try:
+        cau_hinh.THU_MUC_GOC = GOC_CAY
+        return cau_hinh.khai_kho_kiem_thu()
+    finally:
+        cau_hinh.THU_MUC_GOC = cu
+
+
+_khai_kho_cua_bo_thu()
+
 HEAD_GHIM = os.environ.get("VIP_G18_HEAD", "").strip()
 DAY_DU = os.environ.get("VIP_G18_DAY_DU", "") == "1"
 SO_DUONG_API = re.compile(r'"(/api/v2/[^"]*)"')

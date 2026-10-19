@@ -68,6 +68,13 @@ os.environ["VIP_HUB_DATA"] = _TAM
 if GOC_APP not in sys.path:
     sys.path.append(GOC_APP)
 
+# ── Y1 · TỰ KHAI KHO ĐANG CHẠY (cổng fail-closed của G22) ─────────────────────────────────────
+# Bộ thử này chạy `thu_qa_g17.py`/`thu_qa_g18.py` trong tiến trình con; khai báo dưới đây vào
+# `os.environ` nên con kế thừa. KHÔNG dựa vào việc người chạy nhớ `export VIP_KHO_DANG_CHAY`:
+# một bộ chỉ xanh khi người chạy nhớ khai là một bộ GIỎ. `VIP_HUB_DATA` đã trỏ nền TẠM ở trên.
+import cau_hinh                                                            # noqa: E402
+cau_hinh.khai_kho_kiem_thu()
+
 HEAD_GHIM = os.environ.get("VIP_G20_HEAD", "").strip()
 NHANH = os.environ.get("VIP_G20_NHANH", "") == "1"
 

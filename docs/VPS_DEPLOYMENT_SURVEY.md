@@ -1,3 +1,8 @@
+> **CẬP NHẬT 2026-10-20:** Owner đã duyệt; dịch vụ đã chạy trên VPS qua Cloudflare Tunnel.
+> URL tạm và quy trình nhập BEST: `docs/BEST_EXPRESS_LIVE_UAT.md`. Tên miền chính
+> `best-uat.viporder.vn` vẫn NXDOMAIN; Caddy chưa có cert cho tên này. Báo cáo dưới là hiện
+> trạng trước triển khai.
+
 # VIP EXPRESS HUB — KHẢO SÁT & PHƯƠNG ÁN TRIỂN KHAI VPS 160.22.170.20
 
 **Ngày:** 2026-10-19 · **Trạng thái:** ĐÃ KHẢO SÁT + ĐÃ BUILD/SELF-TEST CÔ LẬP.

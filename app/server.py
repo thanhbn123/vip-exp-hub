@@ -346,8 +346,15 @@ class BoXuLy(BaseHTTPRequestHandler):
 
     # ---------- static ----------
     def _phuc_vu_tinh(self, duong):
-        if duong == "/":
-            duong = "/admin/index.html"
+        # `/` từng trả NỘI DUNG admin/index.html nhưng URL vẫn là `/`, nên các script
+        # tương đối (`logic.js`, `admin.js`...) bị trình duyệt tìm ở `/logic.js` → 404 →
+        # trang trắng. Chuyển hướng để trình duyệt dùng đúng base `/admin/`.
+        if duong in ("/", "/admin"):
+            return self._tra(302, {"ok": True, "chuyen_huong": "/admin/"},
+                             them_header={"Location": "/admin/"})
+        if duong == "/pages/best-uat":
+            return self._tra(302, {"ok": True, "chuyen_huong": "/pages/best-uat.html"},
+                             them_header={"Location": "/pages/best-uat.html"})
         if duong.endswith("/"):
             duong += "index.html"
         an_toan = os.path.normpath(duong).lstrip("/")

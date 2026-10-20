@@ -1,43 +1,39 @@
 # BEST EXPRESS — UAT LIVE TRÊN VPS (2026-10-20)
 
-**Trạng thái:** dịch vụ đã chạy trên VPS, **HTTPS công khai tạm qua Cloudflare Tunnel**;
-chưa có chứng chỉ cho tên miền chính vì DNS chưa đúng. Không có REAL PASS/OWNER APPROVED.
+**Trạng thái:** dịch vụ đã chạy trên VPS; **HTTPS chính thức `best-uat.viporder.vn`** đã có
+chứng chỉ Let's Encrypt hợp lệ. Chưa có REAL PASS/OWNER APPROVED vì chưa có credential BEST
+sandbox và chưa có webhook thật do BEST cấu hình.
 
 ## 1. URL VÀ ĐĂNG NHẬP
 
 | Mục | Giá trị |
 |---|---|
-| Bàn nghiệm thu | **https://enforcement-disciplines-salon-describes.trycloudflare.com/pages/best-uat.html** |
-| Quản trị | **https://enforcement-disciplines-salon-describes.trycloudflare.com/admin/** |
+| Bàn nghiệm thu | **https://best-uat.viporder.vn/pages/best-uat.html** |
+| Quản trị | **https://best-uat.viporder.vn/admin/** |
 | Tài khoản | `anh-thanh` (theo tài khoản VIP GROUP ID) |
-| Mật khẩu | đọc tại `VIP GROUP ID/cowork/secrets/owner-anh-thanh.txt` trên máy Owner — **không dán vào chat** |
+| Mật khẩu tạm | `/Users/viporder/VIP-EXPRESS-UAT-anh-thanh.txt` — đúng **20 ký tự, không newline**; **không dán vào chat**; đổi và xoá sau khi vào |
 | Backend | container `vip-express-hub` · `127.0.0.1:18897` · image `vps-a7a98dc` |
 | Health | 200 · `/san-sang` 200 · trang UAT 200 · API chưa đăng nhập 401 |
 
-URL tunnel là **tạm**; nếu process cloudflared restart, URL đổi. Process đang chạy:
-`/home/deploy/bin/cloudflared tunnel --url http://127.0.0.1:18897`, PID lưu tại
-`/home/deploy/vip-express-hub/cloudflared.pid`, log `.../logs/cloudflared.log`.
+DNS `best-uat.viporder.vn` đã trỏ đúng `160.22.170.20`; Caddy đã cấp cert
+`CN=best-uat.viporder.vn` (Let's Encrypt YE1, hạn 2027-01-18). Tunnel tạm đã dừng.
+Nếu cert hết hạn, Caddy tự gia hạn; kiểm bằng `openssl s_client` ở §5.
 
-## 2. VÌ SAO CHƯA DÙNG `best-uat.viporder.vn`
+## 2. DNS / HTTPS ĐÃ XONG
 
-- `best-uat.viporder.vn` hiện **NXDOMAIN** ở cả hai NS của `viporder.vn`
-  (`ninhbinh.vclouddns.com`, `hoalu.vclouddns.com`). Bản ghi A **chưa được tạo đúng zone**.
-- `best-uat.vipgroup.com.vn` có A `160.22.170.20` và resolver công cộng thấy, nhưng zone
-  `vipgroup.com.vn` có **hai nhà NS** (VCloudDNS + ZoneDNS); một NS không trả bản ghi nên
-  Let's Encrypt **secondary validation** thất bại (`DNS problem: networking error`).
-- `best-uat.viporder.com.vn` trỏ **103.159.50.70**, không phải VPS này — không dùng.
-
-**Cần Owner/DNS admin:**
-1. Vào zone **`viporder.vn`** (VCloudDNS), tạo `best-uat` A `160.22.170.20`, DNS-only.
-2. Kiểm cả hai NS:
-   `dig +short @ninhbinh.vclouddns.com best-uat.viporder.vn A` và
-   `dig +short @hoalu.vclouddns.com best-uat.viporder.vn A` → phải trả `160.22.170.20`.
-3. Báo lại; hệ sẽ reload Caddy và kiểm cert, rồi chuyển URL chính thức.
-Nếu muốn dùng `best-uat.vipgroup.com.vn`, phải tạo cùng bản ghi ở **cả VCloudDNS và ZoneDNS**.
+- `best-uat.viporder.vn` → `160.22.170.20` ở cả hai NS VCloudDNS.
+- Cert Let's Encrypt hợp lệ: `CN=best-uat.viporder.vn`, issuer `Let's Encrypt YE1`,
+  hiệu lực 2026-10-20 → 2027-01-18; HTTP tự chuyển 308 sang HTTPS.
+- Caddy chỉ còn site `best-uat.viporder.vn`; tên phụ `best-uat.vipgroup.com.vn` đã bỏ khỏi block
+  để tránh ACME lỗi.
+- Không cần đổi DNS/firewall nữa cho tên chính thức.
 
 ## 3. OWNER NHẬP TÀI KHOẢN BEST SANDBOX
 
-1. Mở URL bàn nghiệm thu ở §1, đăng nhập `anh-thanh`.
+> Hiện DB đã có **1 tài khoản tên “BEST mock”** (môi trường `mock`). Tài khoản này **không**
+> dùng để kiểm tra hãng thật. Cần tạo **một tài khoản mới, môi trường `sandbox`**.
+
+1. Mở URL bàn nghiệm thu ở §1, đăng nhập `anh-thanh` (mật khẩu tạm ở §1).
 2. Mục **0**: tick xác nhận đã được Owner phê duyệt sandbox.
 3. Mục **2 — Tài khoản BEST**:
    - Môi trường: **sandbox (TEST)**.
@@ -49,7 +45,7 @@ Nếu muốn dùng `best-uat.vipgroup.com.vn`, phải tạo cùng bản ghi ở 
    - Thất bại: đọc đúng mã lỗi/HTTP; không đoán.
 5. Mục **4 — Webhook Bearer**: dán Bearer token do BEST cấp, bấm lưu.
    - UI hiện **URL webhook đầy đủ** dạng
-     `https://enforcement-disciplines-salon-describes.trycloudflare.com/api/v2/webhook/nhan/<webhook_ma>`.
+     `https://best-uat.viporder.vn/api/v2/webhook/nhan/<webhook_ma>`.
 6. Mục **5 — Báo cước**: nhập địa chỉ đường gửi/nhận (đã có ô), cân gram, kích thước mm, COD.
 7. Mục **6 — Tạo đơn sandbox**: nhập đơn duy nhất, câu xác nhận **`TOI_DONG_Y_GOI_BEST_TEST`**,
    bấm gửi. Production luôn bị khoá.
@@ -99,8 +95,8 @@ ACK mong đợi: {"Result":1,"Message":""}
 
 ## 6. GIỚI HẠN HIỆN TẠI
 
-- Chưa có chứng chỉ Let's Encrypt cho tên miền chính; đang dùng tunnel tạm.
-- Chưa có credential BEST sandbox → chưa thể đăng nhập/kiểm tra hãng; **REAL PASS BLOCKED**.
+- HTTPS chính thức đã có; không còn dùng tunnel tạm.
+- Tài khoản hiện tại là **mock**; chưa có credential BEST sandbox → **REAL PASS BLOCKED**.
 - Chưa có Bearer/BEST cấu hình V9 → webhook thật **BLOCKED**.
 - `VIP_BEST_OWNER_APPROVED=1` đang bật cho phiên UAT; gỡ (`0`) sau khi nghiệm thu xong.
 - Production writes vẫn bị khoá trong mã; không tạo đơn production.

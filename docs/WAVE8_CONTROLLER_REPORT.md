@@ -142,9 +142,10 @@ Chỉ dùng `vps-a7a98dc` sau khi build lại từ commit cuối.
 
 ## 7. URL NGHIỆM THU
 
-**Chưa có URL công khai.** Không được ghi “URL nghiệm thu” khi chưa có DNS/Caddy.
+**URL công khai đã có:** `https://best-uat.viporder.vn/pages/best-uat.html` (cert Let's Encrypt).
 
-- **Local (đã chạy được):**
+- **URL chính thức (đã chạy):** `https://best-uat.viporder.vn/admin/` · `.../pages/best-uat.html`
+- **Local (dự phòng):**
   ```sh
   ./trien_khai/best_nghiem_thu.sh 'OWNER-UAT-2026-10-19'
   # https://localhost:8897/admin/

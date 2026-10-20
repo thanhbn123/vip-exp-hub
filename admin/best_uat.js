@@ -83,7 +83,7 @@
     if (!o) return;
     if (!dsTaiKhoan.length) {
       o.className = "ketqua canhbao";
-      o.textContent = "Chưa có tài khoản BEST. Tạo một tài khoản ở form bên dưới (mock trước, sandbox sau khi có phê duyệt).";
+      o.textContent = "Chưa có tài khoản BEST. Tạo tài khoản sandbox ở form bên dưới.";
     } else {
       o.className = "ketqua";
       o.textContent = anBiMat(dsTaiKhoan.map((t) => {
@@ -95,11 +95,15 @@
           + ` · credential: ${t.co_credentials ? "đã lưu" : "chưa lưu"}`;
       }).join("\n"));
     }
+    // Các ô THAO TÁC chỉ nhận tài khoản thật (sandbox/production). Tài khoản mock
+    // không thể kiểm tra/báo cước/tạo đơn với BEST; để mock trong danh sách chỉ gây
+    // hiểu nhầm "mock = lỗi kết nối". Mock vẫn hiện ở bảng tài khoản phía trên.
+    const dsThat = dsTaiKhoan.filter((t) => t.moi_truong !== "mock");
     for (const id of ["kn-tk", "wh-tk", "cuoc-tk", "don-tk", "tc-tk", "ud-tk"]) {
       const s = $(id);
       if (!s) continue;
       s.textContent = "";
-      for (const t of dsTaiKhoan) {
+      for (const t of dsThat) {
         const op = document.createElement("option");
         op.value = String(t.id);
         op.textContent = `#${t.id} ${t.moi_truong} — ${t.ten}`;
@@ -108,7 +112,7 @@
       if (!s.options.length) {
         const op = document.createElement("option");
         op.value = "";
-        op.textContent = "(chưa có tài khoản BEST)";
+        op.textContent = "(chưa có tài khoản sandbox/production — tạo ở mục 2)";
         s.appendChild(op);
       }
     }

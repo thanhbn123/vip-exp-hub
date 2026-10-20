@@ -137,3 +137,15 @@ git pull --ff-only
 cd /home/deploy/vip-express-hub/app
 ./trien_khai/vps/deploy.sh
 ```
+
+## 10. PRODUCTION LIVE — TRẠNG THÁI 2026-10-21
+
+- Tài khoản **#3 `BEST Production`** đã được cập nhật credential production; **đăng nhập BEST thật
+  thành công** (HTTP 200, `/User/Login`).
+- **Báo cước production thật thành công**: 500 g, 100×100×100 mm, HCM → HCM:
+  `FreightFee 19.800`, `TotalFeeVAT 21.780` VND.
+- Tài khoản #1/#2 vẫn là mock; UI đã ẩn mock khỏi ô kiểm tra/báo cước/tạo đơn.
+- **Chưa tạo đơn production**: cần Owner điền thông tin đơn thật và phê duyệt rõ; mã hiện
+  **khoá ghi production** (`cua_phe_duyet`). Không tự tạo giao dịch thật.
+- Webhook Bearer: **chưa có token**; cần BEST cấp hoặc Owner cho phép sinh token để gửi BEST V9.
+- Không ghi mật khẩu/token vào tài liệu này.

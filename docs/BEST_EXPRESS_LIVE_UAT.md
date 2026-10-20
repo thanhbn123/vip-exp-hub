@@ -111,3 +111,29 @@ docker compose down            # KHÔNG dùng -v
 # Caddy: khôi phục backup đã lưu, nạp lại JSON qua admin API hoặc reload
 ```
 Không xoá `data/`; không `docker compose down -v`; không đụng container khác.
+
+## 8. GITHUB VÀ DEPLOY VPS
+
+| Mục | Giá trị |
+|---|---|
+| Repo | **https://github.com/thanhbn123/vip-exp-hub** |
+| Nhánh chuẩn | `main` |
+| Checkout VPS | `/home/deploy/vip-express-hub/app` (clone từ repo) |
+| Deploy | `cd /home/deploy/vip-express-hub/app && ./trien_khai/vps/deploy.sh` |
+| `.env` | `app/trien_khai/vps/.env` — **không commit**, đã giữ từ bản trước |
+| Dữ liệu | `/home/deploy/vip-express-hub/data` (bind mount, không nằm trong repo) |
+| Image hiện tại | `vip-express-hub:vps-1832a25` |
+
+`deploy.sh` pull fast-forward, build image tag theo commit, `docker compose up -d`, kiểm
+`/api/v2/suc-khoe`. Không dùng `docker compose down -v`; không commit `.env`/DB/khoá.
+Thư mục `src` cũ đã đổi tên thành `src-backup-before-git-20261020`; **sửa trong `app`**.
+
+Quy trình sửa tiếp:
+```sh
+# trên máy code
+git pull --ff-only
+# sửa, test, commit, push main
+# trên VPS
+cd /home/deploy/vip-express-hub/app
+./trien_khai/vps/deploy.sh
+```

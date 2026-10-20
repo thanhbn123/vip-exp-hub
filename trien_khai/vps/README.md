@@ -203,3 +203,17 @@ docker restart vip-staging-caddy # dùng reload, không restart
 # sửa /srv/vip-staging-proxy/Caddyfile trực tiếp khi chưa backup/validate — CẤM
 # docker compose up -d khi chưa có duyệt — CẤM
 ```
+
+## 10. CẬP NHẬT TỪ GITHUB (canonical)
+
+Checkout chuẩn trên VPS: `/home/deploy/vip-express-hub/app` (clone từ
+`https://github.com/thanhbn123/vip-exp-hub`, nhánh `main`). Thư mục `src` cũ chỉ là bản
+trước khi chuyển Git; không sửa ở đó.
+
+```sh
+cd /home/deploy/vip-express-hub/app
+./trien_khai/vps/deploy.sh
+```
+
+Script pull fast-forward, build image tag theo commit, `docker compose up -d`, kiểm health.
+`.env` nằm trong `trien_khai/vps/.env` (không commit). Không chạy `git reset --hard`/`down -v`.

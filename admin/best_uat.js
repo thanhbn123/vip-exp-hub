@@ -167,8 +167,20 @@
       }
       if (!xacNhan) return loi("tk-kq", new Error("cần tick xác nhận phê duyệt của Owner"));
       if (!xacNhanThat()) return loi("tk-kq", new Error("cần tick ô phê duyệt phiên nghiệm thu ở mục 0"));
+      // Production KHÔNG còn bị chặn tuyệt đối ở đây. Chặn cũ là sai phạm vi: nó khoá cả
+      // ĐĂNG NHẬP và TRA CỨU production — hai thao tác chỉ đọc mà backend vốn cho phép
+      // (`best_hop_dong.cua_phe_duyet` chỉ từ chối production khi `ghi=True`). Vì thế Owner
+      // không nhập được credential production qua giao diện dù hợp đồng cho phép đọc.
+      // Kiểm soát thật cho tạo/sửa/hủy production nằm ở backend và KHÔNG đi qua ô này:
+      // `tao_don_that`/`cap_nhat_that`/`sua_dia_chi_that`/`huy_that` trả `blocked` ngay, và
+      // `cua_phe_duyet(..., ghi=True)` chặn lần thứ hai. Ở đây chỉ cần một xác nhận RIÊNG để
+      // Owner không chọn nhầm production khi đang định nhập credential test.
       if (mt === "production") {
-        return loi("tk-kq", new Error("production chỉ cho phép sau nghiệm thu riêng; dùng sandbox trước."));
+        const oProd = $("tk-xac-nhan-prod");
+        if (!(oProd && oProd.checked)) {
+          return loi("tk-kq", new Error(
+            "production: cần tick thêm ô xác nhận credential thật (chỉ đăng nhập/báo cước/tra cứu/in nhãn; tạo-sửa-hủy đơn vẫn bị backend khoá)"));
+        }
       }
     }
     const cred = { username: user, password: pass };

@@ -54,9 +54,9 @@
     <h2>0. Phê duyệt phiên nghiệm thu</h2>
     <label style="font-weight:400">
       <input id="phe-duyet-that" type="checkbox" style="width:auto">
-      Tôi xác nhận đã được Owner phê duyệt gọi BEST <b>sandbox</b> trong phiên này; không dùng
-      tài khoản production để tạo đơn. Mọi thao tác thật vẫn đi qua backend và bị từ chối nếu
-      thiếu phê duyệt phía máy chủ.
+      Tôi xác nhận đã được Owner phê duyệt gọi BEST <b>thật</b> (sandbox hoặc production) trong
+      phiên này. Với production chỉ <b>đăng nhập · báo cước · tra cứu · in nhãn</b>; mọi thao tác
+      <b>tạo/sửa/hủy đơn production vẫn bị backend khoá cứng</b> và không mở được từ trang này.
     </label>
     <p class="phu" style="margin:8px 0 0">Trang này không lưu mật khẩu/token vào trình duyệt.
       Đóng tab là mất; tải lại phải nhập lại nếu muốn kiểm tra kết nối.</p>
@@ -82,7 +82,8 @@
         <div><label for="tk-ems">ems-key (tuỳ chọn)</label><input id="tk-ems" type="password" autocomplete="new-password" maxlength="512"></div>
         <div><label for="tk-ghi-chu">Ghi chú nội bộ</label><input id="tk-ghi-chu" maxlength="300"></div>
       </div>
-      <label style="margin-top:10px;font-weight:400"><input id="tk-xac-nhan" type="checkbox" style="width:auto"> Tôi xác nhận đã có phê duyệt của Owner và đang nhập credential TEST (không phải production).</label>
+      <label style="margin-top:10px;font-weight:400"><input id="tk-xac-nhan" type="checkbox" style="width:auto"> Tôi xác nhận đã có phê duyệt của Owner cho credential đang nhập, và đúng môi trường đã chọn ở trên.</label>
+      <label style="margin-top:6px;font-weight:400"><input id="tk-xac-nhan-prod" type="checkbox" style="width:auto"> <b>Chỉ khi chọn production:</b> tôi hiểu đây là credential <b>thật</b>; hub chỉ dùng cho đăng nhập/báo cước/tra cứu/in nhãn, không tạo/sửa/hủy đơn.</label>
       <button id="btn-luu-tk" type="submit">Lưu tài khoản</button>
       <span class="ma" id="tk-kq" role="status" aria-live="polite"></span>
     </form>

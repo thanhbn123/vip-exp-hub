@@ -12,11 +12,13 @@
 # `word/document.xml` (gồm bảng) ngày 2026-10-19. Xem `docs/BEST_EXPRESS_DOCX_AUDIT.md`.
 #
 # KHÔNG ghi credential/token vào log/response. `authorization` chỉ được dựng trong header gửi đi.
+import hashlib
 import json
 import os
 import re
 import socket
 import ssl
+import threading
 import time
 from decimal import Decimal, InvalidOperation
 
@@ -811,13 +813,153 @@ def _goi_json(url, payload, token=None, ems_key=None, timeout=10):
     return ok, data, loi, tra.ma_http
 
 
-def lay_token_that(credentials, moi_truong, *, cho_phep_that, timeout=10):
-    """Đăng nhập thật, trả `(token, meta, loi)`. Token KHÔNG ra khỏi hàm gọi nội bộ."""
+# ============================================================================
+# 5a. KHO TOKEN TRONG TIẾN TRÌNH — tái dùng token thay vì đăng nhập mỗi lượt
+# ============================================================================
+# Tài liệu hãng: token sống 30 ngày. Trước bản vá này MỌI thao tác nghiệp vụ đều gọi
+# `/User/Login` ngay trước lời gọi thật, nên một lần "Báo cước" là HAI lượt HTTP tới BEST và
+# một lượt dùng credential. Đo được trên production 2026-10-24: 1 login / 1 lượt nghiệp vụ.
+# Đó là rủi ro thật (trần tần suất đăng nhập của hãng, độ trễ, và credential đi ra mạng nhiều
+# lần hơn cần thiết), không phải chuyện tối ưu cho đẹp.
+#
+# Kho này CỐ Ý nằm trong tiến trình, KHÔNG ghi đĩa:
+#   · `xac_thuc_best` đã có kho token mã hoá trên đĩa, nhưng nó đòi credential nằm trong kho
+#     RIÊNG của nó; credential của hub là `carrier_accounts.credentials_ma_hoa`. Nối hai kho là
+#     đổi nguồn-sự-thật của credential — việc đó phải có bước di trú riêng, không làm lẫn ở đây.
+#   · token không ghi đĩa thì khởi động lại container là đăng nhập lại một lần. Giá đó rẻ hơn
+#     việc có hai nơi cùng giữ token mà không ai biết nơi nào đang đúng.
+#
+# Khoá kho là BĂM của (môi trường + credential), không phải chính credential: đổi mật khẩu ⇒
+# khoá đổi ⇒ token cũ không còn được dùng, kể cả khi lượt vô hiệu bị lỡ.
+HAN_TOKEN_GIAY = TOKEN_TTL_DAYS * 24 * 60 * 60
+# Hết hạn sớm: tài liệu nói 30 ngày nhưng không nói mốc nào được tính. Trả token sắp chết là
+# đẩy lỗi 401 sang đúng lúc đang gọi nghiệp vụ. Nửa ngày biên là rẻ.
+LE_HET_HAN_SOM_GIAY = 12 * 60 * 60
+_KHO_TOKEN = {}
+_KHOA_KHO_TOKEN = threading.RLock()
+_KHOA_DANG_NHAP = {}
+
+# Hãng trả HTTP 200 + `Result=2` cho lỗi xác thực (đo được: `[404] The account not found...`,
+# `[401] ...`). Vì vậy không thể nhìn mã HTTP để biết token đã chết; phải đọc thông điệp.
+_MAU_LOI_XAC_THUC = re.compile(r"\[401\]|\[403\]|token|unauthorized|authentic|expire",
+                               re.IGNORECASE)
+
+
+def _la_loi_token(loi):
+    """Thông điệp của hãng có dấu hiệu token không còn dùng được?
+
+    Cố ý KHÔNG coi `[404] The account not found or have been locked` là lỗi token: đó là lỗi
+    tài khoản, và đăng nhập lại chỉ nhận đúng lỗi đó lần thứ hai.
+    """
+    s = str(loi or "")
+    if "[404]" in s:
+        return False
+    return bool(_MAU_LOI_XAC_THUC.search(s))
+
+
+def _van_tay_credential(credentials, moi_truong):
+    """Khoá kho token. Băm, không giữ bản rõ; `None` nếu credential không dùng được."""
+    if not isinstance(credentials, dict):
+        return None
+    user = credentials.get("username") or credentials.get("user") or ""
+    mk = credentials.get("password") or credentials.get("mat_khau") or ""
+    if not user or not mk:
+        return None
+    goc = "\x1f".join([str(moi_truong or ""), str(user), str(mk),
+                       str(credentials.get("ems_key") or "")])
+    return hashlib.sha256(goc.encode("utf-8")).hexdigest()
+
+
+def _khoa_dang_nhap(khoa):
+    """Một khoá cho mỗi cặp (môi trường, credential): hai lượt song song chỉ đăng nhập một lần."""
+    with _KHOA_KHO_TOKEN:
+        o = _KHOA_DANG_NHAP.get(khoa)
+        if o is None:
+            # Trần để một luồng gọi liên tục với credential đổi liên tục không làm phình bộ nhớ.
+            if len(_KHOA_DANG_NHAP) > 256:
+                _KHOA_DANG_NHAP.clear()
+            o = _KHOA_DANG_NHAP[khoa] = threading.Lock()
+        return o
+
+
+def _token_trong_kho(khoa, now):
+    with _KHOA_KHO_TOKEN:
+        d = _KHO_TOKEN.get(khoa)
+        if d is None:
+            return None
+        if now >= d["het_han_luc"] - LE_HET_HAN_SOM_GIAY:
+            _KHO_TOKEN.pop(khoa, None)
+            return None
+        return d["token"]
+
+
+def _luu_token_vao_kho(khoa, token, now):
+    with _KHOA_KHO_TOKEN:
+        _KHO_TOKEN[khoa] = {"token": token, "phat_hanh_luc": now,
+                            "het_han_luc": now + HAN_TOKEN_GIAY}
+
+
+def bo_token(credentials=None, moi_truong=None, *, tat_ca=False):
+    """Vô hiệu token đã nhớ. Lượt sau sẽ đăng nhập lại. Trả số bản ghi đã bỏ."""
+    with _KHOA_KHO_TOKEN:
+        if tat_ca:
+            n = len(_KHO_TOKEN)
+            _KHO_TOKEN.clear()
+            return n
+        khoa = _van_tay_credential(credentials, moi_truong)
+        return 1 if (khoa and _KHO_TOKEN.pop(khoa, None) is not None) else 0
+
+
+def trang_thai_token_kho(credentials=None, moi_truong=None):
+    """Mô tả kho token cho chẩn đoán. KHÔNG trả token, KHÔNG trả khoá băm đầy đủ."""
+    now = time.time()
+    with _KHOA_KHO_TOKEN:
+        ra = {"so_token_dang_nho": len(_KHO_TOKEN), "han_giay": HAN_TOKEN_GIAY,
+              "le_het_han_som_giay": LE_HET_HAN_SOM_GIAY, "luu_tren_dia": False}
+        khoa = _van_tay_credential(credentials, moi_truong)
+        if khoa:
+            d = _KHO_TOKEN.get(khoa)
+            ra["tai_khoan_nay"] = (
+                {"co_token": False} if d is None else
+                {"co_token": True,
+                 "con_lai_giay": int(max(0, d["het_han_luc"] - LE_HET_HAN_SOM_GIAY - now)),
+                 "phat_hanh_cach_day_giay": int(max(0, now - d["phat_hanh_luc"]))})
+        return ra
+
+
+def lay_token_that(credentials, moi_truong, *, cho_phep_that, timeout=10, dung_kho=True):
+    """Trả `(token, meta, loi)`. Token KHÔNG ra khỏi hàm gọi nội bộ.
+
+    `dung_kho=True` (mặc định cho đường nghiệp vụ): dùng token còn hạn đã nhớ, chỉ đăng nhập
+    khi chưa có/đã hết hạn. `dung_kho=False`: BẮT BUỘC gọi `/User/Login` — đúng thứ nút
+    "Kiểm tra kết nối" cần đo, vì một cache hit không chứng minh credential còn dùng được.
+    """
     ok, ly_do = cua_phe_duyet(moi_truong, cho_phep_that)
     if not ok:
         return None, {"moi_truong": moi_truong, "blocked": True, "ly_do": ly_do}, ly_do
     if not isinstance(credentials, dict):
         return None, {}, "credentials phải là dict"
+    khoa = _van_tay_credential(credentials, moi_truong)
+    if dung_kho and khoa:
+        token = _token_trong_kho(khoa, time.time())
+        if token:
+            return token, {"moi_truong": moi_truong, "endpoint": DUONG_API["login"],
+                           "base_url": BASE_URL[moi_truong], "token_tu_kho": True,
+                           "http_status": 0}, ""
+    if khoa:
+        with _khoa_dang_nhap(khoa):
+            # Đọc lại trong khoá: luồng đi trước có thể vừa đăng nhập xong.
+            if dung_kho:
+                token = _token_trong_kho(khoa, time.time())
+                if token:
+                    return token, {"moi_truong": moi_truong, "endpoint": DUONG_API["login"],
+                                   "base_url": BASE_URL[moi_truong], "token_tu_kho": True,
+                                   "http_status": 0}, ""
+            return _dang_nhap_lay_token(credentials, moi_truong, timeout, khoa)
+    return _dang_nhap_lay_token(credentials, moi_truong, timeout, None)
+
+
+def _dang_nhap_lay_token(credentials, moi_truong, timeout, khoa):
     try:
         payload = dung_login(credentials.get("username") or credentials.get("user"),
                              credentials.get("password") or credentials.get("mat_khau"))
@@ -833,12 +975,17 @@ def lay_token_that(credentials, moi_truong, *, cho_phep_that, timeout=10):
     token, loi_token = boc_token(data)
     if not token:
         return None, meta, loi_token
+    if khoa:
+        _luu_token_vao_kho(khoa, token, time.time())
+    meta["token_tu_kho"] = False
     return token, meta, ""
 
 
 def dang_nhap_that(credentials, moi_truong, *, cho_phep_that, timeout=10):
+    # `dung_kho=False`: nút "Kiểm tra kết nối" phải thật sự gọi `/User/Login`. Trả "THÀNH CÔNG"
+    # vì còn token trong kho là nói sai — credential có thể đã bị hãng khoá từ lúc đó.
     token, meta, loi = lay_token_that(credentials, moi_truong, cho_phep_that=cho_phep_that,
-                                      timeout=timeout)
+                                      timeout=timeout, dung_kho=False)
     tls = None
     if not meta.get("blocked"):
         tls = kiem_tra_tls(HOST_SANDBOX if moi_truong == SANDBOX else HOST_PRODUCTION)
@@ -860,6 +1007,29 @@ def _goi_co_token(thao_tac, payload, credentials, moi_truong, *, cho_phep_that,
     url = _url(thao_tac, moi_truong)
     ok, data, loi, http_status = _goi_json(
         url, payload, token=token, ems_key=credentials.get("ems_key"), timeout=timeout)
+
+    # Token nhớ có thể đã bị hãng thu hồi trước hạn 30 ngày (đổi mật khẩu, khoá tài khoản,
+    # hãng xoay khoá). Khi đó phải lấy token mới MỘT lần rồi thử lại — nhưng CHỈ cho thao tác
+    # ĐỌC. Với thao tác GHI, lời gọi đầu có thể đã được hãng nhận và chỉ phản hồi bị mất; thử
+    # lại là đường tạo đơn trùng. Chính sách "timeout ⇒ UNKNOWN, không retry mù" của G04 nói
+    # đúng điều đó, nên nhánh ghi chỉ vô hiệu token và trả lỗi để người vận hành tự quyết.
+    if not ok and _la_loi_token(loi) and meta.get("token_tu_kho"):
+        bo_token(credentials, moi_truong)
+        if ghi:
+            meta.update({"endpoint": DUONG_API[thao_tac], "http_status": http_status,
+                         "token_da_bo": True})
+            return ok, data, loi, http_status, meta
+        token2, meta2, loi2 = lay_token_that(
+            credentials, moi_truong, cho_phep_that=cho_phep_that, timeout=timeout,
+            dung_kho=False)
+        if not token2:
+            return False, None, (loi2 or loi), 0, {"blocked": False, "ly_do": loi2 or loi,
+                                                   "token_da_bo": True}
+        meta = dict(meta2)
+        meta["dang_nhap_lai_sau_401"] = True
+        ok, data, loi, http_status = _goi_json(
+            url, payload, token=token2, ems_key=credentials.get("ems_key"), timeout=timeout)
+
     meta.update({"endpoint": DUONG_API[thao_tac], "http_status": http_status})
     return ok, data, loi, http_status, meta
 

@@ -7,7 +7,11 @@
 set -eu
 
 GOC="${VIP_HUB_VPS_ROOT:-/home/deploy/vip-express-hub}"
-COMPOSE_DIR="$GOC/src/trien_khai/vps"
+# Thư mục compose là THƯ MỤC CHỨA CHÍNH TỆP NÀY, không phải một đường cố định. Bản cũ ghim
+# `$GOC/src/trien_khai/vps`; khi checkout trên VPS đổi từ `src/` sang `app/` (clone từ GitHub,
+# 2026-10-20) thì đường đó không còn tồn tại và script chết ngay dòng kiểm compose. Đó là cách
+# cron sao lưu đứng im nhiều ngày mà không ai thấy. Tự định vị thì không còn chỗ để lệch.
+COMPOSE_DIR="${VIP_HUB_COMPOSE_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
 COMPOSE="$COMPOSE_DIR/docker-compose.yml"
 ENV_FILE="$COMPOSE_DIR/.env"
 

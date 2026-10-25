@@ -9,7 +9,11 @@ set -eu
 DOMAIN="${VIP_HUB_DOMAIN:-best-uat.viporder.vn}"
 LOCAL="http://127.0.0.1:18897"
 GOC="${VIP_HUB_VPS_ROOT:-/home/deploy/vip-express-hub}"
-COMPOSE_DIR="$GOC/src/trien_khai/vps"
+# Thư mục compose là THƯ MỤC CHỨA CHÍNH TỆP NÀY, không phải một đường cố định. Bản cũ ghim
+# `$GOC/src/trien_khai/vps`; khi checkout trên VPS đổi từ `src/` sang `app/` (clone từ GitHub,
+# 2026-10-20) thì đường đó không còn tồn tại và script chết ngay dòng kiểm compose. Đó là cách
+# cron sao lưu đứng im nhiều ngày mà không ai thấy. Tự định vị thì không còn chỗ để lệch.
+COMPOSE_DIR="${VIP_HUB_COMPOSE_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
 COMPOSE="$COMPOSE_DIR/docker-compose.yml"
 TEN="${VIP_HUB_CONTAINER:-vip-express-hub}"
 loi=0
@@ -63,8 +67,14 @@ check "health" 200 "$LOCAL/api/v2/suc-khoe"
 check "ready" 200 "$LOCAL/api/v2/san-sang"
 check "trang UAT" 200 "$LOCAL/pages/best-uat.html"
 check "hợp đồng BEST cần đăng nhập" 401 "$LOCAL/api/v2/best/hop-dong"
-check "webhook mã lạ bị chặn (404 fail-closed)" 404 -X POST "$LOCAL/api/v2/webhook/nhan/khong-co" \
-  -H 'Content-Type: application/json' -d '{}'
+# Thứ tự tham số của `check` là `tên kỳ_vọng URL [curl opts]`. Bản cũ viết `-X POST` TRƯỚC URL,
+# nên `url` bị gán thành `-X` và `curl` nhận `POST` như một URL: cổng kiểm này luôn đỏ dù dịch
+# vụ đúng. Giữ URL ở vị trí thứ ba.
+check "webhook mã lạ bị chặn (404 fail-closed)" 404 "$LOCAL/api/v2/webhook/nhan/khong-co" \
+  -X POST -H 'Content-Type: application/json' -d '{}'
+# GET trên cửa webhook phải là 405 + Allow: POST, KHÔNG phải 401 "chưa đăng nhập": hãng thử URL
+# bằng GET trước khi bật cấu hình, và 401 nói sai rằng endpoint cần phiên.
+check "webhook GET trả 405 (không phải 401)" 405 "$LOCAL/api/v2/webhook/nhan/khong-co"
 
 echo "== cổng app chỉ loopback =="
 if ! command -v ss >/dev/null 2>&1; then

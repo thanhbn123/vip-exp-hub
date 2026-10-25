@@ -555,6 +555,21 @@ class BoXuLy(BaseHTTPRequestHandler):
     def _api(self, duong, method):
         # --- webhook ingest: không cần phiên, xác thực bằng chữ ký của chính carrier account ---
         m = re.fullmatch(r"/api/v2/webhook/nhan/([A-Za-z0-9_-]+)", duong)
+        if m and method != "POST":
+            # Hãng vận chuyển thường THỬ URL callback bằng GET trước khi bật cấu hình. Trước bản
+            # vá, lượt GET rơi xuống đường API chung và nhận `401 {"loi":"chưa đăng nhập hoặc
+            # phiên hết hạn"}` — đọc từ phía hãng thì đó là "URL của bạn đòi đăng nhập", tức
+            # thông tin SAI về một endpoint vốn không dùng phiên. Đo được trên production: BEST
+            # gọi GET đúng URL này hai lượt (2026-10-21 09:29 và 09:51) và cả hai nhận 401.
+            #
+            # Trả 405 + `Allow: POST` là câu trả lời đúng. CỐ Ý không tra CSDL trước khi trả:
+            # câu trả lời giống nhau cho mọi định danh, nên nó không tiết lộ webhook_ma nào có
+            # thật. Thân giữ đúng hai khoá `Result`/`Message` để bên nhận không phải đọc hai
+            # hình dạng JSON khác nhau từ cùng một endpoint.
+            self._gioi_han("webhook.nhan", dinh_danh=m.group(1))
+            return self._tra(405, {"Result": 0,
+                                   "Message": "dùng POST cho callback; GET không được hỗ trợ"},
+                             them_header={"Allow": "POST"})
         if m and method == "POST":
             # r33: chặn TRƯỚC khi tra account và so chữ ký. Mỗi lượt sai chữ ký vẫn phải giải
             # mã secret (AES-GCM) rồi tính HMAC — việc đó tốn CPU và đụng vào khóa, nên cửa
@@ -1060,6 +1075,12 @@ class BoXuLy(BaseHTTPRequestHandler):
             else:
                 csdl.ghi("UPDATE carrier_accounts SET kich_hoat=? WHERE id=?",
                          (0 if viec == "khoa" else 1, tk["id"]))
+            if viec in ("rotate", "revoke", "khoa") and str(tk["hang"]) == "best":
+                # `best_hop_dong` nhớ token BEST trong tiến trình. Đổi/thu hồi credential mà
+                # không bỏ token là để một credential đã bị rút tiếp tục được dùng tới 30 ngày.
+                # Bỏ TẤT CẢ vì ở đây không còn bản rõ credential CŨ để dựng đúng khoá kho; giá
+                # phải trả là các tài khoản BEST khác đăng nhập lại một lượt.
+                ra["token_da_bo"] = best_hop_dong.bo_token(tat_ca=True)
             csdl.audit(f"tai_khoan_hang_{viec}", f"carrier_account:{tk['id']}", "",
                        tenant_id=tenant_id, user_id=nc.user_id)
             return self._tra(200, ra)

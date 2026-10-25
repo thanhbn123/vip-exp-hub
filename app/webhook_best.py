@@ -272,8 +272,13 @@ TRUONG_SO = ("cod", "product_price", "freight_fee", "cod_fee", "insurance_fee", 
 # nhưng để hở nghĩa là lớp sau có thể ghi secret mà không ai thấy.
 _KHOA_NHAY_CAM = ("token", "secret", "password", "passwd", "authorization", "cookie",
                   "signature", "chu_ky", "mat_khau", "api_key", "apikey")
+# `x-forwarded-for`/`x-real-ip` do reverse proxy đặt. Lưu chúng là cách DUY NHẤT để sau này
+# phân biệt được "callback THẬT từ hạ tầng BEST" với "lượt mô phỏng nội bộ" khi đọc bằng chứng:
+# cả hai đều đi qua đúng URL, đúng Bearer và đều ACK 200, nên nếu không ghi nguồn thì không ai
+# chứng minh được lượt nào là của hãng. Đây KHÔNG phải để xác thực — tenant/quyền vẫn chỉ đến
+# từ `carrier_accounts` + Bearer; header này có thể bị giả và chỉ dùng để đọc lại lịch sử.
 _HEADER_DUOC_LUU = ("content-type", "content-length", "user-agent", "host", "x-request-id",
-                     "x-best-timestamp", "timestamp")
+                     "x-best-timestamp", "timestamp", "x-forwarded-for", "x-real-ip")
 
 
 def _la_khoa_nhay_cam(k):
